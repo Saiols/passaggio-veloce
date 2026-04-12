@@ -171,28 +171,30 @@
 ## FASE 2 - Auth, Registrazione, Multi-utente
 
 ### 2.1 Registrazione (stesso form dealer/agenzia)
-- [ ] Form registrazione azienda (ragione sociale, P.IVA, SDI, PEC, indirizzo)
-- [ ] Form dati amministratore (Nome, Cognome, data/luogo nascita, CF)
-- [ ] Upload CI + CF amministratore
-- [ ] Upload Visura Camerale (validazione max 6 mesi)
-- [ ] Inserimento IBAN + autorizzazione addebito SEPA
-- [ ] Accettazione T&C con registro timestamp/IP
-- [ ] Verifica email/PEC
-- [ ] Approvazione automatica account
-- [ ] Selezione ruolo (dealer / agenzia) in fase di registrazione
-- [ ] Step aggiuntivo per agenzia: inserimento orari di apertura (giorni + fasce orarie multiple) + giorni di chiusura straordinaria
+- [x] Form registrazione azienda (ragione sociale, P.IVA, SDI, PEC, indirizzo)
+- [x] Form dati amministratore (Nome, Cognome, data/luogo nascita, CF)
+- [ ] Upload CI + CF amministratore (placeholder: attivato in Fase 3 con storage)
+- [ ] Upload Visura Camerale (max 6 mesi) (placeholder: Fase 3)
+- [x] Inserimento IBAN + flag autorizzazione SEPA (mandato Stripe reale in Fase 5)
+- [x] Accettazione T&C con timestamp (registro IP da aggiungere)
+- [~] Verifica email — token generato e tabella `verification_tokens` pronta; invio email reale in Fase 6
+- [x] Approvazione automatica account (stato `PENDING_EMAIL_VERIFICATION` → `ACTIVE`)
+- [x] Selezione ruolo (dealer / agenzia) in fase di registrazione
+- [ ] Step aggiuntivo per agenzia: inserimento orari di apertura (rimandato)
 
 ### 2.2 Auth e sicurezza
-- [ ] Login JWT + refresh token
-- [ ] Password policy + reset password
+- [x] Login con Auth.js v5 (Credentials provider, JWT strategy)
+- [x] Password policy (min 10, maiusc/minusc/numero) + hashing bcrypt 12 rounds
+- [~] Reset password — pagina placeholder, flusso reale in Fase 6
 - [ ] 2FA opzionale (email/OTP)
 - [ ] Rate limiting login
-- [ ] Audit log accessi
+- [ ] Audit log accessi (campo `lastLoginAt` già presente)
 
 ### 2.3 Multi-utente e ruoli
-- [ ] Utente admin azienda + utenti secondari
-- [ ] Gestione permessi utenti secondari
-- [ ] Invito utenti via email
+- [x] Modello dati `Invitation` pronto, ruoli `ADMIN_AZIENDA` / `UTENTE_AZIENDA` / `ADMIN_PIATTAFORMA`
+- [ ] UI gestione utenti secondari
+- [ ] Invito utenti via email (server action, da fare nel prossimo chunk)
+- [ ] Accettazione invito + creazione utente secondario
 - [ ] Revoca accessi
 
 ---

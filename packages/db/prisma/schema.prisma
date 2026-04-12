@@ -1,0 +1,81 @@
+// Passaggio Veloce - Prisma schema
+// Schema iniziale: estensibile man mano che le fasi avanzano.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum CompanyType {
+  DEALER
+  AGENZIA
+}
+
+enum UserRole {
+  ADMIN_AZIENDA
+  UTENTE_AZIENDA
+  ADMIN_PIATTAFORMA
+}
+
+// ============================================================
+// MODELS - Fase 1: solo scaffold base, espansione nelle fasi 2+
+// ============================================================
+
+model Company {
+  id              String      @id @default(uuid()) @db.Uuid
+  type            CompanyType
+  ragioneSociale  String
+  partitaIva      String      @unique
+  codiceSdi       String?
+  pec             String
+  email           String
+  telefono        String?
+  indirizzo       String
+  citta           String
+  cap             String
+  provincia       String
+  iban            String?
+
+  users           User[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  deletedAt       DateTime?
+
+  @@index([type])
+  @@index([citta])
+  @@map("companies")
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String
+  emailVerifiedAt DateTime?
+
+  nome            String
+  cognome         String
+  codiceFiscale   String?
+  dataNascita     DateTime?
+  luogoNascita    String?
+
+  role            UserRole  @default(UTENTE_AZIENDA)
+
+  companyId       String?   @db.Uuid
+  company         Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([companyId])
+  @@map("users")
+}

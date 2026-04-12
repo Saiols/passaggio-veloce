@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(python3 -c ':*)",
+      "Bash(where python:*)",
+      "Bash(where py:*)",
+      "Bash(/c/Users/fsiol/AppData/Local/Programs/Python/Python312/python.exe -c ':*)",
+      "Bash(pnpm --version)",
+      "Bash(git --version)",
+      "Bash(npm install:*)",
+      "Bash(pnpm create:*)",
+      "Bash(rm -f pnpm-workspace.yaml pnpm-lock.yaml README.md CLAUDE.md AGENTS.md)",
+      "Bash(rm -rf node_modules)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm --filter @pv/db db:generate)",
+      "Bash(pnpm --filter piattaforma typecheck)",
+      "Bash(pnpm --filter piattaforma build)"
+    ]
+  }
+}

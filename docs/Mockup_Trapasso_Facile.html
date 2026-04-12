@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trapasso Facile — Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #F0F4F8; color: #1a1a2e; }
+
+  /* NAV */
+  .nav { background: #1A3C6E; color: white; padding: 14px 32px; display: flex; align-items: center; gap: 12px; }
+  .nav-logo { font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  .nav-sub { font-size: 12px; opacity: 0.7; }
+  .nav-tabs { margin-left: auto; display: flex; gap: 8px; }
+  .nav-tab { background: rgba(255,255,255,0.15); border: none; color: white; padding: 7px 18px; border-radius: 20px; cursor: pointer; font-size: 13px; }
+  .nav-tab.active { background: #2E75B6; }
+
+  /* SECTION TITLES */
+  .section-title { font-size: 22px; font-weight: 700; color: #1A3C6E; margin: 36px 32px 6px; border-bottom: 3px solid #2E75B6; padding-bottom: 8px; }
+  .section-sub { font-size: 13px; color: #666; margin: 0 32px 20px; }
+
+  /* GRID */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; padding: 0 32px 32px; }
+
+  /* SCREEN CARD */
+  .screen { background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
+  .screen-header { background: #1A3C6E; color: white; padding: 14px 18px; display: flex; align-items: center; gap: 10px; }
+  .screen-header .icon { width: 32px; height: 32px; background: rgba(255,255,255,0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .screen-title { font-size: 14px; font-weight: 700; }
+  .screen-subtitle { font-size: 11px; opacity: 0.75; }
+  .screen-body { padding: 18px; }
+  .screen-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 12px; }
+  .tag-broker { background: #EBF2FA; color: #1A3C6E; }
+  .tag-agenzia { background: #E8F4EC; color: #1E6E42; }
+  .tag-system { background: #FFF3CD; color: #856404; }
+  .tag-admin { background: #F0E8FA; color: #5B2D8E; }
+
+  /* FORM ELEMENTS */
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; font-weight: 600; color: #666; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 9px 12px; border: 1.5px solid #E0E0E0; border-radius: 8px;
+    font-size: 13px; color: #333; background: #FAFAFA;
+  }
+  .field textarea { height: 60px; resize: none; }
+
+  /* BUTTONS */
+  .btn { display: inline-block; padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+  .btn-primary { background: #1A3C6E; color: white; }
+  .btn-success { background: #1E6E42; color: white; }
+  .btn-danger { background: #C0392B; color: white; }
+  .btn-outline { background: white; color: #1A3C6E; border: 1.5px solid #1A3C6E; }
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+  .btn-full { width: 100%; text-align: center; }
+  .btn-row { display: flex; gap: 8px; margin-top: 14px; }
+
+  /* STATUS BADGES */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-pending { background: #FFF3CD; color: #856404; }
+  .badge-accepted { background: #E8F4EC; color: #1E6E42; }
+  .badge-signed { background: #EBF2FA; color: #1A3C6E; }
+  .badge-auto { background: #F0E8FA; color: #5B2D8E; }
+
+  /* PRATICA ROW */
+  .pratica-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #F0F0F0; }
+  .pratica-row:last-child { border-bottom: none; }
+  .pratica-info { font-size: 13px; }
+  .pratica-plate { font-weight: 700; color: #1A3C6E; }
+  .pratica-meta { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* STATS */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat-box { background: #F0F4F8; border-radius: 10px; padding: 12px; text-align: center; }
+  .stat-num { font-size: 22px; font-weight: 700; color: #1A3C6E; }
+  .stat-label { font-size: 10px; color: #888; margin-top: 2px; }
+
+  /* NOTIFICATION CARD */
+  .notif { background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
+  .notif-header { padding: 14px 18px 10px; border-bottom: 1px solid #F0F0F0; display: flex; align-items: flex-start; gap: 12px; }
+  .notif-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .notif-icon.blue { background: #EBF2FA; }
+  .notif-icon.green { background: #E8F4EC; }
+  .notif-icon.yellow { background: #FFF3CD; }
+  .notif-icon.red { background: #FDECEA; }
+  .notif-icon.purple { background: #F0E8FA; }
+  .notif-title { font-size: 14px; font-weight: 700; color: #1A3C6E; }
+  .notif-time { font-size: 11px; color: #aaa; margin-top: 2px; }
+  .notif-body { padding: 14px 18px; }
+  .notif-text { font-size: 13px; line-height: 1.6; color: #444; }
+  .notif-code { background: #F0F4F8; border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-family: monospace; font-size: 15px; font-weight: 700; color: #1A3C6E; letter-spacing: 2px; text-align: center; }
+  .notif-footer { padding: 10px 18px 14px; display: flex; gap: 8px; }
+
+  /* WALLET */
+  .wallet-box { background: linear-gradient(135deg, #1A3C6E, #2E75B6); color: white; border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+  .wallet-label { font-size: 11px; opacity: 0.8; }
+  .wallet-amount { font-size: 32px; font-weight: 700; margin: 4px 0; }
+  .wallet-meta { font-size: 11px; opacity: 0.7; }
+  .progress-bar { background: rgba(255,255,255,0.2); border-radius: 20px; height: 6px; margin: 10px 0 4px; overflow: hidden; }
+  .progress-fill { background: white; height: 100%; border-radius: 20px; }
+  .progress-labels { display: flex; justify-content: space-between; font-size: 10px; opacity: 0.8; }
+
+  /* MAP PLACEHOLDER */
+  .map-box { background: #E8EFF5; border-radius: 10px; height: 120px; display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px; margin-bottom: 12px; border: 2px dashed #B0C4D8; }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1px solid #F0F0F0; margin: 12px 0; }
+
+  /* UPLOAD AREA */
+  .upload-area { border: 2px dashed #B0C4D8; border-radius: 10px; padding: 16px; text-align: center; color: #888; font-size: 12px; margin-bottom: 10px; }
+  .upload-area .upload-icon { font-size: 24px; margin-bottom: 4px; }
+
+  /* STEP INDICATOR */
+  .steps { display: flex; align-items: center; margin-bottom: 16px; }
+  .step { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .step.done { background: #1E6E42; color: white; }
+  .step.active { background: #1A3C6E; color: white; }
+  .step.todo { background: #E0E0E0; color: #888; }
+  .step-line { flex: 1; height: 2px; background: #E0E0E0; }
+  .step-line.done { background: #1E6E42; }
+
+  hr.section-divider { border: none; border-top: 3px solid #1A3C6E; margin: 40px 32px 0; opacity: 0.15; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div>
+    <div class="nav-logo">TRAPASSO FACILE</div>
+    <div class="nav-sub">Mockup — Schermate & Notifiche</div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active">Broker / Dealer</button>
+    <button class="nav-tab">Agenzia</button>
+    <button class="nav-tab">Notifiche</button>
+    <button class="nav-tab">Admin</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ BROKER SCREENS -->
+<div class="section-title">Dashboard Broker / Dealer</div>
+<div class="section-sub">Schermate principali lato broker e commerciante</div>
+<div class="grid">
+
+  <!-- DASHBOARD HOME -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">🏠</div>
+      <div><div class="screen-title">Dashboard principale</div><div class="screen-subtitle">Panoramica attività</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num">12</div><div class="stat-label">Pratiche attive</div></div>
+        <div class="stat-box"><div class="stat-num">47</div><div class="stat-label">Completate</div></div>
+        <div class="stat-box"><div class="stat-num">€ 1.175</div><div class="stat-label">Wallet</div></div>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">AB 123 CD</div><div class="pratica-meta">Trapasso netto · Milano · 2 giorni fa</div></div>
+        <span class="badge badge-accepted">Presa in carico</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">EF 456 GH</div><div class="pratica-meta">Minivoltura · Roma · 5 giorni fa</div></div>
+        <span class="badge badge-pending">In attesa</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">IJ 789 KL</div><div class="pratica-meta">Trapasso netto · Torino · 12 giorni fa</div></div>
+        <span class="badge badge-signed">Firmata</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- NUOVA PRATICA STEP 1 -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">📄</div>
+      <div><div class="screen-title">Nuova pratica — Step 1</div><div class="screen-subtitle">Caricamento libretto</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="steps">
+        <div class="step active">1</div>
+        <div class="step-line"></div>
+        <div class="step todo">2</div>
+        <div class="step-line"></div>
+        <div class="step todo">3</div>
+        <div class="step-line"></div>
+        <div class="step todo">4</div>
+      </div>
+      <div class="field"><label>Tipo di pratica</label>
+        <select><option>Trapasso netto</option><option>Minivoltura</option><option>Lotto massivo</option></select>
+      </div>
+      <div class="upload-area">
+        <div class="upload-icon">📋</div>
+        <div>Carica il libretto di circolazione (PDF)</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">L'IA leggerà automaticamente i dati</div>
+      </div>
+      <div style="background:#E8F4EC;border-radius:8px;padding:10px 12px;font-size:12px;color:#1E6E42;">
+        ✅ Libretto letto correttamente<br>
+        <strong>Targa:</strong> AB 123 CD · <strong>Telaio:</strong> ZFA31200003456789<br>
+        <span style="color:#C0392B;">⚠️ Richiesto: rimozione comodato d'uso</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-full">Continua →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NUOVA PRATICA STEP 2 -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">👤</div>
+      <div><div class="screen-title">Nuova pratica — Step 2</div><div class="screen-subtitle">Documenti identità</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="steps">
+        <div class="step done">✓</div>
+        <div class="step-line done"></div>
+        <div class="step active">2</div>
+        <div class="step-line"></div>
+        <div class="step todo">3</div>
+        <div class="step-line"></div>
+        <div class="step todo">4</div>
+      </div>
+      <div class="field"><label>CI Venditore</label>
+        <div class="upload-area" style="padding:8px">📎 Carica documento</div>
+      </div>
+      <div class="field"><label>CI Acquirente</label>
+        <div class="upload-area" style="padding:8px">📎 Carica documento</div>
+      </div>
+      <div class="field"><label>Codice fiscale entrambe le parti</label>
+        <div class="upload-area" style="padding:8px">📎 Carica tessere sanitarie</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+        <input type="checkbox" id="cb1"><label for="cb1" style="font-size:12px;color:#555">Flag minivoltura (rivenditore si intesta il veicolo)</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="cb2"><label for="cb2" style="font-size:12px;color:#555">Cointestazione (aggiungi secondo intestatario)</label>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm">← Indietro</button>
+        <button class="btn btn-primary" style="flex:1">Continua →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NUOVA PRATICA STEP 3 — SELEZIONE AGENZIA -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">📍</div>
+      <div><div class="screen-title">Nuova pratica — Step 3</div><div class="screen-subtitle">Selezione comune</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="steps">
+        <div class="step done">✓</div>
+        <div class="step-line done"></div>
+        <div class="step done">✓</div>
+        <div class="step-line done"></div>
+        <div class="step active">3</div>
+        <div class="step-line"></div>
+        <div class="step todo">4</div>
+      </div>
+      <div class="field"><label>Comune preferito per il passaggio</label>
+        <input type="text" placeholder="Es. Milano, Roma, Torino...">
+      </div>
+      <div class="map-box">🗺️ Mappa agenzie disponibili nella zona</div>
+      <div style="background:#FFF3CD;border-radius:8px;padding:10px 12px;font-size:12px;color:#856404;margin-bottom:12px;">
+        📡 La pratica verrà inviata alle <strong>5 agenzie più vicine</strong>.<br>La prima che accetta si aggiudica il cliente.
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm">← Indietro</button>
+        <button class="btn btn-success" style="flex:1">🚀 Invia pratica</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRATICA INVIATA — ATTESA -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">⏳</div>
+      <div><div class="screen-title">Pratica inviata — In attesa</div><div class="screen-subtitle">In attesa di presa in carico</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div style="text-align:center;padding:16px 0 8px;">
+        <div style="font-size:36px;">📡</div>
+        <div style="font-weight:700;color:#1A3C6E;margin:8px 0 4px;">Pratica inviata a 5 agenzie</div>
+        <div style="font-size:12px;color:#888;">In attesa che la prima agenzia accetti</div>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">AB 123 CD</div><div class="pratica-meta">Trapasso netto · Milano</div></div>
+        <span class="badge badge-pending">In attesa</span>
+      </div>
+      <hr class="divider">
+      <div style="font-size:12px;color:#888;text-align:center;">Riceverai una notifica non appena un'agenzia prende in carico la pratica</div>
+    </div>
+  </div>
+
+  <!-- PRATICA ACCETTATA + CODICE -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">✅</div>
+      <div><div class="screen-title">Pratica accettata</div><div class="screen-subtitle">Codice per i clienti</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div style="background:#E8F4EC;border-radius:10px;padding:12px;margin-bottom:12px;text-align:center;">
+        <div style="font-size:12px;color:#1E6E42;font-weight:600;">✅ Agenzia Pratiche Roma Centro ha accettato</div>
+        <div style="font-size:11px;color:#666;margin-top:4px;">Via Roma 45, Roma · Tel. 06 1234567</div>
+      </div>
+      <div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600;">Codice pratica da comunicare ai clienti:</div>
+      <div class="notif-code">TF-2026-04821</div>
+      <div style="font-size:11px;color:#888;text-align:center;margin-bottom:12px;">I clienti presentano questo codice in agenzia per la corsia preferenziale</div>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-full btn-sm">📋 Copia codice</button>
+        <button class="btn btn-primary btn-full btn-sm">📤 Condividi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WALLET BROKER -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">💰</div>
+      <div><div class="screen-title">Wallet broker</div><div class="screen-subtitle">Crediti e payout</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="wallet-box">
+        <div class="wallet-label">Crediti disponibili</div>
+        <div class="wallet-amount">€ 637,50</div>
+        <div class="wallet-meta">25 pratiche completate questo mese</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:64%"></div></div>
+        <div class="progress-labels"><span>€ 0</span><span>Payout manuale da € 500</span><span>Auto € 1.000</span></div>
+      </div>
+      <button class="btn btn-outline btn-full btn-sm" style="margin-bottom:10px;">💸 Richiedi payout (disponibile sopra € 500)</button>
+      <hr class="divider">
+      <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px;">Ultime transazioni</div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">AB 123 CD · Trapasso netto</div><div class="pratica-meta">Oggi</div></div>
+        <div style="font-weight:700;color:#1E6E42;font-size:13px;">+ € 25,00</div>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">EF 456 GH · Trapasso netto</div><div class="pratica-meta">Ieri</div></div>
+        <div style="font-weight:700;color:#1E6E42;font-size:13px;">+ € 25,00</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOTTO MASSIVO -->
+  <div class="screen">
+    <div class="screen-header">
+      <div class="icon">🚗</div>
+      <div><div class="screen-title">Lotto massivo</div><div class="screen-subtitle">Caricamento multiplo veicoli</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="field"><label>Acquirente unico (commerciante)</label>
+        <input type="text" placeholder="Ragione sociale o nome">
+      </div>
+      <div class="field"><label>Visura camerale acquirente</label>
+        <div class="upload-area" style="padding:8px">📎 Carica visura</div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px;">Veicoli del lotto (3 caricati)</div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">AB 123 CD</div><div class="pratica-meta">Libretto + venditore ✅</div></div>
+        <span style="font-size:11px;color:#1E6E42;">€ 15</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">EF 456 GH</div><div class="pratica-meta">Libretto + venditore ✅</div></div>
+        <span style="font-size:11px;color:#1E6E42;">€ 15</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">IJ 789 KL</div><div class="pratica-meta">⚠️ Manca CI venditore</div></div>
+        <span style="font-size:11px;color:#C0392B;">Incompleto</span>
+      </div>
+      <button class="btn btn-outline btn-full btn-sm" style="margin:10px 0 6px;">+ Aggiungi veicolo</button>
+      <div style="font-size:11px;color:#888;text-align:center;">Totale stimato: € 45 (3 veicoli × € 15)</div>
+    </div>
+  </div>
+
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════ AGENZIA SCREENS -->
+<div class="section-title">Dashboard Agenzia Pratiche</div>
+<div class="section-sub">Schermate principali lato agenzia</div>
+<div class="grid">
+
+  <!-- DASHBOARD AGENZIA -->
+  <div class="screen">
+    <div class="screen-header" style="background:#1E6E42;">
+      <div class="icon">🏢</div>
+      <div><div class="screen-title">Dashboard agenzia</div><div class="screen-subtitle">Pratiche ricevute</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num" style="color:#1E6E42;">3</div><div class="stat-label">Nuove</div></div>
+        <div class="stat-box"><div class="stat-num">8</div><div class="stat-label">In lavorazione</div></div>
+        <div class="stat-box"><div class="stat-num">€ 525</div><div class="stat-label">Fee mese</div></div>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">AB 123 CD</div><div class="pratica-meta">Trapasso netto · Da: AutoDealer Srl</div></div>
+        <button class="btn btn-success btn-sm">Accetta</button>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">EF 456 GH</div><div class="pratica-meta">Minivoltura · Da: Moto Broker Roma</div></div>
+        <button class="btn btn-success btn-sm">Accetta</button>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">MN 012 OP</div><div class="pratica-meta">Trapasso netto · Da: Cars Milano</div></div>
+        <button class="btn btn-success btn-sm">Accetta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETTAGLIO PRATICA AGENZIA -->
+  <div class="screen">
+    <div class="screen-header" style="background:#1E6E42;">
+      <div class="icon">📂</div>
+      <div><div class="screen-title">Dettaglio pratica</div><div class="screen-subtitle">AB 123 CD — Trapasso netto</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div style="background:#E8F4EC;border-radius:8px;padding:10px 12px;font-size:12px;color:#1E6E42;margin-bottom:12px;">
+        ✅ Dossier completo e verificato da Trapasso Facile
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px;">Documenti disponibili</div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">📋 Libretto di circolazione</div></div>
+        <button class="btn btn-outline btn-sm">⬇ Scarica</button>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">👤 CI Venditore + CF</div></div>
+        <button class="btn btn-outline btn-sm">⬇ Scarica</button>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">👤 CI Acquirente + CF</div></div>
+        <button class="btn btn-outline btn-sm">⬇ Scarica</button>
+      </div>
+      <button class="btn btn-outline btn-full btn-sm" style="margin:10px 0 6px;">⬇ Scarica tutto (ZIP)</button>
+      <div class="btn-row">
+        <button class="btn btn-danger btn-sm">Rifiuta</button>
+        <button class="btn btn-success" style="flex:1">✅ Prendi in carico</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRATICA IN LAVORAZIONE -->
+  <div class="screen">
+    <div class="screen-header" style="background:#1E6E42;">
+      <div class="icon">⚙️</div>
+      <div><div class="screen-title">Pratica in lavorazione</div><div class="screen-subtitle">AB 123 CD</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;font-weight:600;">Codice pratica TF</div></div>
+        <div class="notif-code" style="font-size:13px;padding:4px 10px;margin:0;">TF-2026-04821</div>
+      </div>
+      <hr class="divider">
+      <div class="field"><label>Codice pratica interno agenzia</label>
+        <input type="text" placeholder="Es. AG-2026-1234">
+      </div>
+      <div class="field"><label>Note interne</label>
+        <textarea placeholder="Note per uso interno..."></textarea>
+      </div>
+      <hr class="divider">
+      <div style="font-size:12px;color:#C0392B;font-weight:600;margin-bottom:8px;">⏰ Firma non ancora avvenuta — 8 giorni rimasti</div>
+      <button class="btn btn-success btn-full">✅ Firma avvenuta — Chiudi pratica</button>
+    </div>
+  </div>
+
+  <!-- STORICO PRATICHE AGENZIA -->
+  <div class="screen">
+    <div class="screen-header" style="background:#1E6E42;">
+      <div class="icon">📊</div>
+      <div><div class="screen-title">Storico e fee</div><div class="screen-subtitle">Riepilogo mensile</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num" style="color:#1E6E42;">21</div><div class="stat-label">Pratiche mese</div></div>
+        <div class="stat-box"><div class="stat-num" style="color:#C0392B;">€ 525</div><div class="stat-label">Fee totale</div></div>
+        <div class="stat-box"><div class="stat-num">2</div><div class="stat-label">Auto-addebiti</div></div>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">AB 123 CD</div><div class="pratica-meta">Trapasso netto · Firma flaggata</div></div>
+        <span style="font-size:12px;color:#C0392B;font-weight:600;">- € 75</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">EF 456 GH</div><div class="pratica-meta">Minivoltura · Firma flaggata</div></div>
+        <span style="font-size:12px;color:#C0392B;font-weight:600;">- € 15</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div class="pratica-plate">IJ 789 KL</div><div class="pratica-meta">Trapasso netto · Auto-addebito g.20</div></div>
+        <span class="badge badge-auto" style="font-size:10px;">- € 75 auto</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════ NOTIFICHE -->
+<div class="section-title">Mockup Notifiche</div>
+<div class="section-sub">Tutte le notifiche del sistema — push, email e in-app</div>
+<div class="grid">
+
+  <!-- N1 BROKER: pratica inviata -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon blue">📡</div>
+      <div><div class="notif-title">Pratica inviata con successo</div><div class="notif-time">A: Broker — Subito dopo l'invio</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="notif-text">La tua pratica per il veicolo <strong>AB 123 CD</strong> è stata inviata a <strong>5 agenzie</strong> nella zona di <strong>Milano</strong>.<br>Riceverai una notifica non appena un'agenzia la prende in carico.</div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-outline btn-sm">Vedi pratica</button>
+    </div>
+  </div>
+
+  <!-- N2 BROKER: pratica accettata -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon green">✅</div>
+      <div><div class="notif-title">Pratica accettata!</div><div class="notif-time">A: Broker — Quando l'agenzia accetta</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="notif-text"><strong>Agenzia Pratiche Roma Centro</strong> ha preso in carico la pratica per <strong>AB 123 CD</strong>.<br>Comunica questo codice ai tuoi clienti per la corsia preferenziale:</div>
+      <div class="notif-code">TF-2026-04821</div>
+      <div style="font-size:11px;color:#888;">I clienti possono presentarsi in agenzia in qualsiasi momento mostrando questo codice.</div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-outline btn-sm">📋 Copia codice</button>
+      <button class="btn btn-primary btn-sm">Vedi dettagli</button>
+    </div>
+  </div>
+
+  <!-- N3 BROKER: sollecito clienti -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon yellow">⏰</div>
+      <div><div class="notif-title">Sollecito — clienti non ancora andati</div><div class="notif-time">A: Broker — Ogni 5 giorni fino alla firma</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="notif-text">I clienti della pratica <strong>AB 123 CD</strong> non si sono ancora presentati in agenzia. Sono passati <strong>10 giorni</strong> dalla presa in carico.<br><br>Ricorda loro di presentarsi con il codice <strong>TF-2026-04821</strong> presso <strong>Agenzia Pratiche Roma Centro</strong>.</div>
+      <div style="background:#FFF3CD;border-radius:8px;padding:8px 12px;font-size:11px;color:#856404;margin-top:10px;">⚠️ Mancano <strong>10 giorni</strong> all'addebito automatico all'agenzia.</div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-outline btn-sm">Vedi pratica</button>
+    </div>
+  </div>
+
+  <!-- N4 BROKER: firma avvenuta -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon blue">🎉</div>
+      <div><div class="notif-title">Pratica completata!</div><div class="notif-time">A: Broker — Quando l'agenzia flagga la firma</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="notif-text">I clienti hanno firmato e il passaggio di proprietà per <strong>AB 123 CD</strong> è stato completato con successo da <strong>Agenzia Pratiche Roma Centro</strong>.<br><br>Credito accreditato nel tuo wallet:</div>
+      <div style="background:#E8F4EC;border-radius:8px;padding:10px;text-align:center;margin:10px 0;"><span style="font-size:22px;font-weight:700;color:#1E6E42;">+ € 25,00</span></div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-success btn-sm">Vedi wallet</button>
+    </div>
+  </div>
+
+  <!-- N5 BROKER: soglia wallet -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon green">💸</div>
+      <div><div class="notif-title">Payout automatico eseguito</div><div class="notif-time">A: Broker — Al raggiungimento di € 1.000</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-broker">BROKER</span>
+      <div class="notif-text">Hai raggiunto la soglia di <strong>€ 1.000</strong>. Il payout automatico di <strong>€ 1.000,00</strong> è stato eseguito sull'IBAN registrato.<br><br>Scarica il rendiconto per emettere la fattura verso Trapasso Facile.</div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-outline btn-sm">📄 Scarica rendiconto</button>
+      <button class="btn btn-primary btn-sm">Vedi wallet</button>
+    </div>
+  </div>
+
+  <!-- N6 AGENZIA: nuova pratica -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon green">📥</div>
+      <div><div class="notif-title">Nuova pratica disponibile</div><div class="notif-time">A: Agenzia — Quando il broker invia</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div class="notif-text">È disponibile una nuova pratica di <strong>trapasso netto</strong> per il veicolo <strong>AB 123 CD</strong> nella zona di <strong>Milano</strong>.<br><br>Il dossier è completo e verificato. Accetta entro pochi minuti — altre 4 agenzie hanno ricevuto la stessa notifica.</div>
+      <div style="background:#FDECEA;border-radius:8px;padding:8px 12px;font-size:11px;color:#C0392B;margin-top:10px;">🏁 La prima agenzia che accetta si aggiudica la pratica.</div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-danger btn-sm">Rifiuta</button>
+      <button class="btn btn-success btn-sm">✅ Accetta subito</button>
+    </div>
+  </div>
+
+  <!-- N7 AGENZIA: promemoria firma -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon yellow">⏰</div>
+      <div><div class="notif-title">Promemoria firma — 5 giorni al termine</div><div class="notif-time">A: Agenzia — Notifica periodica</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div class="notif-text">La pratica <strong>TF-2026-04821</strong> (veicolo <strong>AB 123 CD</strong>) non risulta ancora completata con firma.<br><br>Mancano <strong>5 giorni</strong> al termine di 20 giorni. Dopo tale data la fee di <strong>€ 75,00</strong> verrà addebitata automaticamente come da termini di servizio.</div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-success btn-sm">✅ Flagga firma avvenuta</button>
+    </div>
+  </div>
+
+  <!-- N8 AGENZIA: auto-addebito -->
+  <div class="notif">
+    <div class="notif-header">
+      <div class="notif-icon red">🔴</div>
+      <div><div class="notif-title">Addebito automatico eseguito</div><div class="notif-time">A: Agenzia — Al giorno 20 senza firma flaggata</div></div>
+    </div>
+    <div class="notif-body">
+      <span class="screen-tag tag-agenzia">AGENZIA</span>
+      <div class="notif-text">Sono trascorsi <strong>20 giorni</strong> dalla presa in carico della pratica <strong>TF-2026-04821</strong> senza che la firma venisse registrata.<br><br>Come da termini di servizio accettati alla registrazione, è stato eseguito l'addebito automatico di:</div>
+      <div style="background:#FDECEA;border-radius:8px;padding:10px;text-align:center;margin:10px 0;"><span style="font-size:22px;font-weight:700;color:#C0392B;">- € 75,00</span></div>
+    </div>
+    <div class="notif-footer">
+      <button class="btn btn-outline btn-sm">Vedi dettagli</button>
+    </div>
+  </div>
+
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════ ADMIN -->
+<div class="section-title">Dashboard Admin</div>
+<div class="section-sub">Pannello di controllo interno Trapasso Facile</div>
+<div class="grid">
+
+  <div class="screen">
+    <div class="screen-header" style="background:#5B2D8E;">
+      <div class="icon">⚙️</div>
+      <div><div class="screen-title">Admin — Overview</div><div class="screen-subtitle">Monitoraggio piattaforma</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-admin">ADMIN</span>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num" style="color:#5B2D8E;">312</div><div class="stat-label">Pratiche mese</div></div>
+        <div class="stat-box"><div class="stat-num" style="color:#1E6E42;">€ 15.600</div><div class="stat-label">Revenue mese</div></div>
+        <div class="stat-box"><div class="stat-num" style="color:#C0392B;">7</div><div class="stat-label">Auto-addebiti</div></div>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">Nuove registrazioni oggi</div></div>
+        <span class="badge badge-pending">3 dealer, 1 agenzia</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">Payout broker in coda</div></div>
+        <span class="badge badge-accepted">€ 4.250 totali</span>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;">Pratiche senza risposta agenzie</div></div>
+        <span class="badge badge-auto">2 pratiche</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen">
+    <div class="screen-header" style="background:#5B2D8E;">
+      <div class="icon">👥</div>
+      <div><div class="screen-title">Admin — Utenti</div><div class="screen-subtitle">Gestione dealer e agenzie</div></div>
+    </div>
+    <div class="screen-body">
+      <span class="screen-tag tag-admin">ADMIN</span>
+      <div class="field"><label>Cerca utente</label><input type="text" placeholder="Nome, email, P.IVA..."></div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;font-weight:600;">AutoDealer Srl</div><div class="pratica-meta">Dealer · Milano · 47 pratiche</div></div>
+        <button class="btn btn-outline btn-sm">Dettaglio</button>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;font-weight:600;">Agenzia Roma Centro</div><div class="pratica-meta">Agenzia · Roma · 21 pratiche</div></div>
+        <button class="btn btn-outline btn-sm">Dettaglio</button>
+      </div>
+      <div class="pratica-row">
+        <div class="pratica-info"><div style="font-size:12px;font-weight:600;">Cars Milano Srl</div><div class="pratica-meta">Dealer · Milano · 12 pratiche</div></div>
+        <button class="btn btn-outline btn-sm">Dettaglio</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="text-align:center;padding:32px;color:#aaa;font-size:12px;">
+  Trapasso Facile — Mockup UI  |  © 2026 Alberto De Vivo  |  Documento confidenziale
+</div>
+
+</body>
+</html>

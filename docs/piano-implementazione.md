@@ -41,14 +41,14 @@
 
 ### 0.4 Architettura e stack
 - [ ] PRD tecnico completo
-- [ ] Scelta definitiva stack (React/Next.js + Node/Python + PostgreSQL)
-- [ ] Scelta provider IA/OCR (GPT-4o Vision / Google Document AI / AWS Textract) + benchmark
-- [ ] Scelta provider pagamenti (Stripe SEPA vs alternative)
-- [ ] Scelta provider email transazionale
+- [x] Scelta definitiva stack (Next.js 16 + TypeScript + PostgreSQL + Prisma) — vedi `stack-tecnico.md`
+- [ ] Scelta provider IA/OCR (Google Document AI candidato + benchmark)
+- [x] Scelta provider pagamenti: Stripe (da validare con commercialista)
+- [x] Scelta provider email transazionale: Resend
 - [ ] Scelta provider SDI fatturazione elettronica
 - [ ] Disegno architettura ambienti (dev / staging / prod)
-- [ ] Schema database iniziale (ERD)
-- [ ] Definizione data model utenti, pratiche, wallet, notifiche, valutazioni
+- [~] Schema database iniziale (ERD) — scaffold base in `packages/db/prisma/schema.prisma`
+- [~] Definizione data model utenti, pratiche, wallet, notifiche, valutazioni — base Company/User creata
 
 ### 0.5 Flusso fallback "nessuna delle 5 agenzie accetta" (proposta da validare)
 
@@ -134,35 +134,37 @@
 ## FASE 1 - Fondamenta tecniche
 
 ### 1.1 Setup progetto
-- [ ] Repository Git + branching strategy
-- [ ] Monorepo o repo separati (piattaforma / CRM interno / landing)
-- [ ] CI/CD pipeline base
-- [ ] Ambiente dev locale documentato
+- [x] Repository Git + branching strategy (trunk-based, conventional commits)
+- [x] Monorepo pnpm + Turborepo (apps/piattaforma + packages/db, lib, config, ui, email)
+- [x] CI base GitHub Actions (`.github/workflows/ci.yml` — lint + typecheck + build)
+- [x] Ambiente dev locale documentato (README + stack-tecnico.md + Docker Compose Postgres)
 - [ ] Ambiente staging
 - [ ] Ambiente produzione
-- [ ] Secret management (env vars, vault)
-- [ ] Logging + monitoring (Sentry, Datadog o equivalente)
+- [x] Secret management base (.env.example versionato, .env.local ignorato)
+- [x] Sentry integrato in Next.js (no-op se DSN vuoto, attivabile con env var)
 - [ ] Backup automatici DB
 
 ### 1.2 Infrastruttura
-- [ ] Hosting backend (cloud provider scelto)
+- [ ] Hosting backend (Vercel scelto, da provisionare)
 - [ ] Storage S3-compatible con encryption at rest
 - [ ] CDN per assets statici
 - [ ] Dominio + certificati SSL
 - [ ] Email transazionale configurata (SPF/DKIM/DMARC)
 - [ ] Scheduler/cron jobs infrastruttura
+- [x] Database Postgres locale via Docker Compose (`docker-compose.yml`)
+- [x] Prima migrazione applicata (`init`)
 
 ### 1.3 Database e modelli base
-- [ ] Schema utenti (admin, dealer, agenzia) con multi-utente
-- [ ] Schema aziende (ragione sociale, P.IVA, SDI, PEC, IBAN)
+- [~] Schema utenti (admin, dealer, agenzia) con multi-utente — model `User` base creato
+- [~] Schema aziende (ragione sociale, P.IVA, SDI, PEC, IBAN) — model `Company` base creato
 - [ ] Schema documenti caricati (metadata + ref storage)
-- [ ] Schema pratiche (tipo, stato, timeline, codice TF)
+- [ ] Schema pratiche (tipo, stato, timeline, codice PV)
 - [ ] Schema wallet broker + transazioni
 - [ ] Schema fee / addebiti
 - [ ] Schema valutazioni agenzie
 - [ ] Schema listini raccolti
 - [ ] Schema notifiche inviate (audit)
-- [ ] Migrazioni versionate
+- [x] Sistema migrazioni versionate configurato (Prisma Migrate)
 
 ---
 

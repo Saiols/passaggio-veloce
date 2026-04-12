@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pv-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pv
+      POSTGRES_PASSWORD: pv_dev_password
+      POSTGRES_DB: passaggio_veloce
+    ports:
+      - "5432:5432"
+    volumes:
+      - pv-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pv -d passaggio_veloce"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pv-postgres-data:
+    name: pv-postgres-data

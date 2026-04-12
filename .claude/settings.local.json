@@ -15,7 +15,13 @@
       "Bash(pnpm install:*)",
       "Bash(pnpm --filter @pv/db db:generate)",
       "Bash(pnpm --filter piattaforma typecheck)",
-      "Bash(pnpm --filter piattaforma build)"
+      "Bash(pnpm --filter piattaforma build)",
+      "Bash(gh --version)",
+      "Bash(docker --version)",
+      "Bash(docker compose:*)",
+      "Bash(pnpm --filter @pv/db exec prisma migrate dev --name init)",
+      "Bash(docker exec:*)",
+      "Bash(pnpm --filter piattaforma add @sentry/nextjs)"
     ]
   }
 }

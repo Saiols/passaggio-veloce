@@ -21,7 +21,13 @@
       "Bash(docker compose:*)",
       "Bash(pnpm --filter @pv/db exec prisma migrate dev --name init)",
       "Bash(docker exec:*)",
-      "Bash(pnpm --filter piattaforma add @sentry/nextjs)"
+      "Bash(pnpm --filter piattaforma add @sentry/nextjs)",
+      "Bash(pnpm --filter @pv/db exec prisma migrate dev --name auth_and_invitations)",
+      "Bash(pnpm --filter piattaforma add next-auth@beta @auth/prisma-adapter bcryptjs zod react-hook-form @hookform/resolvers)",
+      "Bash(pnpm --filter piattaforma add -D @types/bcryptjs)",
+      "Bash(pnpm --filter piattaforma remove @types/bcryptjs)",
+      "Bash(pnpm --filter piattaforma add @t3-oss/env-nextjs server-only)",
+      "Bash(pnpm lint:*)"
     ]
   }
 }

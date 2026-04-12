@@ -10,6 +10,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DATABASE_URL: postgresql://pv:pv_dev_password@127.0.0.1:5432/passaggio_veloce?schema=public
+  AUTH_SECRET: ci-only-secret-min-32-chars-aaaaaaaaaaaaaaaaa
+
 jobs:
   quality:
     name: Lint, Typecheck, Build
@@ -39,10 +43,8 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Build (generates route types needed by typecheck)
+        run: pnpm build
+
       - name: Typecheck
         run: pnpm typecheck
-
-      - name: Build
-        run: pnpm build
-        env:
-          DATABASE_URL: postgresql://pv:pv_dev_password@127.0.0.1:5432/passaggio_veloce?schema=public

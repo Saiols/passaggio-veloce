@@ -1,5 +1,5 @@
 // Passaggio Veloce - Prisma schema
-// Schema iniziale: estensibile man mano che le fasi avanzano.
+// Schema esteso Fase 2: auth, multi-utente, inviti, verification token.
 
 generator client {
   provider = "prisma-client-js"
@@ -25,26 +25,52 @@ enum UserRole {
   ADMIN_PIATTAFORMA
 }
 
+enum UserStatus {
+  PENDING_EMAIL_VERIFICATION
+  ACTIVE
+  SUSPENDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
 // ============================================================
-// MODELS - Fase 1: solo scaffold base, espansione nelle fasi 2+
+// MODELS
 // ============================================================
 
 model Company {
   id              String      @id @default(uuid()) @db.Uuid
   type            CompanyType
+
   ragioneSociale  String
   partitaIva      String      @unique
   codiceSdi       String?
   pec             String
   email           String
   telefono        String?
+
   indirizzo       String
   citta           String
   cap             String
   provincia       String
+
   iban            String?
+  sepaMandateAccepted   Boolean   @default(false)
+  sepaMandateAcceptedAt DateTime?
+
+  termsAcceptedAt DateTime?
 
   users           User[]
+  invitations     Invitation[]
 
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -56,8 +82,8 @@ model Company {
 }
 
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
-  email           String    @unique
+  id              String     @id @default(uuid()) @db.Uuid
+  email           String     @unique
   passwordHash    String
   emailVerifiedAt DateTime?
 
@@ -67,15 +93,57 @@ model User {
   dataNascita     DateTime?
   luogoNascita    String?
 
-  role            UserRole  @default(UTENTE_AZIENDA)
+  role            UserRole   @default(UTENTE_AZIENDA)
+  status          UserStatus @default(PENDING_EMAIL_VERIFICATION)
 
-  companyId       String?   @db.Uuid
-  company         Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId       String?    @db.Uuid
+  company         Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
   deletedAt       DateTime?
 
   @@index([companyId])
+  @@index([status])
   @@map("users")
+}
+
+model VerificationToken {
+  id        String                @id @default(uuid()) @db.Uuid
+  token     String                @unique
+  type      VerificationTokenType
+  email     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime              @default(now())
+
+  @@index([email, type])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+model Invitation {
+  id        String           @id @default(uuid()) @db.Uuid
+  email     String
+  token     String           @unique
+  role      UserRole         @default(UTENTE_AZIENDA)
+  status    InvitationStatus @default(PENDING)
+
+  companyId String           @db.Uuid
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  invitedById String         @db.Uuid
+
+  expiresAt DateTime
+  acceptedAt DateTime?
+
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([companyId])
+  @@index([email])
+  @@index([status])
+  @@map("invitations")
 }

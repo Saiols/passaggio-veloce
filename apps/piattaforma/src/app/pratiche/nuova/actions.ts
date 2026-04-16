@@ -49,6 +49,12 @@ export async function extractLibrettoAction(
   return { ok: true, data };
 }
 
+// Tratta correttamente "false" / "true" / "on" / assenza di campo dalle FormData
+const formBool = z.preprocess(
+  (v) => v === 'true' || v === 'on' || v === true,
+  z.boolean(),
+);
+
 const submitSchema = z.object({
   tipo: z.enum(['TRAPASSO_NETTO', 'MINIVOLTURA', 'LOTTO_MASSIVO']),
 
@@ -57,11 +63,11 @@ const submitSchema = z.object({
   telaio: z.string().trim().min(11).max(17),
   proprietarioAttuale: z.string().trim().min(1).max(120),
   dataImmatricolazione: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  preImm2015: z.coerce.boolean().optional().default(false),
-  flagComodatoDuso: z.coerce.boolean().optional().default(false),
+  preImm2015: formBool.default(false),
+  flagComodatoDuso: formBool.default(false),
 
   // Venditore
-  venditoreIsPG: z.coerce.boolean().default(false),
+  venditoreIsPG: formBool.default(false),
   venditoreNome: z.string().trim().max(80).optional(),
   venditoreCognome: z.string().trim().max(80).optional(),
   venditoreCF: z.string().trim().max(16).optional(),
@@ -69,7 +75,7 @@ const submitSchema = z.object({
   venditorePIVA: z.string().trim().max(11).optional(),
 
   // Acquirente
-  acquirenteIsPG: z.coerce.boolean().default(false),
+  acquirenteIsPG: formBool.default(false),
   acquirenteNome: z.string().trim().max(80).optional(),
   acquirenteCognome: z.string().trim().max(80).optional(),
   acquirenteCF: z.string().trim().max(16).optional(),
@@ -77,9 +83,9 @@ const submitSchema = z.object({
   acquirentePIVA: z.string().trim().max(11).optional(),
 
   // Flag
-  flagCointestazione: z.coerce.boolean().default(false),
-  flagMinivoltura: z.coerce.boolean().default(false),
-  flagProcura: z.coerce.boolean().default(false),
+  flagCointestazione: formBool.default(false),
+  flagMinivoltura: formBool.default(false),
+  flagProcura: formBool.default(false),
 
   // Localizzazione
   comune: z.string().trim().min(1).max(100),

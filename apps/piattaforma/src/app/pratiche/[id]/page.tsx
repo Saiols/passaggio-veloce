@@ -3,15 +3,19 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Card, StatusChip, type PraticaStato } from '@/components/ui';
+import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
+import { markFirmaAvvenutaAction, annullaPraticaAction } from '../actions';
 
 export default async function PraticaDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ firmata?: string; annullata?: string; error?: string }>;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -47,6 +51,21 @@ export default async function PraticaDetailPage({
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
+  const canFirma =
+    companyType === 'AGENZIA' &&
+    pratica.agenziaAssegnataId === companyId &&
+    pratica.stato === 'ACCETTATA';
+
+  const canAnnulla =
+    companyType === 'DEALER' &&
+    pratica.brokerId === companyId &&
+    pratica.stato !== 'FIRMATA' &&
+    pratica.stato !== 'ANNULLATA' &&
+    pratica.stato !== 'SCADUTA';
+
+  const firmaBound = markFirmaAvvenutaAction.bind(null, pratica.id);
+  const annullaBound = annullaPraticaAction.bind(null, pratica.id);
+
   return (
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -72,6 +91,20 @@ export default async function PraticaDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {canFirma && (
+              <form action={firmaBound}>
+                <Button type="submit" size="sm">
+                  Firma avvenuta
+                </Button>
+              </form>
+            )}
+            {canAnnulla && (
+              <form action={annullaBound}>
+                <Button type="submit" size="sm" variant="danger">
+                  Annulla pratica
+                </Button>
+              </form>
+            )}
             <Link
               href="#"
               className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
@@ -80,6 +113,26 @@ export default async function PraticaDetailPage({
             </Link>
           </div>
         </header>
+
+        {sp.firmata && (
+          <div className="mb-5">
+            <Alert variant="success" title="Firma registrata">
+              Credito accreditato al broker, auto-addebito programmato.
+            </Alert>
+          </div>
+        )}
+        {sp.annullata && (
+          <div className="mb-5">
+            <Alert variant="info" title="Pratica annullata">
+              Tutte le assegnazioni pending sono state chiuse.
+            </Alert>
+          </div>
+        )}
+        {sp.error && (
+          <div className="mb-5">
+            <Alert variant="error">{sp.error}</Alert>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">

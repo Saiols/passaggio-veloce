@@ -5,18 +5,25 @@ type Step = { id: number; label: string };
 type Props = {
   steps: readonly Step[];
   current: number;
+  label?: string;
+  stickyOffset?: 'top-0' | 'top-14';
 };
 
-export function WizardProgress({ steps, current }: Props) {
+export function WizardProgress({
+  steps,
+  current,
+  label = 'Registrazione',
+  stickyOffset = 'top-14',
+}: Props) {
   const clamped = Math.min(Math.max(current, 1), steps.length);
   const percent = ((clamped - 1) / (steps.length - 1)) * 100;
 
   return (
-    <div className="sticky top-14 z-20 border-b border-pv-slate-200 bg-white/95 backdrop-blur">
+    <div className={`sticky ${stickyOffset} z-20 border-b border-pv-slate-200 bg-white/95 backdrop-blur`}>
       <div className="mx-auto w-full max-w-6xl px-5 pt-4 pb-3 sm:px-6">
         <div className="mb-2 flex items-baseline justify-between">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            Registrazione
+            {label}
           </p>
           <p className="text-[12px] font-semibold text-pv-slate-500">
             Step {clamped} di {steps.length}

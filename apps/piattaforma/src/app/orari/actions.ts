@@ -1,0 +1,54 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { auth } from '@/auth';
+import { prisma, Prisma } from '@pv/db';
+
+type Giorno = 'LUN' | 'MAR' | 'MER' | 'GIO' | 'VEN' | 'SAB' | 'DOM';
+const GIORNI: Giorno[] = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
+
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function readFascia(
+  form: FormData,
+  giorno: Giorno,
+  slot: 1 | 2,
+): { inizio: string; fine: string } | null {
+  const start = String(form.get(`${giorno}_${slot}_start`) ?? '').trim();
+  const end = String(form.get(`${giorno}_${slot}_end`) ?? '').trim();
+  if (!start && !end) return null;
+  if (!TIME_RE.test(start) || !TIME_RE.test(end)) return null;
+  if (start >= end) return null;
+  return { inizio: start, fine: end };
+}
+
+type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function updateOrariAction(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  if (session.user.companyType !== 'AGENZIA') {
+    return { ok: false, error: 'Solo le agenzie possono modificare gli orari' };
+  }
+  const agenziaId = session.user.companyId;
+  if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
+
+  for (const g of GIORNI) {
+    const f1 = readFascia(formData, g, 1);
+    const f2 = readFascia(formData, g, 2);
+    const fasce = [f1, f2].filter((x): x is { inizio: string; fine: string } => x !== null);
+
+    await prisma.orariApertura.upsert({
+      where: { agenziaId_giorno: { agenziaId, giorno: g } },
+      update: { fasceOrarie: fasce as unknown as Prisma.InputJsonValue },
+      create: {
+        agenziaId,
+        giorno: g,
+        fasceOrarie: fasce as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  revalidatePath('/orari');
+  return { ok: true };
+}

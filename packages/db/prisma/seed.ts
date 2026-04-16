@@ -195,6 +195,242 @@ async function main() {
     console.log(`  · agenzia: ${agenzia.ragioneSociale} (${a.userEmail}) + orari`);
   }
 
+  // ============================================================
+  // Sample pratiche — variano stato per popolare dashboard
+  // ============================================================
+
+  const agenzieAll = await prisma.company.findMany({
+    where: { type: 'AGENZIA' },
+    orderBy: { createdAt: 'asc' },
+  });
+  const agenziaVE = agenzieAll.find((a) => a.provincia === 'VE')!;
+  const agenziaPD = agenzieAll.find((a) => a.provincia === 'PD')!;
+  const agenziaTV = agenzieAll.find((a) => a.provincia === 'TV')!;
+
+  const daysAgo = (n: number): Date => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d;
+  };
+
+  type PraticaSeed = {
+    codicePratica: string;
+    tipo: 'TRAPASSO_NETTO' | 'MINIVOLTURA';
+    stato:
+      | 'BOZZA'
+      | 'IN_ATTESA_ROUND_1'
+      | 'ACCETTATA'
+      | 'FIRMATA'
+      | 'IN_ESCALATION';
+    brokerId: string;
+    agenziaAssegnataId?: string;
+    comune: string;
+    provincia: string;
+    targa: string;
+    telaio: string;
+    proprietario: string;
+    feeAgenziaCent: number;
+    creditoBrokerCent: number;
+    submittedAgo: number;
+    accettataAgo?: number;
+    firmaAgo?: number;
+    assegnazioni: { agenziaId: string; round: number; esito: 'PENDING' | 'ACCETTATA' | 'RIFIUTATA' | 'TIMEOUT' | 'ASSEGNATA_ALTRO' }[];
+  };
+
+  const praticheSeed: PraticaSeed[] = [
+    {
+      codicePratica: 'PV-2026-00001',
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'FIRMATA',
+      brokerId: dealer1.id,
+      agenziaAssegnataId: agenziaVE.id,
+      comune: 'Venezia',
+      provincia: 'VE',
+      targa: 'FA123GH',
+      telaio: 'ZFA19500005123456',
+      proprietario: 'Mario Rossi',
+      feeAgenziaCent: 12000,
+      creditoBrokerCent: 2500,
+      submittedAgo: 30,
+      accettataAgo: 29,
+      firmaAgo: 12,
+      assegnazioni: [
+        { agenziaId: agenziaVE.id, round: 1, esito: 'ACCETTATA' },
+        { agenziaId: agenziaPD.id, round: 1, esito: 'ASSEGNATA_ALTRO' },
+        { agenziaId: agenziaTV.id, round: 1, esito: 'ASSEGNATA_ALTRO' },
+      ],
+    },
+    {
+      codicePratica: 'PV-2026-00002',
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'ACCETTATA',
+      brokerId: dealer1.id,
+      agenziaAssegnataId: agenziaPD.id,
+      comune: 'Padova',
+      provincia: 'PD',
+      targa: 'GT789NO',
+      telaio: 'WVWZZZ1KZBW234567',
+      proprietario: 'Anna Verdi',
+      feeAgenziaCent: 11500,
+      creditoBrokerCent: 2500,
+      submittedAgo: 6,
+      accettataAgo: 5,
+      assegnazioni: [
+        { agenziaId: agenziaPD.id, round: 1, esito: 'ACCETTATA' },
+        { agenziaId: agenziaVE.id, round: 1, esito: 'ASSEGNATA_ALTRO' },
+      ],
+    },
+    {
+      codicePratica: 'PV-2026-00003',
+      tipo: 'MINIVOLTURA',
+      stato: 'IN_ATTESA_ROUND_1',
+      brokerId: dealer2.id,
+      comune: 'Padova',
+      provincia: 'PD',
+      targa: 'EJ456LM',
+      telaio: 'WAUZZZ8V3JA098765',
+      proprietario: 'Giuseppe Bianchi',
+      feeAgenziaCent: 9500,
+      creditoBrokerCent: 1800,
+      submittedAgo: 1,
+      assegnazioni: [
+        { agenziaId: agenziaPD.id, round: 1, esito: 'PENDING' },
+        { agenziaId: agenziaVE.id, round: 1, esito: 'PENDING' },
+        { agenziaId: agenziaTV.id, round: 1, esito: 'PENDING' },
+      ],
+    },
+    {
+      codicePratica: 'PV-2026-00004',
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'IN_ESCALATION',
+      brokerId: dealer2.id,
+      comune: 'Treviso',
+      provincia: 'TV',
+      targa: 'FB234PQ',
+      telaio: 'JMBSNC74A4U056789',
+      proprietario: 'Luca Ferrari',
+      feeAgenziaCent: 12500,
+      creditoBrokerCent: 2500,
+      submittedAgo: 14,
+      assegnazioni: [
+        { agenziaId: agenziaTV.id, round: 1, esito: 'TIMEOUT' },
+        { agenziaId: agenziaVE.id, round: 2, esito: 'TIMEOUT' },
+        { agenziaId: agenziaPD.id, round: 3, esito: 'TIMEOUT' },
+      ],
+    },
+    {
+      codicePratica: 'PV-2026-00005',
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'FIRMATA',
+      brokerId: dealer2.id,
+      agenziaAssegnataId: agenziaTV.id,
+      comune: 'Treviso',
+      provincia: 'TV',
+      targa: 'EZ567RS',
+      telaio: 'VF1RFD00X57345678',
+      proprietario: 'Francesca Neri',
+      feeAgenziaCent: 11000,
+      creditoBrokerCent: 2500,
+      submittedAgo: 60,
+      accettataAgo: 58,
+      firmaAgo: 40,
+      assegnazioni: [{ agenziaId: agenziaTV.id, round: 1, esito: 'ACCETTATA' }],
+    },
+    // BOZZA — broker la sta ancora compilando
+    {
+      codicePratica: 'PV-2026-DRAFT',
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'BOZZA',
+      brokerId: dealer1.id,
+      comune: 'Venezia',
+      provincia: 'VE',
+      targa: 'FA999ZZ',
+      telaio: 'WFC19500009999999',
+      proprietario: 'Carla Ferri',
+      feeAgenziaCent: 0,
+      creditoBrokerCent: 0,
+      submittedAgo: 0,
+      assegnazioni: [],
+    },
+  ];
+
+  for (const p of praticheSeed) {
+    const exists = await prisma.pratica.findUnique({
+      where: { codicePratica: p.codicePratica },
+    });
+    if (exists) continue;
+
+    const submittedAt = p.submittedAgo > 0 ? daysAgo(p.submittedAgo) : null;
+    const accettataAt = p.accettataAgo ? daysAgo(p.accettataAgo) : null;
+    const firmaAt = p.firmaAgo ? daysAgo(p.firmaAgo) : null;
+
+    const pratica = await prisma.pratica.create({
+      data: {
+        codicePratica: p.stato === 'BOZZA' ? null : p.codicePratica,
+        tipo: p.tipo,
+        stato: p.stato,
+        targa: p.targa,
+        telaio: p.telaio,
+        proprietarioAttuale: p.proprietario,
+        dataImmatricolazione: new Date('2019-06-15'),
+        comune: p.comune,
+        provincia: p.provincia,
+        brokerId: p.brokerId,
+        agenziaAssegnataId: p.agenziaAssegnataId,
+        feeAgenziaCent: p.feeAgenziaCent,
+        creditoBrokerCent: p.creditoBrokerCent,
+        submittedAt,
+        round1StartedAt: submittedAt,
+        accettataAt,
+        firmaAvvenutaAt: firmaAt,
+        venditoreNome: 'Fabio',
+        venditoreCognome: 'Galli',
+        venditoreCF: 'GLLFBA70A01F205P',
+        acquirenteNome: 'Nuovo',
+        acquirenteCognome: 'Proprietario',
+        acquirenteCF: 'NVPRPR85E10L736X',
+      },
+    });
+
+    // Assegnazioni
+    for (const a of p.assegnazioni) {
+      await prisma.praticaAssegnazione.create({
+        data: {
+          praticaId: pratica.id,
+          agenziaId: a.agenziaId,
+          round: a.round,
+          esito: a.esito,
+          invioAt: submittedAt ?? new Date(),
+          esitoAt: a.esito === 'PENDING' ? null : (accettataAt ?? submittedAt ?? new Date()),
+        },
+      });
+    }
+
+    // Credito wallet broker su pratiche firmate
+    if (p.stato === 'FIRMATA' && firmaAt) {
+      const wallet = await prisma.wallet.findUnique({ where: { companyId: p.brokerId } });
+      if (wallet) {
+        const newBalance = wallet.saldoCent + p.creditoBrokerCent;
+        await prisma.wallet.update({
+          where: { id: wallet.id },
+          data: { saldoCent: newBalance },
+        });
+        await prisma.transazioneWallet.create({
+          data: {
+            walletId: wallet.id,
+            tipo: 'CREDITO_PRATICA',
+            importoCent: p.creditoBrokerCent,
+            saldoPostCent: newBalance,
+            praticaId: pratica.id,
+            createdAt: firmaAt,
+          },
+        });
+      }
+    }
+
+    console.log(`  · pratica ${p.codicePratica} [${p.stato}]`);
+  }
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);

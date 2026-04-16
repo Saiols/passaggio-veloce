@@ -7,4 +7,7 @@ export { Field } from './field';
 export { Alert } from './alert';
 export { Stepper } from './stepper';
 export { Card } from './card';
+export { StatCard } from './stat-card';
+export { StatusChip } from './status-chip';
+export type { PraticaStato } from './status-chip';
 export { cn } from './cn';

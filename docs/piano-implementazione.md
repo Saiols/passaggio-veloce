@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-04-12
+> Ultimo aggiornamento: 2026-04-16
 
 ---
 
@@ -46,6 +46,12 @@
 - [x] Scelta provider pagamenti: Stripe (da validare con commercialista)
 - [x] Scelta provider email transazionale: Resend
 - [ ] Scelta provider SDI fatturazione elettronica
+- [ ] Scelta CRM vendite: **HubSpot** vs **Airtable** (decisione CTO — vedi `crm-architettura.md` §8)
+- [ ] Scelta orchestratore automazioni CRM: Make (ex Integromat) confermato
+- [ ] Scelta provider bot AI voce: Vapi.ai confermato (da budgetare)
+- [ ] Scelta provider mail tracking outbound: Lemlist vs Customer.io
+- [ ] Scelta provider video tracking tutorial: Wistia confermato
+- [ ] Scelta provider SMS + VoIP chiamate: Twilio confermato
 - [ ] Disegno architettura ambienti (dev / staging / prod)
 - [~] Schema database iniziale (ERD) — scaffold base in `packages/db/prisma/schema.prisma`
 - [~] Definizione data model utenti, pratiche, wallet, notifiche, valutazioni — base Company/User creata
@@ -181,6 +187,10 @@
 - [x] Approvazione automatica account (stato `PENDING_EMAIL_VERIFICATION` → `ACTIVE`)
 - [x] Selezione ruolo (dealer / agenzia) in fase di registrazione
 - [ ] Step aggiuntivo per agenzia: inserimento orari di apertura (rimandato)
+- [ ] **UTM capture**: salvataggio `utm_contact` / `utm_source` da landing + `/register` → campo `User.crmContactId` (per matching CRM, vedi `crm-architettura.md` §10.3)
+- [ ] **Webhook `user.signup.started`** emesso all'apertura del wizard Step 1 (evento pixel CRM §3.4)
+- [ ] **Webhook `user.signup.completed`** emesso al termine del wizard (Caso A/B §4 doc CRM)
+- [ ] Outbox `CrmOutboundEvent` + worker retry con backoff (vedi `crm-architettura.md` §10.4)
 
 ### 2.2 Auth e sicurezza
 - [x] Login con Auth.js v5 (Credentials provider, JWT strategy)
@@ -362,23 +372,84 @@
 
 ---
 
-## FASE 10 - CRM Interno (sistema SEPARATO dalla piattaforma)
+## FASE 10 - CRM Vendite + Growth Stack
 
-### 10.1 Base CRM
-- [ ] Auth separato
-- [ ] 6 ruoli gerarchici: Admin / AD / CTO / CFO / Sales Manager / Sales
-- [ ] Matrice permessi (vedi analisi-progetto.md §16.3)
-- [ ] Account predefiniti al lancio (6)
+> **Architettura di riferimento:** `docs/crm-architettura.md` (Aprile 2026).
+> Il CRM è un **sistema esterno** (HubSpot/Airtable + Make + Vapi.ai + Lemlist +
+> Wistia + Twilio) — la piattaforma è solo **emettitore di eventi** verso il CRM.
+> Questo permette di avviare il CRM in parallelo allo sviluppo piattaforma,
+> con un team/contractor separato focalizzato su growth e sales ops.
 
-### 10.2 Funzionalità CRM
-- [ ] Gestione lead (dealer e agenzie target)
-- [ ] Assegnazione contatti a Sales
-- [ ] Promemoria e task
-- [ ] Notifiche interne
-- [ ] Dashboard operativa (Admin/AD/CTO/Sales Mgr)
-- [ ] Dashboard economica (Admin/AD/CTO, CFO solo lettura)
-- [ ] Gestione account utenti CRM (con restrizioni per ruolo)
-- [ ] Log attività
+### 10.1 Piattaforma — eventi in uscita (lato codebase)
+
+Outbox pattern con retry per garantire delivery affidabile anche sotto carico.
+
+- [ ] Aggiungere `User.crmContactId` nullable unique + `crmSyncedAt`
+- [ ] Modello `CrmOutboundEvent` (outbox) con stato pending/sent/failed + retry count
+- [ ] Worker cron/queue che processa outbox con backoff esponenziale
+- [ ] Firma webhook HMAC-SHA256 con shared secret (`CRM_WEBHOOK_SECRET` env)
+- [ ] Idempotency-key header per retry sicuri
+- [ ] Eventi emessi:
+  - [ ] `user.signup.started` (apertura wizard Step 1)
+  - [ ] `user.signup.completed` (wizard terminato)
+  - [ ] `pratica.first.created` (broker — prima pratica caricata)
+  - [ ] `pratica.first.accepted` (agenzia — prima pratica accettata)
+  - [ ] `pratica.completed` (firma avvenuta)
+  - [ ] `user.inactive.30d` (nessun accesso/pratica da 30 giorni)
+
+### 10.2 Piattaforma — API read-only per CRM
+
+Endpoint protetti da API key + IP allowlist Make, per permettere al bot AI / Make
+di leggere lo stato corrente dell'utente prima di una chiamata.
+
+- [ ] `GET /api/crm/user/:platformUserId/state` → JSON con `statusAccount`, `ultimoAccesso`, `praticheTotali`, `praticheUltimoMese`, `tassoCompletamento`
+- [ ] Middleware auth API key + rate limiting
+- [ ] Log richieste per audit
+
+### 10.3 CRM esterno — Setup (settimana 1, lato CTO/growth)
+
+- [ ] Scelta tool CRM (HubSpot free/starter vs Airtable)
+- [ ] Creazione campi custom (vedi `crm-architettura.md` §3)
+- [ ] Import prospect esistenti (~600 contatti Veneto)
+- [ ] Configurazione pipeline stati S0–S10
+
+### 10.4 CRM esterno — Integrazione piattaforma (settimana 1-2)
+
+- [ ] Endpoint Make riceve webhook piattaforma
+- [ ] Logica matching email → telefono → P.IVA
+- [ ] Scenario Make per Caso A (contatto esistente)
+- [ ] Scenario Make per Caso B (nuovo iscritto)
+- [ ] Alert manuale sales su conflitti matching
+- [ ] Test end-to-end su utenti di test
+
+### 10.5 CRM esterno — Bot AI + tracking (settimana 2-3)
+
+- [ ] Vapi.ai function calling — lettura stato pre-chiamata
+- [ ] Vapi.ai function calling — scrittura post-chiamata (stato, note, sentiment, tag obiezioni, trascrizione)
+- [ ] Pixel su link iscrizione con UTM univoci per contatto (link tracciati Lemlist)
+- [ ] Webhook Wistia per tracking video tutorial (minuti visti, %)
+- [ ] Trigger Make su eventi stato (vedi `crm-architettura.md` §6):
+  - [ ] SMS + mail su fine chiamata positiva (S0/S1 → S3)
+  - [ ] Reminder SMS link non aperto a 24h / chiamata AI a 48h / SMS finale a 7gg
+  - [ ] Chiamata AI pixel-aware su link aperto non iscritto (S5)
+  - [ ] SMS+chiamata supporto su iscrizione iniziata non completata (S6)
+  - [ ] Onboarding S7 (mail benvenuto + guida prima pratica + chiamata AI attivazione)
+  - [ ] Celebrazione S8 + feedback call +7gg
+  - [ ] Re-engagement S9/S10 su inattività
+
+### 10.6 CRM esterno — Test & go-live (settimana 3-4)
+
+- [ ] Test E2E su campione 20-30 contatti
+- [ ] Verifica qualità trascrizioni + riassunti AI
+- [ ] Verifica matching robusto (Caso A, Caso B, conflitti)
+- [ ] Go-live su database prospect completo
+
+### 10.7 Testi e copy (documento complementare)
+
+- [ ] Script vocale per ogni stato (S0–S10)
+- [ ] Testi SMS per ogni trigger
+- [ ] Template mail branded per ogni trigger
+- [ ] A/B test varianti testo + sentiment tracking
 
 ---
 
@@ -448,3 +519,6 @@
 | B2 | Fallback 5 agenzie non accettano | Proposta in §0.5, da validare | Sblocca Fase 4.1 una volta approvato | Alberto + Andrea |
 | B3 | Naming definitivo | Risolto: **Passaggio Veloce** | — | — |
 | B4 | CTO socio fondatore | Risolto: **Francesco Sioli** | — | — |
+| B5 | Scelta CRM core (HubSpot vs Airtable) | Aperto | Sblocca Fase 10.3 | CTO |
+| B6 | Budget bot AI Vapi.ai | Aperto | Impatta Fase 10.5 + stima costi complessiva | Andrea + CTO |
+| B7 | Testi SMS / script vocale / copy mail per stati S0-S10 | Aperto | Blocca Fase 10.7 | Sales + marketing |

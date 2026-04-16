@@ -43,3 +43,11 @@ packages/db/prisma/migrations/dev.db*
 *.tsbuildinfo
 next-env.d.ts
 .superpowers/
+
+# Provider locali (dev)
+uploads/
+.dev-emails/
+
+# Claude Code runtime / local-only
+.claude/scheduled_tasks.lock
+.claude/crm-extracted.txt

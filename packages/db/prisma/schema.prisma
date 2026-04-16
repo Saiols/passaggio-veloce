@@ -1,5 +1,6 @@
 // Passaggio Veloce - Prisma schema
-// Schema esteso Fase 2: auth, multi-utente, inviti, verification token.
+// Schema esteso Fase 2.5: auth + core business models (pratiche, documenti,
+// distribuzione, wallet, fee, valutazioni, listini, notifiche).
 
 generator client {
   provider = "prisma-client-js"
@@ -11,7 +12,7 @@ datasource db {
 }
 
 // ============================================================
-// ENUMS
+// ENUMS — identità e accesso
 // ============================================================
 
 enum CompanyType {
@@ -44,66 +45,257 @@ enum VerificationTokenType {
 }
 
 // ============================================================
-// MODELS
+// ENUMS — pratiche
+// ============================================================
+
+enum PraticaTipo {
+  TRAPASSO_NETTO
+  MINIVOLTURA
+  LOTTO_MASSIVO
+}
+
+enum PraticaStato {
+  BOZZA
+  IN_ATTESA_ROUND_1
+  IN_ATTESA_ROUND_2
+  IN_ATTESA_ROUND_3
+  IN_ESCALATION
+  ACCETTATA
+  FIRMATA
+  SCADUTA
+  ANNULLATA
+}
+
+enum AssegnazioneEsito {
+  PENDING
+  ACCETTATA
+  RIFIUTATA
+  TIMEOUT
+  ASSEGNATA_ALTRO
+}
+
+// ============================================================
+// ENUMS — documenti e gating IA
+// ============================================================
+
+enum DocumentoTipo {
+  LIBRETTO_CIRCOLAZIONE
+  CI_FRONTE
+  CI_RETRO
+  CODICE_FISCALE
+  PROCURA
+  PERMESSO_SOGGIORNO
+  VISURA_CAMERALE
+  CERTIFICATO_PROPRIETA
+  ALTRO
+}
+
+enum DocumentoOwner {
+  VENDITORE
+  ACQUIRENTE
+  AMMINISTRATORE
+  AZIENDA
+}
+
+enum OcrStato {
+  NONE
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum GatingStato {
+  NONE
+  PENDING
+  PASSED
+  FAILED
+  OVERRIDDEN
+}
+
+// ============================================================
+// ENUMS — calendario
+// ============================================================
+
+enum GiornoSettimana {
+  LUN
+  MAR
+  MER
+  GIO
+  VEN
+  SAB
+  DOM
+}
+
+// ============================================================
+// ENUMS — pagamenti e wallet
+// ============================================================
+
+enum TransazioneWalletTipo {
+  CREDITO_PRATICA
+  PAYOUT_AUTOMATICO
+  PAYOUT_MANUALE
+  RETTIFICA_ADMIN
+  STORNO
+}
+
+enum PayoutStato {
+  RICHIESTO
+  IN_LAVORAZIONE
+  ESEGUITO
+  FALLITO
+  ANNULLATO
+}
+
+enum FeeAddebitoTipo {
+  ADDEBITO_FIRMA
+  AUTO_ADDEBITO_GIORNO_20
+}
+
+enum FeeAddebitoStato {
+  SCHEDULED
+  IN_LAVORAZIONE
+  SUCCESS
+  FAILED
+  RETRY
+  ANNULLATO
+}
+
+// ============================================================
+// ENUMS — valutazioni e listini
+// ============================================================
+
+enum ListinoFormato {
+  UPLOAD_FILE
+  FORM_STRUTTURATO
+}
+
+// ============================================================
+// ENUMS — notifiche
+// ============================================================
+
+enum NotificaTipo {
+  N1_BROKER_INVIO_PRATICA
+  N2_BROKER_ACCETTATA
+  N3_BROKER_SOLLECITO
+  N4_BROKER_FIRMA_E_CREDITO
+  N5_BROKER_PAYOUT
+  N6_AGENZIA_NUOVA_PRATICA
+  N7_AGENZIA_PROMEMORIA_COUNTDOWN
+  N8_AGENZIA_ADDEBITO
+  N10_ADMIN_ESCALATION
+  N11_BROKER_ESCALATION
+}
+
+enum NotificaCanale {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum NotificaStato {
+  SCHEDULED
+  SENT
+  FAILED
+  READ
+}
+
+// ============================================================
+// MODELS — identità
 // ============================================================
 
 model Company {
-  id              String      @id @default(uuid()) @db.Uuid
-  type            CompanyType
+  id   String      @id @default(uuid()) @db.Uuid
+  type CompanyType
 
-  ragioneSociale  String
-  partitaIva      String      @unique
-  codiceSdi       String?
-  pec             String
-  email           String
-  telefono        String?
+  ragioneSociale String
+  partitaIva     String  @unique
+  codiceSdi      String?
+  pec            String
+  email          String
+  telefono       String?
 
-  indirizzo       String
-  citta           String
-  cap             String
-  provincia       String
+  indirizzo String
+  citta     String
+  cap       String
+  provincia String
 
-  iban            String?
+  iban                  String?
   sepaMandateAccepted   Boolean   @default(false)
   sepaMandateAcceptedAt DateTime?
 
   termsAcceptedAt DateTime?
 
-  users           User[]
-  invitations     Invitation[]
+  users       User[]
+  invitations Invitation[]
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  deletedAt       DateTime?
+  // Pratiche (broker)
+  praticheCreate    Pratica[]             @relation("PraticheBroker")
+  // Pratiche (agenzia assegnata)
+  praticheAssegnate Pratica[]             @relation("PraticheAgenziaAssegnata")
+  // Assegnazioni intermedie (round 1/2/3)
+  assegnazioni      PraticaAssegnazione[]
+  // Documenti anagrafici aziendali (visura, CI amministratore)
+  documenti         Documento[]           @relation("DocumentiCompany")
+
+  // Calendario agenzia
+  orariApertura         OrariApertura[]
+  chiusureStraordinarie ChiusuraStraordinaria[]
+
+  // Wallet (broker)
+  wallet Wallet?
+
+  // Fee (agenzia)
+  feeAddebiti FeeAddebito[]
+
+  // Valutazioni (agenzia che riceve / dealer che vota)
+  valutazioniRicevute Valutazione[] @relation("ValutazioniAgenzia")
+  valutazioniFatte    Valutazione[] @relation("ValutazioniDealer")
+
+  // Listini (agenzia)
+  listini Listino[]
+
+  // Notifiche
+  notifiche NotificaInviata[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([type])
   @@index([citta])
+  @@index([provincia])
   @@map("companies")
 }
 
 model User {
-  id              String     @id @default(uuid()) @db.Uuid
-  email           String     @unique
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
   passwordHash    String
   emailVerifiedAt DateTime?
 
-  nome            String
-  cognome         String
-  codiceFiscale   String?
-  dataNascita     DateTime?
-  luogoNascita    String?
+  nome          String
+  cognome       String
+  codiceFiscale String?
+  dataNascita   DateTime?
+  luogoNascita  String?
 
-  role            UserRole   @default(UTENTE_AZIENDA)
-  status          UserStatus @default(PENDING_EMAIL_VERIFICATION)
+  role   UserRole   @default(UTENTE_AZIENDA)
+  status UserStatus @default(PENDING_EMAIL_VERIFICATION)
 
-  companyId       String?    @db.Uuid
-  company         Company?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId String?  @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  lastLoginAt     DateTime?
+  lastLoginAt DateTime?
 
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
-  deletedAt       DateTime?
+  // Documenti caricati da questo utente
+  documentiCaricati Documento[] @relation("DocumentiUploader")
+
+  // Notifiche dirette all'utente
+  notifiche NotificaInviata[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
   @@index([companyId])
   @@index([status])
@@ -125,25 +317,429 @@ model VerificationToken {
 }
 
 model Invitation {
-  id        String           @id @default(uuid()) @db.Uuid
-  email     String
-  token     String           @unique
-  role      UserRole         @default(UTENTE_AZIENDA)
-  status    InvitationStatus @default(PENDING)
+  id     String           @id @default(uuid()) @db.Uuid
+  email  String
+  token  String           @unique
+  role   UserRole         @default(UTENTE_AZIENDA)
+  status InvitationStatus @default(PENDING)
 
-  companyId String           @db.Uuid
-  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  invitedById String         @db.Uuid
+  invitedById String @db.Uuid
 
-  expiresAt DateTime
+  expiresAt  DateTime
   acceptedAt DateTime?
 
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([email])
   @@index([status])
   @@map("invitations")
+}
+
+// ============================================================
+// MODELS — pratiche
+// ============================================================
+
+model Pratica {
+  id            String  @id @default(uuid()) @db.Uuid
+  // Codice leggibile es. PV-2026-04821, generato al submit (NON in bozza)
+  codicePratica String? @unique
+
+  tipo  PraticaTipo
+  stato PraticaStato @default(BOZZA)
+
+  // Dati veicolo (da OCR libretto, correggibili manualmente)
+  targa                String?
+  telaio               String?
+  proprietarioAttuale  String?
+  dataImmatricolazione DateTime?
+  preImm2015           Boolean   @default(false)
+  flagComodatoDuso     Boolean   @default(false)
+
+  // Dati venditore
+  venditoreNome               String?
+  venditoreCognome            String?
+  venditoreCF                 String?
+  venditoreIsPersonaGiuridica Boolean @default(false)
+  venditoreRagioneSociale     String?
+  venditorePIVA               String?
+
+  // Dati acquirente
+  acquirenteNome               String?
+  acquirenteCognome            String?
+  acquirenteCF                 String?
+  acquirenteIsPersonaGiuridica Boolean @default(false)
+  acquirenteRagioneSociale     String?
+  acquirentePIVA               String?
+
+  // Flag pratica
+  flagCointestazione Boolean @default(false)
+  flagMinivoltura    Boolean @default(false)
+  flagProcura        Boolean @default(false)
+
+  // Localizzazione / distribuzione
+  comune    String?
+  provincia String?
+
+  // Attori
+  brokerId String  @db.Uuid
+  broker   Company @relation("PraticheBroker", fields: [brokerId], references: [id])
+
+  agenziaAssegnataId String?  @db.Uuid
+  agenziaAssegnata   Company? @relation("PraticheAgenziaAssegnata", fields: [agenziaAssegnataId], references: [id])
+
+  // Codice interno agenzia + nota (assegnata al momento accettazione)
+  codiceAgenziaInterno String?
+  notaInternaAgenzia   String?
+
+  // Economics (in centesimi)
+  feeAgenziaCent    Int @default(0)
+  creditoBrokerCent Int @default(0)
+
+  // Timeline
+  submittedAt     DateTime?
+  round1StartedAt DateTime?
+  round2StartedAt DateTime?
+  round3StartedAt DateTime?
+  escalationAt    DateTime?
+  accettataAt     DateTime?
+  firmaAvvenutaAt DateTime?
+  autoAddebitoAt  DateTime?
+  scadutaAt       DateTime?
+  annullataAt     DateTime?
+
+  // Relations
+  documenti    Documento[]
+  assegnazioni PraticaAssegnazione[]
+  transazioni  TransazioneWallet[]
+  feeAddebiti  FeeAddebito[]
+  valutazione  Valutazione?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([brokerId])
+  @@index([agenziaAssegnataId])
+  @@index([stato])
+  @@index([provincia])
+  @@index([comune])
+  @@map("pratiche")
+}
+
+model PraticaAssegnazione {
+  id String @id @default(uuid()) @db.Uuid
+
+  praticaId String  @db.Uuid
+  pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  agenziaId String  @db.Uuid
+  agenzia   Company @relation(fields: [agenziaId], references: [id])
+
+  round Int // 1, 2, 3
+
+  invioAt           DateTime  @default(now())
+  notificaInviataAt DateTime?
+
+  // Countdown per-agenzia basato sui suoi orari di apertura
+  countdownInizioAt DateTime?
+  countdownFineAt   DateTime?
+
+  esito       AssegnazioneEsito @default(PENDING)
+  esitoAt     DateTime?
+  notaRifiuto String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([praticaId, agenziaId, round])
+  @@index([agenziaId, esito])
+  @@index([round, esito])
+  @@map("pratiche_assegnazioni")
+}
+
+// ============================================================
+// MODELS — documenti
+// ============================================================
+
+model Documento {
+  id String @id @default(uuid()) @db.Uuid
+
+  tipo  DocumentoTipo
+  owner DocumentoOwner? // a chi si riferisce (venditore/acquirente/...)
+
+  // Proprietà: può essere su una pratica OPPURE anagrafica aziendale (visura)
+  praticaId String?  @db.Uuid
+  pratica   Pratica? @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  companyId String?  @db.Uuid
+  company   Company? @relation("DocumentiCompany", fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Storage
+  storageKey       String // path/key nel provider (locale o S3)
+  storageProvider  String @default("local") // "local" | "s3" | "gcs"
+  mimeType         String
+  sizeBytes        Int
+  originalFilename String
+
+  uploadedById String @db.Uuid
+  uploadedBy   User   @relation("DocumentiUploader", fields: [uploadedById], references: [id])
+
+  // OCR
+  ocrStato    OcrStato  @default(NONE)
+  ocrProvider String? // "mock" | "google_documentai" | ...
+  ocrData     Json?
+  ocrAt       DateTime?
+  ocrError    String?
+
+  // Gating IA
+  gatingStato        GatingStato @default(NONE)
+  gatingError        String?
+  gatingOverrideById String?     @db.Uuid
+  gatingOverrideAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([praticaId])
+  @@index([companyId])
+  @@index([tipo])
+  @@index([gatingStato])
+  @@map("documenti")
+}
+
+// ============================================================
+// MODELS — calendario agenzia
+// ============================================================
+
+model OrariApertura {
+  id String @id @default(uuid()) @db.Uuid
+
+  agenziaId String  @db.Uuid
+  agenzia   Company @relation(fields: [agenziaId], references: [id], onDelete: Cascade)
+
+  giorno GiornoSettimana
+
+  // Fasce orarie come JSON: [{ inizio: "09:00", fine: "13:00" }, { inizio: "15:00", fine: "18:30" }]
+  fasceOrarie Json
+
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([agenziaId, giorno])
+  @@map("orari_apertura")
+}
+
+model ChiusuraStraordinaria {
+  id String @id @default(uuid()) @db.Uuid
+
+  agenziaId String  @db.Uuid
+  agenzia   Company @relation(fields: [agenziaId], references: [id], onDelete: Cascade)
+
+  dataInizio DateTime @db.Date
+  dataFine   DateTime @db.Date
+  motivo     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([agenziaId, dataInizio])
+  @@map("chiusure_straordinarie")
+}
+
+// ============================================================
+// MODELS — wallet e pagamenti
+// ============================================================
+
+model Wallet {
+  id String @id @default(uuid()) @db.Uuid
+
+  companyId String  @unique @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  saldoCent Int @default(0)
+
+  transazioni TransazioneWallet[]
+  payouts     Payout[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("wallets")
+}
+
+model TransazioneWallet {
+  id String @id @default(uuid()) @db.Uuid
+
+  walletId String @db.Uuid
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  tipo          TransazioneWalletTipo
+  importoCent   Int // positivo = credito, negativo = debito
+  saldoPostCent Int // saldo dopo la transazione (audit)
+
+  praticaId String?  @db.Uuid
+  pratica   Pratica? @relation(fields: [praticaId], references: [id])
+
+  payoutId String? @db.Uuid
+  payout   Payout? @relation(fields: [payoutId], references: [id])
+
+  note String?
+
+  createdAt DateTime @default(now())
+
+  @@index([walletId, createdAt])
+  @@index([praticaId])
+  @@map("transazioni_wallet")
+}
+
+model Payout {
+  id String @id @default(uuid()) @db.Uuid
+
+  walletId String @db.Uuid
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  importoCent Int
+  stato       PayoutStato @default(RICHIESTO)
+  automatico  Boolean     @default(false)
+
+  richiestoAt  DateTime  @default(now())
+  eseguitoAt   DateTime?
+  fallitoAt    DateTime?
+  errorMessage String?
+
+  // Rendiconto PDF (ref Documento opzionale)
+  rendicontoStorageKey String?
+  providerRef          String? // riferimento Stripe Payout (post-integrazione)
+
+  transazioni TransazioneWallet[]
+
+  @@index([walletId, stato])
+  @@map("payouts")
+}
+
+model FeeAddebito {
+  id String @id @default(uuid()) @db.Uuid
+
+  praticaId String  @db.Uuid
+  pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  agenziaId String  @db.Uuid
+  agenzia   Company @relation(fields: [agenziaId], references: [id])
+
+  importoCent Int
+  tipo        FeeAddebitoTipo
+  stato       FeeAddebitoStato @default(SCHEDULED)
+
+  scheduledAt  DateTime?
+  executedAt   DateTime?
+  errorMessage String?
+  providerRef  String? // riferimento Stripe charge (post-integrazione)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agenziaId, stato])
+  @@index([praticaId])
+  @@index([scheduledAt])
+  @@map("fee_addebiti")
+}
+
+// ============================================================
+// MODELS — valutazioni
+// ============================================================
+
+model Valutazione {
+  id String @id @default(uuid()) @db.Uuid
+
+  praticaId String  @unique @db.Uuid
+  pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  agenziaId String  @db.Uuid
+  agenzia   Company @relation("ValutazioniAgenzia", fields: [agenziaId], references: [id])
+
+  dealerId String  @db.Uuid
+  dealer   Company @relation("ValutazioniDealer", fields: [dealerId], references: [id])
+
+  stelle            Int // 1..5
+  note              String?
+  segnalazioneAbuso Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([agenziaId])
+  @@map("valutazioni")
+}
+
+// ============================================================
+// MODELS — listini / osservatorio prezzi
+// ============================================================
+
+model Listino {
+  id String @id @default(uuid()) @db.Uuid
+
+  agenziaId String  @db.Uuid
+  agenzia   Company @relation(fields: [agenziaId], references: [id], onDelete: Cascade)
+
+  formato ListinoFormato
+
+  // Se formato = UPLOAD_FILE, riferimento al documento (non FK hard: può vivere in storage esterno)
+  documentoStorageKey String?
+
+  // Se formato = FORM_STRUTTURATO: campi in centesimi
+  prezzoBaseTrapassoCent Int?
+  prezzoMinivolturaCent  Int?
+  maggiorazioni          Json? // struttura libera (es. { "pre2015": 3000, "lottoMassivo": -500 })
+
+  provincieCopertura String[] // es. ["VE", "PD", "TV"]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([agenziaId])
+  @@map("listini")
+}
+
+// ============================================================
+// MODELS — notifiche (audit)
+// ============================================================
+
+model NotificaInviata {
+  id String @id @default(uuid()) @db.Uuid
+
+  tipo   NotificaTipo
+  canale NotificaCanale
+  stato  NotificaStato  @default(SCHEDULED)
+
+  // Destinatario: può essere user+company, solo company, o libero
+  userId String? @db.Uuid
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  companyId String?  @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  destinazione String // email o telefono effettivo al momento dell'invio
+  subject      String?
+  bodyPreview  String? // primi 200 char (audit rapido)
+  payload      Json // dati usati per generare la notifica
+
+  scheduledAt DateTime  @default(now())
+  sentAt      DateTime?
+  failedAt    DateTime?
+  readAt      DateTime?
+
+  providerRef  String? // message-id del provider (Resend/Twilio/...)
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tipo])
+  @@index([userId])
+  @@index([companyId])
+  @@index([stato, scheduledAt])
+  @@map("notifiche_inviate")
 }

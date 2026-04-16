@@ -42,3 +42,4 @@ packages/db/prisma/migrations/dev.db*
 # Misc
 *.tsbuildinfo
 next-env.d.ts
+.superpowers/

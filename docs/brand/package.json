@@ -1,0 +1,9 @@
+{
+  "name": "brand-scratch",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "sharp": "^0.33.5",
+    "potrace": "^2.1.8"
+  }
+}

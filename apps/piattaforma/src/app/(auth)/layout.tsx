@@ -1,19 +1,17 @@
 import type { ReactNode } from 'react';
+import { SiteHeader } from '@/components/site-header';
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-slate-900">Passaggio Veloce</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Broker digitale per i passaggi di proprietà veicoli
-          </p>
+    <div className="flex min-h-screen flex-col bg-white">
+      <SiteHeader variant="auth" />
+      <main className="flex flex-1 flex-col">{children}</main>
+      <footer className="border-t border-pv-slate-200 bg-white">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4 text-[12px] text-pv-slate-500 sm:px-6">
+          <p>© {new Date().getFullYear()} Passaggio Veloce</p>
+          <p>Broker digitale automotive</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          {children}
-        </div>
-      </div>
+      </footer>
     </div>
   );
 }

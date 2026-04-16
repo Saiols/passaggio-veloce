@@ -2,25 +2,79 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #0f172a;
+
+  /* Brand — Trust Blue (facile.it-inspired) */
+  --pv-navy-900: #0a0f1f;
+  --pv-navy-800: #0a2540;
+  --pv-navy-700: #003f8a;
+  --pv-navy-600: #0054a6;
+  --pv-navy-100: #e8eef7;
+
+  --pv-orange-500: #ff7a00;
+  --pv-orange-600: #e86d00;
+
+  --pv-slate-50: #f8fafc;
+  --pv-slate-100: #f1f5f9;
+  --pv-slate-200: #e2e8f0;
+  --pv-slate-300: #cbd5e1;
+  --pv-slate-500: #64748b;
+  --pv-slate-700: #334155;
+  --pv-slate-900: #0f172a;
+
+  --pv-green-500: #16a34a;
+  --pv-green-50: #ecfdf5;
+  --pv-red-500: #dc2626;
+  --pv-red-50: #fef2f2;
+  --pv-amber-500: #f59e0b;
+  --pv-amber-50: #fffbeb;
+
+  --pv-radius-sm: 8px;
+  --pv-radius-md: 10px;
+  --pv-radius-lg: 12px;
+  --pv-radius-xl: 16px;
+  --pv-radius-2xl: 20px;
+
+  --pv-shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 30px rgb(10 37 64 / 0.08);
+  --pv-shadow-card-lg: 0 24px 60px rgb(0 0 0 / 0.22);
+  --pv-shadow-cta: 0 8px 18px rgb(255 122 0 / 0.28);
+  --pv-ring-focus: 0 0 0 3px rgb(0 84 166 / 0.22);
+  --pv-ring-error: 0 0 0 3px rgb(220 38 38 / 0.22);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-pv-navy-900: var(--pv-navy-900);
+  --color-pv-navy-800: var(--pv-navy-800);
+  --color-pv-navy-700: var(--pv-navy-700);
+  --color-pv-navy-600: var(--pv-navy-600);
+  --color-pv-navy-100: var(--pv-navy-100);
+
+  --color-pv-orange-500: var(--pv-orange-500);
+  --color-pv-orange-600: var(--pv-orange-600);
+
+  --color-pv-slate-50: var(--pv-slate-50);
+  --color-pv-slate-100: var(--pv-slate-100);
+  --color-pv-slate-200: var(--pv-slate-200);
+  --color-pv-slate-300: var(--pv-slate-300);
+  --color-pv-slate-500: var(--pv-slate-500);
+  --color-pv-slate-700: var(--pv-slate-700);
+  --color-pv-slate-900: var(--pv-slate-900);
+
+  --color-pv-green-500: var(--pv-green-500);
+  --color-pv-green-50: var(--pv-green-50);
+  --color-pv-red-500: var(--pv-red-500);
+  --color-pv-red-50: var(--pv-red-50);
+  --color-pv-amber-500: var(--pv-amber-500);
+  --color-pv-amber-50: var(--pv-amber-50);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

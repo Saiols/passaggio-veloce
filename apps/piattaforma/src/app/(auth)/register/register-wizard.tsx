@@ -11,6 +11,8 @@ import {
   registerStep2CompanySchema,
   registerStep4PaymentSchema,
 } from '@/lib/auth/schemas';
+import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
+import { WizardProgress } from '@/components/wizard-progress';
 import { registerAction } from '../actions';
 
 type AccountData = z.infer<typeof registerStep1AccountSchema>;
@@ -24,10 +26,10 @@ type WizardData = {
 };
 
 const STEPS = [
-  { id: 1, label: 'Account' },
-  { id: 2, label: 'Azienda' },
-  { id: 3, label: 'Documenti' },
-  { id: 4, label: 'Pagamento' },
+  { id: 1, label: 'Account', title: 'Crea il tuo account', hint: 'Dati personali e credenziali di accesso alla piattaforma.' },
+  { id: 2, label: 'Azienda', title: 'Dati azienda', hint: 'Ragione sociale, partita IVA, sede legale e contatti.' },
+  { id: 3, label: 'Documenti', title: 'Documenti richiesti', hint: 'CI, codice fiscale e visura camerale per la verifica KYC.' },
+  { id: 4, label: 'Pagamento', title: 'Pagamento e condizioni', hint: 'IBAN per il mandato SEPA e accettazione dei Termini.' },
 ] as const;
 
 export function RegisterWizard() {
@@ -77,100 +79,50 @@ export function RegisterWizard() {
     });
   };
 
+  const currentStep = STEPS.find((s) => s.id === step)!;
+
   return (
-    <div className="space-y-6">
-      <Stepper current={step} />
+    <>
+      <WizardProgress steps={STEPS} current={step} />
 
-      {success && (
-        <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">{success}</div>
-      )}
-      {submitError && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{submitError}</div>
-      )}
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+        <header className="mb-6">
+          <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+            {currentStep.title}
+          </h1>
+          <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-pv-slate-500">
+            {currentStep.hint}
+          </p>
+        </header>
 
-      {step === 1 && <AccountStep defaultValues={data.account} onNext={handleAccount} />}
-      {step === 2 && (
-        <CompanyStep
-          defaultValues={data.company}
-          onBack={() => setStep(1)}
-          onNext={handleCompany}
-        />
-      )}
-      {step === 3 && (
-        <DocumentsStep onBack={() => setStep(2)} onNext={handleDocumentsSkip} />
-      )}
-      {step === 4 && (
-        <PaymentStep
-          defaultValues={data.payment}
-          onBack={() => setStep(3)}
-          onSubmit={handlePayment}
-          isSubmitting={isPending}
-        />
-      )}
-    </div>
+        <div className="space-y-5">
+          {success && <Alert variant="success">{success}</Alert>}
+          {submitError && <Alert variant="error">{submitError}</Alert>}
+
+          {step === 1 && <AccountStep defaultValues={data.account} onNext={handleAccount} />}
+          {step === 2 && (
+            <CompanyStep
+              defaultValues={data.company}
+              onBack={() => setStep(1)}
+              onNext={handleCompany}
+            />
+          )}
+          {step === 3 && (
+            <DocumentsStep onBack={() => setStep(2)} onNext={handleDocumentsSkip} />
+          )}
+          {step === 4 && (
+            <PaymentStep
+              defaultValues={data.payment}
+              onBack={() => setStep(3)}
+              onSubmit={handlePayment}
+              isSubmitting={isPending}
+            />
+          )}
+        </div>
+      </div>
+    </>
   );
 }
-
-// ============================================================
-// STEPPER
-// ============================================================
-
-function Stepper({ current }: { current: number }) {
-  return (
-    <ol className="flex items-center justify-between text-xs">
-      {STEPS.map((s) => {
-        const isDone = current > s.id;
-        const isCurrent = current === s.id;
-        return (
-          <li key={s.id} className="flex flex-1 items-center">
-            <div
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-                isDone
-                  ? 'bg-green-600 text-white'
-                  : isCurrent
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-200 text-slate-600'
-              }`}
-            >
-              {s.id}
-            </div>
-            <span
-              className={`ml-2 ${isCurrent ? 'font-semibold text-slate-900' : 'text-slate-500'}`}
-            >
-              {s.label}
-            </span>
-            {s.id < STEPS.length && <div className="mx-2 h-px flex-1 bg-slate-200" />}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-// ============================================================
-// FIELD WRAPPER
-// ============================================================
-
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
-      {children}
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-    </div>
-  );
-}
-
-const inputClass =
-  'block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
 
 // ============================================================
 // STEP 1 - ACCOUNT
@@ -186,65 +138,63 @@ function AccountStep({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<AccountData>({
     resolver: zodResolver(registerStep1AccountSchema),
     defaultValues,
+    mode: 'onChange',
   });
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
-      <Field label="Email" error={errors.email?.message}>
-        <input type="email" autoComplete="email" {...register('email')} className={inputClass} />
+      <Field label="Email" required error={errors.email?.message}>
+        <Input type="email" autoComplete="email" invalid={!!errors.email} {...register('email')} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Password" error={errors.password?.message}>
-          <input
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Password" required error={errors.password?.message}>
+          <Input
             type="password"
             autoComplete="new-password"
+            invalid={!!errors.password}
             {...register('password')}
-            className={inputClass}
           />
         </Field>
-        <Field label="Conferma password" error={errors.passwordConfirm?.message}>
-          <input
+        <Field label="Conferma password" required error={errors.passwordConfirm?.message}>
+          <Input
             type="password"
             autoComplete="new-password"
+            invalid={!!errors.passwordConfirm}
             {...register('passwordConfirm')}
-            className={inputClass}
           />
         </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Nome" error={errors.nome?.message}>
-          <input {...register('nome')} className={inputClass} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Nome" required error={errors.nome?.message}>
+          <Input invalid={!!errors.nome} {...register('nome')} />
         </Field>
-        <Field label="Cognome" error={errors.cognome?.message}>
-          <input {...register('cognome')} className={inputClass} />
+        <Field label="Cognome" required error={errors.cognome?.message}>
+          <Input invalid={!!errors.cognome} {...register('cognome')} />
         </Field>
       </div>
 
-      <Field label="Codice Fiscale" error={errors.codiceFiscale?.message}>
-        <input {...register('codiceFiscale')} className={inputClass} />
+      <Field label="Codice Fiscale" required error={errors.codiceFiscale?.message}>
+        <Input invalid={!!errors.codiceFiscale} {...register('codiceFiscale')} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Data di nascita" error={errors.dataNascita?.message}>
-          <input type="date" {...register('dataNascita')} className={inputClass} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Data di nascita" required error={errors.dataNascita?.message}>
+          <Input type="date" invalid={!!errors.dataNascita} {...register('dataNascita')} />
         </Field>
-        <Field label="Luogo di nascita" error={errors.luogoNascita?.message}>
-          <input {...register('luogoNascita')} className={inputClass} />
+        <Field label="Luogo di nascita" required error={errors.luogoNascita?.message}>
+          <Input invalid={!!errors.luogoNascita} {...register('luogoNascita')} />
         </Field>
       </div>
 
-      <button
-        type="submit"
-        className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-      >
+      <Button type="submit" disabled={!isValid} fullWidth>
         Avanti
-      </button>
+      </Button>
     </form>
   );
 }
@@ -265,80 +215,74 @@ function CompanyStep({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<CompanyData>({
     resolver: zodResolver(registerStep2CompanySchema),
     defaultValues,
+    mode: 'onChange',
   });
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
-      <Field label="Tipo azienda" error={errors.type?.message}>
-        <select {...register('type')} className={inputClass} defaultValue="">
+      <Field label="Tipo azienda" required error={errors.type?.message}>
+        <Select invalid={!!errors.type} {...register('type')} defaultValue="">
           <option value="" disabled>
             Seleziona...
           </option>
           <option value="DEALER">Dealer / Commerciante</option>
           <option value="AGENZIA">Agenzia pratiche auto</option>
-        </select>
+        </Select>
       </Field>
 
-      <Field label="Ragione sociale" error={errors.ragioneSociale?.message}>
-        <input {...register('ragioneSociale')} className={inputClass} />
+      <Field label="Ragione sociale" required error={errors.ragioneSociale?.message}>
+        <Input invalid={!!errors.ragioneSociale} {...register('ragioneSociale')} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="P.IVA" error={errors.partitaIva?.message}>
-          <input {...register('partitaIva')} className={inputClass} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="P.IVA" required error={errors.partitaIva?.message}>
+          <Input invalid={!!errors.partitaIva} {...register('partitaIva')} />
         </Field>
-        <Field label="Codice SDI (opzionale)" error={errors.codiceSdi?.message}>
-          <input {...register('codiceSdi')} className={inputClass} />
+        <Field label="Codice SDI" hint="Opzionale" error={errors.codiceSdi?.message}>
+          <Input invalid={!!errors.codiceSdi} {...register('codiceSdi')} />
         </Field>
       </div>
 
-      <Field label="PEC" error={errors.pec?.message}>
-        <input type="email" {...register('pec')} className={inputClass} />
+      <Field label="PEC" required error={errors.pec?.message}>
+        <Input type="email" invalid={!!errors.pec} {...register('pec')} />
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Email aziendale" error={errors.email?.message}>
-          <input type="email" {...register('email')} className={inputClass} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Email aziendale" required error={errors.email?.message}>
+          <Input type="email" invalid={!!errors.email} {...register('email')} />
         </Field>
-        <Field label="Telefono (opzionale)" error={errors.telefono?.message}>
-          <input {...register('telefono')} className={inputClass} />
+        <Field label="Telefono" hint="Opzionale" error={errors.telefono?.message}>
+          <Input invalid={!!errors.telefono} {...register('telefono')} />
         </Field>
       </div>
 
-      <Field label="Indirizzo" error={errors.indirizzo?.message}>
-        <input {...register('indirizzo')} className={inputClass} />
+      <Field label="Indirizzo" required error={errors.indirizzo?.message}>
+        <Input invalid={!!errors.indirizzo} {...register('indirizzo')} />
       </Field>
 
-      <div className="grid grid-cols-3 gap-4">
-        <Field label="Città" error={errors.citta?.message}>
-          <input {...register('citta')} className={inputClass} />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <Field label="Città" required error={errors.citta?.message}>
+          <Input invalid={!!errors.citta} {...register('citta')} />
         </Field>
-        <Field label="CAP" error={errors.cap?.message}>
-          <input {...register('cap')} className={inputClass} />
+        <Field label="CAP" required error={errors.cap?.message}>
+          <Input invalid={!!errors.cap} {...register('cap')} />
         </Field>
-        <Field label="Prov." error={errors.provincia?.message}>
-          <input maxLength={2} {...register('provincia')} className={inputClass} />
+        <Field label="Prov." required error={errors.provincia?.message}>
+          <Input maxLength={2} invalid={!!errors.provincia} {...register('provincia')} />
         </Field>
       </div>
 
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex-1 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        >
+      <div className="flex flex-col-reverse gap-3 sm:flex-row">
+        <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto">
           Indietro
-        </button>
-        <button
-          type="submit"
-          className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-        >
+        </Button>
+        <Button type="submit" disabled={!isValid} className="sm:flex-1">
           Avanti
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -351,29 +295,18 @@ function CompanyStep({
 function DocumentsStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-semibold">Upload documenti — disponibile in Fase 3</p>
-        <p className="mt-1">
-          Qui chiederemo: CI fronte/retro, Codice Fiscale, Visura Camerale (max 6 mesi).
-          Lo storage sicuro e la validazione IA verranno attivati nella prossima fase di
-          sviluppo. Per ora puoi proseguire e completare la registrazione.
-        </p>
-      </div>
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex-1 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        >
+      <Alert variant="warning" title="Upload documenti — disponibile in Fase 3">
+        Qui chiederemo: CI fronte/retro, Codice Fiscale, Visura Camerale (max 6 mesi). Lo
+        storage sicuro e la validazione IA verranno attivati nella prossima fase di
+        sviluppo. Per ora puoi proseguire e completare la registrazione.
+      </Alert>
+      <div className="flex flex-col-reverse gap-3 sm:flex-row">
+        <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto">
           Indietro
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
-        >
+        </Button>
+        <Button type="button" onClick={onNext} className="sm:flex-1">
           Avanti
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -397,64 +330,71 @@ function PaymentStep({
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<PaymentData>({
     resolver: zodResolver(registerStep4PaymentSchema),
     defaultValues,
+    mode: 'onChange',
   });
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <Field label="IBAN" error={errors.iban?.message}>
-        <input
-          {...register('iban')}
+      <Field label="IBAN" required error={errors.iban?.message}>
+        <Input
+          invalid={!!errors.iban}
           placeholder="IT60X0542811101000000123456"
-          className={inputClass}
+          {...register('iban')}
         />
       </Field>
 
-      <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-        Il mandato SEPA reale verrà attivato in Fase 5 tramite Stripe. Per ora salviamo
-        solo l&apos;accettazione.
-      </div>
+      <Alert variant="info">
+        Il mandato SEPA reale verrà attivato in Fase 5 tramite Stripe. Per ora salviamo solo
+        l&apos;accettazione.
+      </Alert>
 
-      <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" {...register('sepaMandateAccepted')} className="mt-0.5" />
+      <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
+        <Checkbox {...register('sepaMandateAccepted')} className="mt-0.5" />
         <span>
-          Autorizzo l&apos;addebito automatico SEPA per i pagamenti delle pratiche e per
-          gli auto-addebiti previsti dai Termini.
+          Autorizzo l&apos;addebito automatico SEPA per i pagamenti delle pratiche e per gli
+          auto-addebiti previsti dai Termini.
+          <span className="ml-1 text-pv-orange-500" aria-hidden="true">
+            •
+          </span>
         </span>
       </label>
       {errors.sepaMandateAccepted && (
-        <p className="text-xs text-red-600">{errors.sepaMandateAccepted.message}</p>
+        <p className="text-xs font-medium text-pv-red-500">
+          {errors.sepaMandateAccepted.message}
+        </p>
       )}
 
-      <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" {...register('termsAccepted')} className="mt-0.5" />
+      <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
+        <Checkbox {...register('termsAccepted')} className="mt-0.5" />
         <span>
-          Ho letto e accetto i Termini e Condizioni e l&apos;Informativa Privacy di
-          Passaggio Veloce.
+          Ho letto e accetto i Termini e Condizioni e l&apos;Informativa Privacy di Passaggio
+          Veloce.
+          <span className="ml-1 text-pv-orange-500" aria-hidden="true">
+            •
+          </span>
         </span>
       </label>
       {errors.termsAccepted && (
-        <p className="text-xs text-red-600">{errors.termsAccepted.message}</p>
+        <p className="text-xs font-medium text-pv-red-500">{errors.termsAccepted.message}</p>
       )}
 
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex-1 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        >
+      <div className="flex flex-col-reverse gap-3 sm:flex-row">
+        <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto">
           Indietro
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          disabled={isSubmitting}
-          className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+          disabled={!isValid}
+          loading={isSubmitting}
+          loadingLabel="Registrazione…"
+          className="sm:flex-1"
         >
-          {isSubmitting ? 'Registrazione...' : 'Completa registrazione'}
-        </button>
+          Completa registrazione
+        </Button>
       </div>
     </form>
   );

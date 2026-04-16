@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Alert, Button } from '@/components/ui';
 import { verifyEmailAction } from '../actions';
 
 type Props = {
@@ -8,37 +9,38 @@ type Props = {
 export default async function VerifyEmailPage({ searchParams }: Props) {
   const { token } = await searchParams;
 
-  if (!token) {
-    return (
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-slate-900">Verifica email</h2>
-        <p className="text-sm text-slate-600">Token mancante nel link.</p>
+  return (
+    <div className="mx-auto w-full max-w-md px-5 py-12 sm:px-6 sm:py-16">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+        Verifica
+      </p>
+      <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+        Conferma email
+      </h1>
+
+      <div className="mt-6 space-y-4">
+        {!token && <Alert variant="error">Token mancante nel link.</Alert>}
+        {token && <VerifyResult token={token} />}
       </div>
+    </div>
+  );
+}
+
+async function VerifyResult({ token }: { token: string }) {
+  const result = await verifyEmailAction(token);
+
+  if (result.ok) {
+    return (
+      <>
+        <Alert variant="success">
+          Email verificata con successo. Il tuo account è ora attivo.
+        </Alert>
+        <Link href="/login" className="block">
+          <Button fullWidth>Vai al login</Button>
+        </Link>
+      </>
     );
   }
 
-  const result = await verifyEmailAction(token);
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-slate-900">Verifica email</h2>
-      {result.ok ? (
-        <>
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
-            Email verificata con successo. Il tuo account è ora attivo.
-          </div>
-          <Link
-            href="/login"
-            className="block w-full rounded-md bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Vai al login
-          </Link>
-        </>
-      ) : (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-          {result.error}
-        </div>
-      )}
-    </div>
-  );
+  return <Alert variant="error">{result.error}</Alert>;
 }

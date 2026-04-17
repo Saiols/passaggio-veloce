@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-04-16
+> Ultimo aggiornamento: 2026-04-17
 
 ---
 
@@ -161,16 +161,18 @@
 - [x] Prima migrazione applicata (`init`)
 
 ### 1.3 Database e modelli base
-- [~] Schema utenti (admin, dealer, agenzia) con multi-utente — model `User` base creato
-- [~] Schema aziende (ragione sociale, P.IVA, SDI, PEC, IBAN) — model `Company` base creato
-- [ ] Schema documenti caricati (metadata + ref storage)
-- [ ] Schema pratiche (tipo, stato, timeline, codice PV)
-- [ ] Schema wallet broker + transazioni
-- [ ] Schema fee / addebiti
-- [ ] Schema valutazioni agenzie
-- [ ] Schema listini raccolti
-- [ ] Schema notifiche inviate (audit)
+- [x] Schema utenti (admin, dealer, agenzia) con multi-utente
+- [x] Schema aziende (ragione sociale, P.IVA, SDI, PEC, IBAN)
+- [x] Schema documenti caricati (metadata + ref storage, OCR + gating fields)
+- [x] Schema pratiche (tipo, stato, timeline, codicePratica) + `PraticaAssegnazione` per round 1/2/3
+- [x] Schema wallet broker + transazioni (importi in centesimi, saldo-post per audit)
+- [x] Schema fee / addebiti (tipo firma / auto-addebito-giorno-20)
+- [x] Schema valutazioni agenzie (5⭐ + segnalazione abuso)
+- [x] Schema listini raccolti
+- [x] Schema notifiche inviate (audit con canale/stato/providerRef)
+- [x] Schema orari apertura + chiusure straordinarie (engine ore lavorative)
 - [x] Sistema migrazioni versionate configurato (Prisma Migrate)
+- [x] Seed dev: 1 admin + 2 dealer + 3 agenzie + 5 pratiche stati misti
 
 ---
 
@@ -186,7 +188,7 @@
 - [~] Verifica email — token generato e tabella `verification_tokens` pronta; invio email reale in Fase 6
 - [x] Approvazione automatica account (stato `PENDING_EMAIL_VERIFICATION` → `ACTIVE`)
 - [x] Selezione ruolo (dealer / agenzia) in fase di registrazione
-- [ ] Step aggiuntivo per agenzia: inserimento orari di apertura (rimandato)
+- [x] Step aggiuntivo per agenzia: inserimento orari di apertura — pagina `/orari` con fasce settimanali salvate su `OrariApertura`
 - [ ] **UTM capture**: salvataggio `utm_contact` / `utm_source` da landing + `/register` → campo `User.crmContactId` (per matching CRM, vedi `crm-architettura.md` §10.3)
 - [ ] **Webhook `user.signup.started`** emesso all'apertura del wizard Step 1 (evento pixel CRM §3.4)
 - [ ] **Webhook `user.signup.completed`** emesso al termine del wizard (Caso A/B §4 doc CRM)
@@ -212,20 +214,24 @@
 ## FASE 3 - Core: Documenti, IA, Pratiche
 
 ### 3.1 Storage e upload documenti
-- [ ] Upload file (PDF, JPG, PNG) con limite dimensione
-- [ ] Anteprima documenti
-- [ ] Encryption at rest
+- [x] Upload file (PDF, JPG, PNG) con limite dimensione (10 MB, via wizard pratica)
+- [x] Provider abstraction `StorageProvider` con impl locale (`./uploads/`) swap-ready a S3
+- [ ] Anteprima documenti (richiede route serve file + auth check)
+- [ ] Encryption at rest (S3 SSE quando swap)
 - [ ] Download singolo + download ZIP pratica completa
 - [ ] Soft delete + retention policy
 
 ### 3.2 OCR libretto di circolazione
-- [ ] Estrazione targa, telaio, proprietario, data immatricolazione
-- [ ] Rilevamento comodato d'uso (da rimuovere)
-- [ ] Rilevamento veicolo pre-10/2015 (richiede certificato proprietà)
-- [ ] Fallback manuale in caso di OCR fallito
-- [ ] UI correzione dati estratti
+- [x] Provider abstraction `OcrProvider` con `MockOcrProvider` (dati plausibili deterministici su hash buffer)
+- [x] Estrazione targa, telaio, proprietario, data immatricolazione (mock)
+- [x] Rilevamento veicolo pre-2015
+- [x] Rilevamento comodato d'uso (mock flag)
+- [x] UI correzione dati estratti (wizard step 1, form editabile pre-submit)
+- [ ] Fallback manuale in caso di OCR fallito (richiede UI skip)
+- [ ] Integrazione Google Document AI (richiede account, swap del provider)
 
 ### 3.3 Gating documentale IA (killer feature)
+- [x] Schema `Documento.gatingStato` (PASSED/FAILED/PENDING/OVERRIDDEN/NONE) + `GatingStato` enum
 - [ ] Classificatore tipo documento (CI, CF/Tessera Sanitaria, Visura, Permesso soggiorno, Procura, Libretto)
 - [ ] Verifica fronte/retro CI
 - [ ] Verifica leggibilità / scadenza
@@ -233,16 +239,18 @@
 - [ ] Messaggi errore chiari all'utente
 - [ ] Override manuale admin (caso eccezionale)
 - [ ] Test set di validazione con documenti reali (non PII)
+- [ ] Wizard: step aggiuntivo con upload CI venditore / CI acquirente / CF / visura
 
-### 3.4 Dashboard Broker - 4 step pratica
-- [ ] Step 0: selezione tipo pratica (trapasso netto / minivoltura / lotto massivo)
-- [ ] Step 1: upload libretto + OCR + conferma dati
-- [ ] Step 2: upload documenti venditore + acquirente (con flag cointestazione, minivoltura, procura)
-- [ ] Step 3: selezione comune (input + autocomplete) + mappa agenzie
-- [ ] Step 4: invio e schermata "in attesa"
-- [ ] Salva bozza pratica
-- [ ] Lista pratiche con stato (in attesa / accettata / in corso / firmata / scaduta)
-- [ ] Dettaglio pratica con timeline
+### 3.4 Dashboard Broker - flusso pratica
+- [x] Step 1: tipo pratica (trapasso netto / minivoltura) + upload libretto + OCR + conferma dati
+- [x] Step 2: dati venditore + acquirente + flag (cointestazione, minivoltura, procura)
+- [x] Step 3: selezione comune + provincia + riepilogo + invio
+- [x] Pratica inviata → redirect a detail + assegnazioni round 1 create
+- [ ] Mappa agenzie (richiede coordinate)
+- [ ] Salva bozza pratica (stato BOZZA esiste ma non è persistito dal wizard)
+- [x] Lista pratiche con stato + filtri (stato / periodo) + ricerca (targa, codice, proprietario) + paginazione
+- [x] Dettaglio pratica con timeline + round distribuzione + parti commerciali
+- [x] Azione "Annulla pratica" (broker) — transazionale
 
 ### 3.5 Lotto massivo
 - [ ] Flusso dedicato: 1 acquirente, N venditori, N libretti
@@ -255,31 +263,35 @@
 ## FASE 4 - Distribuzione pratica e Dashboard Agenzia
 
 ### 4.1 Algoritmo distribuzione
-- [ ] Ricerca 5 agenzie per comune selezionato
-- [ ] Ordinamento per rating (4.5-5 priorità massima, <2.5 sospesa)
-- [ ] Soglia minima 5 valutazioni per applicare ranking
-- [ ] Gestione race condition "prima che accetta vince" (lock DB / atomic update)
-- [ ] Implementazione flusso fallback 3 round + escalation (vedi §0.5)
-- [ ] Countdown per-agenzia basato sui suoi orari di apertura
-- [ ] Engine "ore lavorative" (calcolo finestre, esclusione ferie, multi-fascia)
-- [ ] Trigger automatico passaggio round successivo
-- [ ] Stato pratica `in_attesa_round_1/2/3`, `in_escalation`
-- [ ] Gestione UI admin per escalation manuale + assegnazione partner di fiducia
-- [ ] Invio parallelo notifiche alle agenzie del round corrente
-- [ ] Gestione anti-abuso ranking (decay rifiuti, sospensione timeout)
+- [x] Ricerca agenzie per comune/provincia selezionata (round 1)
+- [x] Ordinamento per rating (avg desc, non rankate a fine, sospese escluse)
+- [x] Soglia minima 5 valutazioni per applicare ranking (`RANKING.MIN_RATINGS_FOR_RANK`)
+- [x] Gestione race condition "prima che accetta vince" (transazione accept chiude altre PENDING come ASSEGNATA_ALTRO)
+- [x] Implementazione flusso fallback 3 round + escalation (vedi §0.5)
+- [x] Countdown per-agenzia basato sui suoi orari di apertura
+- [x] Engine "ore lavorative" (calcolo finestre, esclusione ChiusuraStraordinaria, multi-fascia)
+- [x] Trigger passaggio round successivo (on-event via reject, on-schedule via tickPratica)
+- [x] Stato pratica `IN_ATTESA_ROUND_1/2/3`, `IN_ESCALATION`
+- [x] UI admin per visualizzazione escalation (`/admin/escalation`)
+- [ ] UI admin per assegnazione manuale a partner di fiducia (solo lista, non ancora assign)
+- [x] Invio notifiche (N6) alle agenzie del round corrente
+- [x] Endpoint `/api/jobs/distribuzione-tick` + pulsante admin manuale
+- [ ] Cron automatico scheduling (Vercel Cron / GitHub Actions)
+- [ ] Anti-abuso ranking (decay rifiuti consecutivi, sospensione timeout >5)
 - [ ] KPI dashboard fallback (% per round, tempi medi, comuni critici)
+- [ ] Raggio km reale 15 km per round 2 (oggi mappa province limitrofe hardcoded Veneto)
 
 ### 4.2 Dashboard Agenzia
-- [ ] Lista pratiche in arrivo
-- [ ] Pulsante Accetta / Rifiuta
-- [ ] Messaggio "Dossier completo e verificato da TF"
-- [ ] Download singolo + ZIP pratica
-- [ ] Generazione codice pratica (es. TF-2026-04821)
-- [ ] Campo codice pratica interno agenzia + note
-- [ ] Countdown 20 giorni
-- [ ] Pulsante "Firma avvenuta" (Step 3)
-- [ ] Storico pratiche completate
-- [ ] Riepilogo fee mensili e auto-addebiti
+- [x] Lista pratiche in arrivo (`/inbox` con PENDING + storico ultime decisioni)
+- [x] Pulsante Accetta / Rifiuta (transazionale, con motivazione rifiuto opzionale)
+- [ ] Messaggio "Dossier completo e verificato da TF" (aspetta gating IA completo)
+- [ ] Download singolo + ZIP pratica (pulsante placeholder presente)
+- [x] Generazione codice pratica (`PV-YYYY-NNNNN`)
+- [ ] Campo codice pratica interno agenzia + note (campo DB presente, UI da fare)
+- [ ] Countdown 20 giorni visibile (autoAddebitoAt salvato, UI countdown da fare)
+- [x] Pulsante "Firma avvenuta" (Step 3) — transazionale: pratica FIRMATA + credito wallet broker + FeeAddebito SCHEDULED
+- [x] Storico pratiche completate (`/pratiche` filtrabile per stato)
+- [ ] Riepilogo fee mensili e auto-addebiti (dati in DB, dashboard da comporre)
 
 ---
 
@@ -288,20 +300,21 @@
 > **Prerequisito:** validazione commercialista completata (blocco 0.2)
 
 ### 5.1 Addebito agenzia
-- [ ] Integrazione Stripe SEPA / card
-- [ ] Addebito al flag "firma avvenuta" (Step 3)
-- [ ] Auto-addebito al giorno 20 se firma non flaggata
+- [ ] Integrazione Stripe SEPA / card (bloccato su validazione commercialista)
+- [x] Creazione `FeeAddebito` schedulato al flag "firma avvenuta" (Stripe reale in follow-up)
+- [x] Schedulazione auto-addebito giorno 20 (campo `autoAddebitoAt`, esecuzione reale con cron Stripe)
 - [ ] Gestione fallimenti addebito + retry
-- [ ] Audit trail addebiti
-- [ ] Notifica agenzia pre-addebito automatico
+- [x] Audit trail addebiti (tabella `FeeAddebito` con stato/errorMessage/providerRef)
+- [x] Notifica agenzia pre-addebito automatico (N8 al momento della firma)
 
 ### 5.2 Wallet broker
-- [ ] Accredito automatico 25 EUR per trapasso netto a firma confermata
-- [ ] Visualizzazione saldo wallet
-- [ ] Storico movimenti
-- [ ] Soglia <500 EUR: nessun payout
-- [ ] Soglia 500-999 EUR: pulsante richiesta payout manuale
-- [ ] Soglia ≥1000 EUR: payout automatico
+- [x] Accredito automatico 25 EUR per trapasso netto a firma confermata
+- [x] Visualizzazione saldo wallet (`/wallet`)
+- [x] Storico movimenti (ultimi 20 con saldo-post per audit)
+- [x] Soglia <500 EUR: nessun payout (logica frontend + badge)
+- [x] Soglia 500-999 EUR: alert payout manuale disponibile
+- [ ] Pulsante richiesta payout manuale (UI placeholder — Stripe in Fase 5)
+- [ ] Soglia ≥1000 EUR: payout automatico (logica da implementare + cron)
 - [ ] Generazione rendiconto payout (PDF)
 - [ ] Flusso fattura broker → TF basato su rendiconto
 
@@ -313,36 +326,41 @@
 
 ---
 
-## FASE 6 - Notifiche (8 tipi)
+## FASE 6 - Notifiche (10 tipi)
 
-- [ ] N1 Broker: conferma invio pratica a 5 agenzie
-- [ ] N2 Broker: agenzia accetta + codice pratica + dati agenzia
-- [ ] N3 Broker: sollecito ogni 5 giorni senza firma
-- [ ] N4 Broker: firma avvenuta + credito wallet
-- [ ] N5 Broker: payout automatico eseguito + rendiconto
-- [ ] N6 Agenzia: nuova pratica disponibile (urgenza: altre 4 agenzie)
-- [ ] N7 Agenzia: promemoria countdown + giorni rimasti + importo
-- [ ] N8 Agenzia: addebito automatico eseguito
-- [ ] N10 Admin: pratica in escalation (round 3 fallito)
-- [ ] N11 Broker: pratica in gestione al team (escalation)
+- [x] N1 Broker: conferma invio pratica a N agenzie (on-submit)
+- [x] N2 Broker: agenzia accetta + codice pratica + dati agenzia (on-accept)
+- [ ] N3 Broker: sollecito ogni 5 giorni senza firma (richiede cron)
+- [x] N4 Broker: firma avvenuta + credito wallet (on-firma)
+- [ ] N5 Broker: payout automatico eseguito + rendiconto (richiede Stripe)
+- [x] N6 Agenzia: nuova pratica disponibile + fee + altri N-1 destinatari (on-round-open)
+- [ ] N7 Agenzia: promemoria countdown + giorni rimasti + importo (richiede cron)
+- [x] N8 Agenzia: addebito pratica schedulato (on-firma, con data auto-addebito)
+- [x] N10 Admin: pratica in escalation (round 3 fallito) (broadcast a tutti gli admin)
+- [x] N11 Broker: pratica in gestione al team (escalation)
+- [x] Helper `sendNotification` + audit su `NotificaInviata` (SCHEDULED → SENT/FAILED)
+- [x] Provider abstraction `EmailProvider` (ConsoleEmailProvider dev → Resend prod swap)
+- [x] Template MVP branded (header navy + card bianca + footer) — copy definitivi da sales
+- [x] Pattern outbox post-commit (no email fantasma su rollback tx)
+- [x] Pagina `/notifiche` con audit per user/company
 - [ ] Scheduler cron solleciti (ogni 5gg)
 - [ ] Scheduler cron auto-addebiti (giorno 20)
 - [ ] Scheduler cron payout (soglia 1000)
-- [ ] Template email branded
 - [ ] Unsubscribe / preferenze notifiche (solo per quelle non obbligatorie)
 
 ---
 
 ## FASE 7 - Valutazioni e Ranking
 
-- [ ] Notifica al dealer post-firma per valutare
-- [ ] Form 5 stelle + note opzionali
-- [ ] Segnalazione abuso prezzo nelle note (flag admin)
-- [ ] Calcolo rating medio agenzia
-- [ ] Soglia minima 5 valutazioni
-- [ ] Integrazione rating nell'algoritmo distribuzione
-- [ ] Sospensione automatica rating <2.5 → revisione admin
-- [ ] Ranking NON pubblico (solo interno)
+- [ ] Notifica al dealer post-firma per valutare (form già visibile sul detail FIRMATA, manca la push proattiva)
+- [x] Form 5 stelle + note opzionali (client component con hover preview)
+- [x] Segnalazione abuso prezzo nelle note (flag `segnalazioneAbuso` in `Valutazione`)
+- [x] Calcolo rating medio agenzia (`attachRating` con GROUP BY on-demand)
+- [x] Soglia minima 5 valutazioni (`RANKING.MIN_RATINGS_FOR_RANK`)
+- [x] Integrazione rating nell'algoritmo distribuzione (`rankCandidates` in `avviaRound`)
+- [x] Sospensione automatica rating <2.5 (`RANKING.MIN_AVG_TO_STAY_ACTIVE`, visibile in `/admin/agenzie`)
+- [ ] Review admin per agenzie sospese (UI di unsuspension / note)
+- [x] Ranking NON pubblico (visibile solo lato admin e usato dall'engine distribuzione)
 
 ---
 
@@ -361,11 +379,18 @@
 
 ## FASE 9 - Admin Panel Piattaforma
 
-- [ ] Overview: pratiche mese, revenue, auto-addebiti, registrazioni, payout in coda, pratiche senza risposta
-- [ ] Gestione utenti (ricerca, lista, dettaglio, sospensione, blocco)
-- [ ] Gestione pratiche (monitoring, override, dispute)
-- [ ] Osservatorio Prezzi
-- [ ] Gestione segnalazioni abusi
+- [x] Overview base (pratiche totali, in distribuzione, escalation, dealer/agenzie attivi)
+- [x] Layout `AppShell` role-based con nav dedicata admin
+- [x] Route guard `(auth)/admin/layout.tsx` che redirige non-admin
+- [x] Gestione pratiche (`/admin/pratiche`, lista con stato + filtri impliciti)
+- [x] Gestione utenti (`/admin/utenti`, lista con ruolo/stato/company)
+- [x] Gestione agenzie + ranking (`/admin/agenzie` con stato rankata/non/sospesa)
+- [x] Gestione escalation (`/admin/escalation`, pratiche in gestione manuale)
+- [x] Tick distribuzione manuale (pulsante sulla dashboard)
+- [ ] Assegnazione manuale pratica in escalation a partner di fiducia (UI)
+- [ ] Ricerca avanzata utenti + sospensione/blocco
+- [ ] Osservatorio Prezzi (richiede Fase 8)
+- [ ] Gestione segnalazioni abusi (lista `Valutazione.segnalazioneAbuso=true`)
 - [ ] Report finanziari
 - [ ] Configurazione parametri (N agenzie per invio, timeout giorni, soglie wallet)
 - [ ] Log di sistema / audit
@@ -508,6 +533,30 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [ ] ≥30 listini caricati (database prezzi iniziale)
 - [ ] Sistema valutazioni operativo su tutte le agenzie attive
 - [ ] Revenue ~180.000 EUR
+
+---
+
+## Stato MVP al 2026-04-17
+
+**Progresso complessivo (effort-weighted): ~72-75%**
+
+| Fase | % | Note |
+|---|---|---|
+| 0 Pre-sviluppo | ~30% | Stack scelto, naming, CTO. Resto su decisioni business/legali |
+| 1 Fondamenta | ~75% | Monorepo, CI, DB, Prisma, Sentry, Docker, seed. Manca staging/prod/backup |
+| 2 Auth | ~60% | Login, wizard registrazione, logout. Manca invito utenti, 2FA, rate limit, email reale |
+| 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
+| 3 Documenti/OCR/Pratiche | ~50% | Storage+OCR mock operativi, wizard nuova pratica, lista/detail. Manca gating IA + upload CI/CF/visura |
+| 4 Distribuzione + agenzia | ~85% | Engine 3-round + ore lavorative + ranking. Manca cron automatico, anti-abuso, raggio km reale |
+| 5 Pagamenti/Wallet/SDI | ~25% | Logica DB completa (wallet, fee, transazioni, payout). Blocca Stripe → commercialista |
+| 6 Notifiche | ~60% | 7/10 tipi agganciati + audit. Manca N3/N5/N7 (cron-based), unsubscribe |
+| 7 Valutazioni/Ranking | ~85% | Form 5⭐, rating integrato in distribuzione, sospensione auto. Manca push notification + unsuspend UI |
+| 8 Listini / Osservatorio | 0% | — |
+| 9 Admin panel | ~50% | Route guard, overview, lista pratiche/utenti/agenzie/escalation, tick manuale. Manca assegnazione manuale, report |
+| 10 CRM vendite esterno | 0% | Documento architettura pronto (`crm-architettura.md`), integrazione in attesa di costituzione |
+| 11 QA/Compliance/Lancio | 0% | — |
+
+**Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
 
 ---
 

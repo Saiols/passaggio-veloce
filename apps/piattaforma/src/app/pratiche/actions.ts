@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 
@@ -130,4 +131,66 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
   revalidatePath('/pratiche');
   revalidatePath(`/pratiche/${praticaId}`);
   redirect(`/pratiche/${praticaId}?annullata=1`);
+}
+
+const valutazioneSchema = z.object({
+  praticaId: z.string().uuid(),
+  stelle: z.coerce.number().int().min(1).max(5),
+  note: z.string().trim().max(500).optional(),
+  segnalazioneAbuso: z
+    .preprocess((v) => v === 'true' || v === 'on' || v === true, z.boolean())
+    .default(false),
+});
+
+type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function submitValutazioneAction(formData: FormData): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  if (session.user.companyType !== 'DEALER') {
+    return { ok: false, error: 'Solo i broker possono valutare le agenzie' };
+  }
+  const dealerId = session.user.companyId;
+  if (!dealerId) return { ok: false, error: 'Azienda non associata' };
+
+  const parsed = valutazioneSchema.safeParse(Object.fromEntries(formData.entries()));
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    return {
+      ok: false,
+      error: first ? `${first.path.join('.')}: ${first.message}` : 'Dati non validi',
+    };
+  }
+  const { praticaId, stelle, note, segnalazioneAbuso } = parsed.data;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const pratica = await tx.pratica.findUnique({
+        where: { id: praticaId },
+        include: { valutazione: true },
+      });
+      if (!pratica) throw new Error('Pratica non trovata');
+      if (pratica.brokerId !== dealerId) throw new Error('Non sei il broker di questa pratica');
+      if (pratica.stato !== 'FIRMATA') throw new Error('Puoi valutare solo pratiche firmate');
+      if (!pratica.agenziaAssegnataId) throw new Error('Nessuna agenzia assegnata');
+      if (pratica.valutazione) throw new Error('Hai già valutato questa pratica');
+
+      await tx.valutazione.create({
+        data: {
+          praticaId,
+          agenziaId: pratica.agenziaAssegnataId,
+          dealerId,
+          stelle,
+          note: note ?? null,
+          segnalazioneAbuso,
+        },
+      });
+    });
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+
+  revalidatePath(`/pratiche/${praticaId}`);
+  revalidatePath('/dashboard');
+  return { ok: true };
 }

@@ -72,12 +72,18 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
           Il tick distribuzione fa avanzare automaticamente le pratiche scadute al round
           successivo. In produzione diventerà un cron automatico.
         </p>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/admin/pratiche"
             className="rounded-[12px] border border-pv-slate-200 p-4 text-[13px] font-semibold text-pv-navy-700 transition-colors hover:bg-pv-slate-50"
           >
             Gestione pratiche →
+          </Link>
+          <Link
+            href="/admin/agenzie"
+            className="rounded-[12px] border border-pv-slate-200 p-4 text-[13px] font-semibold text-pv-navy-700 transition-colors hover:bg-pv-slate-50"
+          >
+            Ranking agenzie →
           </Link>
           <Link
             href="/admin/utenti"

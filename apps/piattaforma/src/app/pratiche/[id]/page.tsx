@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
 import { markFirmaAvvenutaAction, annullaPraticaAction } from '../actions';
+import { ValutazioneForm } from './valutazione-form';
 
 export default async function PraticaDetailPage({
   params,
@@ -65,6 +66,13 @@ export default async function PraticaDetailPage({
 
   const firmaBound = markFirmaAvvenutaAction.bind(null, pratica.id);
   const annullaBound = annullaPraticaAction.bind(null, pratica.id);
+
+  const canValutare =
+    companyType === 'DEALER' &&
+    pratica.brokerId === companyId &&
+    pratica.stato === 'FIRMATA' &&
+    !pratica.valutazione &&
+    !!pratica.agenziaAssegnata;
 
   return (
     <AppShell session={session} activePath="/pratiche">
@@ -131,6 +139,48 @@ export default async function PraticaDetailPage({
         {sp.error && (
           <div className="mb-5">
             <Alert variant="error">{sp.error}</Alert>
+          </div>
+        )}
+
+        {canValutare && pratica.agenziaAssegnata && (
+          <div className="mb-5">
+            <ValutazioneForm
+              praticaId={pratica.id}
+              agenziaNome={pratica.agenziaAssegnata.ragioneSociale}
+            />
+          </div>
+        )}
+
+        {pratica.valutazione && (
+          <div className="mb-5">
+            <Card>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                    Valutazione
+                  </p>
+                  <p className="mt-1 text-[18px] font-bold text-pv-navy-800">
+                    {'★'.repeat(pratica.valutazione.stelle)}
+                    <span className="text-pv-slate-300">
+                      {'★'.repeat(5 - pratica.valutazione.stelle)}
+                    </span>
+                    <span className="ml-2 text-[13px] font-normal text-pv-slate-500">
+                      {pratica.valutazione.stelle}/5
+                    </span>
+                  </p>
+                  {pratica.valutazione.note && (
+                    <p className="mt-1 text-[13px] text-pv-slate-700">
+                      &ldquo;{pratica.valutazione.note}&rdquo;
+                    </p>
+                  )}
+                  {pratica.valutazione.segnalazioneAbuso && (
+                    <p className="mt-1 text-[12px] font-bold uppercase tracking-wider text-pv-red-500">
+                      Segnalata per abuso prezzo
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Card>
           </div>
         )}
 

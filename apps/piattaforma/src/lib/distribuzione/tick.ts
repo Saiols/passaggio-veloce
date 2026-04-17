@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { DISTRIBUZIONE, provinceLimitrofe } from './constants';
 import { computeCountdown, loadOrariPerAgenzie } from './countdown';
+import { attachRating, rankCandidates } from './ranking';
 
 const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
   1: DISTRIBUZIONE.T1_HOURS,
@@ -146,17 +147,24 @@ async function avviaRound(
     return 0;
   }
 
-  // 3) Seleziona agenzie candidate
-  const candidate = await tx.company.findMany({
+  // 3) Seleziona agenzie candidate + applica ranking rating
+  const raw = await tx.company.findMany({
     where: {
       type: 'AGENZIA',
       deletedAt: null,
       provincia: { in: provincieTarget as string[] },
       id: { notIn: Array.from(giaContattate) },
     },
-    orderBy: { createdAt: 'asc' }, // ranking rating verrà agganciato in task successivo
-    take: maxPerRound,
+    select: {
+      id: true,
+      createdAt: true,
+      ragioneSociale: true,
+      provincia: true,
+    },
   });
+  const ranked = await attachRating(tx, raw);
+  const eligible = rankCandidates(ranked); // esclude sospese, ordina per rating desc
+  const candidate = eligible.slice(0, maxPerRound);
 
   if (candidate.length === 0) {
     if (round === 3) {

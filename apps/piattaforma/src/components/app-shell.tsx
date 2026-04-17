@@ -20,6 +20,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
     return [
       { href: '/dashboard', label: 'Dashboard' },
       { href: '/admin/pratiche', label: 'Pratiche' },
+      { href: '/admin/agenzie', label: 'Agenzie' },
       { href: '/admin/utenti', label: 'Utenti' },
       { href: '/admin/escalation', label: 'Escalation' },
     ];

@@ -29,3 +29,15 @@ export const PROVINCE_LIMITROFE: Record<string, readonly string[]> = {
 export function provinceLimitrofe(provincia: string): readonly string[] {
   return PROVINCE_LIMITROFE[provincia.toUpperCase()] ?? [];
 }
+
+/**
+ * Soglie ranking agenzie.
+ * - `MIN_RATINGS_FOR_RANK`: numero minimo di valutazioni perché il rating
+ *   sia considerato affidabile (sotto, l'agenzia è "non rankata" — neutra)
+ * - `MIN_AVG_TO_STAY_ACTIVE`: sotto questa media l'agenzia è automaticamente
+ *   sospesa dalla distribuzione (Fase 7 del piano)
+ */
+export const RANKING = {
+  MIN_RATINGS_FOR_RANK: 5,
+  MIN_AVG_TO_STAY_ACTIVE: 2.5,
+} as const;

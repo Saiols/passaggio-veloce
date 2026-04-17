@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { tickPratica } from '@/lib/distribuzione';
+import { sendNotification } from '@/lib/notifiche';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -65,6 +66,47 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
     });
   } catch (err) {
     return { ok: false, error: (err as Error).message };
+  }
+
+  // N2 — notifica broker che l'agenzia ha accettato
+  try {
+    const full = await prisma.pratica.findUnique({
+      where: { id: praticaId },
+      include: {
+        broker: {
+          include: {
+            users: {
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              select: { email: true, nome: true, id: true },
+              take: 1,
+            },
+          },
+        },
+        agenziaAssegnata: {
+          select: { ragioneSociale: true, citta: true, email: true, telefono: true },
+        },
+      },
+    });
+    const broker = full?.broker;
+    const brokerUser = broker?.users[0];
+    const agenzia = full?.agenziaAssegnata;
+    if (full && broker && brokerUser && agenzia) {
+      await sendNotification({
+        tipo: 'N2_BROKER_ACCETTATA',
+        target: { email: brokerUser.email, userId: brokerUser.id, companyId: broker.id },
+        payload: {
+          codicePratica: full.codicePratica ?? '—',
+          targa: full.targa,
+          agenziaNome: agenzia.ragioneSociale,
+          agenziaCitta: agenzia.citta,
+          agenziaEmail: agenzia.email,
+          agenziaTelefono: agenzia.telefono,
+          nomeBroker: brokerUser.nome,
+        },
+      }).catch(() => undefined);
+    }
+  } catch {
+    // best-effort, non blocca
   }
 
   revalidatePath('/inbox');

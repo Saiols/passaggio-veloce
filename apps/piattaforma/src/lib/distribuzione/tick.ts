@@ -3,6 +3,12 @@ import { prisma, Prisma } from '@pv/db';
 import { DISTRIBUZIONE, provinceLimitrofe } from './constants';
 import { computeCountdown, loadOrariPerAgenzie } from './countdown';
 import { attachRating, rankCandidates } from './ranking';
+import {
+  getAdminEmails,
+  sendNotification,
+  sendNotifications,
+  type N6AgenziaNuovaPayload,
+} from '@/lib/notifiche';
 
 const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
   1: DISTRIBUZIONE.T1_HOURS,
@@ -17,43 +23,41 @@ export type TickResult =
   | { status: 'escalated' }
   | { status: 'closed'; finalStato: 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
 
-/**
- * Ispeziona una pratica e porta avanti la macchina di stato distribuzione:
- *   1. Marca TIMEOUT le assegnazioni del round corrente con countdownFineAt scaduto
- *   2. Se tutte le assegnazioni del round non sono più PENDING → avanza round
- *   3. Se esaurisce round 3 → IN_ESCALATION
- *
- * Idempotente: richiamabile più volte senza effetti indesiderati.
- */
+/** Side-effect jobs accumulati dentro la transazione per esecuzione post-commit. */
+type PostCommitJobs = {
+  newAssegnazioniIds: string[]; // emette N6
+  escalationPraticaId: string | null; // emette N10 + N11
+};
+
 export async function tickPratica(praticaId: string): Promise<TickResult> {
-  return prisma.$transaction(async (tx) => {
+  const { result, jobs } = await prisma.$transaction(async (tx) => {
     const pratica = await tx.pratica.findUnique({
       where: { id: praticaId },
       include: {
-        assegnazioni: {
-          orderBy: [{ round: 'asc' }, { invioAt: 'asc' }],
-        },
+        assegnazioni: { orderBy: [{ round: 'asc' }, { invioAt: 'asc' }] },
       },
     });
 
-    if (!pratica) return { status: 'noop', reason: 'pratica non trovata' };
+    if (!pratica) {
+      return { result: { status: 'noop' as const, reason: 'pratica non trovata' }, jobs: emptyJobs() };
+    }
 
     const terminale = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as const;
     if ((terminale as readonly string[]).includes(pratica.stato)) {
-      return { status: 'closed', finalStato: pratica.stato as 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
+      return {
+        result: { status: 'closed' as const, finalStato: pratica.stato as 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' },
+        jobs: emptyJobs(),
+      };
     }
 
     const currentRound = currentRoundFromStato(pratica.stato);
     if (!currentRound) {
-      return { status: 'noop', reason: `stato ${pratica.stato} non gestito da tick` };
+      return { result: { status: 'noop' as const, reason: `stato ${pratica.stato} non gestito` }, jobs: emptyJobs() };
     }
 
     const now = new Date();
-    const assegnazioniCorrenti = pratica.assegnazioni.filter(
-      (a) => a.round === currentRound,
-    );
+    const assegnazioniCorrenti = pratica.assegnazioni.filter((a) => a.round === currentRound);
 
-    // 1) Marca TIMEOUT
     const daScadere = assegnazioniCorrenti.filter(
       (a) => a.esito === 'PENDING' && a.countdownFineAt && a.countdownFineAt <= now,
     );
@@ -69,25 +73,28 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
       }
     }
 
-    // 2) Se c'è ancora qualche PENDING, aspettiamo
     const ancoraPending = assegnazioniCorrenti.some((a) => a.esito === 'PENDING');
     if (ancoraPending) {
       return daScadere.length > 0
-        ? { status: 'timeouts-marked', count: daScadere.length }
-        : { status: 'noop', reason: 'round corrente con assegnazioni pending' };
+        ? { result: { status: 'timeouts-marked' as const, count: daScadere.length }, jobs: emptyJobs() }
+        : { result: { status: 'noop' as const, reason: 'assegnazioni pending' }, jobs: emptyJobs() };
     }
 
-    // 3) Nessuna accettata (altrimenti il flow accept avrebbe già chiuso): avanza round
     const accettata = assegnazioniCorrenti.some((a) => a.esito === 'ACCETTATA');
     if (accettata) {
-      return { status: 'noop', reason: 'round già risolto con accettazione' };
+      return { result: { status: 'noop' as const, reason: 'round già risolto con accettazione' }, jobs: emptyJobs() };
     }
 
-    // 4) Avanza round
     if (currentRound < 3) {
       const nextRound = (currentRound + 1) as 1 | 2 | 3;
-      const created = await avviaRound(tx, pratica, nextRound);
-      return { status: 'advanced-round', nextRound, assegnazioni: created };
+      const { count, newAssegnazioniIds, escalated } = await avviaRound(tx, pratica, nextRound);
+      return {
+        result: { status: 'advanced-round' as const, nextRound, assegnazioni: count },
+        jobs: {
+          newAssegnazioniIds,
+          escalationPraticaId: escalated ? praticaId : null,
+        },
+      };
     }
 
     // Round 3 esaurito → escalation
@@ -95,15 +102,16 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
       where: { id: praticaId },
       data: { stato: 'IN_ESCALATION', escalationAt: now },
     });
-    return { status: 'escalated' };
+    return {
+      result: { status: 'escalated' as const },
+      jobs: { newAssegnazioniIds: [], escalationPraticaId: praticaId },
+    };
   });
+
+  await processPostCommitJobs(jobs);
+  return result;
 }
 
-/**
- * Avvia un round per una pratica: seleziona agenzie, crea PraticaAssegnazione,
- * calcola countdown, aggiorna lo stato della pratica.
- * Ritorna il numero di assegnazioni create.
- */
 async function avviaRound(
   tx: Prisma.TransactionClient,
   pratica: {
@@ -112,42 +120,24 @@ async function avviaRound(
     assegnazioni: { agenziaId: string }[];
   },
   round: 1 | 2 | 3,
-): Promise<number> {
+): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean }> {
   const now = new Date();
   const provincia = (pratica.provincia ?? '').toUpperCase();
   const giaContattate = new Set(pratica.assegnazioni.map((a) => a.agenziaId));
 
-  // 1) Costruisci il set di provincie target per il round
   let provincieTarget: readonly string[];
   if (round === 1 || round === 3) provincieTarget = [provincia];
   else provincieTarget = provinceLimitrofe(provincia);
 
-  // 2) Cap agenzie per round
-  const giaContattateCount = giaContattate.size;
   const maxPerRound =
     round === 3
-      ? Math.max(0, DISTRIBUZIONE.N_MAX - giaContattateCount)
+      ? Math.max(0, DISTRIBUZIONE.N_MAX - giaContattate.size)
       : DISTRIBUZIONE.N_PER_ROUND;
 
   if (maxPerRound === 0 || provincieTarget.length === 0) {
-    // Nessuno da contattare in questo round — escalation se siamo all'ultimo
-    if (round === 3) {
-      await tx.pratica.update({
-        where: { id: pratica.id },
-        data: { stato: 'IN_ESCALATION', escalationAt: now },
-      });
-    } else {
-      // Skip del round e tenta il successivo ricorsivamente? Per ora marcatura semplice:
-      // aggiorna lo stato al round e lascia che il prossimo tick lo faccia avanzare.
-      await tx.pratica.update({
-        where: { id: pratica.id },
-        data: statoPerRound(round, now),
-      });
-    }
-    return 0;
+    return handleNoCandidates(tx, pratica.id, round, now);
   }
 
-  // 3) Seleziona agenzie candidate + applica ranking rating
   const raw = await tx.company.findMany({
     where: {
       type: 'AGENZIA',
@@ -155,45 +145,27 @@ async function avviaRound(
       provincia: { in: provincieTarget as string[] },
       id: { notIn: Array.from(giaContattate) },
     },
-    select: {
-      id: true,
-      createdAt: true,
-      ragioneSociale: true,
-      provincia: true,
-    },
+    select: { id: true, createdAt: true, ragioneSociale: true, provincia: true },
   });
-  const ranked = await attachRating(tx, raw);
-  const eligible = rankCandidates(ranked); // esclude sospese, ordina per rating desc
+  const rankedCandidates = await attachRating(tx, raw);
+  const eligible = rankCandidates(rankedCandidates);
   const candidate = eligible.slice(0, maxPerRound);
 
   if (candidate.length === 0) {
-    if (round === 3) {
-      await tx.pratica.update({
-        where: { id: pratica.id },
-        data: { stato: 'IN_ESCALATION', escalationAt: now },
-      });
-    } else {
-      await tx.pratica.update({
-        where: { id: pratica.id },
-        data: statoPerRound(round, now),
-      });
-    }
-    return 0;
+    return handleNoCandidates(tx, pratica.id, round, now);
   }
 
-  // 4) Calcola countdown per ciascuna agenzia
   const orariMap = await loadOrariPerAgenzie(
     candidate.map((c) => c.id),
     tx,
   );
-
   const hours = ROUND_TO_HOURS[round];
+  const newIds: string[] = [];
 
-  // 5) Crea le assegnazioni
   for (const a of candidate) {
     const orari = orariMap.get(a.id) ?? { fasce: {}, chiusure: [] };
     const { inizio, fine } = computeCountdown(now, hours, orari);
-    await tx.praticaAssegnazione.create({
+    const created = await tx.praticaAssegnazione.create({
       data: {
         praticaId: pratica.id,
         agenziaId: a.id,
@@ -204,15 +176,35 @@ async function avviaRound(
         countdownFineAt: fine,
       },
     });
+    newIds.push(created.id);
   }
 
-  // 6) Aggiorna stato pratica al round corrente
   await tx.pratica.update({
     where: { id: pratica.id },
     data: statoPerRound(round, now),
   });
 
-  return candidate.length;
+  return { count: candidate.length, newAssegnazioniIds: newIds, escalated: false };
+}
+
+async function handleNoCandidates(
+  tx: Prisma.TransactionClient,
+  praticaId: string,
+  round: 1 | 2 | 3,
+  now: Date,
+): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean }> {
+  if (round === 3) {
+    await tx.pratica.update({
+      where: { id: praticaId },
+      data: { stato: 'IN_ESCALATION', escalationAt: now },
+    });
+    return { count: 0, newAssegnazioniIds: [], escalated: true };
+  }
+  await tx.pratica.update({
+    where: { id: praticaId },
+    data: statoPerRound(round, now),
+  });
+  return { count: 0, newAssegnazioniIds: [], escalated: false };
 }
 
 function statoPerRound(
@@ -231,33 +223,145 @@ function currentRoundFromStato(stato: string): 1 | 2 | 3 | null {
   return null;
 }
 
+function emptyJobs(): PostCommitJobs {
+  return { newAssegnazioniIds: [], escalationPraticaId: null };
+}
+
+async function processPostCommitJobs(jobs: PostCommitJobs): Promise<void> {
+  if (jobs.newAssegnazioniIds.length > 0) {
+    await emitN6ForAssegnazioni(jobs.newAssegnazioniIds);
+  }
+  if (jobs.escalationPraticaId) {
+    await emitEscalationNotifications(jobs.escalationPraticaId);
+  }
+}
+
+async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
+  const assegnazioni = await prisma.praticaAssegnazione.findMany({
+    where: { id: { in: assegnazioneIds } },
+    include: {
+      agenzia: { select: { id: true, ragioneSociale: true, email: true } },
+      pratica: {
+        select: {
+          codicePratica: true,
+          targa: true,
+          comune: true,
+          provincia: true,
+          feeAgenziaCent: true,
+        },
+      },
+    },
+  });
+
+  const batchTotal = assegnazioni.length;
+  const inputs = assegnazioni.map((a) => ({
+    tipo: 'N6_AGENZIA_NUOVA_PRATICA' as const,
+    target: {
+      email: a.agenzia.email,
+      companyId: a.agenzia.id,
+      userId: null,
+    },
+    payload: {
+      codicePratica: a.pratica.codicePratica ?? '—',
+      targa: a.pratica.targa,
+      comune: a.pratica.comune,
+      provincia: a.pratica.provincia,
+      feeCent: a.pratica.feeAgenziaCent,
+      round: a.round,
+      altreAgenzie: Math.max(0, batchTotal - 1),
+      countdownFineAt: a.countdownFineAt,
+      nomeAgenzia: a.agenzia.ragioneSociale,
+    } satisfies N6AgenziaNuovaPayload,
+  }));
+
+  await sendNotifications(inputs);
+}
+
+async function emitEscalationNotifications(praticaId: string): Promise<void> {
+  const pratica = await prisma.pratica.findUnique({
+    where: { id: praticaId },
+    include: {
+      broker: {
+        include: {
+          users: { where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' }, select: { email: true, nome: true, id: true }, take: 1 },
+        },
+      },
+      assegnazioni: { select: { id: true } },
+    },
+  });
+  if (!pratica) return;
+
+  const tentativi = pratica.assegnazioni.length;
+  const admins = await getAdminEmails();
+
+  const targets = admins.map((a) => ({
+    tipo: 'N10_ADMIN_ESCALATION' as const,
+    target: { email: a.email, userId: a.userId, companyId: null },
+    payload: {
+      codicePratica: pratica.codicePratica ?? '—',
+      targa: pratica.targa,
+      comune: pratica.comune,
+      provincia: pratica.provincia,
+      tentativi,
+      brokerRagioneSociale: pratica.broker.ragioneSociale,
+      brokerEmail: pratica.broker.email,
+      brokerTelefono: pratica.broker.telefono,
+    },
+  }));
+
+  await sendNotifications(targets);
+
+  const brokerUser = pratica.broker.users[0];
+  if (brokerUser) {
+    await sendNotification({
+      tipo: 'N11_BROKER_ESCALATION',
+      target: { email: brokerUser.email, userId: brokerUser.id, companyId: pratica.broker.id },
+      payload: {
+        codicePratica: pratica.codicePratica ?? '—',
+        targa: pratica.targa,
+        nomeBroker: brokerUser.nome,
+      },
+    });
+  }
+}
+
 /**
- * Avvia il round 1 per una pratica in BOZZA — usata da submitNuovaPraticaAction.
- * Scorporata per condividere la logica "apri round" tra submit e tick.
+ * Avvia il round 1 per una pratica appena creata.
  */
-export async function avviaRound1ForPratica(
-  praticaId: string,
-): Promise<{ assegnazioni: number; stato: string }> {
+export async function avviaRound1ForPratica(praticaId: string): Promise<{
+  assegnazioni: number;
+  stato: string;
+  newAssegnazioniIds: string[];
+  escalated: boolean;
+}> {
   const result = await prisma.$transaction(async (tx) => {
     const pratica = await tx.pratica.findUnique({
       where: { id: praticaId },
       include: { assegnazioni: { select: { agenziaId: true } } },
     });
     if (!pratica) throw new Error('Pratica non trovata');
-    const created = await avviaRound(tx, pratica, 1);
+    const r = await avviaRound(tx, pratica, 1);
     const updated = await tx.pratica.findUnique({
       where: { id: praticaId },
       select: { stato: true },
     });
-    return { assegnazioni: created, stato: updated!.stato };
+    return {
+      assegnazioni: r.count,
+      stato: updated!.stato,
+      newAssegnazioniIds: r.newAssegnazioniIds,
+      escalated: r.escalated,
+    };
   });
+
+  // Post-commit: notifiche alle agenzie + escalation se nessuno
+  await processPostCommitJobs({
+    newAssegnazioniIds: result.newAssegnazioniIds,
+    escalationPraticaId: result.escalated ? praticaId : null,
+  });
+
   return result;
 }
 
-/**
- * Itera tutte le pratiche in distribuzione e applica tickPratica.
- * Usata da /api/jobs/distribuzione-tick (e in futuro da cron Vercel).
- */
 export async function tickAllPraticheInDistribuzione(): Promise<{
   scanned: number;
   timeoutsMarked: number;

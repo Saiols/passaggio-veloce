@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
+import { sendNotification } from '@/lib/notifiche';
 
 const AUTO_ADDEBITO_DAYS = 20;
 
@@ -78,6 +79,75 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
     });
   } catch (err) {
     redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
+  }
+
+  // N4 (broker) + N8 (agenzia): best-effort post-commit
+  try {
+    const full = await prisma.pratica.findUnique({
+      where: { id: praticaId },
+      include: {
+        broker: {
+          include: {
+            wallet: true,
+            users: {
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              select: { email: true, nome: true, id: true },
+              take: 1,
+            },
+          },
+        },
+        agenziaAssegnata: {
+          include: {
+            users: {
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              select: { email: true, id: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (full) {
+      const brokerUser = full.broker.users[0];
+      if (brokerUser) {
+        await sendNotification({
+          tipo: 'N4_BROKER_FIRMA_E_CREDITO',
+          target: {
+            email: brokerUser.email,
+            userId: brokerUser.id,
+            companyId: full.broker.id,
+          },
+          payload: {
+            codicePratica: full.codicePratica ?? '—',
+            targa: full.targa,
+            agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
+            creditoCent: full.creditoBrokerCent,
+            saldoCent: full.broker.wallet?.saldoCent ?? 0,
+            nomeBroker: brokerUser.nome,
+          },
+        }).catch(() => undefined);
+      }
+
+      const agenziaUser = full.agenziaAssegnata?.users[0];
+      if (full.agenziaAssegnata && agenziaUser && full.autoAddebitoAt) {
+        await sendNotification({
+          tipo: 'N8_AGENZIA_ADDEBITO',
+          target: {
+            email: full.agenziaAssegnata.email,
+            userId: agenziaUser.id,
+            companyId: full.agenziaAssegnata.id,
+          },
+          payload: {
+            codicePratica: full.codicePratica ?? '—',
+            feeCent: full.feeAgenziaCent,
+            autoAddebitoAt: full.autoAddebitoAt,
+            nomeAgenzia: full.agenziaAssegnata.ragioneSociale,
+          },
+        }).catch(() => undefined);
+      }
+    }
+  } catch {
+    // best-effort
   }
 
   revalidatePath('/dashboard');

@@ -31,6 +31,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       { href: '/inbox', label: 'Inbox' },
       { href: '/pratiche', label: 'Pratiche attive' },
       { href: '/orari', label: 'Orari' },
+      { href: '/notifiche', label: 'Notifiche' },
       { href: '/profilo', label: 'Profilo' },
     ];
   }
@@ -39,6 +40,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/pratiche', label: 'Pratiche' },
     { href: '/wallet', label: 'Wallet' },
+    { href: '/notifiche', label: 'Notifiche' },
     { href: '/profilo', label: 'Profilo' },
   ];
 }

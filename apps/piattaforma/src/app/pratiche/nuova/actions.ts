@@ -8,6 +8,7 @@ import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
+import { sendNotification } from '@/lib/notifiche';
 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -182,7 +183,24 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
 
   // Apre il round 1 tramite engine distribuzione: crea PraticaAssegnazione
   // con countdown per-agenzia basato sugli orari di apertura dichiarati.
-  await avviaRound1ForPratica(pratica.id);
+  const round1 = await avviaRound1ForPratica(pratica.id);
+
+  // N1 — conferma invio al broker
+  if (round1.assegnazioni > 0) {
+    const me = session.user;
+    await sendNotification({
+      tipo: 'N1_BROKER_INVIO_PRATICA',
+      target: { email: me.email ?? '', userId: me.id ?? null, companyId: brokerId },
+      payload: {
+        codicePratica,
+        targa: d.targa,
+        comune: d.comune,
+        provincia: d.provincia,
+        numeroAgenzie: round1.assegnazioni,
+        nomeBroker: me.name?.split(' ')[0] ?? 'utente',
+      },
+    }).catch(() => undefined);
+  }
 
   // Upload libretto su storage (fuori dalla transaction — filesystem)
   const storage = getStorage();

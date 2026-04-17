@@ -7,6 +7,7 @@ import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import { getStorage } from '@/lib/providers/storage';
+import { avviaRound1ForPratica } from '@/lib/distribuzione';
 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -136,74 +137,52 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   const codicePratica = await nextCodicePratica();
   const now = new Date();
 
-  // Trova prime N agenzie nella provincia per round 1 (placeholder algoritmo Fase 4)
-  const agenzieRound1 = await prisma.company.findMany({
-    where: {
-      type: 'AGENZIA',
+  // Crea la pratica in BOZZA — l'apertura del round 1 avviene subito dopo
+  // tramite l'engine di distribuzione (gestisce selezione agenzie + countdown).
+  const pratica = await prisma.pratica.create({
+    data: {
+      codicePratica,
+      tipo: d.tipo,
+      stato: 'BOZZA',
+      targa: d.targa.toUpperCase(),
+      telaio: d.telaio.toUpperCase(),
+      proprietarioAttuale: d.proprietarioAttuale,
+      dataImmatricolazione: new Date(d.dataImmatricolazione),
+      preImm2015: d.preImm2015 ?? false,
+      flagComodatoDuso: d.flagComodatoDuso ?? false,
+
+      venditoreIsPersonaGiuridica: d.venditoreIsPG,
+      venditoreNome: d.venditoreIsPG ? null : d.venditoreNome,
+      venditoreCognome: d.venditoreIsPG ? null : d.venditoreCognome,
+      venditoreCF: d.venditoreIsPG ? null : d.venditoreCF?.toUpperCase(),
+      venditoreRagioneSociale: d.venditoreIsPG ? d.venditoreRagioneSociale : null,
+      venditorePIVA: d.venditoreIsPG ? d.venditorePIVA : null,
+
+      acquirenteIsPersonaGiuridica: d.acquirenteIsPG,
+      acquirenteNome: d.acquirenteIsPG ? null : d.acquirenteNome,
+      acquirenteCognome: d.acquirenteIsPG ? null : d.acquirenteCognome,
+      acquirenteCF: d.acquirenteIsPG ? null : d.acquirenteCF?.toUpperCase(),
+      acquirenteRagioneSociale: d.acquirenteIsPG ? d.acquirenteRagioneSociale : null,
+      acquirentePIVA: d.acquirenteIsPG ? d.acquirentePIVA : null,
+
+      flagCointestazione: d.flagCointestazione,
+      flagMinivoltura: d.flagMinivoltura,
+      flagProcura: d.flagProcura,
+
+      comune: d.comune,
       provincia: d.provincia,
-      deletedAt: null,
+
+      brokerId,
+      feeAgenziaCent,
+      creditoBrokerCent,
+
+      submittedAt: now,
     },
-    take: 5,
   });
 
-  const pratica = await prisma.$transaction(async (tx) => {
-    const p = await tx.pratica.create({
-      data: {
-        codicePratica,
-        tipo: d.tipo,
-        stato: agenzieRound1.length > 0 ? 'IN_ATTESA_ROUND_1' : 'IN_ESCALATION',
-        targa: d.targa.toUpperCase(),
-        telaio: d.telaio.toUpperCase(),
-        proprietarioAttuale: d.proprietarioAttuale,
-        dataImmatricolazione: new Date(d.dataImmatricolazione),
-        preImm2015: d.preImm2015 ?? false,
-        flagComodatoDuso: d.flagComodatoDuso ?? false,
-
-        venditoreIsPersonaGiuridica: d.venditoreIsPG,
-        venditoreNome: d.venditoreIsPG ? null : d.venditoreNome,
-        venditoreCognome: d.venditoreIsPG ? null : d.venditoreCognome,
-        venditoreCF: d.venditoreIsPG ? null : d.venditoreCF?.toUpperCase(),
-        venditoreRagioneSociale: d.venditoreIsPG ? d.venditoreRagioneSociale : null,
-        venditorePIVA: d.venditoreIsPG ? d.venditorePIVA : null,
-
-        acquirenteIsPersonaGiuridica: d.acquirenteIsPG,
-        acquirenteNome: d.acquirenteIsPG ? null : d.acquirenteNome,
-        acquirenteCognome: d.acquirenteIsPG ? null : d.acquirenteCognome,
-        acquirenteCF: d.acquirenteIsPG ? null : d.acquirenteCF?.toUpperCase(),
-        acquirenteRagioneSociale: d.acquirenteIsPG ? d.acquirenteRagioneSociale : null,
-        acquirentePIVA: d.acquirenteIsPG ? d.acquirentePIVA : null,
-
-        flagCointestazione: d.flagCointestazione,
-        flagMinivoltura: d.flagMinivoltura,
-        flagProcura: d.flagProcura,
-
-        comune: d.comune,
-        provincia: d.provincia,
-
-        brokerId,
-        feeAgenziaCent,
-        creditoBrokerCent,
-
-        submittedAt: now,
-        round1StartedAt: now,
-        escalationAt: agenzieRound1.length === 0 ? now : null,
-      },
-    });
-
-    for (const a of agenzieRound1) {
-      await tx.praticaAssegnazione.create({
-        data: {
-          praticaId: p.id,
-          agenziaId: a.id,
-          round: 1,
-          esito: 'PENDING',
-          invioAt: now,
-        },
-      });
-    }
-
-    return p;
-  });
+  // Apre il round 1 tramite engine distribuzione: crea PraticaAssegnazione
+  // con countdown per-agenzia basato sugli orari di apertura dichiarati.
+  await avviaRound1ForPratica(pratica.id);
 
   // Upload libretto su storage (fuori dalla transaction — filesystem)
   const storage = getStorage();

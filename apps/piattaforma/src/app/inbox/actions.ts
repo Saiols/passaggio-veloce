@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
+import { tickPratica } from '@/lib/distribuzione';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -99,6 +100,9 @@ export async function rejectPratica(
     where: { id: assegnazione.id },
     data: { esito: 'RIFIUTATA', esitoAt: new Date(), notaRifiuto: nota },
   });
+
+  // Se era l'ultima PENDING del round corrente, l'engine fa avanzare round / escalation
+  await tickPratica(praticaId);
 
   revalidatePath('/inbox');
   revalidatePath('/dashboard');

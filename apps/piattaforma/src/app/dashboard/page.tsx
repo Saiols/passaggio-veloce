@@ -5,7 +5,18 @@ import { BrokerDashboard } from './broker-dashboard';
 import { AgenziaDashboard } from './agenzia-dashboard';
 import { AdminDashboard } from './admin-dashboard';
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    tick?: string;
+    scanned?: string;
+    timeouts?: string;
+    advanced?: string;
+    escalated?: string;
+  }>;
+}) {
+  const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -16,7 +27,18 @@ export default async function DashboardPage() {
   return (
     <AppShell session={session} activePath="/dashboard">
       {role === 'ADMIN_PIATTAFORMA' ? (
-        <AdminDashboard />
+        <AdminDashboard
+          tickBanner={
+            sp.tick === '1'
+              ? {
+                  scanned: sp.scanned,
+                  timeouts: sp.timeouts,
+                  advanced: sp.advanced,
+                  escalated: sp.escalated,
+                }
+              : undefined
+          }
+        />
       ) : companyType === 'AGENZIA' && companyId ? (
         <AgenziaDashboard companyId={companyId} />
       ) : companyType === 'DEALER' && companyId ? (

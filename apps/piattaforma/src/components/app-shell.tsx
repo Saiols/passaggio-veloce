@@ -3,6 +3,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { cn } from '@/components/ui';
 import { logoutAction } from '@/app/(auth)/actions';
+import { DemoBanner } from '@/components/demo-banner';
 
 export type AppShellSession = {
   user: {
@@ -71,6 +72,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-pv-slate-50">
+      <DemoBanner isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />
       <header className="sticky top-0 z-30 bg-pv-navy-800 text-white shadow-[0_2px_12px_rgb(10_37_64_/_0.25)]">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
           <Link href="/dashboard" className="flex items-center gap-2.5">

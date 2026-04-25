@@ -431,9 +431,150 @@ async function main() {
     console.log(`  · pratica ${p.codicePratica} [${p.stato}]`);
   }
 
+  // ============================================================
+  // DEMO ACCOUNTS (separati dagli account dev — password DemoPass2026!)
+  // ============================================================
+
+  const DEMO_PASSWORD = 'DemoPass2026!';
+  const demoPasswordHash = await hash(DEMO_PASSWORD, 12);
+
+  // Demo Admin (no company)
+  await prisma.user.upsert({
+    where: { email: 'admin@demo.passaggioveloce.it' },
+    create: {
+      email: 'admin@demo.passaggioveloce.it',
+      passwordHash: demoPasswordHash,
+      nome: 'Admin',
+      cognome: 'Demo',
+      role: 'ADMIN_PIATTAFORMA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+    },
+    update: { passwordHash: demoPasswordHash },
+  });
+
+  // Demo Dealer Company
+  const demoDealerCompany = await prisma.company.upsert({
+    where: { partitaIva: '99999999991' },
+    create: {
+      type: 'DEALER',
+      ragioneSociale: 'Demo Auto Srl',
+      partitaIva: '99999999991',
+      pec: 'pec@demoauto.it',
+      email: 'info@demoauto.it',
+      indirizzo: 'Via Roma 1',
+      citta: 'Padova',
+      cap: '35100',
+      provincia: 'PD',
+      iban: 'IT60X0542811101000000000001',
+      sepaMandateAccepted: true,
+      sepaMandateAcceptedAt: now,
+      termsAcceptedAt: now,
+      wallet: { create: { saldoCent: 0 } },
+    },
+    update: {},
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'dealer@demo.passaggioveloce.it' },
+    create: {
+      email: 'dealer@demo.passaggioveloce.it',
+      passwordHash: demoPasswordHash,
+      nome: 'Mario',
+      cognome: 'Rossi',
+      role: 'ADMIN_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+      companyId: demoDealerCompany.id,
+    },
+    update: { passwordHash: demoPasswordHash, companyId: demoDealerCompany.id },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'dealer-junior@demo.passaggioveloce.it' },
+    create: {
+      email: 'dealer-junior@demo.passaggioveloce.it',
+      passwordHash: demoPasswordHash,
+      nome: 'Luca',
+      cognome: 'Bianchi',
+      role: 'UTENTE_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+      companyId: demoDealerCompany.id,
+    },
+    update: { passwordHash: demoPasswordHash, companyId: demoDealerCompany.id },
+  });
+
+  // Demo Agenzia Company
+  const demoAgenziaCompany = await prisma.company.upsert({
+    where: { partitaIva: '99999999992' },
+    create: {
+      type: 'AGENZIA',
+      ragioneSociale: 'Demo Pratiche Auto Snc',
+      partitaIva: '99999999992',
+      pec: 'pec@demopratiche.it',
+      email: 'info@demopratiche.it',
+      indirizzo: 'Via Milano 5',
+      citta: 'Padova',
+      cap: '35100',
+      provincia: 'PD',
+      iban: 'IT60X0542811101000000000002',
+      sepaMandateAccepted: true,
+      sepaMandateAcceptedAt: now,
+      termsAcceptedAt: now,
+    },
+    update: {},
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'agenzia@demo.passaggioveloce.it' },
+    create: {
+      email: 'agenzia@demo.passaggioveloce.it',
+      passwordHash: demoPasswordHash,
+      nome: 'Giulia',
+      cognome: 'Verdi',
+      role: 'ADMIN_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+      companyId: demoAgenziaCompany.id,
+    },
+    update: { passwordHash: demoPasswordHash, companyId: demoAgenziaCompany.id },
+  });
+
+  // Orari standard agenzia demo (lun-ven 9-13 + 15-18:30, sab 9-12)
+  // Stesso pattern delle altre agenzie: fasceOrarie come JSON, enum GiornoSettimana
+  const demoStandardFasce = [
+    { inizio: '09:00', fine: '13:00' },
+    { inizio: '15:00', fine: '18:30' },
+  ];
+  const demoSabFasce = [{ inizio: '09:00', fine: '12:00' }];
+  const demoGiorni = [
+    { g: 'LUN', f: demoStandardFasce },
+    { g: 'MAR', f: demoStandardFasce },
+    { g: 'MER', f: demoStandardFasce },
+    { g: 'GIO', f: demoStandardFasce },
+    { g: 'VEN', f: demoStandardFasce },
+    { g: 'SAB', f: demoSabFasce },
+  ] as const;
+  for (const { g, f } of demoGiorni) {
+    await prisma.orariApertura.upsert({
+      where: { agenziaId_giorno: { agenziaId: demoAgenziaCompany.id, giorno: g } },
+      update: { fasceOrarie: f },
+      create: { agenziaId: demoAgenziaCompany.id, giorno: g, fasceOrarie: f },
+    });
+  }
+
+  console.log('');
+  console.log('  [DEMO ACCOUNTS]');
+  console.log(`  · demo admin: admin@demo.passaggioveloce.it`);
+  console.log(`  · demo dealer: dealer@demo.passaggioveloce.it (company: Demo Auto Srl)`);
+  console.log(`  · demo dealer-junior: dealer-junior@demo.passaggioveloce.it`);
+  console.log(`  · demo agenzia: agenzia@demo.passaggioveloce.it (company: Demo Pratiche Auto Snc)`);
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);
+  console.log(`  password demo (account demo): ${DEMO_PASSWORD}`);
 }
 
 main()

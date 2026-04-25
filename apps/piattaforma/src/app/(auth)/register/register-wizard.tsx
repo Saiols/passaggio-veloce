@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,11 +32,10 @@ const STEPS = [
 ] as const;
 
 export function RegisterWizard() {
-  const router = useRouter();
   const [step, setStep] = useState(1);
   const [data, setData] = useState<WizardData>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleAccount = (values: AccountData) => {
@@ -69,10 +67,7 @@ export function RegisterWizard() {
       });
 
       if (result.ok) {
-        setSuccess(
-          `Registrazione completata! In dev, token verifica: ${result.emailVerificationToken}`,
-        );
-        setTimeout(() => router.push('/login'), 2500);
+        setToken(result.emailVerificationToken);
       } else {
         setSubmitError(result.error);
       }
@@ -96,7 +91,28 @@ export function RegisterWizard() {
         </header>
 
         <div className="space-y-5">
-          {success && <Alert variant="success">{success}</Alert>}
+          {token && (
+            <div className="rounded-lg bg-pv-amber-50 border border-pv-amber-500 p-4 mt-4 text-sm">
+              <p className="font-bold text-pv-navy-900">🧪 Modalità DEMO</p>
+              <p className="text-pv-navy-700 mt-1">
+                Il tuo account è già attivo. In produzione avresti ricevuto un&apos;email
+                con questo link di verifica:
+              </p>
+              <a
+                href={`/verify-email?token=${token}`}
+                className="text-pv-navy-700 underline mt-2 inline-block break-all"
+              >
+                {`/verify-email?token=${token}`}
+              </a>
+              <p className="text-pv-navy-700 mt-2">
+                Puoi{' '}
+                <a href="/login" className="underline font-semibold">
+                  accedere subito
+                </a>
+                .
+              </p>
+            </div>
+          )}
           {submitError && <Alert variant="error">{submitError}</Alert>}
 
           {step === 1 && <AccountStep defaultValues={data.account} onNext={handleAccount} />}

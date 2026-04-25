@@ -5,6 +5,7 @@ import { Prisma } from '@pv/db';
 import { prisma } from '@pv/db';
 
 import { signIn, signOut } from '@/auth';
+import { env } from '@/env';
 import { hashPassword } from '@/lib/auth/password';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
 import {
@@ -147,6 +148,22 @@ export async function registerAction(
         },
       });
     });
+
+    if (env.DEMO_MODE) {
+      await prisma.$transaction(async (tx) => {
+        await tx.verificationToken.update({
+          where: { token: verificationToken },
+          data: { usedAt: new Date() },
+        });
+        await tx.user.update({
+          where: { email: emailLower },
+          data: {
+            emailVerifiedAt: new Date(),
+            status: 'ACTIVE',
+          },
+        });
+      });
+    }
 
     // TODO Fase 6: inviare email di verifica via Resend con link
     // /verify-email?token=verificationToken

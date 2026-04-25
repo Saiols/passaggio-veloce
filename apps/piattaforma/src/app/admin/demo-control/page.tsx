@@ -4,6 +4,7 @@ import { env } from '@/env';
 import { AppShell } from '@/components/app-shell';
 import { Counters } from './counters';
 import { InboxDemo } from './inbox-demo';
+import { JobButtons } from './job-buttons';
 
 export default async function DemoControlPage() {
   if (!env.DEMO_MODE) notFound();
@@ -34,7 +35,7 @@ export default async function DemoControlPage() {
             <InboxDemo />
           </section>
           <section>
-            <p className="text-sm text-pv-slate-500">[Job Buttons: vedi Task 27]</p>
+            <JobButtons />
           </section>
         </div>
       </div>

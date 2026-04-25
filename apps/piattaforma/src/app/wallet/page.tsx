@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
+import { PayoutButton } from './payout-button';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 
 const THRESHOLD_PAYOUT_AUTO_CENT = 100_000; // 1.000 €
@@ -92,14 +93,20 @@ export default async function WalletPage() {
           />
         </div>
 
-        {statusPayout === 'manual' && (
-          <div className="mb-5">
-            <Alert variant="info" title="Payout manuale disponibile">
-              Sei sopra i {formatCurrencyCent(THRESHOLD_PAYOUT_MIN_CENT)}: puoi richiedere
-              un payout manuale. Questo flusso sarà attivato in Fase 5 con Stripe.
-            </Alert>
+        <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
+          <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
+          <p className="mt-1 text-sm text-pv-slate-500">
+            Soglia minima 500€ · Soglia auto 1.000€
+          </p>
+          <div className="mt-4">
+            <PayoutButton disabled={saldoCent < 50_000} />
           </div>
-        )}
+          {saldoCent >= 100_000 && (
+            <p className="mt-2 text-xs text-pv-slate-500">
+              🎯 Sei sopra la soglia automatica. In DEMO il payout si attiva via Demo Control.
+            </p>
+          )}
+        </div>
 
         <Card className="mb-5">
           <h2 className="text-[15px] font-bold text-pv-navy-800">Movimenti</h2>

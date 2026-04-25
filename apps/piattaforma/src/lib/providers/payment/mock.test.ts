@@ -43,4 +43,28 @@ describe('MockPaymentProvider', () => {
   it('exposes name = "mock"', () => {
     expect(provider.name).toBe('mock');
   });
+
+  it('rejects zero amount on chargeFee as non-retryable error', async () => {
+    const res = await provider.chargeFee({
+      feeAddebitoId: 'fee-zero',
+      importoCent: 0,
+      agenziaId: 'ag-zero',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.retryable).toBe(false);
+    }
+  });
+
+  it('rejects negative amount on executePayout as non-retryable error', async () => {
+    const res = await provider.executePayout({
+      payoutId: 'payout-x',
+      importoCent: -50,
+      iban: 'IT60X0542811101000000123456',
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.retryable).toBe(false);
+    }
+  });
 });

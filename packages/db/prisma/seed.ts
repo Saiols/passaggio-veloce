@@ -1405,6 +1405,548 @@ async function main() {
     });
   }
 
+  // ============================================================
+  // TASK 31 — Wallet, Transazioni, Payout, Valutazioni, FeeAddebito
+  // ============================================================
+
+  console.log('');
+  console.log('  [TASK 31 — FINANZIARIO DEMO]');
+
+  // Ricarica i 3 dealer demo per avere gli ID corretti
+  const demoDealerComp = await prisma.company.findUnique({ where: { partitaIva: '99999999991' } }); // Demo Auto Srl
+  const autoVenetoComp = await prisma.company.findUnique({ where: { partitaIva: '99999999993' } }); // Auto Veneto Srl
+  const consTrevisoComp = await prisma.company.findUnique({ where: { partitaIva: '99999999994' } }); // Concessionaria Treviso Spa
+  const demoPraticheComp = await prisma.company.findUnique({ where: { partitaIva: '99999999992' } }); // Demo Pratiche Auto Snc (agenzia principale)
+
+  // Agenzie demo aggiuntive per valutazioni
+  const studioPd2Comp = await prisma.company.findUnique({ where: { partitaIva: '99999999995' } });
+  const venetoTrapassiComp = await prisma.company.findUnique({ where: { partitaIva: '99999999996' } });
+  const trapassoTvComp = await prisma.company.findUnique({ where: { partitaIva: '99999999997' } });
+  const vicenzaAutoComp = await prisma.company.findUnique({ where: { partitaIva: '99999999998' } });
+  const veronaTrapassiComp = await prisma.company.findUnique({ where: { partitaIva: '99999999999' } }); // sospesa
+
+  // ── 1. WALLET DEMO DEALER ──────────────────────────────────────
+  // Demo Auto Srl → 1.250 € (sopra soglia auto-payout)
+  if (demoDealerComp) {
+    await prisma.wallet.upsert({
+      where: { companyId: demoDealerComp.id },
+      create: { companyId: demoDealerComp.id, saldoCent: 125_000 },
+      update: { saldoCent: 125_000 },
+    });
+    console.log('  · wallet Demo Auto Srl → 125.000 cent');
+  }
+
+  // Auto Veneto Srl → 480 € (sotto soglia, può payout manuale)
+  if (autoVenetoComp) {
+    await prisma.wallet.upsert({
+      where: { companyId: autoVenetoComp.id },
+      create: { companyId: autoVenetoComp.id, saldoCent: 48_000 },
+      update: { saldoCent: 48_000 },
+    });
+    console.log('  · wallet Auto Veneto Srl → 48.000 cent');
+  }
+
+  // Concessionaria Treviso → 0 €
+  if (consTrevisoComp) {
+    await prisma.wallet.upsert({
+      where: { companyId: consTrevisoComp.id },
+      create: { companyId: consTrevisoComp.id, saldoCent: 0 },
+      update: { saldoCent: 0 },
+    });
+    console.log('  · wallet Concessionaria Treviso → 0 cent');
+  }
+
+  // ── 2. TRANSAZIONI STORICHE DEMO AUTO SRL ──────────────────────
+  if (demoDealerComp) {
+    const demoWallet = await prisma.wallet.findUnique({ where: { companyId: demoDealerComp.id } });
+    if (demoWallet) {
+      const existingTxCount = await prisma.transazioneWallet.count({
+        where: { walletId: demoWallet.id, note: 'SEED-DEMO' },
+      });
+
+      if (existingTxCount === 0) {
+        // 13 CREDITO_PRATICA: da 0 a 175.000 (2500 × 13 = 32.500 prima della sottrazione payout)
+        // poi 1 PAYOUT_AUTOMATICO storico ESEGUITO (−50.000)
+        // poi 2 CREDITO_PRATICA finali + 1 RETTIFICA_ADMIN per arrivare a 125.000
+        let saldo = 0;
+        const baseDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90gg fa
+
+        for (let i = 0; i < 13; i++) {
+          saldo += 10_000;
+          const txDate = new Date(baseDate.getTime() + i * 5 * 24 * 60 * 60 * 1000);
+          await prisma.transazioneWallet.create({
+            data: {
+              walletId: demoWallet.id,
+              tipo: 'CREDITO_PRATICA',
+              importoCent: 10_000,
+              saldoPostCent: saldo,
+              note: 'SEED-DEMO',
+              createdAt: txDate,
+            },
+          });
+        }
+        // saldo ora = 130.000
+
+        // PAYOUT_AUTOMATICO storico — già ESEGUITO
+        const payoutStorico = await prisma.payout.create({
+          data: {
+            walletId: demoWallet.id,
+            importoCent: 50_000,
+            stato: 'ESEGUITO',
+            automatico: true,
+            richiestoAt: new Date(baseDate.getTime() + 40 * 24 * 60 * 60 * 1000),
+            eseguitoAt: new Date(baseDate.getTime() + 41 * 24 * 60 * 60 * 1000),
+            providerRef: 'DEMO-PAYOUT-001',
+          },
+        });
+        saldo -= 50_000;
+        // saldo ora = 80.000
+        await prisma.transazioneWallet.create({
+          data: {
+            walletId: demoWallet.id,
+            tipo: 'PAYOUT_AUTOMATICO',
+            importoCent: -50_000,
+            saldoPostCent: saldo,
+            payoutId: payoutStorico.id,
+            note: 'SEED-DEMO',
+            createdAt: new Date(baseDate.getTime() + 41 * 24 * 60 * 60 * 1000),
+          },
+        });
+
+        // 2 CREDITO_PRATICA aggiuntivi (da 80.000 a 120.000)
+        for (let i = 0; i < 2; i++) {
+          saldo += 20_000;
+          await prisma.transazioneWallet.create({
+            data: {
+              walletId: demoWallet.id,
+              tipo: 'CREDITO_PRATICA',
+              importoCent: 20_000,
+              saldoPostCent: saldo,
+              note: 'SEED-DEMO',
+              createdAt: new Date(baseDate.getTime() + (50 + i * 5) * 24 * 60 * 60 * 1000),
+            },
+          });
+        }
+        // saldo ora = 120.000
+
+        // 1 RETTIFICA_ADMIN: +5.000 → 125.000
+        saldo += 5_000;
+        await prisma.transazioneWallet.create({
+          data: {
+            walletId: demoWallet.id,
+            tipo: 'RETTIFICA_ADMIN',
+            importoCent: 5_000,
+            saldoPostCent: saldo,
+            note: 'SEED-DEMO',
+            createdAt: new Date(baseDate.getTime() + 65 * 24 * 60 * 60 * 1000),
+          },
+        });
+
+        console.log(`  · transazioni Demo Auto Srl: 13 CREDITO + 1 PAYOUT_AUTOMATICO + 2 CREDITO + 1 RETTIFICA = 17 tx (saldo target: ${saldo})`);
+      } else {
+        console.log('  · transazioni Demo Auto Srl già presenti (SEED-DEMO), skip');
+      }
+    }
+  }
+
+  // ── 3. TRANSAZIONI STORICHE AUTO VENETO SRL (~5 CREDITO_PRATICA) ──
+  if (autoVenetoComp) {
+    const veWallet = await prisma.wallet.findUnique({ where: { companyId: autoVenetoComp.id } });
+    if (veWallet) {
+      const existingVeTxCount = await prisma.transazioneWallet.count({
+        where: { walletId: veWallet.id, note: 'SEED-DEMO' },
+      });
+
+      if (existingVeTxCount === 0) {
+        let saldo = 0;
+        const baseDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        for (let i = 0; i < 5; i++) {
+          saldo += Math.round(48_000 / 5); // ~9600 each, ultimo arrotondato
+          const txDate = new Date(baseDate.getTime() + i * 6 * 24 * 60 * 60 * 1000);
+          await prisma.transazioneWallet.create({
+            data: {
+              walletId: veWallet.id,
+              tipo: 'CREDITO_PRATICA',
+              importoCent: Math.round(48_000 / 5),
+              saldoPostCent: saldo,
+              note: 'SEED-DEMO',
+              createdAt: txDate,
+            },
+          });
+        }
+        // Aggiusta arrotondamento: se saldo != 48000, aggiungi rettifica
+        if (saldo !== 48_000) {
+          const diff = 48_000 - saldo;
+          await prisma.transazioneWallet.create({
+            data: {
+              walletId: veWallet.id,
+              tipo: 'RETTIFICA_ADMIN',
+              importoCent: diff,
+              saldoPostCent: 48_000,
+              note: 'SEED-DEMO',
+              createdAt: now,
+            },
+          });
+        }
+        console.log('  · transazioni Auto Veneto Srl: 5 CREDITO_PRATICA');
+      } else {
+        console.log('  · transazioni Auto Veneto Srl già presenti (SEED-DEMO), skip');
+      }
+    }
+  }
+
+  // ── 4. PAYOUT RICHIESTO per Auto Veneto Srl ─────────────────────
+  if (autoVenetoComp) {
+    const veWallet = await prisma.wallet.findUnique({ where: { companyId: autoVenetoComp.id } });
+    if (veWallet) {
+      const existingPayout = await prisma.payout.findFirst({
+        where: { walletId: veWallet.id, stato: 'RICHIESTO' },
+      });
+      if (!existingPayout) {
+        await prisma.payout.create({
+          data: {
+            walletId: veWallet.id,
+            importoCent: 48_000,
+            stato: 'RICHIESTO',
+            automatico: false,
+            richiestoAt: new Date(now.getTime() - 2 * 60 * 60 * 1000), // 2h fa
+          },
+        });
+        console.log('  · payout RICHIESTO Auto Veneto Srl: 48.000 cent, manuale');
+      } else {
+        console.log('  · payout RICHIESTO Auto Veneto già presente, skip');
+      }
+    }
+  }
+
+  // ── 5. PRATICHE FIRMATA EXTRA per valutazioni (solo se non abbastanza per demo agenzie) ──
+  // Demo Pratiche Auto Snc necessita 12+1 valutazioni → servono 13 pratiche FIRMATA assegnate a lei
+  // Creiamo le pratiche mancanti con codici "PV-SEED-VAL-NNN" (idempotenti)
+  const demoDealerForVal = demoDealerComp;
+  const agenziaForVal = demoPraticheComp;
+
+  if (demoDealerForVal && agenziaForVal) {
+    let valPraticaSeq = 0;
+    for (let i = 0; i < 15; i++) {
+      const codice = `PV-SEED-VAL-${String(i + 1).padStart(3, '0')}`;
+      const exists = await prisma.pratica.findFirst({ where: { codicePratica: codice } });
+      if (exists) continue;
+      const firmaAt = new Date(now.getTime() - (90 - i * 5) * 24 * 60 * 60 * 1000);
+      const accettataAt = new Date(firmaAt.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const submittedAt = new Date(firmaAt.getTime() - 3 * 24 * 60 * 60 * 1000);
+      await prisma.pratica.create({
+        data: {
+          codicePratica: codice,
+          tipo: i % 3 === 0 ? 'MINIVOLTURA' : 'TRAPASSO_NETTO',
+          stato: 'FIRMATA',
+          brokerId: demoDealerForVal.id,
+          agenziaAssegnataId: agenziaForVal.id,
+          comune: 'Padova',
+          provincia: 'PD',
+          targa: `VA${String(i + 1).padStart(3, '0')}LD`,
+          telaio: `WAUVALSEED${String(i + 1).padStart(7, '0')}`,
+          dataImmatricolazione: new Date('2020-01-01'),
+          feeAgenziaCent: 6_000,
+          creditoBrokerCent: 2_500,
+          submittedAt,
+          round1StartedAt: submittedAt,
+          accettataAt,
+          firmaAvvenutaAt: firmaAt,
+          venditoreNome: 'Venditore',
+          venditoreCognome: `Val${i + 1}`,
+          venditoreCF: 'VNDDMO70A01F205P',
+          acquirenteNome: 'Acquirente',
+          acquirenteCognome: `Val${i + 1}`,
+          acquirenteCF: 'CQRDMO85E10L736X',
+        },
+      });
+      valPraticaSeq++;
+    }
+    if (valPraticaSeq > 0) {
+      console.log(`  · create ${valPraticaSeq} pratiche FIRMATA extra per valutazioni Demo Pratiche Auto Snc`);
+    }
+  }
+
+  // Pratiche FIRMATA extra per le altre 4 agenzie demo attive (2-8 valutazioni target)
+  const agenzieExtraVal: Array<{ comp: typeof studioPd2Comp; codPrefix: string; target: number }> = [
+    { comp: studioPd2Comp, codPrefix: 'PV-SEED-PD2', target: 8 },
+    { comp: venetoTrapassiComp, codPrefix: 'PV-SEED-VET', target: 5 },
+    { comp: trapassoTvComp, codPrefix: 'PV-SEED-TTV', target: 6 },
+    { comp: vicenzaAutoComp, codPrefix: 'PV-SEED-VAP', target: 2 },
+  ];
+
+  if (demoDealerComp) {
+    for (const { comp, codPrefix, target } of agenzieExtraVal) {
+      if (!comp) continue;
+      for (let i = 0; i < target; i++) {
+        const codice = `${codPrefix}-${String(i + 1).padStart(3, '0')}`;
+        const exists = await prisma.pratica.findFirst({ where: { codicePratica: codice } });
+        if (exists) continue;
+        const firmaAt = new Date(now.getTime() - (60 - i * 4) * 24 * 60 * 60 * 1000);
+        const accettataAt = new Date(firmaAt.getTime() - 2 * 24 * 60 * 60 * 1000);
+        const submittedAt = new Date(firmaAt.getTime() - 3 * 24 * 60 * 60 * 1000);
+        await prisma.pratica.create({
+          data: {
+            codicePratica: codice,
+            tipo: i % 2 === 0 ? 'TRAPASSO_NETTO' : 'MINIVOLTURA',
+            stato: 'FIRMATA',
+            brokerId: demoDealerComp.id,
+            agenziaAssegnataId: comp.id,
+            comune: comp.citta,
+            provincia: comp.provincia,
+            targa: `${codPrefix.slice(-2)}${String(i + 1).padStart(3, '0')}XX`,
+            telaio: `WAUSED${codPrefix.slice(-3)}${String(i + 1).padStart(8, '0')}`.slice(0, 17),
+            dataImmatricolazione: new Date('2019-09-15'),
+            feeAgenziaCent: 6_000,
+            creditoBrokerCent: 2_500,
+            submittedAt,
+            round1StartedAt: submittedAt,
+            accettataAt,
+            firmaAvvenutaAt: firmaAt,
+            venditoreNome: 'Venditore',
+            venditoreCognome: `Extra${i + 1}`,
+            venditoreCF: 'VNDDMO70A01F205P',
+            acquirenteNome: 'Acquirente',
+            acquirenteCognome: `Extra${i + 1}`,
+            acquirenteCF: 'CQRDMO85E10L736X',
+          },
+        });
+      }
+    }
+    console.log('  · pratiche FIRMATA extra create per agenzie demo (PD2/VET/TTV/VAP)');
+  }
+
+  // Pratiche FIRMATA extra per Verona Trapassi (5 valutazioni 1-2 stelle, agenzia sospesa)
+  if (demoDealerComp && veronaTrapassiComp) {
+    for (let i = 0; i < 5; i++) {
+      const codice = `PV-SEED-VR-${String(i + 1).padStart(3, '0')}`;
+      const exists = await prisma.pratica.findFirst({ where: { codicePratica: codice } });
+      if (exists) continue;
+      const firmaAt = new Date(now.getTime() - (120 - i * 7) * 24 * 60 * 60 * 1000);
+      const accettataAt = new Date(firmaAt.getTime() - 2 * 24 * 60 * 60 * 1000);
+      const submittedAt = new Date(firmaAt.getTime() - 3 * 24 * 60 * 60 * 1000);
+      await prisma.pratica.create({
+        data: {
+          codicePratica: codice,
+          tipo: 'TRAPASSO_NETTO',
+          stato: 'FIRMATA',
+          brokerId: demoDealerComp.id,
+          agenziaAssegnataId: veronaTrapassiComp.id,
+          comune: 'Verona',
+          provincia: 'VR',
+          targa: `VR${String(i + 1).padStart(3, '0')}SS`,
+          telaio: `WAUVROSED${String(i + 1).padStart(8, '0')}`,
+          dataImmatricolazione: new Date('2018-06-01'),
+          feeAgenziaCent: 6_000,
+          creditoBrokerCent: 2_500,
+          submittedAt,
+          round1StartedAt: submittedAt,
+          accettataAt,
+          firmaAvvenutaAt: firmaAt,
+          venditoreNome: 'Venditore',
+          venditoreCognome: `Vr${i + 1}`,
+          venditoreCF: 'VNDDMO70A01F205P',
+          acquirenteNome: 'Acquirente',
+          acquirenteCognome: `Vr${i + 1}`,
+          acquirenteCF: 'CQRDMO85E10L736X',
+        },
+      });
+    }
+  }
+
+  // ── 5. VALUTAZIONI ──────────────────────────────────────────────
+  // Carica tutte le pratiche FIRMATA per attaccarci le valutazioni
+  const praticheFirmate = await prisma.pratica.findMany({
+    where: { stato: 'FIRMATA', agenziaAssegnataId: { not: null } },
+    select: { id: true, agenziaAssegnataId: true, brokerId: true, codicePratica: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  // Helper per creare valutazione idempotente
+  async function createValutazioneIfNotExists(
+    praticaId: string,
+    agenziaId: string,
+    dealerId: string,
+    stelle: number,
+    note: string | null,
+    segnalazioneAbuso: boolean,
+  ) {
+    const exists = await prisma.valutazione.findFirst({ where: { praticaId } });
+    if (exists) return false;
+    await prisma.valutazione.create({
+      data: { praticaId, agenziaId, dealerId, stelle, note, segnalazioneAbuso },
+    });
+    return true;
+  }
+
+  // Mappa agenziaId → pratiche assegnate a quella agenzia
+  const pratichePerAgenzia = new Map<string, typeof praticheFirmate>();
+  for (const p of praticheFirmate) {
+    if (!p.agenziaAssegnataId) continue;
+    if (!pratichePerAgenzia.has(p.agenziaAssegnataId)) {
+      pratichePerAgenzia.set(p.agenziaAssegnataId, []);
+    }
+    pratichePerAgenzia.get(p.agenziaAssegnataId)!.push(p);
+  }
+
+  let totalValutazioni = 0;
+
+  // Demo Pratiche Auto Snc: 12 valutazioni 4-5 stelle + 1 con segnalazioneAbuso
+  if (demoPraticheComp) {
+    const pratiche = pratichePerAgenzia.get(demoPraticheComp.id) ?? [];
+    const notePosite = [
+      'Ottimo servizio, pratica evasa in tempi record.',
+      'Molto professionali, consigliati.',
+      'Comunicazione perfetta, nessun problema.',
+      'Rapidi ed efficienti.',
+      'Fantastica esperienza, torneremo sicuramente.',
+      'Pratici e disponibili.',
+      'Lavoro impeccabile.',
+      'Nessuna critica, tutto perfetto.',
+      'Consegna in anticipo rispetto ai tempi previsti.',
+      'Massima professionalità.',
+      'Team competente e cordiale.',
+    ];
+    let created = 0;
+    for (let i = 0; i < pratiche.length && created < 12; i++) {
+      const p = pratiche[i];
+      const stelle = i < 8 ? 5 : 4; // 8 da 5 stelle, 4 da 4 stelle
+      const ok = await createValutazioneIfNotExists(
+        p.id,
+        demoPraticheComp.id,
+        p.brokerId,
+        stelle,
+        notePosite[i % notePosite.length] ?? null,
+        false,
+      );
+      if (ok) { created++; totalValutazioni++; }
+    }
+    // 1 valutazione con segnalazioneAbuso (cerca una pratica ancora senza valutazione)
+    for (const p of pratiche) {
+      const exists = await prisma.valutazione.findFirst({ where: { praticaId: p.id } });
+      if (!exists) {
+        await createValutazioneIfNotExists(
+          p.id,
+          demoPraticheComp.id,
+          p.brokerId,
+          4,
+          'Inizialmente in ritardo, poi risolto. Segnalo comportamento non corretto nella prima fase.',
+          true,
+        );
+        totalValutazioni++;
+        break;
+      }
+    }
+    console.log(`  · valutazioni Demo Pratiche Auto Snc: ~${created} create (target 12+1 abuso)`);
+  }
+
+  // Agenzie attive aggiuntive: 2-8 valutazioni mix 3-5 stelle
+  const agenzieAttiveConTarget: Array<{ comp: typeof studioPd2Comp; target: number; minStelle: number }> = [
+    { comp: studioPd2Comp, target: 8, minStelle: 3 },
+    { comp: venetoTrapassiComp, target: 5, minStelle: 3 },
+    { comp: trapassoTvComp, target: 6, minStelle: 3 },
+    { comp: vicenzaAutoComp, target: 2, minStelle: 3 },
+  ];
+
+  const noteMix = [
+    'Buon servizio, qualche piccolo ritardo.',
+    'Soddisfatti nel complesso.',
+    'Professionale, ma comunicazione migliorabile.',
+    'Buona esperienza complessiva.',
+    'Nella media, niente da segnalare.',
+    'Discreta disponibilità.',
+    'Puntuale e preciso.',
+    'Ha gestito bene la pratica.',
+  ];
+
+  for (const { comp, target, minStelle } of agenzieAttiveConTarget) {
+    if (!comp) continue;
+    const pratiche = pratichePerAgenzia.get(comp.id) ?? [];
+    let created = 0;
+    for (let i = 0; i < pratiche.length && created < target; i++) {
+      const p = pratiche[i];
+      const stelle = minStelle + (i % (5 - minStelle + 1)); // mix da minStelle a 5
+      const ok = await createValutazioneIfNotExists(
+        p.id,
+        comp.id,
+        p.brokerId,
+        Math.min(stelle, 5),
+        noteMix[i % noteMix.length] ?? null,
+        false,
+      );
+      if (ok) { created++; totalValutazioni++; }
+    }
+    console.log(`  · valutazioni ${comp.ragioneSociale}: ${created} create`);
+  }
+
+  // Verona Trapassi (sospesa): 5 valutazioni 1-2 stelle (coerenza narrativa)
+  if (veronaTrapassiComp) {
+    // Cerca pratiche in cui questa agenzia era assegnata (anche con deletedAt)
+    const praticheVerona = await prisma.pratica.findMany({
+      where: { stato: 'FIRMATA', agenziaAssegnataId: veronaTrapassiComp.id },
+      select: { id: true, agenziaAssegnataId: true, brokerId: true },
+    });
+    let created = 0;
+    for (let i = 0; i < praticheVerona.length && created < 5; i++) {
+      const p = praticheVerona[i];
+      const stelle = i % 2 === 0 ? 1 : 2;
+      const noteNeg = [
+        'Non si sono presentati all\'appuntamento.',
+        'Pratica persa, nessuna comunicazione.',
+        'Esperienza pessima, non consigliata.',
+        'Ritardi inaccettabili.',
+        'Comportamento scorretto.',
+      ];
+      const ok = await createValutazioneIfNotExists(
+        p.id,
+        veronaTrapassiComp.id,
+        p.brokerId,
+        stelle,
+        noteNeg[i % noteNeg.length] ?? null,
+        false,
+      );
+      if (ok) { created++; totalValutazioni++; }
+    }
+    // Se non ci sono pratiche di Verona Trapassi come agenzia assegnata, non possiamo creare valutazioni
+    // (require praticaId univoco legato a quella agenzia)
+    console.log(`  · valutazioni Verona Trapassi (sospesa): ${created} create`);
+  }
+
+  console.log(`  · totale valutazioni create: ${totalValutazioni}`);
+
+  // ── 6. FEEADDEBITO SCHEDULED SCADUTI ─────────────────────────────
+  // 3 FeeAddebito con scheduledAt -1h per pratiche FIRMATA seed (processabili da "Esegui job")
+  const praticheFirmateSeed = await prisma.pratica.findMany({
+    where: { stato: 'FIRMATA', agenziaAssegnataId: { not: null } },
+    take: 6, // prendiamo più candidate per sicurezza
+    select: { id: true, agenziaAssegnataId: true, codicePratica: true },
+    orderBy: { createdAt: 'asc' }, // le più vecchie (seed originale)
+  });
+
+  let feeCreated = 0;
+  for (const p of praticheFirmateSeed) {
+    if (feeCreated >= 3) break;
+    if (!p.agenziaAssegnataId) continue;
+
+    const exists = await prisma.feeAddebito.findFirst({ where: { praticaId: p.id } });
+    if (exists) continue;
+
+    await prisma.feeAddebito.create({
+      data: {
+        praticaId: p.id,
+        agenziaId: p.agenziaAssegnataId,
+        importoCent: 6_000,
+        tipo: 'ADDEBITO_FIRMA',
+        stato: 'SCHEDULED',
+        scheduledAt: new Date(now.getTime() - 3_600_000), // 1h fa
+      },
+    });
+    feeCreated++;
+    console.log(`  · FeeAddebito SCHEDULED pratica ${p.codicePratica} (6.000 cent, scheduledAt -1h)`);
+  }
+  console.log(`  · FeeAddebito SCHEDULED creati: ${feeCreated}/3`);
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);

@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream';
 
-export type StorageProviderName = 'local' | 's3';
+export type StorageProviderName = 'local' | 's3' | 'vercel-blob';
 
 export type StoragePutInput = {
   /** Scope path (e.g. "pratica/<uuid>" or "company/<uuid>"). Sanitized internally. */

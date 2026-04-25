@@ -18,6 +18,7 @@
     "@pv/lib": "workspace:*",
     "@sentry/nextjs": "^10.48.0",
     "@t3-oss/env-nextjs": "^0.13.11",
+    "@vercel/blob": "^2.3.3",
     "bcryptjs": "^3.0.3",
     "next": "16.2.3",
     "next-auth": "5.0.0-beta.30",

@@ -6,8 +6,17 @@ import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification } from '@/lib/notifiche';
+import { env } from '@/env';
 
 const AUTO_ADDEBITO_DAYS = 20;
+const AUTO_ADDEBITO_DEMO_MINUTES = 5;
+
+function computeAutoAddebitoAt(now: Date): Date {
+  if (env.DEMO_MODE) {
+    return new Date(now.getTime() + AUTO_ADDEBITO_DEMO_MINUTES * 60_000);
+  }
+  return new Date(now.getTime() + AUTO_ADDEBITO_DAYS * 86_400_000);
+}
 
 export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> {
   const session = await auth();
@@ -29,7 +38,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       }
 
       const now = new Date();
-      const autoAddebitoAt = new Date(now.getTime() + AUTO_ADDEBITO_DAYS * 86_400_000);
+      const autoAddebitoAt = computeAutoAddebitoAt(now);
 
       await tx.pratica.update({
         where: { id: praticaId },

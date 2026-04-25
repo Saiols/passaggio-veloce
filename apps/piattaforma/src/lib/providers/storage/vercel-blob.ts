@@ -1,5 +1,6 @@
 import 'server-only';
 import { Readable } from 'node:stream';
+import { ReadableStream } from 'node:stream/web';
 import { put, head, del } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -15,12 +16,21 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/_+/g, '_').slice(-120);
 }
 
+const SAFE_SCOPE = /^[a-z0-9_\-/]+$/i;
+
+function assertSafeScope(scope: string): void {
+  if (!SAFE_SCOPE.test(scope) || scope.includes('..')) {
+    throw new Error(`Invalid scope: ${scope}`);
+  }
+}
+
 export class VercelBlobStorageProvider implements StorageProvider {
   readonly name = 'vercel-blob' as const;
 
   constructor(private readonly token: string) {}
 
   async put(input: StoragePutInput): Promise<StoragePutResult> {
+    assertSafeScope(input.scope);
     const filename = `${randomUUID()}-${sanitizeFilename(input.originalFilename)}`;
     const storageKey = path.posix.join(input.scope, filename);
     await put(storageKey, input.buffer, {
@@ -50,7 +60,7 @@ export class VercelBlobStorageProvider implements StorageProvider {
       throw new StorageNotFoundError(storageKey);
     }
     return {
-      stream: Readable.fromWeb(response.body as never),
+      stream: Readable.fromWeb(response.body as ReadableStream<Uint8Array>),
       sizeBytes: meta.size,
       mimeType: meta.contentType ?? 'application/octet-stream',
     };

@@ -81,7 +81,7 @@ export function ResetForm({ token }: { token: string | null }) {
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
       />
       {error && <p className="text-sm text-pv-red-600">{error}</p>}
-      {success && <p className="text-sm text-pv-green-700">{success}</p>}
+      {success && <p className="text-sm text-pv-green-500">{success}</p>}
       {demoLink && (
         <div className="rounded-lg bg-pv-amber-50 border border-pv-amber-500 p-3 text-xs">
           <p className="font-bold text-pv-navy-900">🧪 Demo</p>

@@ -213,3 +213,57 @@ export async function verifyEmailAction(token: string): Promise<VerifyEmailResul
 
   return { ok: true };
 }
+
+// ============================================================
+// PASSWORD RESET — REQUEST
+// ============================================================
+
+export type RequestPasswordResetResult =
+  | { ok: true; demoToken?: string }
+  | { ok: false; error: string };
+
+export async function requestPasswordResetAction(
+  email: string,
+): Promise<RequestPasswordResetResult> {
+  if (!email || typeof email !== 'string') {
+    return { ok: false, error: 'Email non valida' };
+  }
+
+  const emailLower = email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({ where: { email: emailLower } });
+
+  // Per privacy, ritorniamo ok anche se l'utente non esiste (no enumeration)
+  if (!user) {
+    return { ok: true };
+  }
+
+  const token = generateSecureToken();
+  await prisma.verificationToken.create({
+    data: {
+      token,
+      type: 'PASSWORD_RESET',
+      email: emailLower,
+      expiresAt: expiresIn(2),
+    },
+  });
+
+  // Invia email via provider
+  const { getEmail } = await import('@/lib/providers/email');
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const link = `${appUrl}/reset-password?token=${token}`;
+  await getEmail().send({
+    to: emailLower,
+    subject: 'Passaggio Veloce — Reimposta la tua password',
+    html: `
+      <p>Ciao,</p>
+      <p>Hai richiesto di reimpostare la password del tuo account Passaggio Veloce.</p>
+      <p>Clicca qui per impostare una nuova password (link valido 2 ore):</p>
+      <p><a href="${link}">${link}</a></p>
+      <p>Se non sei stato tu, ignora questa email.</p>
+    `,
+    text: `Reimposta password: ${link}`,
+    tag: 'password-reset',
+  });
+
+  return env.DEMO_MODE ? { ok: true, demoToken: token } : { ok: true };
+}

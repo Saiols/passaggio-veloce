@@ -40,7 +40,7 @@ export function InviteForm() {
       {success && <p className="text-sm text-pv-green-500 basis-full">{success}</p>}
       {demoLink && (
         <div className="basis-full rounded-lg bg-pv-amber-50 border border-pv-amber-500 p-3 text-xs">
-          <p className="font-bold text-pv-navy-900">Demo — link diretto</p>
+          <p className="font-bold text-pv-navy-900">🧪 Modalità DEMO — link diretto</p>
           <a href={demoLink} className="text-pv-navy-700 underline break-all">{demoLink}</a>
         </div>
       )}

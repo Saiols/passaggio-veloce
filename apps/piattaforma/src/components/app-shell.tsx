@@ -72,8 +72,9 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen flex-col bg-pv-slate-50">
-      <DemoBanner isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />
-      <header className="sticky top-0 z-30 bg-pv-navy-800 text-white shadow-[0_2px_12px_rgb(10_37_64_/_0.25)]">
+      <div className="sticky top-0 z-30">
+        <DemoBanner isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />
+        <header className="bg-pv-navy-800 text-white shadow-[0_2px_12px_rgb(10_37_64_/_0.25)]">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
           <Link href="/dashboard" className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white">
@@ -106,6 +107,7 @@ export function AppShell({
           </ul>
         </nav>
       </header>
+      </div>
 
       <main className="flex-1">{children}</main>
 

@@ -73,6 +73,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       }
 
       // Fee addebito schedulato (Stripe reale in Fase 5)
+      // scheduledAt = autoAddebitoAt: il job process-fee-scheduled processa solo
+      // FeeAddebito con scheduledAt <= now, rispettando il countdown 5min DEMO / 20gg prod.
       if (pratica.feeAgenziaCent > 0) {
         await tx.feeAddebito.create({
           data: {
@@ -81,7 +83,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
             importoCent: pratica.feeAgenziaCent,
             tipo: 'ADDEBITO_FIRMA',
             stato: 'SCHEDULED',
-            scheduledAt: now,
+            scheduledAt: autoAddebitoAt,
           },
         });
       }

@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { env } from '@/env';
 import { AppShell } from '@/components/app-shell';
 import { Counters } from './counters';
+import { InboxDemo } from './inbox-demo';
 
 export default async function DemoControlPage() {
   if (!env.DEMO_MODE) notFound();
@@ -30,7 +31,7 @@ export default async function DemoControlPage() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section>
-            <p className="text-sm text-pv-slate-500">[Inbox Demo: vedi Task 26]</p>
+            <InboxDemo />
           </section>
           <section>
             <p className="text-sm text-pv-slate-500">[Job Buttons: vedi Task 27]</p>

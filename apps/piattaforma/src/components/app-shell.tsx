@@ -26,24 +26,27 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       { href: '/admin/escalation', label: 'Escalation' },
     ];
   }
-  if (companyType === 'AGENZIA') {
-    return [
-      { href: '/dashboard', label: 'Dashboard' },
-      { href: '/inbox', label: 'Inbox' },
-      { href: '/pratiche', label: 'Pratiche attive' },
-      { href: '/orari', label: 'Orari' },
-      { href: '/notifiche', label: 'Notifiche' },
-      { href: '/profilo', label: 'Profilo' },
-    ];
+  const links: NavLink[] =
+    companyType === 'AGENZIA'
+      ? [
+          { href: '/dashboard', label: 'Dashboard' },
+          { href: '/inbox', label: 'Inbox' },
+          { href: '/pratiche', label: 'Pratiche attive' },
+          { href: '/orari', label: 'Orari' },
+          { href: '/notifiche', label: 'Notifiche' },
+          { href: '/profilo', label: 'Profilo' },
+        ]
+      : [
+          { href: '/dashboard', label: 'Dashboard' },
+          { href: '/pratiche', label: 'Pratiche' },
+          { href: '/wallet', label: 'Wallet' },
+          { href: '/notifiche', label: 'Notifiche' },
+          { href: '/profilo', label: 'Profilo' },
+        ];
+  if (role === 'ADMIN_AZIENDA') {
+    links.push({ href: '/team', label: 'Team' });
   }
-  // Default: DEALER / broker
-  return [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/pratiche', label: 'Pratiche' },
-    { href: '/wallet', label: 'Wallet' },
-    { href: '/notifiche', label: 'Notifiche' },
-    { href: '/profilo', label: 'Profilo' },
-  ];
+  return links;
 }
 
 function roleBadgeLabel(role: string | undefined, companyType: string | undefined): string {

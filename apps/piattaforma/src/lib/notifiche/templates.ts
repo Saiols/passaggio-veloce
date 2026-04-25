@@ -72,6 +72,24 @@ export type N11BrokerEscalationPayload = {
   nomeBroker: string;
 };
 
+export type N3BrokerSollecitoPayload = {
+  codicePratica: string;
+  targa: string | null;
+  agenziaNome: string;
+  nomeBroker: string;
+  /** Giorni trascorsi dall'accettazione (o minuti in DEMO) per contestualizzare il testo */
+  giorniTrascorsi: number;
+};
+
+export type N7AgenziaPromemoriaCountdownPayload = {
+  codicePratica: string;
+  targa: string | null;
+  nomeAgenzia: string;
+  feeCent: number;
+  /** Data entro cui si aspetta la firma */
+  firmaEntroAt: Date;
+};
+
 export type NotificaContent = { subject: string; html: string; text: string };
 
 const header = `<div style="background:#0a2540;padding:18px 20px;border-radius:12px 12px 0 0;color:#fff">
@@ -232,6 +250,52 @@ export function tplN10AdminEscalation(p: N10AdminEscalationPayload): NotificaCon
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Apri /admin/escalation per assegnare manualmente o contattare il broker.
     </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN3BrokerSollecito(p: N3BrokerSollecitoPayload): NotificaContent {
+  const subject = `Sollecito firma — pratica ${p.codicePratica} in attesa`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} è stata accettata ` +
+    `da ${p.agenziaNome} ma la firma non è ancora stata confermata.\n` +
+    `Accedi alla dashboard per monitorare lo stato o contattare l'agenzia.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Firma ancora in attesa</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}
+      accettata da <strong>${p.agenziaNome}</strong> non risulta ancora firmata.
+    </p>
+    <p style="margin:0;font-size:12px;color:#64748b">
+      Accedi alla dashboard per monitorare lo stato o contattare l'agenzia.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN7AgenziaPromemoriaCountdown(p: N7AgenziaPromemoriaCountdownPayload): NotificaContent {
+  const subject = `Promemoria firma — pratica ${p.codicePratica} · ${formatCurrencyCent(p.feeCent)}`;
+  const text =
+    `Ciao ${p.nomeAgenzia},\n` +
+    `ti ricordiamo che la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} ` +
+    `è ancora in attesa di conferma firma.\n` +
+    `Fee: ${formatCurrencyCent(p.feeCent)}\n` +
+    `Conferma entro: ${formatDate(p.firmaEntroAt)}\n` +
+    `Accedi alla dashboard per segnare "firma avvenuta".`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Promemoria: firma in attesa</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}
+      è ancora in attesa di conferma firma.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Fee: <strong style="color:#0054a6">${formatCurrencyCent(p.feeCent)}</strong><br>
+      Conferma firma entro: <strong>${formatDate(p.firmaEntroAt)}</strong>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">Apri la dashboard e seleziona "Firma avvenuta".</p>
   `);
   return { subject, html, text };
 }

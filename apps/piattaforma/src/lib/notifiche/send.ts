@@ -7,15 +7,19 @@ import {
   tplN11BrokerEscalation,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
+  tplN3BrokerSollecito,
   tplN4BrokerFirma,
   tplN6AgenziaNuova,
+  tplN7AgenziaPromemoriaCountdown,
   tplN8AgenziaAddebito,
   type N10AdminEscalationPayload,
   type N11BrokerEscalationPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
+  type N3BrokerSollecitoPayload,
   type N4BrokerFirmaPayload,
   type N6AgenziaNuovaPayload,
+  type N7AgenziaPromemoriaCountdownPayload,
   type N8AgenziaAddebitoPayload,
   type NotificaContent,
 } from './templates';
@@ -29,8 +33,10 @@ type Target = {
 type SendInput =
   | { tipo: 'N1_BROKER_INVIO_PRATICA'; target: Target; payload: N1BrokerInvioPayload }
   | { tipo: 'N2_BROKER_ACCETTATA'; target: Target; payload: N2BrokerAccettataPayload }
+  | { tipo: 'N3_BROKER_SOLLECITO'; target: Target; payload: N3BrokerSollecitoPayload }
   | { tipo: 'N4_BROKER_FIRMA_E_CREDITO'; target: Target; payload: N4BrokerFirmaPayload }
   | { tipo: 'N6_AGENZIA_NUOVA_PRATICA'; target: Target; payload: N6AgenziaNuovaPayload }
+  | { tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN'; target: Target; payload: N7AgenziaPromemoriaCountdownPayload }
   | { tipo: 'N8_AGENZIA_ADDEBITO'; target: Target; payload: N8AgenziaAddebitoPayload }
   | { tipo: 'N10_ADMIN_ESCALATION'; target: Target; payload: N10AdminEscalationPayload }
   | { tipo: 'N11_BROKER_ESCALATION'; target: Target; payload: N11BrokerEscalationPayload };
@@ -41,10 +47,14 @@ function render(input: SendInput): NotificaContent {
       return tplN1BrokerInvio(input.payload);
     case 'N2_BROKER_ACCETTATA':
       return tplN2BrokerAccettata(input.payload);
+    case 'N3_BROKER_SOLLECITO':
+      return tplN3BrokerSollecito(input.payload);
     case 'N4_BROKER_FIRMA_E_CREDITO':
       return tplN4BrokerFirma(input.payload);
     case 'N6_AGENZIA_NUOVA_PRATICA':
       return tplN6AgenziaNuova(input.payload);
+    case 'N7_AGENZIA_PROMEMORIA_COUNTDOWN':
+      return tplN7AgenziaPromemoriaCountdown(input.payload);
     case 'N8_AGENZIA_ADDEBITO':
       return tplN8AgenziaAddebito(input.payload);
     case 'N10_ADMIN_ESCALATION':

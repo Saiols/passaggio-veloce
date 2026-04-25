@@ -571,6 +571,236 @@ async function main() {
   console.log(`  · demo dealer-junior: dealer-junior@demo.passaggioveloce.it`);
   console.log(`  · demo agenzia: agenzia@demo.passaggioveloce.it (company: Demo Pratiche Auto Snc)`);
 
+  // ============================================================
+  // DEMO CAST AGGIUNTIVO — 2 dealer + 5 agenzie, Veneto
+  // ============================================================
+
+  /**
+   * Helper interno: crea/upsert una company (DEALER o AGENZIA) con il relativo
+   * utente ADMIN_AZIENDA. Per le agenzie aggiunge anche gli orari standard.
+   * La sospensione avviene tramite soft-delete (deletedAt), perché lo schema
+   * Company non ha un campo `sospesa` esplicito.
+   */
+  async function createDemoCompany(args: {
+    type: 'DEALER' | 'AGENZIA';
+    ragioneSociale: string;
+    partitaIva: string;
+    citta: string;
+    provincia: string;
+    cap: string;
+    indirizzo: string;
+    iban: string;
+    pec: string;
+    email: string;
+    userEmail: string;
+    userNome: string;
+    userCognome: string;
+    passwordHash: string;
+    orari?: boolean;
+    sospesa?: boolean;
+  }) {
+    const companyData = {
+      type: args.type,
+      ragioneSociale: args.ragioneSociale,
+      partitaIva: args.partitaIva,
+      pec: args.pec,
+      email: args.email,
+      indirizzo: args.indirizzo,
+      citta: args.citta,
+      cap: args.cap,
+      provincia: args.provincia,
+      iban: args.iban,
+      sepaMandateAccepted: true,
+      sepaMandateAcceptedAt: now,
+      termsAcceptedAt: now,
+      ...(args.sospesa ? { deletedAt: now } : {}),
+      ...(args.type === 'DEALER' ? { wallet: { create: { saldoCent: 0 } } } : {}),
+    };
+
+    const company = await prisma.company.upsert({
+      where: { partitaIva: args.partitaIva },
+      update: {},
+      create: companyData,
+    });
+
+    await prisma.user.upsert({
+      where: { email: args.userEmail },
+      create: {
+        email: args.userEmail,
+        passwordHash: args.passwordHash,
+        nome: args.userNome,
+        cognome: args.userCognome,
+        role: 'ADMIN_AZIENDA',
+        status: 'ACTIVE',
+        emailVerifiedAt: now,
+        companyId: company.id,
+      },
+      update: { passwordHash: args.passwordHash, companyId: company.id },
+    });
+
+    if (args.orari) {
+      const stdFasce = [
+        { inizio: '09:00', fine: '13:00' },
+        { inizio: '15:00', fine: '18:30' },
+      ];
+      const sabFasce = [{ inizio: '09:00', fine: '12:00' }];
+      const giorni = [
+        { g: 'LUN', f: stdFasce },
+        { g: 'MAR', f: stdFasce },
+        { g: 'MER', f: stdFasce },
+        { g: 'GIO', f: stdFasce },
+        { g: 'VEN', f: stdFasce },
+        { g: 'SAB', f: sabFasce },
+      ] as const;
+      for (const { g, f } of giorni) {
+        await prisma.orariApertura.upsert({
+          where: { agenziaId_giorno: { agenziaId: company.id, giorno: g } },
+          update: { fasceOrarie: f },
+          create: { agenziaId: company.id, giorno: g, fasceOrarie: f },
+        });
+      }
+    }
+
+    const tag = args.sospesa ? ' [SOSPESA]' : '';
+    const orariTag = args.orari ? ' + orari' : '';
+    console.log(`  · ${args.type.toLowerCase()}: ${args.ragioneSociale} (${args.userEmail})${orariTag}${tag}`);
+    return company;
+  }
+
+  // Dealer 3 — Auto Veneto Srl, Venezia
+  await createDemoCompany({
+    type: 'DEALER',
+    ragioneSociale: 'Auto Veneto Srl',
+    partitaIva: '99999999993',
+    citta: 'Venezia',
+    provincia: 'VE',
+    cap: '30100',
+    indirizzo: 'Via Torino 22',
+    iban: 'IT60X0542811101000000000003',
+    pec: 'pec@autoveneto.it',
+    email: 'info@autoveneto.it',
+    userEmail: 'auto-veneto@demo.passaggioveloce.it',
+    userNome: 'Paolo',
+    userCognome: 'Moro',
+    passwordHash: demoPasswordHash,
+  });
+
+  // Dealer 4 — Concessionaria Treviso Spa, Treviso
+  await createDemoCompany({
+    type: 'DEALER',
+    ragioneSociale: 'Concessionaria Treviso Spa',
+    partitaIva: '99999999994',
+    citta: 'Treviso',
+    provincia: 'TV',
+    cap: '31100',
+    indirizzo: 'Via Feltrina 88',
+    iban: 'IT60X0542811101000000000004',
+    pec: 'pec@conctreviso.it',
+    email: 'info@conctreviso.it',
+    userEmail: 'treviso@demo.passaggioveloce.it',
+    userNome: 'Elena',
+    userCognome: 'Zago',
+    passwordHash: demoPasswordHash,
+  });
+
+  // Agenzia — Studio Auto Padova 2
+  await createDemoCompany({
+    type: 'AGENZIA',
+    ragioneSociale: 'Studio Auto Padova 2',
+    partitaIva: '99999999995',
+    citta: 'Padova',
+    provincia: 'PD',
+    cap: '35100',
+    indirizzo: 'Via Altinate 12',
+    iban: 'IT60X0542811101000000000005',
+    pec: 'pec@studioautopd2.it',
+    email: 'info@studioautopd2.it',
+    userEmail: 'agenzia-pd2@demo.passaggioveloce.it',
+    userNome: 'Chiara',
+    userCognome: 'Rizzi',
+    passwordHash: demoPasswordHash,
+    orari: true,
+  });
+
+  // Agenzia — Veneto Trapassi, Venezia
+  await createDemoCompany({
+    type: 'AGENZIA',
+    ragioneSociale: 'Veneto Trapassi',
+    partitaIva: '99999999996',
+    citta: 'Venezia',
+    provincia: 'VE',
+    cap: '30170',
+    indirizzo: 'Via Martiri della Libertà 3',
+    iban: 'IT60X0542811101000000000006',
+    pec: 'pec@venetotrapassi.it',
+    email: 'info@venetotrapassi.it',
+    userEmail: 'agenzia-ve@demo.passaggioveloce.it',
+    userNome: 'Andrea',
+    userCognome: 'Fabbris',
+    passwordHash: demoPasswordHash,
+    orari: true,
+  });
+
+  // Agenzia — Trapasso Veloce TV, Treviso
+  await createDemoCompany({
+    type: 'AGENZIA',
+    ragioneSociale: 'Trapasso Veloce TV',
+    partitaIva: '99999999997',
+    citta: 'Treviso',
+    provincia: 'TV',
+    cap: '31100',
+    indirizzo: 'Viale Vittorio Veneto 9',
+    iban: 'IT60X0542811101000000000007',
+    pec: 'pec@trapassovelicetv.it',
+    email: 'info@trapassovelicetv.it',
+    userEmail: 'agenzia-tv@demo.passaggioveloce.it',
+    userNome: 'Davide',
+    userCognome: 'Conte',
+    passwordHash: demoPasswordHash,
+    orari: true,
+  });
+
+  // Agenzia — Vicenza Auto Pratiche, Vicenza
+  await createDemoCompany({
+    type: 'AGENZIA',
+    ragioneSociale: 'Vicenza Auto Pratiche',
+    partitaIva: '99999999998',
+    citta: 'Vicenza',
+    provincia: 'VI',
+    cap: '36100',
+    indirizzo: 'Corso Palladio 44',
+    iban: 'IT60X0542811101000000000008',
+    pec: 'pec@vicenzaauto.it',
+    email: 'info@vicenzaauto.it',
+    userEmail: 'agenzia-vi@demo.passaggioveloce.it',
+    userNome: 'Monica',
+    userCognome: 'Sartori',
+    passwordHash: demoPasswordHash,
+    orari: true,
+  });
+
+  // Agenzia — Verona Trapassi, Verona — SOSPESA via soft-delete (deletedAt)
+  // Non esiste campo `sospesa` nello schema Company; il soft-delete è il meccanismo
+  // standard: l'engine distribuzione esclude le company con deletedAt != null.
+  await createDemoCompany({
+    type: 'AGENZIA',
+    ragioneSociale: 'Verona Trapassi',
+    partitaIva: '99999999999',
+    citta: 'Verona',
+    provincia: 'VR',
+    cap: '37121',
+    indirizzo: 'Via Mazzini 11',
+    iban: 'IT60X0542811101000000000009',
+    pec: 'pec@veronatrapassi.it',
+    email: 'info@veronatrapassi.it',
+    userEmail: 'agenzia-vr@demo.passaggioveloce.it',
+    userNome: 'Simone',
+    userCognome: 'Mancini',
+    passwordHash: demoPasswordHash,
+    orari: true,
+    sospesa: true,
+  });
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);

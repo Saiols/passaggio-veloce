@@ -253,16 +253,29 @@ export default async function PraticaDetailPage({
                       className="flex items-center justify-between rounded-[10px] border border-pv-slate-200 px-3 py-2 text-[13px]"
                     >
                       <div className="min-w-0">
-                        <p className="font-semibold text-pv-navy-800">{labelDocumento(d.tipo)}</p>
-                        <p className="truncate text-[12px] text-pv-slate-500">{d.originalFilename}</p>
+                        <p className="font-semibold text-pv-navy-800">
+                          {labelDocumento(d.tipo)}
+                          {d.owner ? ` — ${labelOwner(d.owner)}` : ''}
+                        </p>
+                        <p className="truncate text-[12px] text-pv-slate-500">
+                          {d.originalFilename} · {formatBytes(d.sizeBytes)}
+                        </p>
                       </div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                        {d.gatingStato === 'PASSED'
-                          ? '✓ ok'
-                          : d.gatingStato === 'FAILED'
-                            ? '✗ scartato'
-                            : d.gatingStato.toLowerCase()}
-                      </span>
+                      <div className="ml-3 flex shrink-0 items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                          {d.gatingStato === 'PASSED'
+                            ? '✓ ok'
+                            : d.gatingStato === 'FAILED'
+                              ? '✗ scartato'
+                              : d.gatingStato.toLowerCase()}
+                        </span>
+                        <a
+                          href={`/api/documenti/${d.id}`}
+                          className="rounded-lg border border-pv-slate-300 px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                        >
+                          Scarica
+                        </a>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -380,6 +393,22 @@ function labelDocumento(t: string): string {
     ALTRO: 'Altro',
   };
   return map[t] ?? t;
+}
+
+function labelOwner(o: string): string {
+  const map: Record<string, string> = {
+    VENDITORE: 'venditore',
+    ACQUIRENTE: 'acquirente',
+    AMMINISTRATORE: 'amministratore',
+    AZIENDA: 'azienda',
+  };
+  return map[o] ?? o;
+}
+
+function formatBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
 type TimelineStep = { label: string; at: Date | null | undefined; active?: boolean };

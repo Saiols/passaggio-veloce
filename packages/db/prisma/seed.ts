@@ -801,10 +801,615 @@ async function main() {
     sospesa: true,
   });
 
+  // ============================================================
+  // PRATICHE STATI MISTI — ~30 pratiche per popolare le dashboard demo
+  // ============================================================
+
+  function generateTarga(seed: number): string {
+    const letters1 =
+      String.fromCharCode(65 + (seed % 26)) +
+      String.fromCharCode(65 + ((seed * 7) % 26));
+    const numbers = String((seed * 11) % 1000).padStart(3, '0');
+    const letters2 =
+      String.fromCharCode(65 + ((seed * 13) % 26)) +
+      String.fromCharCode(65 + ((seed * 17) % 26));
+    return `${letters1}${numbers}${letters2}`;
+  }
+
+  function generateTelaio(seed: number): string {
+    return `WAUZZZ${String(seed).padStart(11, '0')}`.slice(0, 17);
+  }
+
+  function generateCodicePratica(year: number, seq: number): string {
+    return `PV-${year}-${String(seq).padStart(5, '0')}`;
+  }
+
+  // Carica tutti i dealer e le agenzie demo
+  const allDealers = await prisma.company.findMany({
+    where: { type: 'DEALER', deletedAt: null },
+    select: { id: true, ragioneSociale: true, provincia: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const allAgenzie = await prisma.company.findMany({
+    where: { type: 'AGENZIA', deletedAt: null },
+    select: { id: true, ragioneSociale: true, provincia: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  // Serve almeno 3 dealer e 5 agenzie per le assegnazioni
+  const dealers = allDealers.slice(0, 4); // fino a 4 dealer
+  const agenzie = allAgenzie; // tutte le agenzie attive
+
+  let codiceSeq = 100; // sequenza codici pratiche
+
+  const comuniPerProvincia: Record<string, { comune: string; provincia: string }> = {
+    VE: { comune: 'Venezia', provincia: 'VE' },
+    PD: { comune: 'Padova', provincia: 'PD' },
+    TV: { comune: 'Treviso', provincia: 'TV' },
+    VI: { comune: 'Vicenza', provincia: 'VI' },
+    VR: { comune: 'Verona', provincia: 'VR' },
+  };
+
+  function getLuogo(i: number) {
+    const provs = Object.values(comuniPerProvincia);
+    return provs[i % provs.length];
+  }
+
+  function msAgo(ms: number): Date {
+    return new Date(now.getTime() - ms);
+  }
+  const DAY_MS = 86_400_000;
+
+  // Helper: crea pratica se non esiste già
+  async function upsertPratica(codice: string, data: Parameters<typeof prisma.pratica.create>[0]['data']) {
+    const exists = await prisma.pratica.findFirst({ where: { codicePratica: codice } });
+    if (exists) {
+      console.log(`  · pratica ${codice} già esistente, skip`);
+      return exists;
+    }
+    const p = await prisma.pratica.create({ data });
+    console.log(`  · pratica ${codice} [${data.stato}]`);
+    return p;
+  }
+
+  console.log('');
+  console.log('  [PRATICHE STATI MISTI]');
+
+  // ──────────────────────────────────────────────────
+  // BOZZA × 2
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 2; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const luogo = getLuogo(i);
+    // BOZZA non ha codicePratica (nullable)
+    const exists = await prisma.pratica.findFirst({
+      where: {
+        targa: generateTarga(seq),
+        stato: 'BOZZA',
+        brokerId: broker.id,
+      },
+    });
+    if (!exists) {
+      await prisma.pratica.create({
+        data: {
+          tipo: 'TRAPASSO_NETTO',
+          stato: 'BOZZA',
+          brokerId: broker.id,
+          comune: luogo.comune,
+          provincia: luogo.provincia,
+          targa: generateTarga(seq),
+          telaio: generateTelaio(seq),
+          dataImmatricolazione: new Date('2017-03-10'),
+          feeAgenziaCent: 0,
+          creditoBrokerCent: 0,
+        },
+      });
+      console.log(`  · pratica BOZZA #${seq} [BOZZA]`);
+    } else {
+      console.log(`  · pratica BOZZA #${seq} già esistente, skip`);
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // IN_ATTESA_ROUND_1 × 5
+  // (5 PraticaAssegnazione round=1 esito=PENDING per agenzia diversa)
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 5; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const luogo = getLuogo(i);
+    const submittedAt = msAgo((i + 1) * DAY_MS);
+
+    const pratica = await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: i % 2 === 0 ? 'TRAPASSO_NETTO' : 'MINIVOLTURA',
+      stato: 'IN_ATTESA_ROUND_1',
+      brokerId: broker.id,
+      comune: luogo.comune,
+      provincia: luogo.provincia,
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2018-05-20'),
+      feeAgenziaCent: 9500,
+      creditoBrokerCent: 1800,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `Demo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `Demo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+
+    // Crea assegnazioni PENDING per le prime 5 agenzie (o quante ne abbiamo)
+    const agenzieRound = agenzie.slice(0, Math.min(5, agenzie.length));
+    for (const ag of agenzieRound) {
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 1 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 1,
+            esito: 'PENDING',
+            invioAt: submittedAt,
+          },
+        });
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // IN_ATTESA_ROUND_2 × 2
+  // round1 fail (TIMEOUT) × 3 agenzie + round2 PENDING × 3 agenzie diverse
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 2; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const luogo = getLuogo(i + 2);
+    const submittedAt = msAgo((i + 8) * DAY_MS);
+    const round2StartedAt = msAgo((i + 4) * DAY_MS);
+
+    const pratica = await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'IN_ATTESA_ROUND_2',
+      brokerId: broker.id,
+      comune: luogo.comune,
+      provincia: luogo.provincia,
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2016-11-08'),
+      feeAgenziaCent: 10000,
+      creditoBrokerCent: 2000,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      round2StartedAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `R2Demo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `R2Demo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+
+    // Round 1: prime 3 agenzie TIMEOUT
+    const agenzieR1 = agenzie.slice(0, Math.min(3, agenzie.length));
+    for (const ag of agenzieR1) {
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 1 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 1,
+            esito: 'TIMEOUT',
+            invioAt: submittedAt,
+            esitoAt: round2StartedAt,
+          },
+        });
+      }
+    }
+
+    // Round 2: agenzie 3-5 (o successive disponibili) PENDING
+    const agenzieR2 = agenzie.slice(3, Math.min(6, agenzie.length));
+    for (const ag of agenzieR2) {
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 2 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 2,
+            esito: 'PENDING',
+            invioAt: round2StartedAt,
+          },
+        });
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // IN_ATTESA_ROUND_3 × 1
+  // round1 TIMEOUT × 2 agenzie + round2 TIMEOUT × 2 + round3 PENDING × 2
+  // ──────────────────────────────────────────────────
+  {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[0];
+    const submittedAt = msAgo(15 * DAY_MS);
+    const round2StartedAt = msAgo(10 * DAY_MS);
+    const round3StartedAt = msAgo(5 * DAY_MS);
+
+    const pratica = await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'IN_ATTESA_ROUND_3',
+      brokerId: broker.id,
+      comune: 'Vicenza',
+      provincia: 'VI',
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2015-07-22'),
+      feeAgenziaCent: 11000,
+      creditoBrokerCent: 2200,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      round2StartedAt,
+      round3StartedAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `R3Demo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `R3Demo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+
+    // Round 1: agenzie 0-1 TIMEOUT
+    for (let r = 0; r < Math.min(2, agenzie.length); r++) {
+      const ag = agenzie[r];
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 1 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 1,
+            esito: 'TIMEOUT',
+            invioAt: submittedAt,
+            esitoAt: round2StartedAt,
+          },
+        });
+      }
+    }
+
+    // Round 2: agenzie 2-3 RIFIUTATA
+    for (let r = 2; r < Math.min(4, agenzie.length); r++) {
+      const ag = agenzie[r];
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 2 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 2,
+            esito: 'RIFIUTATA',
+            invioAt: round2StartedAt,
+            esitoAt: round3StartedAt,
+          },
+        });
+      }
+    }
+
+    // Round 3: agenzie 4-5 PENDING
+    for (let r = 4; r < Math.min(6, agenzie.length); r++) {
+      const ag = agenzie[r];
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 3 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 3,
+            esito: 'PENDING',
+            invioAt: round3StartedAt,
+          },
+        });
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // ACCETTATA × 4
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 4; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const agenzia = agenzie[i % agenzie.length];
+    const luogo = getLuogo(i);
+    const submittedAt = msAgo((i + 5) * DAY_MS);
+    const accettataAt = msAgo((i + 3) * DAY_MS);
+
+    const pratica = await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: i % 2 === 0 ? 'TRAPASSO_NETTO' : 'MINIVOLTURA',
+      stato: 'ACCETTATA',
+      brokerId: broker.id,
+      agenziaAssegnataId: agenzia.id,
+      comune: luogo.comune,
+      provincia: luogo.provincia,
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2019-01-14'),
+      feeAgenziaCent: 11000,
+      creditoBrokerCent: 2500,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      accettataAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `AccDemo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `AccDemo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+
+    // Assegnazione accettata
+    const assExist = await prisma.praticaAssegnazione.findFirst({
+      where: { praticaId: pratica.id, agenziaId: agenzia.id, round: 1 },
+    });
+    if (!assExist) {
+      await prisma.praticaAssegnazione.create({
+        data: {
+          praticaId: pratica.id,
+          agenziaId: agenzia.id,
+          round: 1,
+          esito: 'ACCETTATA',
+          invioAt: submittedAt,
+          esitoAt: accettataAt,
+        },
+      });
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // FIRMATA × 12
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 12; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const agenzia = agenzie[i % agenzie.length];
+    const luogo = getLuogo(i);
+    const daysAgoNum = i + 1;
+    const firmaAt = msAgo(daysAgoNum * DAY_MS);
+    const accettataAt = msAgo((daysAgoNum + 1) * DAY_MS);
+    const submittedAt = msAgo((daysAgoNum + 2) * DAY_MS);
+    const autoAddebitoAt = new Date(firmaAt.getTime() + 5 * 60_000);
+
+    const pratica = await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: i % 3 === 0 ? 'MINIVOLTURA' : 'TRAPASSO_NETTO',
+      stato: 'FIRMATA',
+      brokerId: broker.id,
+      agenziaAssegnataId: agenzia.id,
+      comune: luogo.comune,
+      provincia: luogo.provincia,
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2020-04-11'),
+      feeAgenziaCent: 6000,
+      creditoBrokerCent: 2500,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      accettataAt,
+      firmaAvvenutaAt: firmaAt,
+      autoAddebitoAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `FirmaDemo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `FirmaDemo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+
+    // Assegnazione accettata
+    const assExist = await prisma.praticaAssegnazione.findFirst({
+      where: { praticaId: pratica.id, agenziaId: agenzia.id, round: 1 },
+    });
+    if (!assExist) {
+      await prisma.praticaAssegnazione.create({
+        data: {
+          praticaId: pratica.id,
+          agenziaId: agenzia.id,
+          round: 1,
+          esito: 'ACCETTATA',
+          invioAt: submittedAt,
+          esitoAt: accettataAt,
+        },
+      });
+    }
+
+    // Credito wallet broker
+    const wallet = await prisma.wallet.findUnique({ where: { companyId: broker.id } });
+    if (wallet) {
+      const newBalance = wallet.saldoCent + 2500;
+      await prisma.wallet.update({
+        where: { id: wallet.id },
+        data: { saldoCent: newBalance },
+      });
+      await prisma.transazioneWallet.create({
+        data: {
+          walletId: wallet.id,
+          tipo: 'CREDITO_PRATICA',
+          importoCent: 2500,
+          saldoPostCent: newBalance,
+          praticaId: pratica.id,
+          createdAt: firmaAt,
+        },
+      });
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // IN_ESCALATION × 2
+  // tutti e 3 i round falliti
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 2; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const luogo = getLuogo(i + 1);
+    const submittedAt = msAgo(20 * DAY_MS);
+    const round2StartedAt = msAgo(14 * DAY_MS);
+    const round3StartedAt = msAgo(7 * DAY_MS);
+    const escalationAt = msAgo(2 * DAY_MS);
+
+    const pratica = await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'IN_ESCALATION',
+      brokerId: broker.id,
+      comune: luogo.comune,
+      provincia: luogo.provincia,
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2014-09-03'),
+      feeAgenziaCent: 12000,
+      creditoBrokerCent: 2500,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      round2StartedAt,
+      round3StartedAt,
+      escalationAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `EscDemo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `EscDemo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+
+    // Round 1: agenzie 0-1 TIMEOUT
+    for (let r = 0; r < Math.min(2, agenzie.length); r++) {
+      const ag = agenzie[r];
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 1 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 1,
+            esito: 'TIMEOUT',
+            invioAt: submittedAt,
+            esitoAt: round2StartedAt,
+          },
+        });
+      }
+    }
+
+    // Round 2: agenzie 2-3 RIFIUTATA
+    for (let r = 2; r < Math.min(4, agenzie.length); r++) {
+      const ag = agenzie[r];
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 2 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 2,
+            esito: 'RIFIUTATA',
+            invioAt: round2StartedAt,
+            esitoAt: round3StartedAt,
+          },
+        });
+      }
+    }
+
+    // Round 3: agenzie 4+ TIMEOUT
+    for (let r = 4; r < Math.min(6, agenzie.length); r++) {
+      const ag = agenzie[r];
+      const assExist = await prisma.praticaAssegnazione.findFirst({
+        where: { praticaId: pratica.id, agenziaId: ag.id, round: 3 },
+      });
+      if (!assExist) {
+        await prisma.praticaAssegnazione.create({
+          data: {
+            praticaId: pratica.id,
+            agenziaId: ag.id,
+            round: 3,
+            esito: 'TIMEOUT',
+            invioAt: round3StartedAt,
+            esitoAt: escalationAt,
+          },
+        });
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────
+  // ANNULLATA × 2
+  // ──────────────────────────────────────────────────
+  for (let i = 0; i < 2; i++) {
+    const seq = codiceSeq++;
+    const codice = generateCodicePratica(2026, seq);
+    const broker = dealers[i % dealers.length];
+    const luogo = getLuogo(i);
+    const submittedAt = msAgo((i + 10) * DAY_MS);
+    const annullataAt = msAgo((i + 5) * DAY_MS);
+
+    await upsertPratica(codice, {
+      codicePratica: codice,
+      tipo: 'TRAPASSO_NETTO',
+      stato: 'ANNULLATA',
+      brokerId: broker.id,
+      comune: luogo.comune,
+      provincia: luogo.provincia,
+      targa: generateTarga(seq),
+      telaio: generateTelaio(seq),
+      dataImmatricolazione: new Date('2016-02-28'),
+      feeAgenziaCent: 0,
+      creditoBrokerCent: 0,
+      submittedAt,
+      round1StartedAt: submittedAt,
+      annullataAt,
+      venditoreNome: 'Venditore',
+      venditoreCognome: `AnnDemo${seq}`,
+      venditoreCF: 'VNDDMO70A01F205P',
+      acquirenteNome: 'Acquirente',
+      acquirenteCognome: `AnnDemo${seq}`,
+      acquirenteCF: 'CQRDMO85E10L736X',
+    });
+  }
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);
   console.log(`  password demo (account demo): ${DEMO_PASSWORD}`);
+  console.log(`  NOTE: documenti placeholder non generati (Plan B — solo record Pratica)`);
 }
 
 main()

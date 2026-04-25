@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
 import { env } from '@/env';
 import { AppShell } from '@/components/app-shell';
+import { Counters } from './counters';
 
 export default async function DemoControlPage() {
   if (!env.DEMO_MODE) notFound();
@@ -24,7 +25,7 @@ export default async function DemoControlPage() {
         </header>
 
         <section className="mb-6">
-          <p className="text-sm text-pv-slate-500">[Counters live: vedi Task 25]</p>
+          <Counters />
         </section>
 
         <div className="grid gap-6 lg:grid-cols-2">

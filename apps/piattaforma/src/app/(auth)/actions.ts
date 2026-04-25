@@ -267,3 +267,50 @@ export async function requestPasswordResetAction(
 
   return env.DEMO_MODE ? { ok: true, demoToken: token } : { ok: true };
 }
+
+// ============================================================
+// PASSWORD RESET — CONFIRM
+// ============================================================
+
+export type ConfirmPasswordResetResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function confirmPasswordResetAction(
+  token: string,
+  newPassword: string,
+): Promise<ConfirmPasswordResetResult> {
+  if (!token) return { ok: false, error: 'Token mancante' };
+  if (!newPassword || newPassword.length < 10) {
+    return { ok: false, error: 'Password troppo corta (min 10 caratteri)' };
+  }
+  if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    return {
+      ok: false,
+      error: 'La password deve contenere maiuscole, minuscole e numeri',
+    };
+  }
+
+  const record = await prisma.verificationToken.findUnique({ where: { token } });
+  if (!record) return { ok: false, error: 'Token non valido' };
+  if (record.usedAt) return { ok: false, error: 'Token già usato' };
+  if (record.expiresAt < new Date()) return { ok: false, error: 'Token scaduto' };
+  if (record.type !== 'PASSWORD_RESET') {
+    return { ok: false, error: 'Token non valido per questa azione' };
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.verificationToken.update({
+      where: { id: record.id },
+      data: { usedAt: new Date() },
+    });
+    await tx.user.update({
+      where: { email: record.email },
+      data: { passwordHash },
+    });
+  });
+
+  return { ok: true };
+}

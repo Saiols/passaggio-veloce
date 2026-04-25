@@ -4,6 +4,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
+import { AssignForm } from './assign-form';
 
 export default async function AdminEscalationPage() {
   const session = await auth();
@@ -17,6 +18,18 @@ export default async function AdminEscalationPage() {
       },
     },
   });
+
+  // Precarichiamo le agenzie attive per ogni provincia presente nelle pratiche
+  const province = Array.from(new Set(pratiche.map((p) => p.provincia).filter(Boolean) as string[]));
+  const agenzieByProvincia = new Map<string, { id: string; ragioneSociale: string }[]>();
+  for (const prov of province) {
+    const agenzie = await prisma.company.findMany({
+      where: { type: 'AGENZIA', deletedAt: null, provincia: prov },
+      select: { id: true, ragioneSociale: true },
+      orderBy: { ragioneSociale: 'asc' },
+    });
+    agenzieByProvincia.set(prov, agenzie);
+  }
 
   return (
     <AppShell session={session!} activePath="/admin/escalation">
@@ -68,6 +81,15 @@ export default async function AdminEscalationPage() {
                   <span className="inline-flex shrink-0 items-center rounded-full bg-pv-red-500 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
                     Azione richiesta
                   </span>
+                </div>
+                <div className="mt-4 border-t border-pv-red-500/30 pt-3">
+                  <p className="text-xs font-semibold text-pv-slate-700">Assegna manualmente</p>
+                  <div className="mt-2">
+                    <AssignForm
+                      praticaId={p.id}
+                      agenzie={agenzieByProvincia.get(p.provincia ?? '') ?? []}
+                    />
+                  </div>
                 </div>
               </div>
             ))}

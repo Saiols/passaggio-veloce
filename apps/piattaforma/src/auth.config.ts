@@ -3,6 +3,7 @@ import type { NextAuthConfig } from 'next-auth';
 // Edge-compatible config (no Node-only modules like bcryptjs).
 // Used by middleware.ts. Full config with Credentials provider lives in auth.ts.
 export const authConfig = {
+  trustHost: true,
   pages: {
     signIn: '/login',
     error: '/login',

@@ -275,8 +275,12 @@ export default function HomePage() {
       <footer className="mt-auto bg-pv-navy-900 text-pv-slate-300">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-5 py-6 text-[13px] sm:flex-row sm:items-center sm:px-6">
           <p>© {new Date().getFullYear()} Passaggio Veloce · Tutti i diritti riservati</p>
-          <p className="text-pv-slate-500">
-            Broker digitale per passaggi di proprietà veicoli
+          <p className="flex items-center gap-2 text-pv-slate-500">
+            <span className="font-mono text-[11px] text-pv-slate-500/70">
+              build {(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)}
+            </span>
+            <span className="text-pv-slate-500/40">·</span>
+            <span>Broker digitale per passaggi di proprietà veicoli</span>
           </p>
         </div>
       </footer>

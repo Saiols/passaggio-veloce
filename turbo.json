@@ -19,7 +19,8 @@
     "PAYMENT_PROVIDER",
     "STRIPE_SECRET_KEY",
     "NEXT_PUBLIC_APP_URL",
-    "SENTRY_DSN"
+    "SENTRY_DSN",
+    "VERCEL_GIT_COMMIT_SHA"
   ],
   "tasks": {
     "build": {

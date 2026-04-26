@@ -1,18 +1,18 @@
+import path from 'node:path';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Monorepo pnpm: serve outputFileTracingRoot per risolvere correttamente i path
+  outputFileTracingRoot: path.join(__dirname, '../..'),
   // Prisma engine binary va incluso esplicitamente nel bundle serverless Vercel
   // (webpack non lo copia automaticamente come fa Turbopack)
   outputFileTracingIncludes: {
-    '/api/**/*': [
-      '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/libquery_engine-*',
-      '../../node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client/libquery_engine-*',
-    ],
     '/**/*': [
-      '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/libquery_engine-*',
-      '../../node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client/libquery_engine-*',
+      './node_modules/.pnpm/@prisma+client*/**/libquery_engine-*',
+      './node_modules/.pnpm/.prisma/client/**',
+      './node_modules/.prisma/client/**',
     ],
   },
 };

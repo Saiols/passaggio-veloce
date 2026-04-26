@@ -1,19 +1,18 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs';
+import { PrismaPlugin } from '@prisma/nextjs-monorepo-workaround-plugin';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // Monorepo pnpm: serve outputFileTracingRoot per risolvere correttamente i path
   outputFileTracingRoot: path.join(__dirname, '../..'),
-  // Prisma engine binary va incluso esplicitamente nel bundle serverless Vercel
-  // (webpack non lo copia automaticamente come fa Turbopack)
-  outputFileTracingIncludes: {
-    '/**/*': [
-      './node_modules/.pnpm/@prisma+client*/**/libquery_engine-*',
-      './node_modules/.pnpm/.prisma/client/**',
-      './node_modules/.prisma/client/**',
-    ],
+  // Plugin ufficiale Prisma per copiare il query engine nel bundle webpack su Vercel monorepo pnpm.
+  // Solo lato server (le rotte API e i Server Component).
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.plugins = [...(config.plugins ?? []), new PrismaPlugin()];
+    }
+    return config;
   },
 };
 

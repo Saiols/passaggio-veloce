@@ -3,6 +3,18 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Prisma engine binary va incluso esplicitamente nel bundle serverless Vercel
+  // (webpack non lo copia automaticamente come fa Turbopack)
+  outputFileTracingIncludes: {
+    '/api/**/*': [
+      '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/libquery_engine-*',
+      '../../node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client/libquery_engine-*',
+    ],
+    '/**/*': [
+      '../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/libquery_engine-*',
+      '../../node_modules/.pnpm/@prisma+client@*/node_modules/@prisma/client/libquery_engine-*',
+    ],
+  },
 };
 
 const sentryEnabled = Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN);

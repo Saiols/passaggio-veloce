@@ -1,6 +1,26 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local"],
+  "globalEnv": [
+    "NODE_ENV",
+    "DATABASE_URL",
+    "DIRECT_URL",
+    "AUTH_SECRET",
+    "AUTH_URL",
+    "DEMO_MODE",
+    "STORAGE_PROVIDER",
+    "STORAGE_LOCAL_DIR",
+    "BLOB_READ_WRITE_TOKEN",
+    "EMAIL_PROVIDER",
+    "EMAIL_CONSOLE_DIR",
+    "EMAIL_FROM",
+    "RESEND_API_KEY",
+    "OCR_PROVIDER",
+    "PAYMENT_PROVIDER",
+    "STRIPE_SECRET_KEY",
+    "NEXT_PUBLIC_APP_URL",
+    "SENTRY_DSN"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

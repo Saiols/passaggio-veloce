@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import QRCode from 'qrcode';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -69,6 +70,15 @@ export default async function AffiliazionePage() {
     ? `${appUrl}/register?ref=${company.referralCode}`
     : null;
 
+  // QR code generato server-side come data URL (no dipendenza da servizi esterni).
+  const qrDataUrl = link
+    ? await QRCode.toDataURL(link, {
+        margin: 1,
+        width: 240,
+        color: { dark: '#0a2540', light: '#ffffff' },
+      })
+    : null;
+
   return (
     <AppShell session={session} activePath="/affiliazione">
       <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
@@ -112,12 +122,43 @@ export default async function AffiliazionePage() {
             associati a te in modo permanente.
           </p>
           {link ? (
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <code className="flex-1 truncate rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 px-3 py-2 text-[12.5px] text-pv-navy-800">
-                {link}
-              </code>
-              <CopyLinkButton link={link} />
-            </div>
+            <>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <code className="flex-1 truncate rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 px-3 py-2 text-[12.5px] text-pv-navy-800">
+                  {link}
+                </code>
+                <CopyLinkButton link={link} />
+              </div>
+              {qrDataUrl && (
+                <div className="mt-5 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrDataUrl}
+                    alt="QR code link affiliazione"
+                    width={120}
+                    height={120}
+                    className="rounded-[10px] border border-pv-slate-200 bg-white p-2"
+                  />
+                  <div className="text-[12.5px] text-pv-slate-500">
+                    <p className="font-semibold text-pv-navy-800">Codice QR pronto da condividere</p>
+                    <p className="mt-1">
+                      Stampa il QR su biglietti da visita, brochure o
+                      mostralo dal telefono. Chi lo scansiona arriva
+                      direttamente al form di registrazione associato a te.
+                    </p>
+                    <p className="mt-2">
+                      <a
+                        href={qrDataUrl}
+                        download={`pv-affiliazione-${company.referralCode}.png`}
+                        className="font-semibold text-pv-navy-700 hover:underline"
+                      >
+                        Scarica PNG
+                      </a>
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <p className="mt-3 text-[13px] text-pv-red-500">
               Codice referral non disponibile. Contatta il supporto.

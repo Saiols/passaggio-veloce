@@ -24,6 +24,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       { href: '/admin/broker', label: 'Broker' },
       { href: '/admin/agenzie', label: 'Agenzie' },
       { href: '/admin/utenti', label: 'Utenti' },
+      { href: '/admin/contatti', label: 'Contatti' },
       { href: '/admin/escalation', label: 'Escalation' },
     ];
     if (role === 'ADMIN_PIATTAFORMA') {

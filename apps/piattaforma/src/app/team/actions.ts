@@ -91,8 +91,8 @@ export async function acceptInvitationAction(
   if (!nome.trim() || !cognome.trim()) {
     return { ok: false, error: 'Nome e cognome obbligatori' };
   }
-  if (!password || password.length < 10) {
-    return { ok: false, error: 'Password troppo corta (min 10)' };
+  if (!password || password.length < 8) {
+    return { ok: false, error: 'Password troppo corta (min 8)' };
   }
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
     return { ok: false, error: 'Password deve avere maiuscola, minuscola e numero' };

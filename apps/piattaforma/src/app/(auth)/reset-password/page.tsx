@@ -15,7 +15,7 @@ export default async function ResetPasswordPage({
         </h1>
         <p className="mt-1 text-sm text-pv-slate-500">
           {token
-            ? 'Inserisci la nuova password (min 10 caratteri, maiuscola, minuscola, numero).'
+            ? 'Inserisci la nuova password (min 8 caratteri, maiuscola, minuscola, numero).'
             : 'Inserisci la tua email — ti invieremo un link per reimpostare la password.'}
         </p>
         <ResetForm token={token ?? null} />

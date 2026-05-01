@@ -25,7 +25,7 @@ export const capSchema = z.string().regex(/^\d{5}$/, 'CAP non valido');
 
 export const passwordSchema = z
   .string()
-  .min(10, 'La password deve avere almeno 10 caratteri')
+  .min(8, 'La password deve avere almeno 8 caratteri')
   .regex(/[A-Z]/, 'Serve almeno una lettera maiuscola')
   .regex(/[a-z]/, 'Serve almeno una lettera minuscola')
   .regex(/\d/, 'Serve almeno un numero');

@@ -281,8 +281,8 @@ export async function confirmPasswordResetAction(
   newPassword: string,
 ): Promise<ConfirmPasswordResetResult> {
   if (!token) return { ok: false, error: 'Token mancante' };
-  if (!newPassword || newPassword.length < 10) {
-    return { ok: false, error: 'Password troppo corta (min 10 caratteri)' };
+  if (!newPassword || newPassword.length < 8) {
+    return { ok: false, error: 'Password troppo corta (min 8 caratteri)' };
   }
   if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
     return {

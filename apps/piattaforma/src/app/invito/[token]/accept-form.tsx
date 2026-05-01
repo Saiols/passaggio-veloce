@@ -29,8 +29,8 @@ export function AcceptForm({ token }: { token: string }) {
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
       <input name="cognome" required placeholder="Cognome"
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
-      <input name="password" type="password" required minLength={10}
-        placeholder="Password (min 10, A-z, 0-9)"
+      <input name="password" type="password" required minLength={8}
+        placeholder="Password (min 8, A-z, 0-9)"
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
       {error && <p className="text-sm text-pv-red-500">{error}</p>}
       <button type="submit" disabled={pending}

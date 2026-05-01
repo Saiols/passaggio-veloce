@@ -187,6 +187,28 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 </Select>
               </Field>
 
+              <div className="mt-4 rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 p-3 text-[12.5px] leading-relaxed text-pv-slate-700">
+                <p className="mb-1.5 font-bold uppercase tracking-wider text-[11px] text-pv-slate-500">
+                  Quando usare quale tipo
+                </p>
+                <ul className="space-y-1.5">
+                  <li>
+                    <span className="font-semibold text-pv-navy-800">
+                      Passaggio di proprietà privato
+                    </span>
+                    : un solo veicolo, da privato a privato. È il caso classico
+                    del cliente che vende l&apos;auto a un altro privato.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-pv-navy-800">
+                      Minivolture multiple
+                    </span>
+                    : commercianti / concessionari che caricano più veicoli in
+                    un&apos;unica pratica. Richiede almeno 2 veicoli.
+                  </li>
+                </ul>
+              </div>
+
               {tipo === 'MINIVOLTURE_MULTIPLE' && (
                 <div className="mt-4">
                   <Field label="Numero veicoli" required>

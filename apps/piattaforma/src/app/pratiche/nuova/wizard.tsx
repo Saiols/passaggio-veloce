@@ -29,6 +29,8 @@ type Parte = {
   cf: string;
   ragioneSociale: string;
   piva: string;
+  telefono: string;
+  email: string;
 };
 
 const emptyParte = (): Parte => ({
@@ -38,6 +40,8 @@ const emptyParte = (): Parte => ({
   cf: '',
   ragioneSociale: '',
   piva: '',
+  telefono: '',
+  email: '',
 });
 
 export function WizardNuovaPratica({ error }: { error?: string }) {
@@ -118,6 +122,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       fd.append('venditoreCognome', venditore.cognome);
       fd.append('venditoreCF', venditore.cf);
     }
+    fd.append('venditoreTelefono', venditore.telefono);
+    fd.append('venditoreEmail', venditore.email);
 
     fd.append('acquirenteIsPG', acquirente.isPG ? 'true' : 'false');
     if (acquirente.isPG) {
@@ -128,6 +134,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       fd.append('acquirenteCognome', acquirente.cognome);
       fd.append('acquirenteCF', acquirente.cf);
     }
+    fd.append('acquirenteTelefono', acquirente.telefono);
+    fd.append('acquirenteEmail', acquirente.email);
 
     fd.append('flagCointestazione', flagCointestazione ? 'true' : 'false');
     fd.append('flagMinivoltura', flagMinivoltura ? 'true' : 'false');
@@ -491,6 +499,24 @@ function ParteForm({ parte, onChange }: { parte: Parte; onChange: (p: Parte) => 
           </Field>
         </div>
       )}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="Telefono">
+          <Input
+            type="tel"
+            value={parte.telefono}
+            onChange={(e) => onChange({ ...parte, telefono: e.target.value })}
+            placeholder="+39 333 1234567"
+          />
+        </Field>
+        <Field label="Email">
+          <Input
+            type="email"
+            value={parte.email}
+            onChange={(e) => onChange({ ...parte, email: e.target.value })}
+            placeholder="nome@esempio.it"
+          />
+        </Field>
+      </div>
     </div>
   );
 }

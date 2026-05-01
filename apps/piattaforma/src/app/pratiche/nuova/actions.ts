@@ -77,6 +77,8 @@ const submitSchema = z.object({
   venditoreCF: z.string().trim().max(16).optional(),
   venditoreRagioneSociale: z.string().trim().max(160).optional(),
   venditorePIVA: z.string().trim().max(11).optional(),
+  venditoreTelefono: z.string().trim().max(30).optional(),
+  venditoreEmail: z.string().trim().max(120).optional(),
 
   // Acquirente
   acquirenteIsPG: formBool.default(false),
@@ -85,6 +87,8 @@ const submitSchema = z.object({
   acquirenteCF: z.string().trim().max(16).optional(),
   acquirenteRagioneSociale: z.string().trim().max(160).optional(),
   acquirentePIVA: z.string().trim().max(11).optional(),
+  acquirenteTelefono: z.string().trim().max(30).optional(),
+  acquirenteEmail: z.string().trim().max(120).optional(),
 
   // Flag
   flagCointestazione: formBool.default(false),
@@ -170,6 +174,8 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       venditoreCF: d.venditoreIsPG ? null : d.venditoreCF?.toUpperCase(),
       venditoreRagioneSociale: d.venditoreIsPG ? d.venditoreRagioneSociale : null,
       venditorePIVA: d.venditoreIsPG ? d.venditorePIVA : null,
+      venditoreTelefono: d.venditoreTelefono || null,
+      venditoreEmail: d.venditoreEmail?.toLowerCase() || null,
 
       acquirenteIsPersonaGiuridica: d.acquirenteIsPG,
       acquirenteNome: d.acquirenteIsPG ? null : d.acquirenteNome,
@@ -177,6 +183,8 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       acquirenteCF: d.acquirenteIsPG ? null : d.acquirenteCF?.toUpperCase(),
       acquirenteRagioneSociale: d.acquirenteIsPG ? d.acquirenteRagioneSociale : null,
       acquirentePIVA: d.acquirenteIsPG ? d.acquirentePIVA : null,
+      acquirenteTelefono: d.acquirenteTelefono || null,
+      acquirenteEmail: d.acquirenteEmail?.toLowerCase() || null,
 
       flagCointestazione: d.flagCointestazione,
       flagMinivoltura: d.flagMinivoltura,

@@ -374,6 +374,8 @@ model Pratica {
   venditoreIsPersonaGiuridica Boolean @default(false)
   venditoreRagioneSociale     String?
   venditorePIVA               String?
+  venditoreTelefono           String?
+  venditoreEmail              String?
 
   // Dati acquirente
   acquirenteNome               String?
@@ -382,6 +384,8 @@ model Pratica {
   acquirenteIsPersonaGiuridica Boolean @default(false)
   acquirenteRagioneSociale     String?
   acquirentePIVA               String?
+  acquirenteTelefono           String?
+  acquirenteEmail              String?
 
   // Flag pratica
   flagCointestazione Boolean @default(false)

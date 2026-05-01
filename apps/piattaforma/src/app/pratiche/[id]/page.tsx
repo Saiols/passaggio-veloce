@@ -220,6 +220,12 @@ export default async function PraticaDetailPage({
                   <p className="text-[12px] text-pv-slate-500">
                     {pratica.venditoreIsPersonaGiuridica ? pratica.venditorePIVA ?? '—' : pratica.venditoreCF ?? '—'}
                   </p>
+                  {(pratica.venditoreTelefono || pratica.venditoreEmail) && (
+                    <ContattiParte
+                      telefono={pratica.venditoreTelefono}
+                      email={pratica.venditoreEmail}
+                    />
+                  )}
                 </div>
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
@@ -235,6 +241,12 @@ export default async function PraticaDetailPage({
                       ? pratica.acquirentePIVA ?? '—'
                       : pratica.acquirenteCF ?? '—'}
                   </p>
+                  {(pratica.acquirenteTelefono || pratica.acquirenteEmail) && (
+                    <ContattiParte
+                      telefono={pratica.acquirenteTelefono}
+                      email={pratica.acquirenteEmail}
+                    />
+                  )}
                 </div>
               </div>
               {(pratica.flagCointestazione || pratica.flagMinivoltura || pratica.flagProcura) && (
@@ -379,6 +391,36 @@ function InfoRow({
         {value || '—'}
       </dd>
     </div>
+  );
+}
+
+function ContattiParte({
+  telefono,
+  email,
+}: {
+  telefono: string | null;
+  email: string | null;
+}) {
+  return (
+    <p className="mt-1 text-[12px] text-pv-slate-700">
+      {telefono && (
+        <span>
+          <span className="font-semibold text-pv-slate-500">Tel:</span>{' '}
+          <a className="hover:underline" href={`tel:${telefono}`}>
+            {telefono}
+          </a>
+        </span>
+      )}
+      {telefono && email && <span className="mx-1.5 text-pv-slate-400">·</span>}
+      {email && (
+        <span>
+          <span className="font-semibold text-pv-slate-500">Email:</span>{' '}
+          <a className="hover:underline" href={`mailto:${email}`}>
+            {email}
+          </a>
+        </span>
+      )}
+    </p>
   );
 }
 

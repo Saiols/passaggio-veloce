@@ -74,6 +74,10 @@ export default async function PraticaDetailPage({
     !pratica.valutazione &&
     !!pratica.agenziaAssegnata;
 
+  // Spec §1.4 demo: il prezzo è informativo solo dopo la firma (dashboard
+  // economica). Per agenzie e broker, prima della firma non viene mostrato.
+  const showFee = pratica.firmaAvvenutaAt !== null;
+
   return (
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -193,6 +197,9 @@ export default async function PraticaDetailPage({
                 <InfoRow label="Telaio" value={pratica.telaio} mono />
                 <InfoRow label="Proprietario attuale" value={pratica.proprietarioAttuale} />
                 <InfoRow label="Immatricolazione" value={formatDate(pratica.dataImmatricolazione)} />
+                {pratica.tipo === 'MINIVOLTURE_MULTIPLE' && (
+                  <InfoRow label="Numero veicoli" value={String(pratica.numeroVeicoli)} />
+                )}
                 <InfoRow label="Pre-2015" value={pratica.preImm2015 ? 'Sì' : 'No'} />
                 <InfoRow label="Comodato d'uso" value={pratica.flagComodatoDuso ? 'Sì' : 'No'} />
               </dl>
@@ -293,16 +300,26 @@ export default async function PraticaDetailPage({
                   value={pratica.agenziaAssegnata?.ragioneSociale ?? '—'}
                 />
                 <InfoRow label="Comune" value={pratica.comune} />
-                <InfoRow
-                  label="Fee agenzia"
-                  value={pratica.feeAgenziaCent > 0 ? formatCurrencyCent(pratica.feeAgenziaCent) : '—'}
-                />
-                <InfoRow
-                  label="Credito broker"
-                  value={
-                    pratica.creditoBrokerCent > 0 ? formatCurrencyCent(pratica.creditoBrokerCent) : '—'
-                  }
-                />
+                {showFee && (
+                  <>
+                    <InfoRow
+                      label="Fee agenzia"
+                      value={
+                        pratica.feeAgenziaCent > 0
+                          ? formatCurrencyCent(pratica.feeAgenziaCent)
+                          : '—'
+                      }
+                    />
+                    <InfoRow
+                      label="Credito broker"
+                      value={
+                        pratica.creditoBrokerCent > 0
+                          ? formatCurrencyCent(pratica.creditoBrokerCent)
+                          : '—'
+                      }
+                    />
+                  </>
+                )}
                 <InfoRow label="Codice interno" value={pratica.codiceAgenziaInterno} />
               </dl>
             </Card>
@@ -374,9 +391,8 @@ function Flag({ children }: { children: React.ReactNode }) {
 }
 
 function labelTipo(t: string): string {
-  if (t === 'TRAPASSO_NETTO') return 'Trapasso netto';
-  if (t === 'MINIVOLTURA') return 'Minivoltura';
-  if (t === 'LOTTO_MASSIVO') return 'Lotto massivo';
+  if (t === 'PASSAGGIO_PRIVATO') return 'Passaggio di proprietà privato';
+  if (t === 'MINIVOLTURE_MULTIPLE') return 'Minivolture multiple';
   return t;
 }
 

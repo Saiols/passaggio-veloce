@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
-import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from '../actions';
 
 export default async function InboxDetailPage({
@@ -84,7 +84,7 @@ export default async function InboxDetailPage({
                   Decisione richiesta
                 </p>
                 <p className="mt-1 text-[15px] font-bold text-pv-navy-800">
-                  Accetti questa pratica per {formatCurrencyCent(pratica.feeAgenziaCent)}?
+                  Confermi accettazione di questa pratica?
                 </p>
                 <p className="mt-0.5 text-[12px] text-pv-slate-500">
                   Prima dell&apos;accettazione, verifica che il dossier sia completo. In
@@ -215,14 +215,8 @@ export default async function InboxDetailPage({
             </Card>
 
             <Card>
-              <h2 className="text-[15px] font-bold text-pv-navy-800">Economics</h2>
+              <h2 className="text-[15px] font-bold text-pv-navy-800">Distribuzione</h2>
               <dl className="mt-3 space-y-2 text-[13px]">
-                <InfoRow
-                  label="Fee per te"
-                  value={
-                    pratica.feeAgenziaCent > 0 ? formatCurrencyCent(pratica.feeAgenziaCent) : '—'
-                  }
-                />
                 <InfoRow label="Round" value={String(assegnazione.round)} />
                 <InfoRow label="Inviata" value={formatDateTime(assegnazione.invioAt)} />
               </dl>
@@ -256,9 +250,8 @@ function InfoRow({
 }
 
 function labelTipo(t: string): string {
-  if (t === 'TRAPASSO_NETTO') return 'Trapasso netto';
-  if (t === 'MINIVOLTURA') return 'Minivoltura';
-  if (t === 'LOTTO_MASSIVO') return 'Lotto massivo';
+  if (t === 'PASSAGGIO_PRIVATO') return 'Passaggio di proprietà privato';
+  if (t === 'MINIVOLTURE_MULTIPLE') return 'Minivolture multiple';
   return t;
 }
 

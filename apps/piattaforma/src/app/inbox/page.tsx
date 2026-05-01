@@ -4,7 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { StatusChip, type PraticaStato } from '@/components/ui';
-import { formatCurrencyCent, formatRelative } from '@/lib/format';
+import { formatRelative } from '@/lib/format';
 
 export default async function InboxPage() {
   const session = await auth();
@@ -102,11 +102,6 @@ export default async function InboxPage() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[14px] font-bold text-pv-navy-800">
-                        {a.pratica.feeAgenziaCent > 0
-                          ? formatCurrencyCent(a.pratica.feeAgenziaCent)
-                          : '—'}
-                      </p>
                       <p className="text-[11px] text-pv-slate-500">{formatRelative(a.invioAt)}</p>
                     </div>
                   </Link>

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification } from '@/lib/notifiche';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 
 export type AssignResult = { ok: true } | { ok: false; error: string };
 
@@ -30,8 +31,8 @@ export async function assegnaEscalationAction(
 ): Promise<AssignResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_PIATTAFORMA') {
-    return { ok: false, error: 'Solo admin può assegnare manualmente' };
+  if (!isAdminOrAssistente(session.user.role)) {
+    return { ok: false, error: 'Solo admin/assistente può assegnare manualmente' };
   }
 
   try {

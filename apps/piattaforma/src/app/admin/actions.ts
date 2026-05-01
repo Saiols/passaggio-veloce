@@ -4,10 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { tickAllPraticheInDistribuzione } from '@/lib/distribuzione';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 
 export async function runDistribuzioneTickAction(): Promise<void> {
   const session = await auth();
-  if (session?.user?.role !== 'ADMIN_PIATTAFORMA') {
+  if (!isAdminOrAssistente(session?.user?.role)) {
     redirect('/dashboard');
   }
 

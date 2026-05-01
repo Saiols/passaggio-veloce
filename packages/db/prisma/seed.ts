@@ -27,6 +27,23 @@ async function main() {
   });
   console.log(`  · admin: ${admin.email}`);
 
+  // Assistente piattaforma (F-03 / D-02): vede pratiche, anagrafiche, wallet,
+  // catalogo, escalation. Non vede dashboard finanziaria aggregata.
+  const assistente = await prisma.user.upsert({
+    where: { email: 'assistente@passaggioveloce.it' },
+    update: {},
+    create: {
+      email: 'assistente@passaggioveloce.it',
+      passwordHash,
+      nome: 'Assistente',
+      cognome: 'Operativo',
+      role: 'ASSISTENTE',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+    },
+  });
+  console.log(`  · assistente: ${assistente.email}`);
+
   // Dealer 1
   const dealer1 = await prisma.company.upsert({
     where: { partitaIva: '01234567890' },

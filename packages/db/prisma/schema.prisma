@@ -26,6 +26,7 @@ enum UserRole {
   ADMIN_AZIENDA
   UTENTE_AZIENDA
   ADMIN_PIATTAFORMA
+  ASSISTENTE
 }
 
 enum UserStatus {

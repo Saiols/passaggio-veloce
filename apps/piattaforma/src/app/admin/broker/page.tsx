@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -88,7 +89,12 @@ export default async function AdminBrokerPage({
                 {broker.map((b) => (
                   <tr key={b.id} className="transition-colors hover:bg-pv-slate-50">
                     <td className="px-5 py-3 font-semibold text-pv-navy-800">
-                      {b.ragioneSociale}
+                      <Link
+                        href={`/admin/companies/${b.id}`}
+                        className="hover:underline"
+                      >
+                        {b.ragioneSociale}
+                      </Link>
                       {b.suspendedAt && (
                         <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
                           Sospeso admin

@@ -3,7 +3,8 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
-import { CompanyEditForm } from './edit-form';
+import { CompanyEditForm } from '@/components/company-edit-form';
+import { updateCompanyProfileAction } from './actions';
 
 export default async function ModificaProfiloAziendalePage() {
   const session = await auth();
@@ -51,6 +52,8 @@ export default async function ModificaProfiloAziendalePage() {
               provincia: company.provincia,
               iban: company.iban,
             }}
+            action={updateCompanyProfileAction}
+            cancelHref="/profilo"
           />
         </Card>
       </div>

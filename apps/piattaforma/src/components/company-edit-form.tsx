@@ -3,9 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Field, Input } from '@/components/ui';
-import { updateCompanyProfileAction } from './actions';
 
-type Defaults = {
+export type CompanyEditDefaults = {
   ragioneSociale: string;
   codiceSdi: string | null;
   pec: string;
@@ -18,7 +17,26 @@ type Defaults = {
   iban: string | null;
 };
 
-export function CompanyEditForm({ defaults }: { defaults: Defaults }) {
+type UpdateResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Form modifica dati aziendali condiviso. Usato sia da:
+ *  - /profilo/azienda (admin azienda modifica la propria)
+ *  - /admin/companies/[id] (admin piattaforma/assistente modifica una qualsiasi)
+ *
+ * L'action e il path di "Annulla" sono parametrizzati.
+ */
+export function CompanyEditForm({
+  defaults,
+  action,
+  cancelHref,
+  successMessage = 'Profilo aziendale aggiornato.',
+}: {
+  defaults: CompanyEditDefaults;
+  action: (formData: FormData) => Promise<UpdateResult>;
+  cancelHref: string;
+  successMessage?: string;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -28,7 +46,7 @@ export function CompanyEditForm({ defaults }: { defaults: Defaults }) {
     setError(null);
     setSuccess(false);
     startTransition(async () => {
-      const res = await updateCompanyProfileAction(formData);
+      const res = await action(formData);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -90,7 +108,7 @@ export function CompanyEditForm({ defaults }: { defaults: Defaults }) {
       )}
       {success && (
         <p className="rounded-[10px] border border-pv-green-500/40 bg-pv-green-50 px-3 py-2 text-[13px] text-pv-green-500">
-          Profilo aziendale aggiornato.
+          {successMessage}
         </p>
       )}
 
@@ -101,7 +119,7 @@ export function CompanyEditForm({ defaults }: { defaults: Defaults }) {
         <Button
           type="button"
           variant="secondary"
-          onClick={() => router.push('/profilo')}
+          onClick={() => router.push(cancelHref)}
         >
           Annulla
         </Button>

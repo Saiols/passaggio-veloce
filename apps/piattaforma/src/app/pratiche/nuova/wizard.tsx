@@ -11,7 +11,7 @@ const STEPS = [
   { id: 3, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
 ] as const;
 
-type Tipo = 'TRAPASSO_NETTO' | 'MINIVOLTURA' | 'LOTTO_MASSIVO';
+type Tipo = 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
 
 type Ocr = {
   targa: string;
@@ -42,7 +42,13 @@ const emptyParte = (): Parte => ({
 
 export function WizardNuovaPratica({ error }: { error?: string }) {
   const [step, setStep] = useState(1);
-  const [tipo, setTipo] = useState<Tipo>('TRAPASSO_NETTO');
+  const [tipo, setTipo] = useState<Tipo>('PASSAGGIO_PRIVATO');
+  const [numeroVeicoli, setNumeroVeicoli] = useState<number>(1);
+
+  const handleTipoChange = (next: Tipo) => {
+    setTipo(next);
+    setNumeroVeicoli(next === 'PASSAGGIO_PRIVATO' ? 1 : 2);
+  };
   const librettoRef = useRef<File | null>(null);
   const [librettoName, setLibrettoName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -95,6 +101,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     const fd = new FormData();
     fd.append('libretto', librettoRef.current);
     fd.append('tipo', tipo);
+    fd.append('numeroVeicoli', String(numeroVeicoli));
     fd.append('targa', ocr.targa);
     fd.append('telaio', ocr.telaio);
     fd.append('proprietarioAttuale', ocr.proprietarioAttuale);
@@ -169,14 +176,35 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <Field label="Tipo pratica" required>
-                <Select value={tipo} onChange={(e) => setTipo(e.target.value as Tipo)}>
-                  <option value="TRAPASSO_NETTO">Trapasso netto</option>
-                  <option value="MINIVOLTURA">Minivoltura</option>
-                  <option value="LOTTO_MASSIVO" disabled>
-                    Lotto massivo (disponibile dopo)
+                <Select
+                  value={tipo}
+                  onChange={(e) => handleTipoChange(e.target.value as Tipo)}
+                >
+                  <option value="PASSAGGIO_PRIVATO">Passaggio di proprietà privato</option>
+                  <option value="MINIVOLTURE_MULTIPLE">
+                    Minivolture multiple (commercianti)
                   </option>
                 </Select>
               </Field>
+
+              {tipo === 'MINIVOLTURE_MULTIPLE' && (
+                <div className="mt-4">
+                  <Field label="Numero veicoli" required>
+                    <Input
+                      type="number"
+                      min={2}
+                      max={50}
+                      value={numeroVeicoli}
+                      onChange={(e) =>
+                        setNumeroVeicoli(Math.max(2, Number(e.target.value) || 2))
+                      }
+                    />
+                  </Field>
+                  <p className="mt-1 text-[12px] text-pv-slate-500">
+                    Le minivolture multiple richiedono almeno 2 veicoli.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
@@ -357,6 +385,9 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                   label="Acquirente"
                   value={parteNome(acquirente)}
                 />
+                {tipo === 'MINIVOLTURE_MULTIPLE' && (
+                  <RiepilogoRow label="Numero veicoli" value={String(numeroVeicoli)} />
+                )}
                 <RiepilogoRow label="Comune" value={comune || '—'} />
               </dl>
             </div>
@@ -464,8 +495,7 @@ function parteNome(p: Parte): string {
 }
 
 function labelTipo(t: Tipo): string {
-  if (t === 'TRAPASSO_NETTO') return 'Trapasso netto';
-  if (t === 'MINIVOLTURA') return 'Minivoltura';
-  if (t === 'LOTTO_MASSIVO') return 'Lotto massivo';
+  if (t === 'PASSAGGIO_PRIVATO') return 'Passaggio di proprietà privato';
+  if (t === 'MINIVOLTURE_MULTIPLE') return 'Minivolture multiple';
   return t;
 }

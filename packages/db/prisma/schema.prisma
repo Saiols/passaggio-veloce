@@ -271,6 +271,8 @@ model Company {
 
   // Commissioni affiliazione (questa company è referente di altri — FASE 13)
   commissioniGenerate CommissioneAffiliazione[] @relation("ReferenteCommissioni")
+  // Click tracking sul referralCode di questa company
+  referralClicks      ReferralClick[]           @relation("ReferralClicks")
 
   // Listini (agenzia)
   listini Listino[]
@@ -699,6 +701,32 @@ enum CommissioneAffiliazioneStato {
 // ============================================================
 // MODELS — affiliazione (scaffold FASE 13)
 // ============================================================
+
+model ReferralClick {
+  id String @id @default(uuid()) @db.Uuid
+
+  // FK al referente la cui Company.referralCode ha generato il click.
+  companyId String  @db.Uuid
+  company   Company @relation("ReferralClicks", fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// Snapshot del code (audit, anche se la company viene eliminata).
+  referralCode String
+
+  /// IP truncato (prime 3 ottetti per IPv4) per minimizzare i dati personali.
+  ip        String?
+  userAgent String?
+
+  /// UTM tracking (opzionale, dipende da come l'utente ha condiviso il link).
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([referralCode])
+  @@map("referral_clicks")
+}
 
 model CommissioneAffiliazione {
   id String @id @default(uuid()) @db.Uuid

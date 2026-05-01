@@ -27,7 +27,7 @@ export default async function AffiliazionePage() {
 
   const companyId = session.user.companyId!;
 
-  const [company, referrals, commissioni] = await Promise.all([
+  const [company, referrals, commissioni, clickCount] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: {
@@ -57,6 +57,7 @@ export default async function AffiliazionePage() {
       _sum: { importoNettoCent: true },
       _count: { _all: true },
     }),
+    prisma.referralClick.count({ where: { companyId } }),
   ]);
 
   if (!company) redirect('/profilo');
@@ -65,9 +66,11 @@ export default async function AffiliazionePage() {
   const numCommissioni = commissioni._count._all;
 
   // Base URL per il link di affiliazione: priorità env, fallback host attuale.
+  // Punta a /r/<code> (non /register?ref=) per fare pixel tracking del click
+  // prima del redirect al wizard.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const link = company.referralCode
-    ? `${appUrl}/register?ref=${company.referralCode}`
+    ? `${appUrl}/r/${company.referralCode}`
     : null;
 
   // QR code generato server-side come data URL (no dipendenza da servizi esterni).
@@ -96,7 +99,8 @@ export default async function AffiliazionePage() {
           </p>
         </header>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label="Click sul link" value={clickCount} accent="slate" />
           <StatCard label="Referral attivi" value={referrals.filter((r) => !r.suspendedAt).length} accent="navy" />
           <StatCard label="Commissioni accreditate" value={numCommissioni} accent="green" />
           <Card>

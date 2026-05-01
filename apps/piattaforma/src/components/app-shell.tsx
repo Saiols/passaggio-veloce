@@ -18,7 +18,7 @@ type NavLink = { href: string; label: string };
 
 function navForRole(role: string | undefined, companyType: string | undefined): NavLink[] {
   if (role === 'ADMIN_PIATTAFORMA' || role === 'ASSISTENTE') {
-    return [
+    const adminLinks: NavLink[] = [
       { href: '/dashboard', label: 'Dashboard' },
       { href: '/admin/pratiche', label: 'Pratiche' },
       { href: '/admin/broker', label: 'Broker' },
@@ -26,6 +26,10 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       { href: '/admin/utenti', label: 'Utenti' },
       { href: '/admin/escalation', label: 'Escalation' },
     ];
+    if (role === 'ADMIN_PIATTAFORMA') {
+      adminLinks.splice(1, 0, { href: '/admin/dashboard', label: 'Finanze' });
+    }
+    return adminLinks;
   }
   const links: NavLink[] =
     companyType === 'AGENZIA'

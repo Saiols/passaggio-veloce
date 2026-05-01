@@ -1,14 +1,32 @@
 import { auth } from '@/auth';
-import { prisma } from '@pv/db';
+import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, StatCard } from '@/components/ui';
 import { RANKING } from '@/lib/distribuzione';
+import { TextSearchFilter } from '@/components/text-search-filter';
 
-export default async function AdminAgenziePage() {
+type SearchParams = { q?: string };
+
+export default async function AdminAgenziePage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   const session = await auth();
+  const sp = await searchParams;
+  const q = sp.q?.trim();
+
+  const where: Prisma.CompanyWhereInput = { type: 'AGENZIA', deletedAt: null };
+  if (q) {
+    where.OR = [
+      { ragioneSociale: { contains: q, mode: 'insensitive' } },
+      { citta: { contains: q, mode: 'insensitive' } },
+      { provincia: { contains: q, mode: 'insensitive' } },
+    ];
+  }
 
   const agenzie = await prisma.company.findMany({
-    where: { type: 'AGENZIA', deletedAt: null },
+    where,
     orderBy: { ragioneSociale: 'asc' },
   });
 
@@ -92,6 +110,12 @@ export default async function AdminAgenziePage() {
             </Alert>
           </div>
         )}
+
+        <TextSearchFilter
+          action="/admin/agenzie"
+          q={q}
+          placeholder="Cerca per ragione sociale, città o provincia…"
+        />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           <table className="w-full text-[13px]">

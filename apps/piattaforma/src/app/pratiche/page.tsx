@@ -5,6 +5,7 @@ import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Button, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
+import { PraticheFilters } from './filters';
 
 const PAGE_SIZE = 15;
 
@@ -132,43 +133,13 @@ export default async function PratichePage({
           )}
         </header>
 
-        <form
-          action="/pratiche"
-          method="get"
-          className="mb-5 grid grid-cols-1 gap-3 rounded-[16px] border border-pv-slate-200 bg-white p-4 shadow-[var(--pv-shadow-card)] sm:grid-cols-[1fr_auto_auto_auto]"
-        >
-          <input
-            name="q"
-            defaultValue={q ?? ''}
-            placeholder="Cerca per codice, targa, proprietario…"
-            className="block w-full rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-[14px] py-2.5 text-sm font-medium text-pv-slate-900 placeholder:text-pv-slate-500 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
-          />
-          <select
-            name="stato"
-            defaultValue={sp.stato ?? ''}
-            className="rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-3 py-2.5 text-sm font-medium text-pv-slate-900 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
-          >
-            {STATI.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <select
-            name="periodo"
-            defaultValue={sp.periodo ?? ''}
-            className="rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-3 py-2.5 text-sm font-medium text-pv-slate-900 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
-          >
-            {PERIODI.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" size="sm">
-            Filtra
-          </Button>
-        </form>
+        <PraticheFilters
+          q={q}
+          stato={sp.stato}
+          periodo={sp.periodo}
+          stati={STATI}
+          periodi={PERIODI}
+        />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           {items.length === 0 ? (
@@ -197,31 +168,48 @@ export default async function PratichePage({
               </thead>
               <tbody className="divide-y divide-pv-slate-200">
                 {items.map((p) => (
-                  <tr key={p.id} className="transition-colors hover:bg-pv-slate-50">
+                  <tr
+                    key={p.id}
+                    className="relative cursor-pointer transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50"
+                  >
                     <td className="px-5 py-3 font-mono font-semibold text-pv-navy-800">
-                      <Link href={`/pratiche/${p.id}`} className="hover:underline">
-                        {p.codicePratica ?? 'BOZZA'}
+                      <Link
+                        href={`/pratiche/${p.id}`}
+                        className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+                      >
+                        <span className="sr-only">
+                          Apri pratica {p.codicePratica ?? 'in bozza'}
+                        </span>
                       </Link>
+                      <span className="relative z-10">{p.codicePratica ?? 'BOZZA'}</span>
                     </td>
                     <td className="px-5 py-3 font-semibold text-pv-slate-900">
-                      {p.targa ?? '—'}
+                      <span className="relative z-10">{p.targa ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 sm:table-cell">
-                      {p.proprietarioAttuale ?? '—'}
+                      <span className="relative z-10">{p.proprietarioAttuale ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
-                      {companyType === 'AGENZIA'
-                        ? p.broker.ragioneSociale
-                        : p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                      <span className="relative z-10">
+                        {companyType === 'AGENZIA'
+                          ? p.broker.ragioneSociale
+                          : p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                      </span>
                     </td>
                     <td className="px-5 py-3">
-                      <StatusChip stato={p.stato as PraticaStato} />
+                      <span className="relative z-10">
+                        <StatusChip stato={p.stato as PraticaStato} />
+                      </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 lg:table-cell">
-                      {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                      <span className="relative z-10">
+                        {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                      </span>
                     </td>
                     <td className="px-5 py-3 text-right text-pv-slate-500">
-                      {formatRelative(p.submittedAt ?? p.createdAt)}
+                      <span className="relative z-10">
+                        {formatRelative(p.submittedAt ?? p.createdAt)}
+                      </span>
                     </td>
                   </tr>
                 ))}

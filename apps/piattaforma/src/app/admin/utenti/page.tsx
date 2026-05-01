@@ -1,12 +1,32 @@
 import { auth } from '@/auth';
-import { prisma } from '@pv/db';
+import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { formatDate } from '@/lib/format';
+import { TextSearchFilter } from '@/components/text-search-filter';
 
-export default async function AdminUtentiPage() {
+type SearchParams = { q?: string };
+
+export default async function AdminUtentiPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   const session = await auth();
+  const sp = await searchParams;
+  const q = sp.q?.trim();
+
+  const where: Prisma.UserWhereInput = { deletedAt: null };
+  if (q) {
+    where.OR = [
+      { nome: { contains: q, mode: 'insensitive' } },
+      { cognome: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } },
+      { company: { ragioneSociale: { contains: q, mode: 'insensitive' } } },
+    ];
+  }
+
   const users = await prisma.user.findMany({
-    where: { deletedAt: null },
+    where,
     include: { company: { select: { ragioneSociale: true, type: true } } },
     orderBy: { createdAt: 'desc' },
     take: 100,
@@ -23,9 +43,16 @@ export default async function AdminUtentiPage() {
             Gestione utenti
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            {users.length} utenti attivi nel sistema.
+            {users.length} utent{users.length === 1 ? 'e' : 'i'}
+            {q ? ' (filtro attivo)' : ' nel sistema'}.
           </p>
         </header>
+
+        <TextSearchFilter
+          action="/admin/utenti"
+          q={q}
+          placeholder="Cerca per nome, email o azienda…"
+        />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           <table className="w-full text-[13px]">

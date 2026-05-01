@@ -329,7 +329,7 @@ export default async function PraticaDetailPage({
               <Timeline pratica={pratica} />
             </Card>
 
-            {pratica.assegnazioni.length > 0 && (
+            {pratica.assegnazioni.length > 0 && companyType !== 'AGENZIA' && (
               <Card>
                 <h2 className="text-[15px] font-bold text-pv-navy-800">Round distribuzione</h2>
                 <ul className="mt-3 space-y-2 text-[13px]">

@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { StatusChip, type PraticaStato } from '@/components/ui';
+import { Button, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
+import { acceptAndRedirect, rejectAndRedirect } from './actions';
 
 export default async function InboxPage() {
   const session = await auth();
@@ -75,20 +76,25 @@ export default async function InboxPage() {
             </div>
           ) : (
             <ul className="divide-y divide-pv-slate-200">
-              {pending.map((a) => (
-                <li key={a.id}>
-                  <Link
-                    href={`/inbox/${a.praticaId}`}
-                    className="flex flex-col gap-2 px-5 py-4 transition-colors hover:bg-pv-slate-50 sm:flex-row sm:items-center sm:gap-4"
+              {pending.map((a) => {
+                const acceptBound = acceptAndRedirect.bind(null, a.praticaId);
+                const rejectBound = rejectAndRedirect.bind(null, a.praticaId);
+                return (
+                  <li
+                    key={a.id}
+                    className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-pv-slate-50 sm:flex-row sm:items-center sm:gap-4"
                   >
-                    <div className="min-w-0 flex-1">
+                    <Link
+                      href={`/inbox/${a.praticaId}`}
+                      className="min-w-0 flex-1"
+                    >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
                           {a.pratica.codicePratica ?? '—'}
                         </span>
                         <StatusChip stato={a.pratica.stato as PraticaStato} />
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                          Round {a.round}
+                        <span className="text-[11px] text-pv-slate-500">
+                          {formatRelative(a.invioAt)}
                         </span>
                       </div>
                       <p className="mt-1 text-[14px] font-semibold text-pv-slate-900">
@@ -100,13 +106,22 @@ export default async function InboxPage() {
                         {a.pratica.comune ?? '—'}
                         {a.pratica.provincia ? ` (${a.pratica.provincia})` : ''}
                       </p>
+                    </Link>
+                    <div className="flex gap-2 sm:shrink-0">
+                      <form action={acceptBound}>
+                        <Button type="submit" size="sm">
+                          Accetta
+                        </Button>
+                      </form>
+                      <form action={rejectBound}>
+                        <Button type="submit" size="sm" variant="secondary">
+                          Rifiuta
+                        </Button>
+                      </form>
                     </div>
-                    <div className="text-right">
-                      <p className="text-[11px] text-pv-slate-500">{formatRelative(a.invioAt)}</p>
-                    </div>
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -129,7 +144,7 @@ export default async function InboxPage() {
                       {a.pratica.codicePratica ?? '—'} · {a.pratica.targa ?? '—'}
                     </p>
                     <p className="text-[11px] text-pv-slate-500">
-                      {a.pratica.broker.ragioneSociale} · R{a.round}
+                      {a.pratica.broker.ragioneSociale}
                     </p>
                   </div>
                   <div className="flex flex-col items-end">

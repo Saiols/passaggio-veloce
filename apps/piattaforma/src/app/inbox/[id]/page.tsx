@@ -58,7 +58,7 @@ export default async function InboxDetailPage({
 
         <header className="mb-6">
           <p className="font-mono text-[13px] font-semibold text-pv-slate-500">
-            {pratica.codicePratica ?? '—'} · Round {assegnazione.round}
+            {pratica.codicePratica ?? '—'}
           </p>
           <h1 className="mt-1 flex flex-wrap items-center gap-3 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
             <span>{pratica.targa ?? 'Pratica'}</span>
@@ -215,9 +215,8 @@ export default async function InboxDetailPage({
             </Card>
 
             <Card>
-              <h2 className="text-[15px] font-bold text-pv-navy-800">Distribuzione</h2>
+              <h2 className="text-[15px] font-bold text-pv-navy-800">Pratica</h2>
               <dl className="mt-3 space-y-2 text-[13px]">
-                <InfoRow label="Round" value={String(assegnazione.round)} />
                 <InfoRow label="Inviata" value={formatDateTime(assegnazione.invioAt)} />
               </dl>
             </Card>

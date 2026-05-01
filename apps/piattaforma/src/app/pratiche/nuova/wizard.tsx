@@ -1,9 +1,22 @@
 'use client';
 
-import { useState, useTransition, useRef } from 'react';
+import { useEffect, useState, useTransition, useRef } from 'react';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { extractLibrettoAction, submitNuovaPraticaAction } from './actions';
+
+/**
+ * Splitta una stringa "Nome Cognome" in due parti.
+ * Per nomi composti (es. "Maria Carla Bianchi") l'ultimo token è cognome.
+ * Se la stringa è una sola parola, la usiamo come cognome (caso edge).
+ */
+function splitNomeCompleto(full: string): { nome: string; cognome: string } {
+  const parts = full.trim().split(/\s+/);
+  if (parts.length <= 1) return { nome: '', cognome: parts[0] ?? '' };
+  const cognome = parts[parts.length - 1]!;
+  const nome = parts.slice(0, -1).join(' ');
+  return { nome, cognome };
+}
 
 const STEPS = [
   { id: 1, label: 'Tipo & libretto', title: 'Tipo pratica e libretto', hint: 'Scegli il tipo di pratica e carica il libretto di circolazione.' },
@@ -104,6 +117,20 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
+
+  // Q-10: pre-fill nome venditore da proprietarioAttuale del libretto. Solo
+  // se l'utente non ha ancora toccato i campi nome+cognome venditore (PF).
+  useEffect(() => {
+    if (!ocr?.proprietarioAttuale) return;
+    setVenditore((prev) => {
+      if (prev.isPG || prev.nome.trim() || prev.cognome.trim()) return prev;
+      const { nome, cognome } = splitNomeCompleto(ocr.proprietarioAttuale);
+      if (!nome && !cognome) return prev;
+      return { ...prev, nome, cognome };
+    });
+    // ocr è preso come deps ma il setter funzionale legge sempre lo state
+    // più fresco; il check prev.nome/cognome evita override se già modificato.
+  }, [ocr?.proprietarioAttuale]);
 
   const [submitting, startSubmit] = useTransition();
 
@@ -286,20 +313,35 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <Field label="Libretto di circolazione (PDF/JPG/PNG)" required>
-                <label className="flex cursor-pointer items-center justify-between gap-3 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] transition-colors hover:border-pv-navy-600">
+                <div className="flex flex-col gap-2 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
                   <span className="truncate text-pv-slate-700">
-                    {librettoName ?? 'Seleziona o trascina il file'}
+                    {librettoName ?? 'Seleziona file o scatta una foto del libretto'}
                   </span>
-                  <span className="shrink-0 rounded-[8px] bg-pv-navy-700 px-3 py-1.5 font-semibold text-white">
-                    {librettoName ? 'Cambia' : 'Sfoglia'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="application/pdf,image/jpeg,image/png"
-                    onChange={onFileSelected}
-                    className="sr-only"
-                  />
-                </label>
+                  <div className="flex shrink-0 gap-2">
+                    {/* Desktop / file picker classico (PDF/JPG/PNG) */}
+                    <label className="cursor-pointer rounded-[8px] bg-pv-navy-700 px-3 py-1.5 font-semibold text-white hover:bg-pv-navy-800">
+                      {librettoName ? 'Cambia' : 'Sfoglia'}
+                      <input
+                        type="file"
+                        accept="application/pdf,image/jpeg,image/png"
+                        onChange={onFileSelected}
+                        className="sr-only"
+                      />
+                    </label>
+                    {/* Q-11: scansione mobile — capture forza la fotocamera
+                        sui browser mobile, su desktop fa fallback al picker. */}
+                    <label className="cursor-pointer rounded-[8px] border border-pv-navy-700 bg-white px-3 py-1.5 font-semibold text-pv-navy-700 hover:bg-pv-slate-50">
+                      Scansiona
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png"
+                        capture="environment"
+                        onChange={onFileSelected}
+                        className="sr-only"
+                      />
+                    </label>
+                  </div>
+                </div>
               </Field>
 
               {extracting && (

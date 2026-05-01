@@ -7,6 +7,13 @@ import { PrismaPlugin } from '@prisma/nextjs-monorepo-workaround-plugin';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.join(__dirname, '../..'),
+  // Server Actions: il wizard pratica può inviare libretto + 6 doc per parte
+  // (max 10 MB ciascuno). Alziamo il limite del body per consentire upload multipli.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+  },
   // Plugin ufficiale Prisma per copiare il query engine nel bundle webpack su Vercel monorepo pnpm.
   // Solo lato server (le rotte API e i Server Component).
   webpack: (config, { isServer }) => {

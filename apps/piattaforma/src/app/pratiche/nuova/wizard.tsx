@@ -22,6 +22,17 @@ type Ocr = {
   flagComodatoDuso: boolean;
 };
 
+// Tipi documento caricabili per parte (sottoinsieme di DocumentoTipo lato DB).
+const DOC_TIPI = [
+  'CI_FRONTE',
+  'CI_RETRO',
+  'CODICE_FISCALE',
+  'PROCURA',
+  'VISURA_CAMERALE',
+  'PERMESSO_SOGGIORNO',
+] as const;
+type DocTipo = (typeof DOC_TIPI)[number];
+
 type Parte = {
   isPG: boolean;
   nome: string;
@@ -31,6 +42,7 @@ type Parte = {
   piva: string;
   telefono: string;
   email: string;
+  documenti: Partial<Record<DocTipo, File>>;
 };
 
 const emptyParte = (): Parte => ({
@@ -42,7 +54,32 @@ const emptyParte = (): Parte => ({
   piva: '',
   telefono: '',
   email: '',
+  documenti: {},
 });
+
+function labelDocTipo(t: DocTipo, isPG: boolean): string {
+  if (t === 'CI_FRONTE')
+    return isPG ? 'CI legale rappresentante (fronte)' : "Carta d'identità (fronte)";
+  if (t === 'CI_RETRO')
+    return isPG ? 'CI legale rappresentante (retro)' : "Carta d'identità (retro)";
+  if (t === 'CODICE_FISCALE') return 'Tessera codice fiscale';
+  if (t === 'PROCURA') return 'Procura';
+  if (t === 'VISURA_CAMERALE') return 'Visura camerale';
+  if (t === 'PERMESSO_SOGGIORNO') return 'Permesso di soggiorno';
+  return t;
+}
+
+const DOC_TIPI_FISICA: readonly DocTipo[] = [
+  'CI_FRONTE',
+  'CI_RETRO',
+  'CODICE_FISCALE',
+  'PROCURA',
+];
+const DOC_TIPI_GIURIDICA: readonly DocTipo[] = [
+  'VISURA_CAMERALE',
+  'CI_FRONTE',
+  'CI_RETRO',
+];
 
 export function WizardNuovaPratica({ error }: { error?: string }) {
   const [step, setStep] = useState(1);
@@ -136,6 +173,16 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     }
     fd.append('acquirenteTelefono', acquirente.telefono);
     fd.append('acquirenteEmail', acquirente.email);
+
+    // Documenti caricati per ciascuna parte (tutti opzionali)
+    for (const t of DOC_TIPI) {
+      const f = venditore.documenti[t];
+      if (f) fd.append(`venditore_${t}`, f);
+    }
+    for (const t of DOC_TIPI) {
+      const f = acquirente.documenti[t];
+      if (f) fd.append(`acquirente_${t}`, f);
+    }
 
     fd.append('flagCointestazione', flagCointestazione ? 'true' : 'false');
     fd.append('flagMinivoltura', flagMinivoltura ? 'true' : 'false');
@@ -517,6 +564,88 @@ function ParteForm({ parte, onChange }: { parte: Parte; onChange: (p: Parte) => 
           />
         </Field>
       </div>
+
+      <DocumentiUploader parte={parte} onChange={onChange} />
+    </div>
+  );
+}
+
+function DocumentiUploader({
+  parte,
+  onChange,
+}: {
+  parte: Parte;
+  onChange: (p: Parte) => void;
+}) {
+  const tipi = parte.isPG ? DOC_TIPI_GIURIDICA : DOC_TIPI_FISICA;
+
+  const handleFile = (tipo: DocTipo, file: File | null) => {
+    const next = { ...parte.documenti };
+    if (file) next[tipo] = file;
+    else delete next[tipo];
+    onChange({ ...parte, documenti: next });
+  };
+
+  return (
+    <div className="mt-5 rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4">
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+        Documenti (opzionali)
+      </p>
+      <p className="mb-3 text-[12px] text-pv-slate-500">
+        PDF / JPG / PNG · max 10 MB per file. Vengono salvati e restano scaricabili
+        in ogni momento dal dettaglio pratica.
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {tipi.map((t) => (
+          <DocFileInput
+            key={t}
+            label={labelDocTipo(t, parte.isPG)}
+            file={parte.documenti[t] ?? null}
+            onChange={(f) => handleFile(t, f)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DocFileInput({
+  label,
+  file,
+  onChange,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[12px] font-semibold text-pv-slate-700">
+        {label}
+      </label>
+      <label className="mt-1 flex cursor-pointer items-center justify-between gap-2 rounded-[8px] border-[1.5px] border-dashed border-pv-slate-300 bg-white px-3 py-2 text-[12px] hover:border-pv-navy-600">
+        <span className="truncate text-pv-slate-700">
+          {file ? file.name : 'Seleziona file'}
+        </span>
+        <span className="shrink-0 text-[11px] font-semibold text-pv-navy-600">
+          {file ? 'Cambia' : 'Sfoglia'}
+        </span>
+        <input
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+          className="sr-only"
+        />
+      </label>
+      {file && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="mt-1 text-[11px] text-pv-slate-500 hover:text-pv-red-500 hover:underline"
+        >
+          Rimuovi
+        </button>
+      )}
     </div>
   );
 }

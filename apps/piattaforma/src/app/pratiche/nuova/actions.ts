@@ -260,6 +260,47 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     },
   });
 
+  // Documenti aggiuntivi per parte (D-06): CI, CF, procura, visura, permesso.
+  // Tutti opzionali. Salviamo file su storage + record Documento con owner.
+  const DOC_TIPI_PARTE = [
+    'CI_FRONTE',
+    'CI_RETRO',
+    'CODICE_FISCALE',
+    'PROCURA',
+    'VISURA_CAMERALE',
+    'PERMESSO_SOGGIORNO',
+  ] as const;
+  for (const owner of ['venditore', 'acquirente'] as const) {
+    for (const docTipo of DOC_TIPI_PARTE) {
+      const f = formData.get(`${owner}_${docTipo}`);
+      if (!(f instanceof File) || f.size === 0) continue;
+      if (f.size > MAX_LIBRETTO_BYTES) continue; // skip silently se troppo grande
+      if (!ACCEPTED_MIME.includes(f.type)) continue;
+      const buf = await bufferFromFile(f);
+      const partyPut = await storage.put({
+        scope: `pratica/${pratica.id}`,
+        buffer: buf,
+        originalFilename: f.name,
+        mimeType: f.type,
+      });
+      await prisma.documento.create({
+        data: {
+          tipo: docTipo,
+          owner: owner === 'venditore' ? 'VENDITORE' : 'ACQUIRENTE',
+          praticaId: pratica.id,
+          storageKey: partyPut.storageKey,
+          storageProvider: partyPut.storageProvider,
+          mimeType: partyPut.mimeType,
+          sizeBytes: partyPut.sizeBytes,
+          originalFilename: partyPut.originalFilename,
+          uploadedById: userId,
+          ocrStato: 'NONE',
+          gatingStato: 'NONE',
+        },
+      });
+    }
+  }
+
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');
   redirect(`/pratiche/${pratica.id}`);

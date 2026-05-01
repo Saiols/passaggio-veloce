@@ -9,6 +9,7 @@ import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
+import { computeFees } from '@/lib/pricing';
 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -58,7 +59,8 @@ const formBool = z.preprocess(
 );
 
 const submitSchema = z.object({
-  tipo: z.enum(['TRAPASSO_NETTO', 'MINIVOLTURA', 'LOTTO_MASSIVO']),
+  tipo: z.enum(['PASSAGGIO_PRIVATO', 'MINIVOLTURE_MULTIPLE']),
+  numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),
 
   // Dati veicolo (OCR + correzioni)
   targa: z.string().trim().min(5).max(10),
@@ -131,9 +133,18 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
   }
 
-  // Fee plausibile in base al tipo (placeholder — Fase 5 Stripe farà la logica vera)
-  const feeAgenziaCent = d.tipo === 'MINIVOLTURA' ? 9500 : 12000;
-  const creditoBrokerCent = d.tipo === 'TRAPASSO_NETTO' ? 2500 : 0;
+  // Validation business rule sul numeroVeicoli
+  if (d.tipo === 'PASSAGGIO_PRIVATO' && d.numeroVeicoli !== 1) {
+    redirect('/pratiche/nuova?error=Passaggio%20privato%20richiede%201%20veicolo');
+  }
+  if (d.tipo === 'MINIVOLTURE_MULTIPLE' && d.numeroVeicoli < 2) {
+    redirect('/pratiche/nuova?error=Minivolture%20multiple%20richiedono%20almeno%202%20veicoli');
+  }
+
+  // Pricing derivato dal tipo + numero veicoli (engine in lib/pricing.ts).
+  const fees = computeFees({ tipo: d.tipo, numeroVeicoli: d.numeroVeicoli });
+  const feeAgenziaCent = fees.feeAgenziaCent;
+  const creditoBrokerCent = fees.creditoBrokerCent;
 
   const codicePratica = await nextCodicePratica();
   const now = new Date();
@@ -144,6 +155,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     data: {
       codicePratica,
       tipo: d.tipo,
+      numeroVeicoli: d.numeroVeicoli,
       stato: 'BOZZA',
       targa: d.targa.toUpperCase(),
       telaio: d.telaio.toUpperCase(),

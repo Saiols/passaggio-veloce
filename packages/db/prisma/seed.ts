@@ -215,7 +215,7 @@ async function main() {
 
   type PraticaSeed = {
     codicePratica: string;
-    tipo: 'TRAPASSO_NETTO' | 'MINIVOLTURA';
+    tipo: 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
     stato:
       | 'BOZZA'
       | 'IN_ATTESA_ROUND_1'
@@ -240,7 +240,7 @@ async function main() {
   const praticheSeed: PraticaSeed[] = [
     {
       codicePratica: 'PV-2026-00001',
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'FIRMATA',
       brokerId: dealer1.id,
       agenziaAssegnataId: agenziaVE.id,
@@ -262,7 +262,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00002',
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'ACCETTATA',
       brokerId: dealer1.id,
       agenziaAssegnataId: agenziaPD.id,
@@ -282,7 +282,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00003',
-      tipo: 'MINIVOLTURA',
+      tipo: 'MINIVOLTURE_MULTIPLE',
       stato: 'IN_ATTESA_ROUND_1',
       brokerId: dealer2.id,
       comune: 'Padova',
@@ -301,7 +301,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00004',
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'IN_ESCALATION',
       brokerId: dealer2.id,
       comune: 'Treviso',
@@ -320,7 +320,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00005',
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'FIRMATA',
       brokerId: dealer2.id,
       agenziaAssegnataId: agenziaTV.id,
@@ -339,7 +339,7 @@ async function main() {
     // BOZZA — broker la sta ancora compilando
     {
       codicePratica: 'PV-2026-DRAFT',
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'BOZZA',
       brokerId: dealer1.id,
       comune: 'Venezia',
@@ -895,7 +895,7 @@ async function main() {
     if (!exists) {
       await prisma.pratica.create({
         data: {
-          tipo: 'TRAPASSO_NETTO',
+          tipo: 'PASSAGGIO_PRIVATO',
           stato: 'BOZZA',
           brokerId: broker.id,
           comune: luogo.comune,
@@ -926,7 +926,7 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: i % 2 === 0 ? 'TRAPASSO_NETTO' : 'MINIVOLTURA',
+      tipo: i % 2 === 0 ? 'PASSAGGIO_PRIVATO' : 'MINIVOLTURE_MULTIPLE',
       stato: 'IN_ATTESA_ROUND_1',
       brokerId: broker.id,
       comune: luogo.comune,
@@ -980,7 +980,7 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'IN_ATTESA_ROUND_2',
       brokerId: broker.id,
       comune: luogo.comune,
@@ -1055,7 +1055,7 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'IN_ATTESA_ROUND_3',
       brokerId: broker.id,
       comune: 'Vicenza',
@@ -1151,7 +1151,7 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: i % 2 === 0 ? 'TRAPASSO_NETTO' : 'MINIVOLTURA',
+      tipo: i % 2 === 0 ? 'PASSAGGIO_PRIVATO' : 'MINIVOLTURE_MULTIPLE',
       stato: 'ACCETTATA',
       brokerId: broker.id,
       agenziaAssegnataId: agenzia.id,
@@ -1208,7 +1208,7 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: i % 3 === 0 ? 'MINIVOLTURA' : 'TRAPASSO_NETTO',
+      tipo: i % 3 === 0 ? 'MINIVOLTURE_MULTIPLE' : 'PASSAGGIO_PRIVATO',
       stato: 'FIRMATA',
       brokerId: broker.id,
       agenziaAssegnataId: agenzia.id,
@@ -1286,7 +1286,7 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'IN_ESCALATION',
       brokerId: broker.id,
       comune: luogo.comune,
@@ -1383,7 +1383,7 @@ async function main() {
 
     await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'TRAPASSO_NETTO',
+      tipo: 'PASSAGGIO_PRIVATO',
       stato: 'ANNULLATA',
       brokerId: broker.id,
       comune: luogo.comune,
@@ -1638,7 +1638,7 @@ async function main() {
       await prisma.pratica.create({
         data: {
           codicePratica: codice,
-          tipo: i % 3 === 0 ? 'MINIVOLTURA' : 'TRAPASSO_NETTO',
+          tipo: i % 3 === 0 ? 'MINIVOLTURE_MULTIPLE' : 'PASSAGGIO_PRIVATO',
           stato: 'FIRMATA',
           brokerId: demoDealerForVal.id,
           agenziaAssegnataId: agenziaForVal.id,
@@ -1689,7 +1689,7 @@ async function main() {
         await prisma.pratica.create({
           data: {
             codicePratica: codice,
-            tipo: i % 2 === 0 ? 'TRAPASSO_NETTO' : 'MINIVOLTURA',
+            tipo: i % 2 === 0 ? 'PASSAGGIO_PRIVATO' : 'MINIVOLTURE_MULTIPLE',
             stato: 'FIRMATA',
             brokerId: demoDealerComp.id,
             agenziaAssegnataId: comp.id,
@@ -1729,7 +1729,7 @@ async function main() {
       await prisma.pratica.create({
         data: {
           codicePratica: codice,
-          tipo: 'TRAPASSO_NETTO',
+          tipo: 'PASSAGGIO_PRIVATO',
           stato: 'FIRMATA',
           brokerId: demoDealerComp.id,
           agenziaAssegnataId: veronaTrapassiComp.id,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -32,6 +33,8 @@ const STEPS = [
 ] as const;
 
 export function RegisterWizard() {
+  const searchParams = useSearchParams();
+  const referralCode = searchParams.get('ref') ?? undefined;
   const [step, setStep] = useState(1);
   const [data, setData] = useState<WizardData>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -64,6 +67,7 @@ export function RegisterWizard() {
         account: data.account!,
         company: data.company!,
         payment: values,
+        referralCode,
       });
 
       if (result.ok) {

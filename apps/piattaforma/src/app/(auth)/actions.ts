@@ -66,8 +66,15 @@ export type RegisterActionResult =
   | { ok: true; emailVerificationToken: string }
   | { ok: false; error: string; field?: string };
 
+// FASE 13 affiliazione: codice referral 8 char alfanumerico minuscolo,
+// generato on-register. Unique constraint sullo schema; in caso di collisione
+// (probabilità ~1/2.8e12) ritentiamo.
+function generateReferralCode(): string {
+  return Math.random().toString(36).slice(2, 10).padEnd(8, '0');
+}
+
 export async function registerAction(
-  input: RegisterFullInput,
+  input: RegisterFullInput & { referralCode?: string },
 ): Promise<RegisterActionResult> {
   const parsed = registerFullSchema.safeParse(input);
   if (!parsed.success) {
@@ -80,6 +87,19 @@ export async function registerAction(
   }
 
   const { account, company, payment } = parsed.data;
+  const refCodeInput = input.referralCode?.trim().toLowerCase();
+
+  // Lookup referente (silente: se codice invalido, registrazione procede senza)
+  let referenteId: string | null = null;
+  if (refCodeInput) {
+    const referente = await prisma.company.findUnique({
+      where: { referralCode: refCodeInput },
+      select: { id: true, deletedAt: true, suspendedAt: true },
+    });
+    if (referente && !referente.deletedAt && !referente.suspendedAt) {
+      referenteId = referente.id;
+    }
+  }
 
   const emailLower = account.email.toLowerCase();
 
@@ -104,6 +124,17 @@ export async function registerAction(
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Genera codice referral con retry su collisione (rarissima ma possibile).
+      let referralCode = generateReferralCode();
+      for (let i = 0; i < 5; i++) {
+        const collision = await tx.company.findUnique({
+          where: { referralCode },
+          select: { id: true },
+        });
+        if (!collision) break;
+        referralCode = generateReferralCode();
+      }
+
       const createdCompany = await tx.company.create({
         data: {
           type: company.type,
@@ -121,6 +152,8 @@ export async function registerAction(
           sepaMandateAccepted: true,
           sepaMandateAcceptedAt: new Date(),
           termsAcceptedAt: new Date(),
+          referralCode,
+          referenteId,
         },
       });
 

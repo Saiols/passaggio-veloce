@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification } from '@/lib/notifiche';
+import { accreditCommissioniAffiliazione } from '@/lib/affiliazione/accredit';
 import { env } from '@/env';
 
 const AUTO_ADDEBITO_DAYS = 20;
@@ -28,7 +29,25 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
 
   try {
     await prisma.$transaction(async (tx) => {
-      const pratica = await tx.pratica.findUnique({ where: { id: praticaId } });
+      const pratica = await tx.pratica.findUnique({
+        where: { id: praticaId },
+        include: {
+          broker: {
+            include: {
+              referente: {
+                select: { id: true, suspendedAt: true, deletedAt: true },
+              },
+            },
+          },
+          agenziaAssegnata: {
+            include: {
+              referente: {
+                select: { id: true, suspendedAt: true, deletedAt: true },
+              },
+            },
+          },
+        },
+      });
       if (!pratica) throw new Error('Pratica non trovata');
       if (pratica.agenziaAssegnataId !== agenziaId) {
         throw new Error('Pratica non assegnata a questa agenzia');
@@ -49,7 +68,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         },
       });
 
-      // Credito wallet broker
+      // Credito wallet broker (proventi pratica)
       if (pratica.creditoBrokerCent > 0) {
         const wallet = await tx.wallet.upsert({
           where: { companyId: pratica.brokerId },
@@ -87,6 +106,18 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           },
         });
       }
+
+      // FASE 13: commissioni affiliazione ai referenti di broker e/o agenzia
+      // (skip se referente sospeso o eliminato).
+      await accreditCommissioniAffiliazione(tx, {
+        praticaId: pratica.id,
+        tipo: pratica.tipo as 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE',
+        numeroVeicoli: pratica.numeroVeicoli,
+        brokerId: pratica.brokerId,
+        agenziaAssegnataId: pratica.agenziaAssegnataId,
+        brokerReferente: pratica.broker.referente,
+        agenziaReferente: pratica.agenziaAssegnata?.referente ?? null,
+      });
     });
   } catch (err) {
     redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);

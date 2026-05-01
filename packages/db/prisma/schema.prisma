@@ -134,6 +134,7 @@ enum GiornoSettimana {
 
 enum TransazioneWalletTipo {
   CREDITO_PRATICA
+  CREDITO_AFFILIAZIONE
   PAYOUT_AUTOMATICO
   PAYOUT_MANUALE
   RETTIFICA_ADMIN
@@ -230,6 +231,16 @@ model Company {
   // F-01: sospensione temporanea (riattivabile). Diversa da deletedAt (totale).
   // null = ACTIVE; valorizzato = SUSPENDED.
   suspendedAt DateTime?
+
+  // FASE 13 affiliazione: chi ha portato questa Company in piattaforma.
+  // null = iscritto diretto. Auto-relazione (può puntare a broker o agenzia).
+  referenteId String?  @db.Uuid
+  referente   Company? @relation("Referrals", fields: [referenteId], references: [id])
+  referrals   Company[] @relation("Referrals")
+
+  // Codice referral univoco da inserire nel link di iscrizione.
+  // Nullable durante backfill, dopo migration tutti i record avranno valore.
+  referralCode String? @unique
 
   users       User[]
   invitations Invitation[]

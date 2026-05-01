@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { InviteForm } from './invite-form';
+import { CreateUserForm } from './create-user-form';
 import { RevokeButton } from './revoke-button';
 import { formatRelative } from '@/lib/format';
 
@@ -44,9 +45,21 @@ export default async function TeamPage() {
         </header>
 
         <section className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
-          <h2 className="text-base font-bold text-pv-navy-900">Invita un utente</h2>
-          <InviteForm />
+          <h2 className="text-base font-bold text-pv-navy-900">Crea account utente</h2>
+          <p className="mt-1 text-[12.5px] text-pv-slate-500">
+            Imposti tu email e password. Comunichi le credenziali al
+            dipendente fuori piattaforma. L&apos;utente è attivo da subito.
+          </p>
+          <CreateUserForm />
         </section>
+
+        <details className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
+          <summary className="cursor-pointer text-[13px] font-semibold text-pv-slate-700">
+            In alternativa: invia un invito via email (l&apos;utente imposta la
+            password)
+          </summary>
+          <InviteForm />
+        </details>
 
         <section className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
           <h2 className="text-base font-bold text-pv-navy-900">Utenti attivi</h2>

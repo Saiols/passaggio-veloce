@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -39,7 +40,8 @@ export default async function ProfiloPage() {
             Profilo
           </h1>
           <p className="mt-1 text-[14px] text-pv-slate-500">
-            Dati di visualizzazione. La modifica sarà attivata nelle prossime fasi.
+            Dati personali e aziendali. L&apos;admin azienda può modificare i
+            dati dell&apos;azienda dalla sezione dedicata.
           </p>
         </header>
 
@@ -63,9 +65,19 @@ export default async function ProfiloPage() {
 
           {company ? (
             <Card>
-              <h2 className="text-[15px] font-bold text-pv-navy-800">
-                Azienda · {labelCompanyType(company.type)}
-              </h2>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-[15px] font-bold text-pv-navy-800">
+                  Azienda · {labelCompanyType(company.type)}
+                </h2>
+                {user.role === 'ADMIN_AZIENDA' && (
+                  <Link
+                    href="/profilo/azienda"
+                    className="rounded-[8px] border border-pv-slate-300 bg-white px-3 py-1 text-[12px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                  >
+                    Modifica
+                  </Link>
+                )}
+              </div>
               <dl className="mt-4 space-y-3 text-[13px]">
                 <InfoRow label="Ragione sociale" value={company.ragioneSociale} />
                 <InfoRow label="Partita IVA" value={company.partitaIva} mono />

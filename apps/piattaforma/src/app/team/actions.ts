@@ -136,6 +136,62 @@ export async function acceptInvitationAction(
   return { ok: true };
 }
 
+export type CreateUserResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Crea direttamente un User aziendale con password impostata dall'admin
+ * (decisione D-01 Opzione A: l'admin azienda gestisce le credenziali e le
+ * comunica al dipendente fuori piattaforma). Niente token email, niente reset
+ * link. L'utente è ACTIVE da subito.
+ */
+export async function createUserDirectAction(
+  email: string,
+  nome: string,
+  cognome: string,
+  password: string,
+): Promise<CreateUserResult> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'ADMIN_AZIENDA') {
+    return { ok: false, error: "Solo l'admin azienda può creare account utente" };
+  }
+  const companyId = session.user.companyId!;
+
+  const emailLower = email.toLowerCase().trim();
+  if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
+    return { ok: false, error: 'Email non valida' };
+  }
+  if (!nome.trim() || !cognome.trim()) {
+    return { ok: false, error: 'Nome e cognome obbligatori' };
+  }
+  if (!password || password.length < 8) {
+    return { ok: false, error: 'Password troppo corta (min 8 caratteri)' };
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+    return { ok: false, error: 'Password deve contenere maiuscola, minuscola e numero' };
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email: emailLower } });
+  if (existing) return { ok: false, error: 'Esiste già un utente con questa email' };
+
+  const passwordHash = await hashPassword(password);
+  await prisma.user.create({
+    data: {
+      email: emailLower,
+      passwordHash,
+      nome: nome.trim(),
+      cognome: cognome.trim(),
+      role: 'UTENTE_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+      companyId,
+    },
+  });
+
+  revalidatePath('/team');
+  return { ok: true };
+}
+
 export async function revokeInvitationAction(invitationId: string): Promise<void> {
   const session = await auth();
   if (!session?.user) redirect('/login');

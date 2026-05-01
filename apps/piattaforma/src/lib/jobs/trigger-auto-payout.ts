@@ -1,13 +1,12 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-
-const AUTO_PAYOUT_THRESHOLD_CENT = 100_000;
+import { WALLET } from '@/lib/wallet/config';
 
 export type TriggerAutoPayoutResult = { created: number };
 
 export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
   const wallets = await prisma.wallet.findMany({
-    where: { saldoCent: { gte: AUTO_PAYOUT_THRESHOLD_CENT } },
+    where: { saldoCent: { gte: WALLET.AUTO_PAYOUT_THRESHOLD_CENT } },
     select: { id: true, saldoCent: true },
   });
 

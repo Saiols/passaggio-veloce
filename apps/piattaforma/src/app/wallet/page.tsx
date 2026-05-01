@@ -5,19 +5,25 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
+import { WALLET } from '@/lib/wallet/config';
 
-const THRESHOLD_PAYOUT_AUTO_CENT = 100_000; // 1.000 €
-const THRESHOLD_PAYOUT_MIN_CENT = 50_000; // 500 €
+const THRESHOLD_PAYOUT_AUTO_CENT = WALLET.AUTO_PAYOUT_THRESHOLD_CENT;
+const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
 
 export default async function WalletPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
 
-  if (session.user.companyType !== 'DEALER') {
+  if (
+    session.user.companyType !== 'DEALER' &&
+    session.user.companyType !== 'AGENZIA'
+  ) {
     return (
       <AppShell session={session} activePath="/wallet">
         <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
-          <Alert variant="info">Il wallet è disponibile solo per i broker.</Alert>
+          <Alert variant="info">
+            Il wallet è disponibile per broker e agenzie.
+          </Alert>
         </div>
       </AppShell>
     );

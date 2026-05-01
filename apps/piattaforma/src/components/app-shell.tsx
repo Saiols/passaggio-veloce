@@ -17,10 +17,11 @@ export type AppShellSession = {
 type NavLink = { href: string; label: string };
 
 function navForRole(role: string | undefined, companyType: string | undefined): NavLink[] {
-  if (role === 'ADMIN_PIATTAFORMA') {
+  if (role === 'ADMIN_PIATTAFORMA' || role === 'ASSISTENTE') {
     return [
       { href: '/dashboard', label: 'Dashboard' },
       { href: '/admin/pratiche', label: 'Pratiche' },
+      { href: '/admin/broker', label: 'Broker' },
       { href: '/admin/agenzie', label: 'Agenzie' },
       { href: '/admin/utenti', label: 'Utenti' },
       { href: '/admin/escalation', label: 'Escalation' },

@@ -3,6 +3,7 @@ import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { formatDate } from '@/lib/format';
 import { TextSearchFilter } from '@/components/text-search-filter';
+import { SuspendButton } from '../suspend-button';
 
 type SearchParams = { q?: string };
 
@@ -64,6 +65,7 @@ export default async function AdminUtentiPage({
                 <th className="px-5 py-3">Ruolo</th>
                 <th className="px-5 py-3">Stato</th>
                 <th className="px-5 py-3 hidden lg:table-cell">Ultimo accesso</th>
+                <th className="px-5 py-3 text-right">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-pv-slate-200">
@@ -103,6 +105,14 @@ export default async function AdminUtentiPage({
                   </td>
                   <td className="px-5 py-3 hidden text-pv-slate-500 lg:table-cell">
                     {formatDate(u.lastLoginAt)}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    {u.role !== 'ADMIN_PIATTAFORMA' && (
+                      <SuspendButton
+                        target={{ kind: 'user', id: u.id }}
+                        suspended={u.status === 'SUSPENDED'}
+                      />
+                    )}
                   </td>
                 </tr>
               ))}

@@ -4,6 +4,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, StatCard } from '@/components/ui';
 import { RANKING } from '@/lib/distribuzione';
 import { TextSearchFilter } from '@/components/text-search-filter';
+import { SuspendButton } from '../suspend-button';
 
 type SearchParams = { q?: string };
 
@@ -126,6 +127,7 @@ export default async function AdminAgenziePage({
                 <th className="px-5 py-3">Rating</th>
                 <th className="px-5 py-3 hidden sm:table-cell">Valutazioni</th>
                 <th className="px-5 py-3">Stato</th>
+                <th className="px-5 py-3 text-right">Azioni</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-pv-slate-200">
@@ -133,6 +135,11 @@ export default async function AdminAgenziePage({
                 <tr key={r.id} className="transition-colors hover:bg-pv-slate-50">
                   <td className="px-5 py-3 font-semibold text-pv-navy-800">
                     {r.ragioneSociale}
+                    {r.suspendedAt && (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
+                        Sospesa admin
+                      </span>
+                    )}
                     <p className="text-[11px] font-normal text-pv-slate-500">
                       {r.citta}
                     </p>
@@ -155,6 +162,12 @@ export default async function AdminAgenziePage({
                   </td>
                   <td className="px-5 py-3">
                     <StatoChip stato={r.stato} />
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <SuspendButton
+                      target={{ kind: 'company', id: r.id }}
+                      suspended={r.suspendedAt !== null}
+                    />
                   </td>
                 </tr>
               ))}

@@ -227,6 +227,10 @@ model Company {
 
   termsAcceptedAt DateTime?
 
+  // F-01: sospensione temporanea (riattivabile). Diversa da deletedAt (totale).
+  // null = ACTIVE; valorizzato = SUSPENDED.
+  suspendedAt DateTime?
+
   users       User[]
   invitations Invitation[]
 

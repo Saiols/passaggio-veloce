@@ -51,9 +51,8 @@ enum VerificationTokenType {
 // ============================================================
 
 enum PraticaTipo {
-  TRAPASSO_NETTO
-  MINIVOLTURA
-  LOTTO_MASSIVO
+  PASSAGGIO_PRIVATO
+  MINIVOLTURE_MULTIPLE
 }
 
 enum PraticaStato {
@@ -253,6 +252,9 @@ model Company {
   valutazioniRicevute Valutazione[] @relation("ValutazioniAgenzia")
   valutazioniFatte    Valutazione[] @relation("ValutazioniDealer")
 
+  // Commissioni affiliazione (questa company è referente di altri — FASE 13)
+  commissioniGenerate CommissioneAffiliazione[] @relation("ReferenteCommissioni")
+
   // Listini (agenzia)
   listini Listino[]
 
@@ -354,6 +356,9 @@ model Pratica {
   tipo  PraticaTipo
   stato PraticaStato @default(BOZZA)
 
+  // Numero veicoli: 1 per PASSAGGIO_PRIVATO, ≥ 2 per MINIVOLTURE_MULTIPLE.
+  numeroVeicoli Int @default(1)
+
   // Dati veicolo (da OCR libretto, correggibili manualmente)
   targa                String?
   telaio               String?
@@ -415,11 +420,12 @@ model Pratica {
   annullataAt     DateTime?
 
   // Relations
-  documenti    Documento[]
-  assegnazioni PraticaAssegnazione[]
-  transazioni  TransazioneWallet[]
-  feeAddebiti  FeeAddebito[]
-  valutazione  Valutazione?
+  documenti               Documento[]
+  assegnazioni            PraticaAssegnazione[]
+  transazioni             TransazioneWallet[]
+  feeAddebiti             FeeAddebito[]
+  valutazione             Valutazione?
+  commissioniAffiliazione CommissioneAffiliazione[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -590,6 +596,9 @@ model TransazioneWallet {
   payoutId String? @db.Uuid
   payout   Payout? @relation(fields: [payoutId], references: [id])
 
+  // Eventuale commissione affiliazione associata (FASE 13)
+  commissioneAffiliazione CommissioneAffiliazione?
+
   note String?
 
   createdAt DateTime @default(now())
@@ -649,6 +658,59 @@ model FeeAddebito {
   @@index([praticaId])
   @@index([scheduledAt])
   @@map("fee_addebiti")
+}
+
+// ============================================================
+// ENUMS — affiliazione (scaffold FASE 13)
+// ============================================================
+
+enum CommissioneAffiliazioneTipo {
+  REFERENTE_BROKER
+  REFERENTE_AGENZIA
+}
+
+enum CommissioneAffiliazioneStato {
+  MATURATA
+  ACCREDITATA
+  ANNULLATA
+}
+
+// ============================================================
+// MODELS — affiliazione (scaffold FASE 13)
+// ============================================================
+
+model CommissioneAffiliazione {
+  id String @id @default(uuid()) @db.Uuid
+
+  praticaId String  @db.Uuid
+  pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  // Chi riceve la commissione (Company referente)
+  referenteId String  @db.Uuid
+  referente   Company @relation("ReferenteCommissioni", fields: [referenteId], references: [id])
+
+  tipo  CommissioneAffiliazioneTipo
+  stato CommissioneAffiliazioneStato @default(MATURATA)
+
+  // In centesimi: importoLordo = nostra spesa per quel referente,
+  // importoNetto = quanto effettivamente accreditato.
+  // Modello §1.2: invariante tra 1 e 2 referenti (in 2 referenti dimezziamo a testa).
+  importoLordoCent Int
+  importoNettoCent Int
+
+  // Cap durata commissione (decisione D-04): null = sempre, valorizzato = scade.
+  expiresAt DateTime?
+
+  // Riferimento alla transazione wallet di accredito (popolato quando stato = ACCREDITATA).
+  transazioneWalletId String?            @unique @db.Uuid
+  transazioneWallet   TransazioneWallet? @relation(fields: [transazioneWalletId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([praticaId])
+  @@index([referenteId, stato])
+  @@map("commissioni_affiliazione")
 }
 
 // ============================================================

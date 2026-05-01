@@ -70,7 +70,7 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
             href="/inbox"
             className="text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
           >
-            Vai all'Inbox →
+            Vai all&apos;Inbox →
           </Link>
         </header>
         {assegnazioniRecenti.length === 0 ? (

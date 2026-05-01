@@ -32,13 +32,11 @@ export function SuspendButton({
 
     startTransition(async () => {
       if (target.kind === 'user') {
-        suspended
-          ? await reactivateUserAction(target.id)
-          : await suspendUserAction(target.id);
+        if (suspended) await reactivateUserAction(target.id);
+        else await suspendUserAction(target.id);
       } else {
-        suspended
-          ? await reactivateCompanyAction(target.id)
-          : await suspendCompanyAction(target.id);
+        if (suspended) await reactivateCompanyAction(target.id);
+        else await suspendCompanyAction(target.id);
       }
     });
   };

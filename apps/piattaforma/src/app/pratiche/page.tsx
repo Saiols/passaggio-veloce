@@ -58,7 +58,7 @@ export default async function PratichePage({
     return (
       <AppShell session={session} activePath="/pratiche">
         <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
-          <p className="text-pv-slate-500">Account non associato a un'azienda.</p>
+          <p className="text-pv-slate-500">Account non associato a un&apos;azienda.</p>
         </div>
       </AppShell>
     );

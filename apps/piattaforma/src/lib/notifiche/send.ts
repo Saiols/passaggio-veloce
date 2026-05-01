@@ -5,6 +5,7 @@ import { getEmail } from '@/lib/providers/email';
 import {
   tplN10AdminEscalation,
   tplN11BrokerEscalation,
+  tplN12AffiliazioneCommissione,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -14,6 +15,7 @@ import {
   tplN8AgenziaAddebito,
   type N10AdminEscalationPayload,
   type N11BrokerEscalationPayload,
+  type N12AffiliazioneCommissionePayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -39,7 +41,12 @@ type SendInput =
   | { tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN'; target: Target; payload: N7AgenziaPromemoriaCountdownPayload }
   | { tipo: 'N8_AGENZIA_ADDEBITO'; target: Target; payload: N8AgenziaAddebitoPayload }
   | { tipo: 'N10_ADMIN_ESCALATION'; target: Target; payload: N10AdminEscalationPayload }
-  | { tipo: 'N11_BROKER_ESCALATION'; target: Target; payload: N11BrokerEscalationPayload };
+  | { tipo: 'N11_BROKER_ESCALATION'; target: Target; payload: N11BrokerEscalationPayload }
+  | {
+      tipo: 'N12_AFFILIAZIONE_COMMISSIONE';
+      target: Target;
+      payload: N12AffiliazioneCommissionePayload;
+    };
 
 function render(input: SendInput): NotificaContent {
   switch (input.tipo) {
@@ -61,6 +68,8 @@ function render(input: SendInput): NotificaContent {
       return tplN10AdminEscalation(input.payload);
     case 'N11_BROKER_ESCALATION':
       return tplN11BrokerEscalation(input.payload);
+    case 'N12_AFFILIAZIONE_COMMISSIONE':
+      return tplN12AffiliazioneCommissione(input.payload);
   }
 }
 

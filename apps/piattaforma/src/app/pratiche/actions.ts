@@ -188,6 +188,59 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         }).catch(() => undefined);
       }
     }
+
+    // N12: notifica ai referenti per ogni commissione affiliazione accreditata.
+    const commissioni = await prisma.commissioneAffiliazione.findMany({
+      where: { praticaId, stato: 'ACCREDITATA' },
+      include: {
+        pratica: {
+          select: {
+            codicePratica: true,
+            targa: true,
+            broker: { select: { ragioneSociale: true } },
+            agenziaAssegnata: { select: { ragioneSociale: true } },
+          },
+        },
+        referente: {
+          select: {
+            id: true,
+            ragioneSociale: true,
+            email: true,
+            wallet: { select: { saldoCent: true } },
+            users: {
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              select: { id: true, email: true, nome: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    for (const c of commissioni) {
+      const refUser = c.referente.users[0];
+      if (!refUser) continue;
+      const referralRagioneSociale =
+        c.tipo === 'REFERENTE_BROKER'
+          ? c.pratica.broker.ragioneSociale
+          : c.pratica.agenziaAssegnata?.ragioneSociale ?? '—';
+      await sendNotification({
+        tipo: 'N12_AFFILIAZIONE_COMMISSIONE',
+        target: {
+          email: refUser.email,
+          userId: refUser.id,
+          companyId: c.referente.id,
+        },
+        payload: {
+          codicePratica: c.pratica.codicePratica ?? '—',
+          targa: c.pratica.targa,
+          nomeReferente: refUser.nome,
+          referralRagioneSociale,
+          tipoReferente: c.tipo,
+          importoAccreditatoCent: c.importoNettoCent,
+          saldoWalletCent: c.referente.wallet?.saldoCent ?? 0,
+        },
+      }).catch(() => undefined);
+    }
   } catch {
     // best-effort
   }

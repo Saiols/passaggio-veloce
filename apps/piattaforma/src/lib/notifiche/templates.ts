@@ -90,6 +90,18 @@ export type N7AgenziaPromemoriaCountdownPayload = {
   firmaEntroAt: Date;
 };
 
+export type N12AffiliazioneCommissionePayload = {
+  codicePratica: string;
+  targa: string | null;
+  nomeReferente: string;
+  /** Ragione sociale del referral (chi ha lavorato la pratica) */
+  referralRagioneSociale: string;
+  /** REFERENTE_BROKER | REFERENTE_AGENZIA — utile per personalizzare il copy */
+  tipoReferente: 'REFERENTE_BROKER' | 'REFERENTE_AGENZIA';
+  importoAccreditatoCent: number;
+  saldoWalletCent: number;
+};
+
 export type NotificaContent = { subject: string; html: string; text: string };
 
 const header = `<div style="background:#0a2540;padding:18px 20px;border-radius:12px 12px 0 0;color:#fff">
@@ -296,6 +308,37 @@ export function tplN7AgenziaPromemoriaCountdown(p: N7AgenziaPromemoriaCountdownP
       Conferma firma entro: <strong>${formatDate(p.firmaEntroAt)}</strong>
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">Apri la dashboard e seleziona "Firma avvenuta".</p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN12AffiliazioneCommissione(
+  p: N12AffiliazioneCommissionePayload,
+): NotificaContent {
+  const ruoloLabel =
+    p.tipoReferente === 'REFERENTE_BROKER' ? 'broker' : 'agenzia';
+  const subject = `+${formatCurrencyCent(p.importoAccreditatoCent)} da affiliazione — ${p.referralRagioneSociale}`;
+  const text =
+    `Ciao ${p.nomeReferente},\n` +
+    `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} è stata firmata.\n` +
+    `Hai guadagnato ${formatCurrencyCent(p.importoAccreditatoCent)} ` +
+    `dal tuo referral ${ruoloLabel} "${p.referralRagioneSociale}".\n` +
+    `Saldo wallet attuale: ${formatCurrencyCent(p.saldoWalletCent)}.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">+${formatCurrencyCent(p.importoAccreditatoCent)} da affiliazione 🎉</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      una pratica completata da <strong>${p.referralRagioneSociale}</strong> (tuo referral
+      ${ruoloLabel}) ti ha generato una commissione di affiliazione.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Pratica: <strong>${p.codicePratica}</strong>${p.targa ? ` &middot; ${p.targa}` : ''}<br>
+      Accreditato: <strong style="color:#16a34a">+${formatCurrencyCent(p.importoAccreditatoCent)}</strong><br>
+      Saldo wallet: <strong>${formatCurrencyCent(p.saldoWalletCent)}</strong>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Continua a invitare colleghi: la commissione si attiva automaticamente ad ogni firma.
+    </p>
   `);
   return { subject, html, text };
 }

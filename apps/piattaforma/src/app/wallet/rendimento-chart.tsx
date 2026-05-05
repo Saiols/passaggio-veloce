@@ -7,10 +7,19 @@ const PADDING_X = 44;
 const PADDING_TOP = 18;
 const PADDING_BOTTOM = 32;
 
+/** Numero massimo di label X visibili: oltre questo si dirada. */
+const MAX_X_LABELS = 8;
+
 /**
  * Bar chart SVG inline (server-rendered): nessuna libreria esterna,
  * design system Trust Blue. Mostra il rendimento del periodo in colonne
  * verticali con label sotto e valore in tooltip nativo (title).
+ *
+ * - Stagger animation: ogni barra entra dal basso con delay incrementale
+ *   (CSS keyframe definito in globals.css come pv-bar-grow).
+ * - Label X diradate: con > MAX_X_LABELS bucket mostriamo solo ogni N-esimo
+ *   per evitare sovrapposizione. Sempre visibili: prima e ultima.
+ * - Linea hover su barra: opacità aumenta + cursor pointer (CSS).
  */
 export function RendimentoChart({
   buckets,
@@ -35,6 +44,11 @@ export function RendimentoChart({
 
   const fill =
     accent === 'navy' ? 'var(--pv-navy-600)' : 'var(--pv-orange-500)';
+
+  // Diradiamo le label X quando ci sono troppi bucket (es. 30d): mostriamo
+  // ogni labelStride. Garantiamo sempre la prima e l'ultima per dare i
+  // riferimenti temporali del periodo.
+  const labelStride = Math.max(1, Math.ceil(buckets.length / MAX_X_LABELS));
 
   return (
     <div className="mt-4 overflow-x-auto">
@@ -80,6 +94,16 @@ export function RendimentoChart({
           const cx = PADDING_X + stride * i + stride / 2;
           const x = cx - barWidth / 2;
           const y = PADDING_TOP + innerH - h;
+          const baseline = PADDING_TOP + innerH;
+          // Mostra label se prima, ultima o multipli di labelStride. Per
+          // evitare sovrapposizione tra ultimo (sempre visibile) e penultimo
+          // multiplo, saltiamo i multipli che cadono troppo vicini all'ultimo.
+          const lastIdx = buckets.length - 1;
+          const minDistance = Math.floor(labelStride / 2);
+          const isMultiplo = i % labelStride === 0;
+          const tooCloseToLast = lastIdx - i < minDistance;
+          const showLabel =
+            i === 0 || i === lastIdx || (isMultiplo && !tooCloseToLast);
           return (
             <g key={i}>
               <rect
@@ -89,21 +113,28 @@ export function RendimentoChart({
                 height={h}
                 fill={fill}
                 rx={3}
+                className="pv-rendimento-bar"
+                style={{
+                  // Animazione stagger: ogni barra entra dal baseline
+                  // crescendo, con delay proporzionale all'indice.
+                  transformOrigin: `${cx}px ${baseline}px`,
+                  animationDelay: `${i * 25}ms`,
+                }}
                 aria-label={`${b.label}: ${formatCurrencyCent(b.importoCent)}`}
               >
-                {/* SVG <title> dentro <rect> è valido per tooltip nativo,
-                    senza creare diff con <title> HEAD durante l'idratazione. */}
                 <title>{`${b.label}: ${formatCurrencyCent(b.importoCent)}`}</title>
               </rect>
-              <text
-                x={cx}
-                y={H - 12}
-                textAnchor="middle"
-                fontSize="10"
-                fill="var(--pv-slate-500)"
-              >
-                {b.label}
-              </text>
+              {showLabel && (
+                <text
+                  x={cx}
+                  y={H - 12}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill="var(--pv-slate-500)"
+                >
+                  {b.label}
+                </text>
+              )}
             </g>
           );
         })}

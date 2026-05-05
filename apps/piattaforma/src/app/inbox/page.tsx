@@ -92,7 +92,10 @@ export default async function InboxPage() {
                         <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
                           {a.pratica.codicePratica ?? '—'}
                         </span>
-                        <StatusChip stato={a.pratica.stato as PraticaStato} />
+                        <StatusChip
+                          stato={a.pratica.stato as PraticaStato}
+                          viewerRole="AGENZIA"
+                        />
                         <span className="text-[11px] text-pv-slate-500">
                           {formatRelative(a.invioAt)}
                         </span>

@@ -110,7 +110,17 @@ export default async function PraticaDetailPage({
             </p>
             <h1 className="mt-1 flex flex-wrap items-center gap-3 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
               <span>{pratica.targa ?? 'Pratica senza targa'}</span>
-              <StatusChip stato={pratica.stato as PraticaStato} />
+              <StatusChip
+                stato={pratica.stato as PraticaStato}
+                viewerRole={
+                  session.user.role === 'ADMIN_PIATTAFORMA' ||
+                  session.user.role === 'ASSISTENTE'
+                    ? 'ADMIN'
+                    : companyType === 'AGENZIA'
+                      ? 'AGENZIA'
+                      : 'BROKER'
+                }
+              />
             </h1>
             <p className="mt-1 text-[14px] text-pv-slate-500">
               {labelTipo(pratica.tipo)} · {pratica.comune ?? '—'}
@@ -375,34 +385,44 @@ export default async function PraticaDetailPage({
 
             <Card>
               <h2 className="text-[15px] font-bold text-pv-navy-800">Timeline</h2>
-              <Timeline pratica={pratica} />
+              <Timeline
+                pratica={pratica}
+                showInternals={
+                  session.user.role === 'ADMIN_PIATTAFORMA' ||
+                  session.user.role === 'ASSISTENTE'
+                }
+              />
             </Card>
 
-            {pratica.assegnazioni.length > 0 && companyType !== 'AGENZIA' && (
-              <Card>
-                <h2 className="text-[15px] font-bold text-pv-navy-800">Round distribuzione</h2>
-                <ul className="mt-3 space-y-2 text-[13px]">
-                  {pratica.assegnazioni.map((a) => (
-                    <li
-                      key={a.id}
-                      className="flex items-center justify-between gap-3 rounded-[10px] border border-pv-slate-200 px-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-pv-navy-800">
-                          {a.agenzia.ragioneSociale}
-                        </p>
-                        <p className="text-[11px] text-pv-slate-500">
-                          R{a.round} · {formatDateTime(a.invioAt)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                        {a.esito.toLowerCase().replace('_', ' ')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            )}
+            {/* Item 02 release 2026-05: il broker non vede il dettaglio dei
+                round e della coda agenzie. Visibile solo all'admin platform. */}
+            {pratica.assegnazioni.length > 0 &&
+              (session.user.role === 'ADMIN_PIATTAFORMA' ||
+                session.user.role === 'ASSISTENTE') && (
+                <Card>
+                  <h2 className="text-[15px] font-bold text-pv-navy-800">Round distribuzione</h2>
+                  <ul className="mt-3 space-y-2 text-[13px]">
+                    {pratica.assegnazioni.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-center justify-between gap-3 rounded-[10px] border border-pv-slate-200 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-pv-navy-800">
+                            {a.agenzia.ragioneSociale}
+                          </p>
+                          <p className="text-[11px] text-pv-slate-500">
+                            R{a.round} · {formatDateTime(a.invioAt)}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                          {a.esito.toLowerCase().replace('_', ' ')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
           </aside>
         </div>
       </div>
@@ -510,6 +530,7 @@ type TimelineStep = { label: string; at: Date | null | undefined; active?: boole
 
 function Timeline({
   pratica,
+  showInternals,
 }: {
   pratica: {
     createdAt: Date;
@@ -525,14 +546,24 @@ function Timeline({
     scadutaAt: Date | null;
     annullataAt: Date | null;
   };
+  /**
+   * Lato broker e agenzia (item 02 release 2026-05) gli step di routing
+   * (round/escalation) sono dettagli operativi interni: vanno mostrati solo
+   * all'admin platform.
+   */
+  showInternals: boolean;
 }) {
   const steps: TimelineStep[] = [
     { label: 'Creazione pratica', at: pratica.createdAt },
     { label: 'Inviata alle agenzie', at: pratica.submittedAt },
-    { label: 'Round 1 — comune', at: pratica.round1StartedAt },
-    { label: 'Round 2 — limitrofi', at: pratica.round2StartedAt },
-    { label: 'Round 3 — provincia', at: pratica.round3StartedAt },
-    { label: 'Escalation admin', at: pratica.escalationAt },
+    ...(showInternals
+      ? [
+          { label: 'Round 1 — comune', at: pratica.round1StartedAt },
+          { label: 'Round 2 — limitrofi', at: pratica.round2StartedAt },
+          { label: 'Round 3 — provincia', at: pratica.round3StartedAt },
+          { label: 'Escalation admin', at: pratica.escalationAt },
+        ]
+      : []),
     { label: 'Accettata', at: pratica.accettataAt },
     { label: 'Processata', at: pratica.processataAt },
     { label: 'Firma avvenuta', at: pratica.firmaAvvenutaAt },

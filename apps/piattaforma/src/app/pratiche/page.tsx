@@ -10,19 +10,28 @@ import { QuickActionButton } from './quick-action-button';
 
 const PAGE_SIZE = 15;
 
-const STATI: { value: string; label: string }[] = [
+// Filtri stato per la lista pratiche broker/agenzia (item 10 release 2026-05).
+// Niente R1/R2/R3 ne "Escalation": questi dettagli sono interni al motore di
+// distribuzione e non devono apparire all'utente. Lato admin la lista
+// completa rimane in /admin/pratiche.
+const STATI_USER: { value: string; label: string }[] = [
   { value: '', label: 'Tutti gli stati' },
   { value: 'BOZZA', label: 'Bozza' },
-  { value: 'IN_ATTESA_ROUND_1', label: 'In attesa · R1' },
-  { value: 'IN_ATTESA_ROUND_2', label: 'In attesa · R2' },
-  { value: 'IN_ATTESA_ROUND_3', label: 'In attesa · R3' },
-  { value: 'IN_ESCALATION', label: 'Escalation' },
+  { value: 'IN_ATTESA', label: 'In attesa' },
   { value: 'ACCETTATA', label: 'Accettata' },
   { value: 'PROCESSATA', label: 'Processata' },
   { value: 'FIRMATA', label: 'Firmata' },
   { value: 'SCADUTA', label: 'Scaduta' },
   { value: 'ANNULLATA', label: 'Annullata' },
 ];
+
+// Mappatura del valore aggregato "IN_ATTESA" sui valori reali del DB.
+const STATI_IN_ATTESA = [
+  'IN_ATTESA_ROUND_1',
+  'IN_ATTESA_ROUND_2',
+  'IN_ATTESA_ROUND_3',
+  'IN_ESCALATION',
+] as const;
 
 const PERIODI = [
   { value: '', label: 'Qualsiasi periodo' },
@@ -79,8 +88,12 @@ export default async function PratichePage({
     where.brokerId = companyId;
   }
 
-  if (sp.stato && STATI.some((s) => s.value === sp.stato)) {
-    where.stato = sp.stato as PraticaStato;
+  if (sp.stato && STATI_USER.some((s) => s.value === sp.stato)) {
+    if (sp.stato === 'IN_ATTESA') {
+      where.stato = { in: STATI_IN_ATTESA as unknown as PraticaStato[] };
+    } else {
+      where.stato = sp.stato as PraticaStato;
+    }
   }
 
   if (sp.periodo === '7d') where.submittedAt = { gte: daysAgo(7) };
@@ -139,7 +152,7 @@ export default async function PratichePage({
           q={q}
           stato={sp.stato}
           periodo={sp.periodo}
-          stati={STATI}
+          stati={STATI_USER}
           periodi={PERIODI}
         />
 
@@ -200,7 +213,10 @@ export default async function PratichePage({
                     </td>
                     <td className="px-5 py-3">
                       <span className="relative z-10 inline-flex items-center gap-2">
-                        <StatusChip stato={p.stato as PraticaStato} />
+                        <StatusChip
+                          stato={p.stato as PraticaStato}
+                          viewerRole={companyType === 'AGENZIA' ? 'AGENZIA' : 'BROKER'}
+                        />
                         {companyType === 'AGENZIA' &&
                           p.agenziaAssegnataId === companyId &&
                           p.stato === 'ACCETTATA' && (

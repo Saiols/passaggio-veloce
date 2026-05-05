@@ -90,10 +90,10 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
                       <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
                         {a.pratica.codicePratica ?? '—'}
                       </span>
-                      <StatusChip stato={a.pratica.stato as PraticaStato} />
-                      <span className="text-[11px] font-semibold text-pv-slate-500">
-                        Round {a.round}
-                      </span>
+                      <StatusChip
+                        stato={a.pratica.stato as PraticaStato}
+                        viewerRole="AGENZIA"
+                      />
                     </div>
                     <p className="mt-1 truncate text-[13px] text-pv-slate-700">
                       {a.pratica.targa && <span className="font-semibold">{a.pratica.targa}</span>}

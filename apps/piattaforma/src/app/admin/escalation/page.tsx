@@ -19,16 +19,52 @@ export default async function AdminEscalationPage() {
     },
   });
 
-  // Precarichiamo le agenzie attive per ogni provincia presente nelle pratiche
-  const province = Array.from(new Set(pratiche.map((p) => p.provincia).filter(Boolean) as string[]));
-  const agenzieByProvincia = new Map<string, { id: string; ragioneSociale: string }[]>();
+  // Precarichiamo le agenzie attive per ogni provincia presente nelle pratiche.
+  // Aggiungiamo rating (media stelle + numero valutazioni) cosi' l'admin
+  // identifica subito le agenzie piu' affidabili (item 13 release 2026-05).
+  const province = Array.from(
+    new Set(pratiche.map((p) => p.provincia).filter(Boolean) as string[]),
+  );
+  type AgenziaPick = {
+    id: string;
+    ragioneSociale: string;
+    avgStars: number | null;
+    numValutazioni: number;
+  };
+  const agenzieByProvincia = new Map<string, AgenziaPick[]>();
   for (const prov of province) {
     const agenzie = await prisma.company.findMany({
       where: { type: 'AGENZIA', deletedAt: null, provincia: prov },
       select: { id: true, ragioneSociale: true },
-      orderBy: { ragioneSociale: 'asc' },
     });
-    agenzieByProvincia.set(prov, agenzie);
+    if (agenzie.length === 0) {
+      agenzieByProvincia.set(prov, []);
+      continue;
+    }
+    const ratings = await prisma.valutazione.groupBy({
+      by: ['agenziaId'],
+      where: { agenziaId: { in: agenzie.map((a) => a.id) } },
+      _avg: { stelle: true },
+      _count: { _all: true },
+    });
+    const ratingMap = new Map(ratings.map((r) => [r.agenziaId, r]));
+    const enriched: AgenziaPick[] = agenzie.map((a) => {
+      const r = ratingMap.get(a.id);
+      return {
+        id: a.id,
+        ragioneSociale: a.ragioneSociale,
+        avgStars: r?._avg.stelle ?? null,
+        numValutazioni: r?._count._all ?? 0,
+      };
+    });
+    // Ordina per ranking discendente (migliori in cima); a parita' alfabetico.
+    enriched.sort((a, b) => {
+      const sa = a.avgStars ?? -1;
+      const sb = b.avgStars ?? -1;
+      if (sa !== sb) return sb - sa;
+      return a.ragioneSociale.localeCompare(b.ragioneSociale);
+    });
+    agenzieByProvincia.set(prov, enriched);
   }
 
   return (

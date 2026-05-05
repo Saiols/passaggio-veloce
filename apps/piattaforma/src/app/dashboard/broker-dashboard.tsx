@@ -118,7 +118,7 @@ export async function BrokerDashboard({
                       <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
                         {p.codicePratica ?? 'BOZZA'}
                       </span>
-                      <StatusChip stato={p.stato as PraticaStato} />
+                      <StatusChip stato={p.stato as PraticaStato} viewerRole="BROKER" />
                     </div>
                     <p className="mt-1 truncate text-[13px] text-pv-slate-700">
                       {p.targa && <span className="font-semibold">{p.targa}</span>}

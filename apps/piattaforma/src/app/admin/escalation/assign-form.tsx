@@ -3,7 +3,19 @@
 import { useState, useTransition } from 'react';
 import { assegnaEscalationAction } from './actions';
 
-type Agenzia = { id: string; ragioneSociale: string };
+type Agenzia = {
+  id: string;
+  ragioneSociale: string;
+  avgStars: number | null;
+  numValutazioni: number;
+};
+
+function formatRating(a: Agenzia): string {
+  if (a.numValutazioni === 0 || a.avgStars === null) {
+    return '★ — (nuova)';
+  }
+  return `★ ${a.avgStars.toFixed(1)} (${a.numValutazioni})`;
+}
 
 export function AssignForm({
   praticaId,
@@ -38,7 +50,7 @@ export function AssignForm({
         <option value="">Scegli agenzia…</option>
         {agenzie.map((a) => (
           <option key={a.id} value={a.id}>
-            {a.ragioneSociale}
+            {a.ragioneSociale} · {formatRating(a)}
           </option>
         ))}
       </select>

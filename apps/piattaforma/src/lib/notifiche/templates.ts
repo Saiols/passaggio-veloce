@@ -138,6 +138,21 @@ export type N19AdminNuovaSegnalazionePayload = {
   notaSegnalazione: string | null;
 };
 
+export type N20AdminRevisioneRichiestaPayload = {
+  praticaId: string;
+  codicePratica: string;
+  motivo: 'DOCUMENTO_NON_STANDARD' | 'CASO_NON_PREVISTO_DA_SCHEMA' | 'RICHIESTA_BROKER';
+  note: string;
+  brokerUserId: string;
+};
+
+export type N21BrokerRevisioneCompletataPayload = {
+  codicePratica: string;
+  nomeBroker: string;
+  esito: 'RISOLTA' | 'ANNULLATA';
+  noteEsito: string;
+};
+
 export type N12AffiliazioneCommissionePayload = {
   codicePratica: string;
   targa: string | null;
@@ -589,6 +604,81 @@ export function tplN19AdminNuovaSegnalazione(
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Apri <strong>/admin/segnalazioni</strong> per verificare e confermare o respingere.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+function labelMotivoRevisione(m: string): string {
+  if (m === 'DOCUMENTO_NON_STANDARD') return 'Documento non standard';
+  if (m === 'CASO_NON_PREVISTO_DA_SCHEMA') return 'Caso non previsto dallo schema';
+  if (m === 'RICHIESTA_BROKER') return 'Richiesta esplicita del broker';
+  return m;
+}
+
+export function tplN20AdminRevisioneRichiesta(
+  p: N20AdminRevisioneRichiestaPayload,
+): NotificaContent {
+  const motivoLbl = labelMotivoRevisione(p.motivo);
+  const subject = `Revisione manuale richiesta — pratica ${p.codicePratica}`;
+  const text =
+    `Un broker ha richiesto revisione manuale.\n` +
+    `Pratica: ${p.codicePratica}\n` +
+    `Motivo: ${motivoLbl}\n` +
+    `Note broker: ${p.note}\n` +
+    `Apri /admin/revisioni per gestire (entro 24-48h).`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Revisione manuale richiesta</h1>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      Un broker ha richiesto un controllo manuale del team su una pratica
+      che non rientra nello schema standard.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Pratica: <strong>${p.codicePratica}</strong><br>
+      Motivo: <strong>${motivoLbl}</strong><br>
+      Note: <em>${p.note}</em>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      SLA interno 24-48h. Apri <strong>/admin/revisioni</strong> per chiudere o annullare.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN21BrokerRevisioneCompletata(
+  p: N21BrokerRevisioneCompletataPayload,
+): NotificaContent {
+  const esitoLbl = p.esito === 'RISOLTA' ? 'risolta' : 'annullata';
+  const subject = `Revisione ${esitoLbl} — pratica ${p.codicePratica}`;
+  const colorBg = p.esito === 'RISOLTA' ? '#ecfdf5' : '#fef2f2';
+  const colorBorder =
+    p.esito === 'RISOLTA' ? '#16a34a33' : '#dc262633';
+  const colorTitle = p.esito === 'RISOLTA' ? '#16a34a' : '#dc2626';
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `il team ha chiuso la revisione manuale sulla pratica ${p.codicePratica}.\n` +
+    `Esito: ${esitoLbl.toUpperCase()}\n` +
+    (p.noteEsito ? `Note: ${p.noteEsito}\n` : '') +
+    (p.esito === 'RISOLTA'
+      ? 'Puoi riprendere il wizard normalmente con le indicazioni ricevute.\n'
+      : 'La pratica è stata annullata.\n');
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:${colorTitle}">Revisione ${esitoLbl}</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      il team ha chiuso la revisione manuale sulla pratica
+      <strong>${p.codicePratica}</strong>.
+    </p>
+    <div style="background:${colorBg};border:1px solid ${colorBorder};border-radius:10px;padding:14px;font-size:13px;color:#0a2540">
+      Esito: <strong>${esitoLbl.toUpperCase()}</strong>
+      ${p.noteEsito ? `<br><br>Note del team: <em>${p.noteEsito}</em>` : ''}
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      ${
+        p.esito === 'RISOLTA'
+          ? 'Puoi riprendere il wizard normalmente con le indicazioni ricevute.'
+          : 'La pratica è annullata. Per chiarimenti scrivi a supporto@passaggioveloce.it.'
+      }
     </p>
   `);
   return { subject, html, text };

@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition, useRef, useMemo } from 'react';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
+import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
 import {
   calcolaDocumentiRichiesti,
@@ -172,6 +173,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   // poter cliccare "Conferma e invia". Il backend logga IP+UA+versione popup.
   const [showDichiarazione, setShowDichiarazione] = useState(false);
   const [dichiarazioneAccettata, setDichiarazioneAccettata] = useState(false);
+
+  // Schema Documentale v7 — SD-C: bottone/popup "Non trovo la mia situazione"
+  // per richiedere review manuale al team PV (caso non riconosciuto).
+  const [showRevisione, setShowRevisione] = useState(false);
 
   // Schema Documentale v7 (SD-B): preview lista documenti richiesti calcolata
   // tramite engine. Si aggiorna in real-time mentre il broker compila i campi
@@ -646,6 +651,25 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 lista doc obbligatori per il broker. */}
             <SchemaDocumentalePreview esito={esitoSchema} />
 
+            {/* SD-C: il broker può richiedere revisione manuale del team
+                anche se l'engine è BLOCCO o se la situazione non è coperta. */}
+            <div className="rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4 text-[12.5px] text-pv-slate-700">
+              <p className="font-semibold text-pv-navy-800">
+                Non trovi la tua situazione qui sopra?
+              </p>
+              <p className="mt-1">
+                Possiamo analizzarla manualmente e darti istruzioni precise
+                entro 24-48h.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowRevisione(true)}
+                className="mt-2 text-[12.5px] font-semibold text-pv-navy-700 underline hover:text-pv-navy-800"
+              >
+                Richiedi revisione manuale →
+              </button>
+            </div>
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
               <Button variant="secondary" onClick={() => setStep(2)} disabled={submitting}>
                 Indietro
@@ -676,6 +700,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           handleFinalSubmit();
         }}
         onClose={() => setShowDichiarazione(false)}
+      />
+
+      <RevisioneManualePopup
+        praticaId={null}
+        open={showRevisione}
+        onClose={() => setShowRevisione(false)}
       />
     </>
   );

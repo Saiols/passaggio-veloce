@@ -13,6 +13,8 @@ import {
   tplN17BrokerPenaleAddebitata,
   tplN18AgenziaSegnalazioneConfermata,
   tplN19AdminNuovaSegnalazione,
+  tplN20AdminRevisioneRichiesta,
+  tplN21BrokerRevisioneCompletata,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -30,6 +32,8 @@ import {
   type N17BrokerPenaleAddebitataPayload,
   type N18AgenziaSegnalazioneConfermataPayload,
   type N19AdminNuovaSegnalazionePayload,
+  type N20AdminRevisioneRichiestaPayload,
+  type N21BrokerRevisioneCompletataPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -95,6 +99,16 @@ type SendInput =
       tipo: 'N19_ADMIN_NUOVA_SEGNALAZIONE';
       target: Target;
       payload: N19AdminNuovaSegnalazionePayload;
+    }
+  | {
+      tipo: 'N20_ADMIN_REVISIONE_RICHIESTA';
+      target: Target;
+      payload: N20AdminRevisioneRichiestaPayload;
+    }
+  | {
+      tipo: 'N21_BROKER_REVISIONE_COMPLETATA';
+      target: Target;
+      payload: N21BrokerRevisioneCompletataPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -133,6 +147,10 @@ function render(input: SendInput): NotificaContent {
       return tplN18AgenziaSegnalazioneConfermata(input.payload);
     case 'N19_ADMIN_NUOVA_SEGNALAZIONE':
       return tplN19AdminNuovaSegnalazione(input.payload);
+    case 'N20_ADMIN_REVISIONE_RICHIESTA':
+      return tplN20AdminRevisioneRichiesta(input.payload);
+    case 'N21_BROKER_REVISIONE_COMPLETATA':
+      return tplN21BrokerRevisioneCompletata(input.payload);
   }
 }
 

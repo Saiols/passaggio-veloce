@@ -27,6 +27,15 @@ enum UserRole {
   UTENTE_AZIENDA
   ADMIN_PIATTAFORMA
   ASSISTENTE
+  // CRM team interno PV (release CRM-A 2026-05-06).
+  // ADMIN_PIATTAFORMA mappa con `admin` del prototipo CRM (vedi
+  // docs/crm-spec-implementativa.md). I 5 ruoli sotto sono esclusivi
+  // del modulo CRM e non hanno accesso ai pannelli operativi piattaforma.
+  AD
+  CTO
+  CFO
+  SALES_MANAGER
+  SALES
 }
 
 enum UserStatus {
@@ -102,11 +111,11 @@ enum DocumentoTipo {
 // Schema Documentale v7: tipologia di soggetto (venditore o acquirente).
 // Determina insieme di documenti richiesti nell'albero decisionale.
 enum TipoSoggetto {
-  PRIVATO_ITALIANO_CIE      // Persona fisica italiana con CIE elettronica
+  PRIVATO_ITALIANO_CIE // Persona fisica italiana con CIE elettronica
   PRIVATO_ITALIANO_CARTACEA // Persona fisica italiana con CI cartacea (vecchia)
   STRANIERO_EXTRA_UE
   AZIENDA
-  OPERATORE_AUTO            // Solo lato venditore: dealer/commerciante (mini voltura)
+  OPERATORE_AUTO // Solo lato venditore: dealer/commerciante (mini voltura)
 }
 
 // Schema Documentale v7: motivo per cui una pratica entra in revisione manuale
@@ -286,8 +295,8 @@ model Company {
 
   // FASE 13 affiliazione: chi ha portato questa Company in piattaforma.
   // null = iscritto diretto. Auto-relazione (può puntare a broker o agenzia).
-  referenteId String?  @db.Uuid
-  referente   Company? @relation("Referrals", fields: [referenteId], references: [id])
+  referenteId String?   @db.Uuid
+  referente   Company?  @relation("Referrals", fields: [referenteId], references: [id])
   referrals   Company[] @relation("Referrals")
 
   // Codice referral univoco da inserire nel link di iscrizione.
@@ -324,6 +333,10 @@ model Company {
   commissioniGenerate CommissioneAffiliazione[] @relation("ReferenteCommissioni")
   // Click tracking sul referralCode di questa company
   referralClicks      ReferralClick[]           @relation("ReferralClicks")
+
+  // CRM lead pipeline match (release CRM-A): contatti CRM agganciati a
+  // questa company via webhook iscrizione (cascata email→tel→P.IVA).
+  crmContactMatches CrmContact[] @relation("CrmContactCompany")
 
   // Listini (agenzia)
   listini Listino[]
@@ -379,6 +392,10 @@ model User {
 
   // Dichiarazioni di responsabilità accettate (Sistema Penali Broker)
   dichiarazioni BrokerDichiarazione[]
+
+  // CRM team interno (release CRM-A)
+  crmContactsAssegnati CrmContact[]  @relation("CrmContactAssigned")
+  crmCampagneOwned     CrmCampaign[] @relation("CrmCampaignOwner")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -483,23 +500,23 @@ model Pratica {
   // Schema Documentale v7 (SD-A release 2026-05): variabili dell'albero
   // decisionale documenti. Compilate dal broker durante il wizard branching,
   // determinano la lista di documenti richiesti tramite engine puro.
-  venditoreTipoSoggetto    TipoSoggetto?
-  venditoreVisuraData      DateTime?     @db.Date
-  venditorePermessoData    DateTime?     @db.Date
-  acquirenteTipoSoggetto   TipoSoggetto?
-  acquirenteVisuraData     DateTime?     @db.Date
-  acquirentePermessoData   DateTime?     @db.Date
-  flagSuccessione          Boolean       @default(false)
-  flagMinore               Boolean       @default(false)
+  venditoreTipoSoggetto  TipoSoggetto?
+  venditoreVisuraData    DateTime?     @db.Date
+  venditorePermessoData  DateTime?     @db.Date
+  acquirenteTipoSoggetto TipoSoggetto?
+  acquirenteVisuraData   DateTime?     @db.Date
+  acquirentePermessoData DateTime?     @db.Date
+  flagSuccessione        Boolean       @default(false)
+  flagMinore             Boolean       @default(false)
 
   // Caso non riconosciuto / dubbio: pratica resta BOZZA, team PV verifica
   // entro 24-48h. Niente nuovo PraticaStato per evitare branch nel workflow.
-  richiedeRevisioneManuale Boolean       @default(false)
+  richiedeRevisioneManuale Boolean                 @default(false)
   motivoRevisione          MotivoRevisioneManuale?
   noteRevisione            String?
-  revisioneCompletata      Boolean       @default(false)
+  revisioneCompletata      Boolean                 @default(false)
   revisioneCompletataAt    DateTime?
-  revisioneCompletataDaId  String?       @db.Uuid
+  revisioneCompletataDaId  String?                 @db.Uuid
 
   // Localizzazione / distribuzione
   comune    String?
@@ -532,20 +549,20 @@ model Pratica {
 
   // Sistema Penali Broker (SP-A release 2026-05): segnalazione fermo/ipoteca
   // dall'agenzia, gestione admin, log penale addebitata.
-  flagSegnalata           Boolean                   @default(false)
-  tipoSegnalazione        SegnalazionePraticaTipo?
-  notaSegnalazione        String?
-  segnalataAt             DateTime?
-  segnalataDaUserId       String?                   @db.Uuid
-  segnalazioneStato       SegnalazionePraticaStato?
-  segnalazioneEsitaAt     DateTime?
-  segnalazioneEsitaDaId   String?                   @db.Uuid
+  flagSegnalata         Boolean                   @default(false)
+  tipoSegnalazione      SegnalazionePraticaTipo?
+  notaSegnalazione      String?
+  segnalataAt           DateTime?
+  segnalataDaUserId     String?                   @db.Uuid
+  segnalazioneStato     SegnalazionePraticaStato?
+  segnalazioneEsitaAt   DateTime?
+  segnalazioneEsitaDaId String?                   @db.Uuid
   // Importo penale addebitata al broker per questa pratica (audit). Null se
   // pratica non ha generato penale.
-  penaleAddebitatoCent    Int?
-  autoAddebitoAt  DateTime?
-  scadutaAt       DateTime?
-  annullataAt     DateTime?
+  penaleAddebitatoCent  Int?
+  autoAddebitoAt        DateTime?
+  scadutaAt             DateTime?
+  annullataAt           DateTime?
 
   // Relations
   documenti               Documento[]
@@ -574,19 +591,19 @@ model Pratica {
 // (Sistema Penali Broker — SP-A release 2026-05). Una riga per ogni submit
 // di pratica: timestamp, IP anonimizzato, userId, versione del testo popup.
 model BrokerDichiarazione {
-  id           String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  praticaId    String   @db.Uuid
-  pratica      Pratica  @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+  praticaId String  @db.Uuid
+  pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
 
-  userId       String   @db.Uuid
-  user         User     @relation(fields: [userId], references: [id])
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id])
 
-  ip           String?  // GDPR: IPv4 = primi 3 ottetti; IPv6 = primi 4 hextet
+  ip           String? // GDPR: IPv4 = primi 3 ottetti; IPv6 = primi 4 hextet
   userAgent    String?
-  popupVersion String   // "v1.0", "v1.1" — audit se il testo cambia
+  popupVersion String // "v1.0", "v1.1" — audit se il testo cambia
 
-  createdAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([praticaId])
   @@index([userId])
@@ -986,4 +1003,311 @@ model NotificaInviata {
   @@index([companyId])
   @@index([stato, scheduledAt])
   @@map("notifiche_inviate")
+}
+
+// ============================================================
+// ENUMS — CRM (release CRM-A 2026-05-06)
+// Spec: docs/crm-spec-implementativa.md
+// ============================================================
+
+enum CrmContactCategoria {
+  BROKER
+  AGENZIA
+}
+
+enum CrmStatoContatto {
+  S0 // Non contattato
+  S1 // Non risponde
+  S2 // Non interessato
+  S3 // Interessato
+  S4 // Link non aperto
+  S5 // Link aperto, non iscritto
+  S6 // Iscrizione incompleta
+  S7 // Iscritto, non attivo
+  S8 // Prima pratica
+  S9 // Attivo ricorrente
+  S10 // Churned
+}
+
+enum CrmFonteAcquisizione {
+  CSV_INIZIALE
+  ISCRIZIONE_DIRETTA
+  REFERRAL
+  ALTRO
+}
+
+enum CrmCallEsito {
+  NON_RISPONDE
+  NON_INTERESSATO
+  INTERESSATO
+  RICHIAMA
+  ISCRITTO
+}
+
+enum CrmSentiment {
+  POSITIVO
+  NEUTRO
+  NEGATIVO
+}
+
+enum CrmPlatStatus {
+  ATTIVO
+  INATTIVO
+  SOSPESO
+}
+
+enum CrmAgentLingua {
+  ITALIANO
+  ENGLISH
+  ESPANOL
+}
+
+enum CrmAgentVoce {
+  FEMMINILE_NATURALE
+  MASCHILE_NATURALE
+  CLONATA
+}
+
+enum CrmAgentAccento {
+  NEUTRO_ITALIANO
+  NORD_ITALIA
+  CENTRO_ITALIA
+  SUD_ITALIA
+}
+
+enum CrmCampaignGiorni {
+  LUN_VEN
+  LUN_SAB
+  TUTTI
+}
+
+enum CrmCampaignStato {
+  ATTIVA
+  PAUSATA
+  CHIUSA
+}
+
+enum CrmChatbotCanale {
+  SITO
+  WHATSAPP
+  MAIL
+  TUTTI
+}
+
+// ============================================================
+// MODELS — CRM (release CRM-A 2026-05-06)
+// ============================================================
+
+/// Contatto della pipeline lead pre-iscrizione. Vive separato da Company
+/// (utenti/aziende che si sono iscritti); il match avviene via webhook a
+/// iscrizione completata (cascata email → tel → P.IVA). Spec §2.1.
+model CrmContact {
+  id String @id @default(uuid()) @db.Uuid
+
+  nome      String
+  cat       CrmContactCategoria
+  tel       String // sempre presente per decisione 11
+  wa        String?
+  email     String?
+  piva      String?
+  indirizzo String?
+  citta     String?
+  cap       String?
+  regione   String?
+
+  status        CrmStatoContatto     @default(S0)
+  fonte         CrmFonteAcquisizione
+  assignedToId  String?              @db.Uuid
+  assignedTo    User?                @relation("CrmContactAssigned", fields: [assignedToId], references: [id])
+  lastContactAt DateTime?
+  nextContactAt DateTime?
+
+  // Aggregati chiamate (denormalizzati da CrmCall via trigger applicativo)
+  callCount    Int           @default(0)
+  callEsito    CrmCallEsito?
+  sentiment    CrmSentiment?
+  obiezioni    String? // CSV tag
+  noteAI       String?
+  trascrizione String?
+  noteManuali  String?
+
+  // Pixel/funnel tracking
+  linkInviato    Boolean   @default(false)
+  linkInviatoAt  DateTime?
+  linkAperto     Boolean   @default(false)
+  linkAperture   Int       @default(0)
+  videoInviato   Boolean   @default(false)
+  videoMin       Int       @default(0)
+  mailAperta     Boolean   @default(false)
+  smsInviato     Boolean   @default(false)
+  waInviato      Boolean   @default(false)
+  iscrizioneInit Boolean   @default(false)
+  iscrizioneComp Boolean   @default(false)
+  iscrizioneAt   DateTime?
+
+  // Match con Company piattaforma (post-iscrizione, via webhook)
+  companyId      String?        @db.Uuid
+  company        Company?       @relation("CrmContactCompany", fields: [companyId], references: [id], onDelete: SetNull)
+  platStatus     CrmPlatStatus?
+  primaPratica   Boolean        @default(false)
+  primaPraticaAt DateTime?
+  praticheTotal  Int            @default(0)
+  praticheMonth  Int            @default(0)
+  lastAccessAt   DateTime?
+  tassoComp      Int            @default(0) // 0-100
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  campaignAssegnazioni CrmCampaignAssegnazione[]
+  calls                CrmCall[]
+
+  @@index([cat])
+  @@index([status])
+  @@index([regione])
+  @@index([assignedToId])
+  @@index([companyId])
+  @@index([linkAperto])
+  @@map("crm_contacts")
+}
+
+/// Configurazione del bot vocale Vapi (FASE CRM-H per integrazione reale).
+model CrmSalesAgent {
+  id      String          @id @default(uuid()) @db.Uuid
+  nome    String
+  lingua  CrmAgentLingua  @default(ITALIANO)
+  voce    CrmAgentVoce    @default(FEMMINILE_NATURALE)
+  accento CrmAgentAccento @default(NEUTRO_ITALIANO)
+
+  prompt         String
+  scriptPrimo    String
+  scriptFollowup String
+  qa             String
+  postCall       String
+
+  vapiAgentId String? // popolato in CRM-H
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  campaigns CrmCampaign[]
+  calls     CrmCall[]
+
+  @@map("crm_sales_agents")
+}
+
+/// Campagna di chiamate AI con filtri target e parametri esecuzione.
+/// Owner = chi l'ha creata, gestione esclusiva propria + admin/AD/CTO.
+model CrmCampaign {
+  id   String @id @default(uuid()) @db.Uuid
+  nome String
+
+  agentId String        @db.Uuid
+  agent   CrmSalesAgent @relation(fields: [agentId], references: [id])
+
+  ownerId String @db.Uuid
+  owner   User   @relation("CrmCampaignOwner", fields: [ownerId], references: [id])
+
+  regione     String?
+  cat         CrmContactCategoria?
+  statoTarget CrmStatoContatto?
+
+  maxTry       Int               @default(3)
+  intervalMin  Int               @default(60)
+  oraStart     String            @default("09:00")
+  oraEnd       String            @default("18:00")
+  giorniAttivi CrmCampaignGiorni @default(LUN_VEN)
+
+  status CrmCampaignStato @default(ATTIVA)
+  note   String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  assegnazioni CrmCampaignAssegnazione[]
+  calls        CrmCall[]
+
+  @@index([agentId])
+  @@index([ownerId])
+  @@index([status])
+  @@map("crm_campaigns")
+}
+
+model CrmCampaignAssegnazione {
+  id         String      @id @default(uuid()) @db.Uuid
+  campaignId String      @db.Uuid
+  contactId  String      @db.Uuid
+  campaign   CrmCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact    CrmContact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  tentativi        Int           @default(0)
+  esitoUltimo      CrmCallEsito?
+  ultimaChiamataAt DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId])
+  @@map("crm_campaign_assegnazioni")
+}
+
+/// Storico chiamate per contatto. Ogni call Vapi (CRM-H) genera una row;
+/// gli aggregati su CrmContact sono denormalizzati per query veloce.
+model CrmCall {
+  id String @id @default(uuid()) @db.Uuid
+
+  contactId String     @db.Uuid
+  contact   CrmContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  campaignId String?      @db.Uuid
+  campaign   CrmCampaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  agentId String?        @db.Uuid
+  agent   CrmSalesAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  startedAt DateTime
+  endedAt   DateTime?
+  duration  Int? // secondi
+  esito     CrmCallEsito?
+  sentiment CrmSentiment?
+
+  summary       String?
+  transcript    String?
+  obiezioniTags String?
+
+  // Integrazione esterna (CRM-H)
+  vapiCallId   String? @unique
+  recordingUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([contactId])
+  @@index([campaignId])
+  @@index([startedAt])
+  @@map("crm_calls")
+}
+
+/// Configurazione bot testuale per sito/WhatsApp/Mail.
+model CrmChatbot {
+  id   String @id @default(uuid()) @db.Uuid
+  nome String
+
+  target    CrmContactCategoria?
+  canale    CrmChatbotCanale
+  posizione String?
+  attivo    Boolean              @default(true)
+
+  prompt     String
+  obiettivo  String
+  qa         String
+  escalation String
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@map("crm_chatbots")
 }

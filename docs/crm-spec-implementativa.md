@@ -627,9 +627,97 @@ Per non bloccarmi su tutto, ho applicato i miei default. Correggimi solo dove se
 
 ---
 
-## 8. Domande aperte (servono input Alberto)
+## 8. Decisioni prese (2026-05-06)
 
-Sono punti dove la mia interpretazione è plausibile ma vorrei conferma prima di codare:
+Tutte le 12 domande aperte sono state risolte con CTO. Sintesi:
+
+| # | Tema | Decisione |
+|---|---|---|
+| 1 | `ADMIN_PIATTAFORMA` vs nuovo `ADMIN` | **Stesso ruolo** — `ADMIN_PIATTAFORMA = admin` del prototipo. Nessun nuovo ruolo. |
+| 2 | AD/CTO accesso CRM | **Uso quotidiano** — UX completa, non supervisione. |
+| 3 | ASSISTENTE | **Fuori dal CRM** per ora. Read-only in fase futura se servirà. |
+| 4 | Eliminazione contatto | **Soft delete** + cron purge a 90gg (compliance GDPR). |
+| 5 | CSV import | **Admin + Sales Manager**. Permission `bulk_import_crm`. |
+| 6 | Sales Manager | **Owner della campagna** — gestisce solo le sue campagne + utenti SALES. |
+| 7 | Filtro contatti SALES | **Strict** — `assignedToId === currentUser.id`. Nessun override. |
+| 8 | Delete agent con campagne attive | **Blocco** — non si può eliminare agent se ha campagne ATTIVA/PAUSATA. |
+| 9 | Chatbot embed sito | **Stessa Next app** — component inline, no iframe/script embeddable. |
+| 10 | Dati economici dashboard CRM | **Stesso aggregato** della `/admin/dashboard` — riuso engine esistente. |
+| 11 | Telefono fisso obbligatorio | **Sempre** — anche per iscrizione diretta. |
+| 12 | Storico chiamate | **Tabella `CrmCall` separata** — sblocca Vapi webhook + analytics. |
+
+### Conseguenze schema (aggiornate)
+
+Aggiunto modello `CrmCall`:
+
+```prisma
+model CrmCall {
+  id          String        @id @default(uuid()) @db.Uuid
+
+  contactId   String        @db.Uuid
+  contact     CrmContact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  campaignId  String?       @db.Uuid
+  campaign    CrmCampaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  agentId     String?       @db.Uuid
+  agent       CrmSalesAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  // Esecuzione
+  startedAt   DateTime
+  endedAt     DateTime?
+  duration    Int?          // secondi
+  esito       CrmCallEsito?
+  sentiment   CrmSentiment?
+
+  // Output AI
+  summary     String?       // riassunto generato post-chiamata
+  transcript  String?       // verbatim
+  obiezioniTags String?     // CSV tag rilevati
+
+  // Integrazione esterna (CRM-H)
+  vapiCallId   String?      @unique
+  recordingUrl String?
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([contactId])
+  @@index([campaignId])
+  @@index([startedAt])
+  @@map("crm_calls")
+}
+```
+
+Aggregati `CrmContact.callCount` e `callEsito` restano denormalizzati (per query veloce su lista) e sono aggiornati via trigger applicativo a ogni `CrmCall.create`. Stesso pattern su `CrmCampaignAssegnazione.tentativi` e `esitoUltimo`.
+
+### Owner della campagna
+
+Aggiungo a `CrmCampaign`:
+```prisma
+ownerId String @db.Uuid
+owner   User   @relation(fields: [ownerId], references: [id])
+```
+
+Permission `manage_campaign(c)` = `currentUser.role in [ADMIN_PIATTAFORMA, AD, CTO]` OR `c.ownerId === currentUser.id`.
+
+### Soft delete agent con cascade pause
+
+Server action `deleteSalesAgent`:
+```typescript
+const activeCount = await prisma.crmCampaign.count({
+  where: { agentId, status: { in: ['ATTIVA', 'PAUSATA'] }, deletedAt: null }
+});
+if (activeCount > 0) {
+  return { ok: false, error: `Agent usato in ${activeCount} campagne attive/pausate. Chiudile prima di eliminare.` };
+}
+```
+
+---
+
+## 8b. Domande aperte (storiche, prima di 2026-05-06)
+
+> Risolte tutte. Lascio la sezione come audit trail.
 
 1. **`ADMIN_PIATTAFORMA` esistente vs nuovo `ADMIN`**: oggi abbiamo `ADMIN_PIATTAFORMA` (Alberto/Andrea). Nel prototipo è chiamato `admin`. Confermi che `ADMIN_PIATTAFORMA = admin` del prototipo? Senza creare un nuovo ruolo `ADMIN`?
 

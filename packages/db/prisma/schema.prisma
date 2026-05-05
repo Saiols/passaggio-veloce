@@ -90,7 +90,31 @@ enum DocumentoTipo {
   PERMESSO_SOGGIORNO
   VISURA_CAMERALE
   CERTIFICATO_PROPRIETA
+  // Schema Documentale v7 (SD-A release 2026-05)
+  REVOCA_COMODATO
+  CERTIFICATO_MORTE
+  ATTO_ACCETTAZIONE_EREDITA
+  DICHIARAZIONE_QUALITA_EREDE
+  AUTORIZZAZIONE_TUTORE
   ALTRO
+}
+
+// Schema Documentale v7: tipologia di soggetto (venditore o acquirente).
+// Determina insieme di documenti richiesti nell'albero decisionale.
+enum TipoSoggetto {
+  PRIVATO_ITALIANO_CIE      // Persona fisica italiana con CIE elettronica
+  PRIVATO_ITALIANO_CARTACEA // Persona fisica italiana con CI cartacea (vecchia)
+  STRANIERO_EXTRA_UE
+  AZIENDA
+  OPERATORE_AUTO            // Solo lato venditore: dealer/commerciante (mini voltura)
+}
+
+// Schema Documentale v7: motivo per cui una pratica entra in revisione manuale
+// del team PV (caso non riconosciuto dall'engine documentale).
+enum MotivoRevisioneManuale {
+  DOCUMENTO_NON_STANDARD
+  CASO_NON_PREVISTO_DA_SCHEMA
+  RICHIESTA_BROKER
 }
 
 enum DocumentoOwner {
@@ -213,6 +237,8 @@ enum NotificaTipo {
   N17_BROKER_PENALE_ADDEBITATA
   N18_AGENZIA_SEGNALAZIONE_CONFERMATA
   N19_ADMIN_NUOVA_SEGNALAZIONE
+  N20_ADMIN_REVISIONE_RICHIESTA
+  N21_BROKER_REVISIONE_COMPLETATA
 }
 
 enum NotificaCanale {
@@ -454,6 +480,27 @@ model Pratica {
   flagMinivoltura    Boolean @default(false)
   flagProcura        Boolean @default(false)
 
+  // Schema Documentale v7 (SD-A release 2026-05): variabili dell'albero
+  // decisionale documenti. Compilate dal broker durante il wizard branching,
+  // determinano la lista di documenti richiesti tramite engine puro.
+  venditoreTipoSoggetto    TipoSoggetto?
+  venditoreVisuraData      DateTime?     @db.Date
+  venditorePermessoData    DateTime?     @db.Date
+  acquirenteTipoSoggetto   TipoSoggetto?
+  acquirenteVisuraData     DateTime?     @db.Date
+  acquirentePermessoData   DateTime?     @db.Date
+  flagSuccessione          Boolean       @default(false)
+  flagMinore               Boolean       @default(false)
+
+  // Caso non riconosciuto / dubbio: pratica resta BOZZA, team PV verifica
+  // entro 24-48h. Niente nuovo PraticaStato per evitare branch nel workflow.
+  richiedeRevisioneManuale Boolean       @default(false)
+  motivoRevisione          MotivoRevisioneManuale?
+  noteRevisione            String?
+  revisioneCompletata      Boolean       @default(false)
+  revisioneCompletataAt    DateTime?
+  revisioneCompletataDaId  String?       @db.Uuid
+
   // Localizzazione / distribuzione
   comune    String?
   provincia String?
@@ -519,6 +566,7 @@ model Pratica {
   @@index([provincia])
   @@index([comune])
   @@index([flagSegnalata])
+  @@index([richiedeRevisioneManuale])
   @@map("pratiche")
 }
 

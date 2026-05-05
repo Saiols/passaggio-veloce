@@ -113,6 +113,31 @@ export type N16AccountEliminatoPayload = {
   ragioneSociale: string;
 };
 
+export type N17BrokerPenaleAddebitataPayload = {
+  nomeBroker: string;
+  codicePratica: string;
+  targa: string | null;
+  tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
+  importoPenaleCent: number;
+  saldoWalletCent: number;
+};
+
+export type N18AgenziaSegnalazioneConfermataPayload = {
+  nomeAgenzia: string;
+  codicePratica: string;
+  targa: string | null;
+  tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
+};
+
+export type N19AdminNuovaSegnalazionePayload = {
+  codicePratica: string;
+  targa: string | null;
+  brokerRagioneSociale: string;
+  agenziaRagioneSociale: string;
+  tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
+  notaSegnalazione: string | null;
+};
+
 export type N12AffiliazioneCommissionePayload = {
   codicePratica: string;
   targa: string | null;
@@ -462,6 +487,108 @@ export function tplN16AccountEliminato(
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+function labelTipoSegnalazione(t: string): string {
+  if (t === 'FERMO_AMMINISTRATIVO') return 'Fermo amministrativo';
+  if (t === 'IPOTECA') return 'Ipoteca';
+  if (t === 'DOCUMENTO_NON_VALIDO') return 'Documento non valido';
+  return 'Altro';
+}
+
+export function tplN17BrokerPenaleAddebitata(
+  p: N17BrokerPenaleAddebitataPayload,
+): NotificaContent {
+  const tipoLbl = labelTipoSegnalazione(p.tipoSegnalazione);
+  const subject = `⚠️ Penale di ${formatCurrencyCent(p.importoPenaleCent)} addebitata — pratica ${p.codicePratica}`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} e' stata annullata ` +
+    `in seguito a segnalazione di "${tipoLbl}" verificata dal team Passaggio Veloce.\n` +
+    `Sono stati detratti ${formatCurrencyCent(p.importoPenaleCent)} dal tuo wallet.\n` +
+    `Saldo attuale: ${formatCurrencyCent(p.saldoWalletCent)}.\n` +
+    (p.saldoWalletCent < 0
+      ? 'Il saldo è negativo: dovrai reintegrarlo prima di poter ricevere payout.\n'
+      : '') +
+    `Per chiarimenti contatta supporto@passaggioveloce.it.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Penale addebitata</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è
+      stata annullata in seguito a segnalazione di <strong>${tipoLbl}</strong>
+      verificata dal nostro team.
+    </p>
+    <div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:14px;font-size:13px;color:#0a2540">
+      <strong style="color:#dc2626">−${formatCurrencyCent(p.importoPenaleCent)}</strong> detratti dal tuo wallet.<br>
+      Saldo attuale: <strong>${formatCurrencyCent(p.saldoWalletCent)}</strong>
+    </div>
+    ${
+      p.saldoWalletCent < 0
+        ? `<div style="margin-top:12px;background:#fef3c7;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">⚠️ Il tuo saldo è negativo. Reintegralo per sbloccare i payout futuri.</div>`
+        : ''
+    }
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN18AgenziaSegnalazioneConfermata(
+  p: N18AgenziaSegnalazioneConfermataPayload,
+): NotificaContent {
+  const tipoLbl = labelTipoSegnalazione(p.tipoSegnalazione);
+  const subject = `Segnalazione confermata — pratica ${p.codicePratica} annullata`;
+  const text =
+    `Ciao ${p.nomeAgenzia},\n` +
+    `la tua segnalazione di "${tipoLbl}" sulla pratica ${p.codicePratica}` +
+    `${p.targa ? ` (${p.targa})` : ''} e' stata confermata dal team.\n` +
+    `La pratica e' annullata e nessun fee verra' addebitato. Grazie per la verifica.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#16a34a">Segnalazione confermata</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la tua segnalazione di <strong>${tipoLbl}</strong> sulla pratica
+      <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
+      confermata dal team. La pratica è annullata, nessun fee ti verrà addebitato.
+    </p>
+    <div style="background:#ecfdf5;border:1px solid #16a34a33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
+      Grazie per il controllo: il tuo presidio ha tutelato l'integrità del marketplace.
+    </div>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN19AdminNuovaSegnalazione(
+  p: N19AdminNuovaSegnalazionePayload,
+): NotificaContent {
+  const tipoLbl = labelTipoSegnalazione(p.tipoSegnalazione);
+  const subject = `Nuova segnalazione: ${tipoLbl} — pratica ${p.codicePratica}`;
+  const text =
+    `Nuova segnalazione ricevuta su pratica ${p.codicePratica}` +
+    `${p.targa ? ` (${p.targa})` : ''}.\n` +
+    `Tipo: ${tipoLbl}\n` +
+    `Broker: ${p.brokerRagioneSociale}\n` +
+    `Agenzia: ${p.agenziaRagioneSociale}\n` +
+    (p.notaSegnalazione ? `Nota: ${p.notaSegnalazione}\n` : '') +
+    `Apri /admin/segnalazioni per verificare e gestire.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Nuova segnalazione</h1>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      Ricevuta segnalazione su pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Tipo: <strong>${tipoLbl}</strong><br>
+      Broker: ${p.brokerRagioneSociale}<br>
+      Agenzia: ${p.agenziaRagioneSociale}
+      ${p.notaSegnalazione ? `<br>Nota: <em>${p.notaSegnalazione}</em>` : ''}
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Apri <strong>/admin/segnalazioni</strong> per verificare e confermare o respingere.
     </p>
   `);
   return { subject, html, text };

@@ -10,6 +10,7 @@ import {
   markPraticaProcessataAction,
   annullaPraticaAction,
 } from '../actions';
+import { SegnalaProblemaButton } from './segnala-button';
 import { ValutazioneForm } from './valutazione-form';
 
 export default async function PraticaDetailPage({
@@ -89,6 +90,15 @@ export default async function PraticaDetailPage({
     !pratica.valutazione &&
     !!pratica.agenziaAssegnata;
 
+  // Sistema Penali Broker (SP-B): l'agenzia assegnata può segnalare un
+  // problema solo prima della firma (ACCETTATA o PROCESSATA) e una sola
+  // volta per pratica.
+  const canSegnalare =
+    companyType === 'AGENZIA' &&
+    pratica.agenziaAssegnataId === companyId &&
+    (pratica.stato === 'ACCETTATA' || pratica.stato === 'PROCESSATA') &&
+    !pratica.flagSegnalata;
+
   // Spec §1.4 demo: il prezzo è informativo solo dopo la firma (dashboard
   // economica). Per agenzie e broker, prima della firma non viene mostrato.
   const showFee = pratica.firmaAvvenutaAt !== null;
@@ -150,6 +160,7 @@ export default async function PraticaDetailPage({
                 </Button>
               </form>
             )}
+            {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && (
               <form action={annullaBound}>
                 <Button type="submit" size="sm" variant="danger">
@@ -166,6 +177,15 @@ export default async function PraticaDetailPage({
           </div>
         </header>
 
+        {pratica.flagSegnalata && pratica.segnalazioneStato === 'RICEVUTA' && (
+          <div className="mb-5">
+            <Alert variant="warning" title="Segnalazione in verifica">
+              {companyType === 'AGENZIA'
+                ? 'La tua segnalazione è in fase di verifica dal team. Riceverai un aggiornamento appena gestita.'
+                : 'È stata aperta una segnalazione su questa pratica. Il team la sta verificando.'}
+            </Alert>
+          </div>
+        )}
         {sp.firmata && (
           <div className="mb-5">
             <Alert variant="success" title="Firma registrata">

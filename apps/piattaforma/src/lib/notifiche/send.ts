@@ -10,6 +10,9 @@ import {
   tplN14AccountSospeso,
   tplN15AccountRiattivato,
   tplN16AccountEliminato,
+  tplN17BrokerPenaleAddebitata,
+  tplN18AgenziaSegnalazioneConfermata,
+  tplN19AdminNuovaSegnalazione,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -24,6 +27,9 @@ import {
   type N14AccountSospesoPayload,
   type N15AccountRiattivatoPayload,
   type N16AccountEliminatoPayload,
+  type N17BrokerPenaleAddebitataPayload,
+  type N18AgenziaSegnalazioneConfermataPayload,
+  type N19AdminNuovaSegnalazionePayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -74,6 +80,21 @@ type SendInput =
       tipo: 'N16_ACCOUNT_ELIMINATO';
       target: Target;
       payload: N16AccountEliminatoPayload;
+    }
+  | {
+      tipo: 'N17_BROKER_PENALE_ADDEBITATA';
+      target: Target;
+      payload: N17BrokerPenaleAddebitataPayload;
+    }
+  | {
+      tipo: 'N18_AGENZIA_SEGNALAZIONE_CONFERMATA';
+      target: Target;
+      payload: N18AgenziaSegnalazioneConfermataPayload;
+    }
+  | {
+      tipo: 'N19_ADMIN_NUOVA_SEGNALAZIONE';
+      target: Target;
+      payload: N19AdminNuovaSegnalazionePayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -106,6 +127,12 @@ function render(input: SendInput): NotificaContent {
       return tplN15AccountRiattivato(input.payload);
     case 'N16_ACCOUNT_ELIMINATO':
       return tplN16AccountEliminato(input.payload);
+    case 'N17_BROKER_PENALE_ADDEBITATA':
+      return tplN17BrokerPenaleAddebitata(input.payload);
+    case 'N18_AGENZIA_SEGNALAZIONE_CONFERMATA':
+      return tplN18AgenziaSegnalazioneConfermata(input.payload);
+    case 'N19_ADMIN_NUOVA_SEGNALAZIONE':
+      return tplN19AdminNuovaSegnalazione(input.payload);
   }
 }
 

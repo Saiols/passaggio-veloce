@@ -120,8 +120,11 @@ export async function getRendimento(
         const [, monthStr] = key.split('-');
         label = MONTH_LABELS[Number(monthStr)] ?? key;
       } else {
-        const d = new Date(key);
-        label = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+        // Parsing manuale per evitare hydration mismatch dovuto a timezone:
+        // `new Date('YYYY-MM-DD').getDate()` interpreta come UTC ma poi
+        // legge il fuso locale, quindi server e client possono divergere.
+        const [, monthStr, dayStr] = key.split('-');
+        label = `${dayStr}/${monthStr}`;
       }
       return { label, importoCent: importo };
     },

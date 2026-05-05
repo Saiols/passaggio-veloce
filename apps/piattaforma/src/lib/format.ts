@@ -1,10 +1,16 @@
 export function formatCurrencyCent(cents: number): string {
   const euro = cents / 100;
+  // Intl.NumberFormat può intercalare NBSP (U+00A0) o NARROW NO-BREAK SPACE
+  // (U+202F) tra cifra e simbolo a seconda della versione ICU di Node vs
+  // Chromium → causa hydration mismatch in SSR. Normalizziamo a spazio
+  // standard per consistenza server/client.
   return new Intl.NumberFormat('it-IT', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
-  }).format(euro);
+  })
+    .format(euro)
+    .replace(/[  ]/g, ' ');
 }
 
 export function formatDate(d: Date | null | undefined): string {

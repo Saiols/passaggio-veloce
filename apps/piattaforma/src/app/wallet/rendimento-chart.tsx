@@ -82,9 +82,6 @@ export function RendimentoChart({
           const y = PADDING_TOP + innerH - h;
           return (
             <g key={i}>
-              <title>
-                {b.label}: {formatCurrencyCent(b.importoCent)}
-              </title>
               <rect
                 x={x}
                 y={y}
@@ -92,7 +89,12 @@ export function RendimentoChart({
                 height={h}
                 fill={fill}
                 rx={3}
-              />
+                aria-label={`${b.label}: ${formatCurrencyCent(b.importoCent)}`}
+              >
+                {/* SVG <title> dentro <rect> è valido per tooltip nativo,
+                    senza creare diff con <title> HEAD durante l'idratazione. */}
+                <title>{`${b.label}: ${formatCurrencyCent(b.importoCent)}`}</title>
+              </rect>
               <text
                 x={cx}
                 y={H - 12}

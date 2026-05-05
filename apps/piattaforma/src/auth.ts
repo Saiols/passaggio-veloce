@@ -25,30 +25,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const { email, password } = parsed.data;
 
-        const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase() },
+        // Multi-tenancy email scope-company (item 07 release 2026-05): la
+        // stessa email puo' esistere su piu' User (uno per company). Cerchiamo
+        // tutti i match attivi e verifichiamo la password contro ognuno.
+        // L'admin platform (companyId=null) prevale per disambiguare in caso
+        // di hash uguali, poi viene il primo per createdAt.
+        const candidates = await prisma.user.findMany({
+          where: {
+            email: email.toLowerCase(),
+            deletedAt: null,
+            status: { not: 'SUSPENDED' },
+          },
           include: { company: true },
+          orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
         });
 
-        if (!user || user.deletedAt) return null;
-        if (user.status === 'SUSPENDED') return null;
+        if (candidates.length === 0) return null;
 
-        const passwordOk = await bcrypt.compare(password, user.passwordHash);
-        if (!passwordOk) return null;
+        let matched: (typeof candidates)[number] | null = null;
+        for (const c of candidates) {
+          // eslint-disable-next-line no-await-in-loop
+          const ok = await bcrypt.compare(password, c.passwordHash);
+          if (ok) {
+            matched = c;
+            break;
+          }
+        }
+        if (!matched) return null;
 
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: matched.id },
           data: { lastLoginAt: new Date() },
         });
 
         return {
-          id: user.id,
-          email: user.email,
-          name: `${user.nome} ${user.cognome}`,
-          role: user.role,
-          status: user.status,
-          companyId: user.companyId ?? undefined,
-          companyType: user.company?.type ?? undefined,
+          id: matched.id,
+          email: matched.email,
+          name: `${matched.nome} ${matched.cognome}`,
+          role: matched.role,
+          status: matched.status,
+          companyId: matched.companyId ?? undefined,
+          companyType: matched.company?.type ?? undefined,
         };
       },
     }),

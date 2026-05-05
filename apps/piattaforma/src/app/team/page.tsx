@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -65,18 +66,31 @@ export default async function TeamPage() {
           <h2 className="text-base font-bold text-pv-navy-900">Utenti attivi</h2>
           <ul className="mt-3 divide-y divide-pv-slate-100">
             {users.map((u) => (
-              <li key={u.id} className="flex items-center justify-between py-3 text-sm">
-                <div>
+              <li
+                key={u.id}
+                className="flex items-center justify-between gap-3 py-3 text-sm"
+              >
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-pv-navy-900">
                     {u.nome} {u.cognome}
                   </p>
-                  <p className="text-xs text-pv-slate-500">
+                  <p className="truncate text-xs text-pv-slate-500">
                     {u.email} · {u.role === 'ADMIN_AZIENDA' ? 'Admin' : 'Utente'}
                   </p>
                 </div>
-                <span className="text-xs text-pv-slate-500">
-                  {u.lastLoginAt ? `Ultimo accesso ${formatRelative(u.lastLoginAt)}` : 'Mai entrato'}
+                <span className="text-xs text-pv-slate-500 hidden sm:inline">
+                  {u.lastLoginAt
+                    ? `Ultimo accesso ${formatRelative(u.lastLoginAt)}`
+                    : 'Mai entrato'}
                 </span>
+                {u.id !== session.user.id && (
+                  <Link
+                    href={`/team/${u.id}/edit`}
+                    className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                  >
+                    Modifica
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

@@ -103,8 +103,15 @@ export async function registerAction(
 
   const emailLower = account.email.toLowerCase();
 
-  const existing = await prisma.user.findUnique({ where: { email: emailLower } });
-  if (existing) {
+  // Multi-tenancy email scope-company (item 07 release 2026-05): la stessa
+  // email puo' registrarsi in piu' aziende (stesso utente come dealer e come
+  // agenzia, o consulente esterno con piu' clienti). Qui blocchiamo solo se
+  // collide con un admin platform (companyId=null) per evitare ambiguita'
+  // di login con account amministrativi.
+  const existingAdmin = await prisma.user.findFirst({
+    where: { email: emailLower, companyId: null },
+  });
+  if (existingAdmin) {
     return { ok: false, error: 'Email gia registrata', field: 'account.email' };
   }
 
@@ -188,8 +195,11 @@ export async function registerAction(
           where: { token: verificationToken },
           data: { usedAt: new Date() },
         });
-        await tx.user.update({
-          where: { email: emailLower },
+        // Multi-tenancy: colpisce solo il record con stato PENDING (quello
+        // appena creato in questo flusso). Gli altri eventuali account con la
+        // stessa email sono gia' ACTIVE.
+        await tx.user.updateMany({
+          where: { email: emailLower, status: 'PENDING_EMAIL_VERIFICATION' },
           data: {
             emailVerifiedAt: new Date(),
             status: 'ACTIVE',
@@ -235,8 +245,8 @@ export async function verifyEmailAction(token: string): Promise<VerifyEmailResul
       data: { usedAt: new Date() },
     });
 
-    await tx.user.update({
-      where: { email: record.email },
+    await tx.user.updateMany({
+      where: { email: record.email, status: 'PENDING_EMAIL_VERIFICATION' },
       data: {
         emailVerifiedAt: new Date(),
         status: 'ACTIVE',
@@ -263,7 +273,15 @@ export async function requestPasswordResetAction(
   }
 
   const emailLower = email.toLowerCase().trim();
-  const user = await prisma.user.findUnique({ where: { email: emailLower } });
+  // Multi-tenancy: con stessa email su piu' User, mandiamo email reset agli
+  // admin platform per primi (priorita' di sicurezza), altrimenti al primo
+  // utente in ordine createdAt. Il token si lega a email e tutti gli account
+  // con quell'email potranno essere ripristinati condividendo la nuova
+  // password (caso raro multi-account: l'utente sceglie poi quale loggare).
+  const user = await prisma.user.findFirst({
+    where: { email: emailLower, deletedAt: null },
+    orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
+  });
 
   // Per privacy, ritorniamo ok anche se l'utente non esiste (no enumeration)
   if (!user) {
@@ -339,8 +357,12 @@ export async function confirmPasswordResetAction(
       where: { id: record.id },
       data: { usedAt: new Date() },
     });
-    await tx.user.update({
-      where: { email: record.email },
+    // Multi-tenancy: la stessa email puo' avere piu' User record. Quando
+    // l'utente reimposta la password, la propaghiamo a tutti i suoi account
+    // (l'identita' fisica e' la stessa, e' come un "single sign-on" dal punto
+    // di vista del recupero credenziali).
+    await tx.user.updateMany({
+      where: { email: record.email, deletedAt: null },
       data: { passwordHash },
     });
   });

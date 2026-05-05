@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -98,10 +99,18 @@ export default async function AdminAssistentiPage() {
                         : ' · mai entrato'}
                     </p>
                   </div>
-                  <SuspendButton
-                    target={{ kind: 'user', id: a.id }}
-                    suspended={a.status === 'SUSPENDED'}
-                  />
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Link
+                      href={`/admin/assistenti/${a.id}/edit`}
+                      className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                    >
+                      Modifica
+                    </Link>
+                    <SuspendButton
+                      target={{ kind: 'user', id: a.id }}
+                      suspended={a.status === 'SUSPENDED'}
+                    />
+                  </div>
                 </li>
               ))}
             </ul>

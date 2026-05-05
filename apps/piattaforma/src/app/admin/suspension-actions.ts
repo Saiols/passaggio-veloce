@@ -4,7 +4,66 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { isAdminOrAssistente, isAdminPiattaforma } from '@/lib/auth/permissions';
+import { sendNotification } from '@/lib/notifiche';
+
+/**
+ * Helper: invia notifica lifecycle a tutti gli utenti attivi di una company,
+ * best-effort (errori provider non bloccano l'azione admin). Item 17 release
+ * 2026-05.
+ */
+async function notifyCompanyLifecycle(
+  companyId: string,
+  tipo: 'N14_ACCOUNT_SOSPESO' | 'N15_ACCOUNT_RIATTIVATO' | 'N16_ACCOUNT_ELIMINATO',
+): Promise<void> {
+  try {
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        id: true,
+        ragioneSociale: true,
+        users: {
+          where: { deletedAt: null },
+          select: { id: true, email: true, nome: true },
+        },
+      },
+    });
+    if (!company) return;
+    for (const u of company.users) {
+      if (tipo === 'N14_ACCOUNT_SOSPESO') {
+        await sendNotification({
+          tipo,
+          target: { email: u.email, userId: u.id, companyId: company.id },
+          payload: {
+            nomeUtente: u.nome,
+            ragioneSociale: company.ragioneSociale,
+            motivo: null,
+          },
+        }).catch(() => undefined);
+      } else if (tipo === 'N15_ACCOUNT_RIATTIVATO') {
+        await sendNotification({
+          tipo,
+          target: { email: u.email, userId: u.id, companyId: company.id },
+          payload: {
+            nomeUtente: u.nome,
+            ragioneSociale: company.ragioneSociale,
+          },
+        }).catch(() => undefined);
+      } else {
+        await sendNotification({
+          tipo,
+          target: { email: u.email, userId: u.id, companyId: company.id },
+          payload: {
+            nomeUtente: u.nome,
+            ragioneSociale: company.ragioneSociale,
+          },
+        }).catch(() => undefined);
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
 
 export type SuspensionResult = { ok: true } | { ok: false; error: string };
 
@@ -65,6 +124,7 @@ export async function suspendCompanyAction(
       data: { status: 'SUSPENDED' },
     }),
   ]);
+  await notifyCompanyLifecycle(companyId, 'N14_ACCOUNT_SOSPESO');
   revalidatePath('/admin/agenzie');
   revalidatePath('/admin/broker');
   revalidatePath('/admin/utenti');
@@ -89,6 +149,64 @@ export async function reactivateCompanyAction(
       data: { status: 'ACTIVE' },
     }),
   ]);
+  await notifyCompanyLifecycle(companyId, 'N15_ACCOUNT_RIATTIVATO');
+  revalidatePath('/admin/agenzie');
+  revalidatePath('/admin/broker');
+  revalidatePath('/admin/utenti');
+  return { ok: true };
+}
+
+/**
+ * Eliminazione definitiva di una company (item 17 release 2026-05).
+ * Soft delete immediato + notifica email. Hard delete dei dati personali
+ * (documenti, recapiti) lascia agli script di retention a 90gg compliance
+ * GDPR (job da implementare). Le pratiche storiche restano per audit
+ * ma il riferimento alla company eliminata si renderizza come
+ * "Account eliminato" lato UI (vedi fallback in /admin/pratiche).
+ */
+export async function deleteCompanyAction(
+  companyId: string,
+  confirmRagioneSociale: string,
+): Promise<SuspensionResult> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!isAdminPiattaforma(session.user.role)) {
+    return {
+      ok: false,
+      error: "Solo l'admin platform può eliminare definitivamente un account",
+    };
+  }
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { ragioneSociale: true, deletedAt: true },
+  });
+  if (!company) return { ok: false, error: 'Azienda non trovata' };
+  if (company.deletedAt) return { ok: false, error: 'Azienda già eliminata' };
+  if (company.ragioneSociale.trim() !== confirmRagioneSociale.trim()) {
+    return {
+      ok: false,
+      error: 'Conferma errata: digita esattamente la ragione sociale',
+    };
+  }
+
+  // Notifica PRIMA del soft delete: dopo, gli user sono SUSPENDED e
+  // l'invio resta valido perche' attinge da deletedAt: null al momento
+  // della chiamata (il suspension non azzera deletedAt).
+  await notifyCompanyLifecycle(companyId, 'N16_ACCOUNT_ELIMINATO');
+
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.company.update({
+      where: { id: companyId },
+      data: { suspendedAt: now, deletedAt: now },
+    }),
+    prisma.user.updateMany({
+      where: { companyId, deletedAt: null },
+      data: { status: 'SUSPENDED', deletedAt: now },
+    }),
+  ]);
+
   revalidatePath('/admin/agenzie');
   revalidatePath('/admin/broker');
   revalidatePath('/admin/utenti');

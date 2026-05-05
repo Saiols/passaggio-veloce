@@ -24,11 +24,12 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       { href: '/admin/broker', label: 'Broker' },
       { href: '/admin/agenzie', label: 'Agenzie' },
       { href: '/admin/utenti', label: 'Utenti' },
-      { href: '/admin/contatti', label: 'Contatti' },
+      { href: '/admin/crm', label: 'CRM' },
       { href: '/admin/escalation', label: 'Escalation' },
     ];
     if (role === 'ADMIN_PIATTAFORMA') {
       adminLinks.splice(1, 0, { href: '/admin/dashboard', label: 'Finanze' });
+      adminLinks.push({ href: '/admin/affiliazioni', label: 'Affiliazioni' });
       adminLinks.push({ href: '/admin/assistenti', label: 'Assistenti' });
     }
     return adminLinks;

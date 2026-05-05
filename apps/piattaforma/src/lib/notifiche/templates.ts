@@ -97,6 +97,22 @@ export type N13BrokerPraticaProcessataPayload = {
   nomeBroker: string;
 };
 
+export type N14AccountSospesoPayload = {
+  nomeUtente: string;
+  ragioneSociale: string;
+  motivo?: string | null;
+};
+
+export type N15AccountRiattivatoPayload = {
+  nomeUtente: string;
+  ragioneSociale: string;
+};
+
+export type N16AccountEliminatoPayload = {
+  nomeUtente: string;
+  ragioneSociale: string;
+};
+
 export type N12AffiliazioneCommissionePayload = {
   codicePratica: string;
   targa: string | null;
@@ -369,6 +385,84 @@ export function tplN13BrokerPraticaProcessata(
     <div style="background:#fef3c7;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
       Documenti pronti, attesa firma del cliente. Riceverai un'altra notifica al completamento del passaggio.
     </div>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN14AccountSospeso(
+  p: N14AccountSospesoPayload,
+): NotificaContent {
+  const subject = `Account ${p.ragioneSociale} sospeso`;
+  const text =
+    `Ciao ${p.nomeUtente},\n` +
+    `il tuo account Passaggio Veloce associato a ${p.ragioneSociale} ` +
+    `e' stato sospeso da un amministratore.\n` +
+    (p.motivo ? `Motivo: ${p.motivo}\n` : '') +
+    `Non puoi accedere alla piattaforma fino alla riattivazione. ` +
+    `Per chiarimenti contatta supporto@passaggioveloce.it.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Account sospeso</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      il tuo account associato a <strong>${p.ragioneSociale}</strong> e&apos;
+      stato sospeso da un amministratore. Non puoi accedere alla piattaforma
+      fino alla riattivazione.
+    </p>
+    ${p.motivo ? `<div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540"><strong>Motivo:</strong> ${p.motivo}</div>` : ''}
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN15AccountRiattivato(
+  p: N15AccountRiattivatoPayload,
+): NotificaContent {
+  const subject = `Account ${p.ragioneSociale} riattivato`;
+  const text =
+    `Ciao ${p.nomeUtente},\n` +
+    `il tuo account ${p.ragioneSociale} e' stato riattivato. ` +
+    `Puoi accedere di nuovo a Passaggio Veloce dalle tue credenziali abituali.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#16a34a">Account riattivato</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      l&apos;account associato a <strong>${p.ragioneSociale}</strong> e&apos;
+      stato riattivato. Puoi accedere di nuovo a Passaggio Veloce con le
+      tue credenziali abituali.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN16AccountEliminato(
+  p: N16AccountEliminatoPayload,
+): NotificaContent {
+  const subject = `Account ${p.ragioneSociale} eliminato`;
+  const text =
+    `Ciao ${p.nomeUtente},\n` +
+    `l'account ${p.ragioneSociale} e' stato eliminato definitivamente da un ` +
+    `amministratore. I dati personali saranno cancellati entro 90 giorni ` +
+    `(retention legale). Le pratiche storiche restano per audit ma anonimizzate.\n` +
+    `Per chiarimenti contatta supporto@passaggioveloce.it.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Account eliminato</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      l&apos;account <strong>${p.ragioneSociale}</strong> e&apos; stato eliminato
+      definitivamente da un amministratore. Non potrai piu&apos; accedere alla
+      piattaforma con le credenziali precedenti.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      <strong>Compliance GDPR</strong><br>
+      I dati personali (documenti, recapiti) saranno cancellati entro
+      <strong>90 giorni</strong> per esigenze di retention legale. Le pratiche
+      storiche restano per audit ma anonimizzate.
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+    </p>
   `);
   return { subject, html, text };
 }

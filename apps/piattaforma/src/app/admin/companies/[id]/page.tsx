@@ -9,6 +9,7 @@ import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
 import { updateCompanyAdminAction } from '../actions';
 import { SuspendButton } from '../../suspend-button';
+import { DeleteCompanyButton } from './delete-button';
 
 export default async function AdminCompanyDetailPage({
   params,
@@ -96,6 +97,16 @@ export default async function AdminCompanyDetailPage({
             suspended={company.suspendedAt !== null}
           />
         </header>
+
+        {session.user.role === 'ADMIN_PIATTAFORMA' && (
+          <div className="mb-6">
+            <DeleteCompanyButton
+              companyId={company.id}
+              ragioneSociale={company.ragioneSociale}
+              redirectAfter={listaHref}
+            />
+          </div>
+        )}
 
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard label="Utenti aziendali" value={company.users.length} accent="navy" />

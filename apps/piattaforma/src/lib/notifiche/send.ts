@@ -7,6 +7,9 @@ import {
   tplN11BrokerEscalation,
   tplN12AffiliazioneCommissione,
   tplN13BrokerPraticaProcessata,
+  tplN14AccountSospeso,
+  tplN15AccountRiattivato,
+  tplN16AccountEliminato,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -18,6 +21,9 @@ import {
   type N11BrokerEscalationPayload,
   type N12AffiliazioneCommissionePayload,
   type N13BrokerPraticaProcessataPayload,
+  type N14AccountSospesoPayload,
+  type N15AccountRiattivatoPayload,
+  type N16AccountEliminatoPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -53,6 +59,21 @@ type SendInput =
       tipo: 'N13_BROKER_PRATICA_PROCESSATA';
       target: Target;
       payload: N13BrokerPraticaProcessataPayload;
+    }
+  | {
+      tipo: 'N14_ACCOUNT_SOSPESO';
+      target: Target;
+      payload: N14AccountSospesoPayload;
+    }
+  | {
+      tipo: 'N15_ACCOUNT_RIATTIVATO';
+      target: Target;
+      payload: N15AccountRiattivatoPayload;
+    }
+  | {
+      tipo: 'N16_ACCOUNT_ELIMINATO';
+      target: Target;
+      payload: N16AccountEliminatoPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -79,6 +100,12 @@ function render(input: SendInput): NotificaContent {
       return tplN12AffiliazioneCommissione(input.payload);
     case 'N13_BROKER_PRATICA_PROCESSATA':
       return tplN13BrokerPraticaProcessata(input.payload);
+    case 'N14_ACCOUNT_SOSPESO':
+      return tplN14AccountSospeso(input.payload);
+    case 'N15_ACCOUNT_RIATTIVATO':
+      return tplN15AccountRiattivato(input.payload);
+    case 'N16_ACCOUNT_ELIMINATO':
+      return tplN16AccountEliminato(input.payload);
   }
 }
 

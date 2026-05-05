@@ -6,20 +6,22 @@ import { Alert, Card, StatCard } from '@/components/ui';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 
-type Periodo = 'settimana' | 'mese' | 'anno';
+type Periodo = 'giorno' | 'settimana' | 'mese' | 'anno';
 type TipoFiltro = '' | 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
 
 type SearchParams = { periodo?: Periodo; tipo?: TipoFiltro };
 
 function startOfPeriodo(p: Periodo): Date {
   const d = new Date();
-  if (p === 'settimana') d.setDate(d.getDate() - 7);
+  if (p === 'giorno') d.setDate(d.getDate() - 1);
+  else if (p === 'settimana') d.setDate(d.getDate() - 7);
   else if (p === 'mese') d.setMonth(d.getMonth() - 1);
   else d.setFullYear(d.getFullYear() - 1);
   return d;
 }
 
 function periodoLabel(p: Periodo): string {
+  if (p === 'giorno') return 'Ultime 24h';
   if (p === 'settimana') return 'Ultima settimana';
   if (p === 'mese') return 'Ultimo mese';
   return 'Ultimo anno';
@@ -96,6 +98,23 @@ export default async function AdminDashboardPage({
   const feeTotaleCent = feeFirmateAgg._sum.feeAgenziaCent ?? 0;
   const creditoBrokerTotaleCent = creditoBrokerAgg._sum.creditoBrokerCent ?? 0;
   const nostroLordoCent = feeTotaleCent - creditoBrokerTotaleCent;
+
+  // Item 15 release 2026-05: erogato vs da erogare per evitare doppi pagamenti
+  // e monitorare la liquidita' in uscita.
+  const [payoutsErogati, walletsAggregato] = await Promise.all([
+    prisma.payout.aggregate({
+      where: { stato: 'ESEGUITO', eseguitoAt: { gte: since } },
+      _sum: { importoCent: true },
+      _count: true,
+    }),
+    prisma.wallet.aggregate({
+      where: { company: { deletedAt: null, suspendedAt: null } },
+      _sum: { saldoCent: true },
+    }),
+  ]);
+  const erogatoCent = payoutsErogati._sum?.importoCent ?? 0;
+  const numErogazioni = payoutsErogati._count ?? 0;
+  const daErogareCent = walletsAggregato._sum.saldoCent ?? 0;
 
   // Top 5 broker per pratiche firmate
   const topBroker = await prisma.pratica.groupBy({
@@ -189,6 +208,35 @@ export default async function AdminDashboardPage({
           </Card>
         </div>
 
+        {/* Erogato vs da-erogare (item 15 release 2026-05): visibilita'
+            critica per evitare doppi pagamenti e monitorare la liquidita'
+            in uscita dato che le erogazioni avvengono in automatico. */}
+        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Card className="border-pv-green-500/30 bg-pv-green-50/40">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-green-500">
+              Già erogato · {periodoLabel(periodo).toLowerCase()}
+            </p>
+            <p className="mt-2 text-[28px] font-extrabold text-pv-navy-900">
+              {formatCurrencyCent(erogatoCent)}
+            </p>
+            <p className="mt-1 text-[11px] text-pv-slate-500">
+              {numErogazioni} payout completati nel periodo
+            </p>
+          </Card>
+          <Card className="border-pv-amber-500/30 bg-pv-amber-50/40">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-amber-500">
+              Da erogare (saldo wallet aperti)
+            </p>
+            <p className="mt-2 text-[28px] font-extrabold text-pv-navy-900">
+              {formatCurrencyCent(daErogareCent)}
+            </p>
+            <p className="mt-1 text-[11px] text-pv-slate-500">
+              somma saldi positivi non ancora pagati. Liquidita&apos; in
+              uscita prevista al prossimo ciclo cron.
+            </p>
+          </Card>
+        </div>
+
         <Card>
           <h2 className="text-[15px] font-bold text-pv-navy-800">
             Top broker per pratiche firmate
@@ -234,7 +282,7 @@ export default async function AdminDashboardPage({
 }
 
 function PeriodoTabs({ current, tipo }: { current: Periodo; tipo: TipoFiltro }) {
-  const periodi: Periodo[] = ['settimana', 'mese', 'anno'];
+  const periodi: Periodo[] = ['giorno', 'settimana', 'mese', 'anno'];
   return (
     <div className="flex gap-2 border-b border-pv-slate-200">
       {periodi.map((p) => {

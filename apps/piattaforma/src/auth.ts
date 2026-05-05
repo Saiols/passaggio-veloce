@@ -44,7 +44,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         let matched: (typeof candidates)[number] | null = null;
         for (const c of candidates) {
-          // eslint-disable-next-line no-await-in-loop
           const ok = await bcrypt.compare(password, c.passwordHash);
           if (ok) {
             matched = c;

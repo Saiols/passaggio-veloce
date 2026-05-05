@@ -32,11 +32,24 @@ const STEPS = [
   { id: 4, label: 'Pagamento', title: 'Pagamento e condizioni', hint: 'IBAN per il mandato SEPA e accettazione dei Termini.' },
 ] as const;
 
-export function RegisterWizard() {
+export function RegisterWizard({
+  forcedCompanyType,
+}: {
+  /**
+   * Quando il flusso di registrazione viene aperto da uno dei due entry point
+   * dedicati (/register/dealer o /register/agenzia, item 5 release 2026-05),
+   * il tipo azienda e' gia' deciso e il select viene nascosto / pre-impostato.
+   */
+  forcedCompanyType?: 'DEALER' | 'AGENZIA';
+} = {}) {
   const searchParams = useSearchParams();
   const referralCode = searchParams.get('ref') ?? undefined;
   const [step, setStep] = useState(1);
-  const [data, setData] = useState<WizardData>({});
+  const [data, setData] = useState<WizardData>(
+    forcedCompanyType
+      ? { company: { type: forcedCompanyType } as CompanyData }
+      : {},
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -123,6 +136,7 @@ export function RegisterWizard() {
           {step === 2 && (
             <CompanyStep
               defaultValues={data.company}
+              forcedCompanyType={forcedCompanyType}
               onBack={() => setStep(1)}
               onNext={handleCompany}
             />
@@ -225,10 +239,12 @@ function AccountStep({
 
 function CompanyStep({
   defaultValues,
+  forcedCompanyType,
   onBack,
   onNext,
 }: {
   defaultValues?: CompanyData;
+  forcedCompanyType?: 'DEALER' | 'AGENZIA';
   onBack: () => void;
   onNext: (data: CompanyData) => void;
 }) {
@@ -238,21 +254,27 @@ function CompanyStep({
     formState: { errors, isValid },
   } = useForm<CompanyData>({
     resolver: zodResolver(registerStep2CompanySchema),
-    defaultValues,
+    defaultValues: forcedCompanyType
+      ? { ...defaultValues, type: forcedCompanyType }
+      : defaultValues,
     mode: 'onChange',
   });
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
-      <Field label="Tipo azienda" required error={errors.type?.message}>
-        <Select invalid={!!errors.type} {...register('type')} defaultValue="">
-          <option value="" disabled>
-            Seleziona...
-          </option>
-          <option value="DEALER">Dealer / Commerciante</option>
-          <option value="AGENZIA">Agenzia pratiche auto</option>
-        </Select>
-      </Field>
+      {forcedCompanyType ? (
+        <input type="hidden" {...register('type')} value={forcedCompanyType} />
+      ) : (
+        <Field label="Tipo azienda" required error={errors.type?.message}>
+          <Select invalid={!!errors.type} {...register('type')} defaultValue="">
+            <option value="" disabled>
+              Seleziona...
+            </option>
+            <option value="DEALER">Dealer / Commerciante</option>
+            <option value="AGENZIA">Agenzia pratiche auto</option>
+          </Select>
+        </Field>
+      )}
 
       <Field label="Ragione sociale" required error={errors.ragioneSociale?.message}>
         <Input invalid={!!errors.ragioneSociale} {...register('ragioneSociale')} />

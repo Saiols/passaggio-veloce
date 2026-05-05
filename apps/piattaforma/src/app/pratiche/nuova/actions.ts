@@ -11,6 +11,7 @@ import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { computeFees } from '@/lib/pricing';
+import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 
 /**
  * Anonimizza IP per GDPR (Sistema Penali Broker — SP-A).
@@ -122,6 +123,32 @@ const submitSchema = z.object({
   flagCointestazione: formBool.default(false),
   flagMinivoltura: formBool.default(false),
   flagProcura: formBool.default(false),
+  flagSuccessione: formBool.default(false),
+  flagMinore: formBool.default(false),
+
+  // Schema Documentale v7 (SD-B): branching variables
+  venditoreTipoSoggetto: z
+    .enum([
+      'PRIVATO_ITALIANO_CIE',
+      'PRIVATO_ITALIANO_CARTACEA',
+      'STRANIERO_EXTRA_UE',
+      'AZIENDA',
+      'OPERATORE_AUTO',
+    ])
+    .optional(),
+  venditoreVisuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  venditorePermessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  acquirenteTipoSoggetto: z
+    .enum([
+      'PRIVATO_ITALIANO_CIE',
+      'PRIVATO_ITALIANO_CARTACEA',
+      'STRANIERO_EXTRA_UE',
+      'AZIENDA',
+      'OPERATORE_AUTO',
+    ])
+    .optional(),
+  acquirenteVisuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  acquirentePermessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 
   // Localizzazione
   comune: z.string().trim().min(1).max(100),
@@ -184,6 +211,47 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     );
   }
 
+  // Schema Documentale v7 (SD-B): l'engine deterministic verifica che la
+  // combinazione di variabili compilate dal broker non porti a BLOCCO
+  // (comodato attivo, permesso scaduto, visura > 6 mesi). Se INPUT_INCOMPLETO
+  // o BLOCCO, redirect con motivo. Server-side è la fonte autoritativa, il
+  // wizard usa lo stesso engine per UI in tempo reale.
+  const esitoSchema = calcolaDocumentiRichiesti({
+    preImm2015: d.preImm2015 ?? false,
+    flagComodatoDuso: d.flagComodatoDuso ?? false,
+    venditoreTipoSoggetto: d.venditoreTipoSoggetto ?? null,
+    venditoreVisuraData: d.venditoreVisuraData
+      ? new Date(d.venditoreVisuraData)
+      : null,
+    venditorePermessoData: d.venditorePermessoData
+      ? new Date(d.venditorePermessoData)
+      : null,
+    flagProcura: d.flagProcura,
+    flagSuccessione: d.flagSuccessione,
+    acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
+    acquirenteVisuraData: d.acquirenteVisuraData
+      ? new Date(d.acquirenteVisuraData)
+      : null,
+    acquirentePermessoData: d.acquirentePermessoData
+      ? new Date(d.acquirentePermessoData)
+      : null,
+    flagMinore: d.flagMinore,
+  });
+  if (esitoSchema.kind === 'BLOCCO') {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        `${esitoSchema.motivo}. ${esitoSchema.soluzione}`,
+      )}`,
+    );
+  }
+  if (esitoSchema.kind === 'INPUT_INCOMPLETO') {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        `Dati incompleti: ${esitoSchema.mancanti.join(', ')}`,
+      )}`,
+    );
+  }
+
   // Pricing derivato dal tipo + numero veicoli (engine in lib/pricing.ts).
   const fees = computeFees({ tipo: d.tipo, numeroVeicoli: d.numeroVeicoli });
   const feeAgenziaCent = fees.feeAgenziaCent;
@@ -231,6 +299,24 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
 
       comune: d.comune,
       provincia: d.provincia,
+
+      // Schema Documentale v7 (SD-B): branching variables persistite.
+      venditoreTipoSoggetto: d.venditoreTipoSoggetto ?? null,
+      venditoreVisuraData: d.venditoreVisuraData
+        ? new Date(d.venditoreVisuraData)
+        : null,
+      venditorePermessoData: d.venditorePermessoData
+        ? new Date(d.venditorePermessoData)
+        : null,
+      acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
+      acquirenteVisuraData: d.acquirenteVisuraData
+        ? new Date(d.acquirenteVisuraData)
+        : null,
+      acquirentePermessoData: d.acquirentePermessoData
+        ? new Date(d.acquirentePermessoData)
+        : null,
+      flagSuccessione: d.flagSuccessione,
+      flagMinore: d.flagMinore,
 
       brokerId,
       feeAgenziaCent,

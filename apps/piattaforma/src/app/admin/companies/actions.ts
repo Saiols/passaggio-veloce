@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { isAdminOrAssistente, isAdminPiattaforma } from '@/lib/auth/permissions';
+import { validatePayoutThresholdCent } from '@/lib/wallet/config';
 
 export type UpdateCompanyResult = { ok: true } | { ok: false; error: string };
 
@@ -24,6 +25,7 @@ const updateSchema = z.object({
     .length(2, 'Provincia 2 lettere')
     .transform((s) => s.toUpperCase()),
   iban: z.string().trim().max(34).optional().or(z.literal('')),
+  payoutThresholdEur: z.string().trim().optional(),
 });
 
 /**
@@ -55,6 +57,28 @@ export async function updateCompanyAdminAction(
   }
   const d = parsed.data;
 
+  // Soglia payout (item 12): valida e applica solo se admin platform.
+  let payoutThresholdCent: number | undefined;
+  if (
+    isAdminPiattaforma(session.user.role) &&
+    d.payoutThresholdEur &&
+    d.payoutThresholdEur.trim() !== ''
+  ) {
+    const eur = Number(d.payoutThresholdEur);
+    if (!Number.isFinite(eur)) {
+      return { ok: false, error: 'Soglia payout non valida' };
+    }
+    const cent = Math.round(eur * 100);
+    const valid = validatePayoutThresholdCent(cent);
+    if (valid === null) {
+      return {
+        ok: false,
+        error: 'Soglia payout fuori range: deve essere tra 1.000€ e 5.000€',
+      };
+    }
+    payoutThresholdCent = valid;
+  }
+
   await prisma.company.update({
     where: { id: companyId },
     data: {
@@ -68,6 +92,7 @@ export async function updateCompanyAdminAction(
       cap: d.cap,
       provincia: d.provincia,
       iban: d.iban ? d.iban.toUpperCase() : null,
+      ...(payoutThresholdCent !== undefined ? { payoutThresholdCent } : {}),
     },
   });
 

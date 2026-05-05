@@ -140,10 +140,12 @@ export default async function AdminCompanyDetailPage({
               cap: company.cap,
               provincia: company.provincia,
               iban: company.iban,
+              payoutThresholdCent: company.payoutThresholdCent,
             }}
             action={updateBound}
             cancelHref={listaHref}
             successMessage="Dati aziendali aggiornati."
+            showPayoutThreshold={session.user.role === 'ADMIN_PIATTAFORMA'}
           />
         </Card>
 

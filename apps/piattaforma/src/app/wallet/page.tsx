@@ -6,11 +6,25 @@ import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { WALLET } from '@/lib/wallet/config';
+import { getRendimento, type RendimentoPeriod } from './rendimento';
+import { RendimentoChart } from './rendimento-chart';
+import { PayoutThresholdForm } from './payout-threshold-form';
 
-const THRESHOLD_PAYOUT_AUTO_CENT = WALLET.AUTO_PAYOUT_THRESHOLD_CENT;
 const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
 
-export default async function WalletPage() {
+const PERIOD_OPTIONS: { value: RendimentoPeriod; label: string }[] = [
+  { value: '7d', label: '7 giorni' },
+  { value: '30d', label: '30 giorni' },
+  { value: '12m', label: '12 mesi' },
+  { value: 'ytd', label: 'Anno corrente' },
+];
+
+export default async function WalletPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ rendimento?: string }>;
+}) {
+  const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -31,31 +45,51 @@ export default async function WalletPage() {
 
   const companyId = session.user.companyId!;
 
-  const wallet = await prisma.wallet.findUnique({
-    where: { companyId },
-    include: {
-      transazioni: {
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        include: {
-          pratica: { select: { codicePratica: true, targa: true } },
+  const [wallet, company] = await Promise.all([
+    prisma.wallet.findUnique({
+      where: { companyId },
+      include: {
+        transazioni: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: {
+            pratica: { select: { codicePratica: true, targa: true } },
+          },
+        },
+        payouts: {
+          orderBy: { richiestoAt: 'desc' },
+          take: 10,
         },
       },
-      payouts: {
-        orderBy: { richiestoAt: 'desc' },
-        take: 10,
-      },
-    },
-  });
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { payoutThresholdCent: true },
+    }),
+  ]);
 
   const saldoCent = wallet?.saldoCent ?? 0;
+  const thresholdAutoCent =
+    company?.payoutThresholdCent ?? WALLET.AUTO_PAYOUT_DEFAULT_CENT;
 
   const statusPayout =
-    saldoCent >= THRESHOLD_PAYOUT_AUTO_CENT
+    saldoCent >= thresholdAutoCent
       ? 'auto'
       : saldoCent >= THRESHOLD_PAYOUT_MIN_CENT
         ? 'manual'
         : 'below';
+
+  // Rendimento periodo (item 03 release 2026-05). Default 30d.
+  const rendimentoPeriod: RendimentoPeriod = PERIOD_OPTIONS.some(
+    (o) => o.value === sp.rendimento,
+  )
+    ? (sp.rendimento as RendimentoPeriod)
+    : '30d';
+  const rendimento = await getRendimento(companyId, rendimentoPeriod, [
+    'CREDITO_PRATICA',
+    'CREDITO_AFFILIAZIONE',
+  ]);
+  const isAdminAzienda = session.user.role === 'ADMIN_AZIENDA';
 
   return (
     <AppShell session={session} activePath="/wallet">
@@ -69,7 +103,7 @@ export default async function WalletPage() {
           </h1>
           <p className="mt-1 text-[14px] text-pv-slate-500">
             Accrediti maturati dalle pratiche firmate. Payout automatico al raggiungimento di{' '}
-            {formatCurrencyCent(THRESHOLD_PAYOUT_AUTO_CENT)}.
+            {formatCurrencyCent(thresholdAutoCent)}.
           </p>
         </header>
 
@@ -81,36 +115,87 @@ export default async function WalletPage() {
           />
           <StatCard
             label="Soglia payout auto"
-            value={formatCurrencyCent(THRESHOLD_PAYOUT_AUTO_CENT)}
+            value={formatCurrencyCent(thresholdAutoCent)}
             hint={
               statusPayout === 'auto'
                 ? 'Superata — payout automatico al prossimo ciclo'
                 : `Mancano ${formatCurrencyCent(
-                    THRESHOLD_PAYOUT_AUTO_CENT - saldoCent,
+                    thresholdAutoCent - saldoCent,
                   )}`
             }
             accent={statusPayout === 'auto' ? 'green' : 'slate'}
           />
           <StatCard
-            label="Movimenti"
-            value={wallet?.transazioni.length ?? 0}
-            hint="Ultimi 20 mostrati"
-            accent="slate"
+            label="Rendimento periodo"
+            value={formatCurrencyCent(rendimento.totalCent)}
+            hint={`${rendimento.count} movimenti · ${PERIOD_OPTIONS.find((o) => o.value === rendimentoPeriod)?.label}`}
+            accent="green"
           />
         </div>
+
+        <Card className="mb-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-[15px] font-bold text-pv-navy-800">
+                Rendimento
+              </h2>
+              <p className="mt-1 text-[12.5px] text-pv-slate-500">
+                Crediti pratiche + commissioni affiliazione, aggregati per
+                periodo.
+              </p>
+            </div>
+            <form className="flex shrink-0 gap-1">
+              {PERIOD_OPTIONS.map((o) => (
+                <button
+                  key={o.value}
+                  type="submit"
+                  name="rendimento"
+                  value={o.value}
+                  className={`rounded-[8px] border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                    o.value === rendimentoPeriod
+                      ? 'border-pv-navy-700 bg-pv-navy-700 text-white'
+                      : 'border-pv-slate-300 bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </form>
+          </div>
+          <RendimentoChart buckets={rendimento.buckets} accent="navy" />
+        </Card>
 
         <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
           <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
           <p className="mt-1 text-sm text-pv-slate-500">
-            Soglia minima 500€ · Soglia auto 1.000€
+            Richiesta manuale da {formatCurrencyCent(WALLET.MIN_PAYOUT_CENT)} ·
+            Soglia automatica {formatCurrencyCent(thresholdAutoCent)}
           </p>
           <div className="mt-4">
-            <PayoutButton disabled={saldoCent < 50_000} />
+            <PayoutButton disabled={saldoCent < WALLET.MIN_PAYOUT_CENT} />
           </div>
-          {saldoCent >= 100_000 && (
+          {saldoCent >= thresholdAutoCent && (
             <p className="mt-2 text-xs text-pv-slate-500">
               🎯 Sei sopra la soglia automatica. In DEMO il payout si attiva via Demo Control.
             </p>
+          )}
+          {isAdminAzienda && (
+            <div className="mt-5 border-t border-pv-slate-200 pt-4">
+              <h3 className="text-[13px] font-bold text-pv-navy-800">
+                Soglia payout automatico
+              </h3>
+              <p className="mt-1 text-[12px] text-pv-slate-500">
+                Configurabile tra {formatCurrencyCent(WALLET.AUTO_PAYOUT_MIN_CENT)} e{' '}
+                {formatCurrencyCent(WALLET.AUTO_PAYOUT_MAX_CENT)}.
+              </p>
+              <div className="mt-3">
+                <PayoutThresholdForm
+                  defaultValueCent={thresholdAutoCent}
+                  minCent={WALLET.AUTO_PAYOUT_MIN_CENT}
+                  maxCent={WALLET.AUTO_PAYOUT_MAX_CENT}
+                />
+              </div>
+            </div>
           )}
         </div>
 

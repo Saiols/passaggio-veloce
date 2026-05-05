@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { WALLET } from '@/lib/wallet/config';
+import { WALLET, validatePayoutThresholdCent } from '@/lib/wallet/config';
 
 export type PayoutResult = { ok: true } | { ok: false; error: string };
 
@@ -38,6 +38,44 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
       stato: 'RICHIESTO',
       automatico: false,
     },
+  });
+
+  revalidatePath('/wallet');
+  return { ok: true };
+}
+
+export type UpdatePayoutThresholdResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Aggiorna la soglia auto-payout per la propria company. Riservato a
+ * ADMIN_AZIENDA (item 12 release 2026-05).
+ */
+export async function updatePayoutThresholdAction(
+  thresholdCent: number,
+): Promise<UpdatePayoutThresholdResult> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'ADMIN_AZIENDA') {
+    return {
+      ok: false,
+      error: "Solo l'admin azienda può modificare la soglia",
+    };
+  }
+  const companyId = session.user.companyId!;
+
+  const valid = validatePayoutThresholdCent(thresholdCent);
+  if (valid === null) {
+    return {
+      ok: false,
+      error: `Valore fuori range: deve essere tra ${WALLET.AUTO_PAYOUT_MIN_CENT / 100}€ e ${WALLET.AUTO_PAYOUT_MAX_CENT / 100}€`,
+    };
+  }
+
+  await prisma.company.update({
+    where: { id: companyId },
+    data: { payoutThresholdCent: valid },
   });
 
   revalidatePath('/wallet');

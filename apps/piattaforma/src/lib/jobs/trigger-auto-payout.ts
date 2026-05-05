@@ -1,17 +1,28 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import { WALLET } from '@/lib/wallet/config';
 
 export type TriggerAutoPayoutResult = { created: number };
 
+/**
+ * Cron payout: per ogni wallet, confronta il saldo con la soglia
+ * configurata sulla company di appartenenza (item 12 release 2026-05).
+ * Filtriamo lato applicazione anziche' lato DB per non duplicare la
+ * regola: e' una query bottleneck periodica, non hot path.
+ */
 export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
   const wallets = await prisma.wallet.findMany({
-    where: { saldoCent: { gte: WALLET.AUTO_PAYOUT_THRESHOLD_CENT } },
-    select: { id: true, saldoCent: true },
+    select: {
+      id: true,
+      saldoCent: true,
+      company: { select: { payoutThresholdCent: true } },
+    },
   });
 
   let created = 0;
   for (const w of wallets) {
+    const threshold = w.company.payoutThresholdCent;
+    if (w.saldoCent < threshold) continue;
+
     const inflight = await prisma.payout.findFirst({
       where: { walletId: w.id, stato: { in: ['RICHIESTO', 'IN_LAVORAZIONE'] } },
     });

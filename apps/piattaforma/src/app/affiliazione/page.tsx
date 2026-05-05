@@ -6,6 +6,8 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
 import { CopyLinkButton } from './copy-link-button';
+import { getRendimento } from '@/app/wallet/rendimento';
+import { RendimentoChart } from '@/app/wallet/rendimento-chart';
 
 export default async function AffiliazionePage() {
   const session = await auth();
@@ -26,6 +28,10 @@ export default async function AffiliazionePage() {
   }
 
   const companyId = session.user.companyId!;
+
+  const earningsRendimento = await getRendimento(companyId, '12m', [
+    'CREDITO_AFFILIAZIONE',
+  ]);
 
   const [company, referrals, commissioni, clickCount] = await Promise.all([
     prisma.company.findUnique({
@@ -169,6 +175,28 @@ export default async function AffiliazionePage() {
             </p>
           )}
         </Card>
+
+        {earningsRendimento.count > 0 && (
+          <Card className="mb-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="text-[15px] font-bold text-pv-navy-800">
+                  Earnings affiliazione · ultimi 12 mesi
+                </h2>
+                <p className="mt-1 text-[12.5px] text-pv-slate-500">
+                  Solo commissioni accreditate dai tuoi referral.
+                </p>
+              </div>
+              <p className="text-[20px] font-extrabold text-pv-navy-900">
+                {formatCurrencyCent(earningsRendimento.totalCent)}
+              </p>
+            </div>
+            <RendimentoChart
+              buckets={earningsRendimento.buckets}
+              accent="orange"
+            />
+          </Card>
+        )}
 
         <Card>
           <h2 className="text-[15px] font-bold text-pv-navy-800">

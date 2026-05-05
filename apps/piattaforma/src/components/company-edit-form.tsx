@@ -15,6 +15,8 @@ export type CompanyEditDefaults = {
   cap: string;
   provincia: string;
   iban: string | null;
+  /** Soglia auto-payout in cent. Editabile solo dall'admin platform. */
+  payoutThresholdCent?: number;
 };
 
 type UpdateResult = { ok: true } | { ok: false; error: string };
@@ -31,11 +33,14 @@ export function CompanyEditForm({
   action,
   cancelHref,
   successMessage = 'Profilo aziendale aggiornato.',
+  showPayoutThreshold = false,
 }: {
   defaults: CompanyEditDefaults;
   action: (formData: FormData) => Promise<UpdateResult>;
   cancelHref: string;
   successMessage?: string;
+  /** Mostra il campo soglia payout (visibile solo all'admin platform). */
+  showPayoutThreshold?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +104,24 @@ export function CompanyEditForm({
             maxLength={34}
           />
         </Field>
+        {showPayoutThreshold && (
+          <Field
+            label="Soglia payout automatico (€)"
+            hint="Range 1.000 - 5.000 €"
+            className="sm:col-span-2"
+          >
+            <Input
+              type="number"
+              name="payoutThresholdEur"
+              defaultValue={(
+                (defaults.payoutThresholdCent ?? 100000) / 100
+              ).toString()}
+              min={1000}
+              max={5000}
+              step={100}
+            />
+          </Field>
+        )}
       </div>
 
       {error && (

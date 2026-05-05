@@ -7,8 +7,9 @@
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
 > **Spec attive da implementare:**
-> - `docs/sistema-penali-broker.md` — popup pre-invio, segnalazione agenzia, penale €100, wallet negativo (3 bundle SP-A/B/C)
-> - `docs/schema-documentale-v7.md` — engine documentale + wizard branching + revisione manuale (4 bundle SD-A/B/C/D, ultimo richiede AI/OCR account esterno)
+> - `docs/sistema-penali-broker.md` — popup pre-invio, segnalazione agenzia, penale €100, wallet negativo (3 bundle SP-A/B/C) ✅ in prod
+> - `docs/schema-documentale-v7.md` — engine documentale + wizard branching + revisione manuale (4 bundle SD-A/B/C/D, ultimo richiede AI/OCR account esterno) ✅ A/B/C in prod
+> - `docs/crm-spec-implementativa.md` — CRM interno team PV (Pipeline Lead, Sales Agents, Campagne, Chatbot, Dashboard, RBAC interno). 8 bundle CRM-A..H. Sostituisce il placeholder "FASE 14 differita".
 
 ---
 

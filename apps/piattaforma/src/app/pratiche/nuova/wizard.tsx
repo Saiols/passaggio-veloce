@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition, useRef } from 'react';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
+import { DichiarazionePopup } from '@/components/dichiarazione-popup';
+import { PENALI } from '@/lib/penali/config';
 import { extractLibrettoAction, submitNuovaPraticaAction } from './actions';
 
 /**
@@ -134,6 +136,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   const [submitting, startSubmit] = useTransition();
 
+  // Sistema Penali Broker — SP-A: popup di responsabilità mostrato come step
+  // finale prima del submit. Il broker deve spuntare il checkbox prima di
+  // poter cliccare "Conferma e invia". Il backend logga IP+UA+versione popup.
+  const [showDichiarazione, setShowDichiarazione] = useState(false);
+  const [dichiarazioneAccettata, setDichiarazioneAccettata] = useState(false);
+
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -217,6 +225,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
     fd.append('comune', comune);
     fd.append('provincia', provincia);
+
+    // Sistema Penali Broker: payload di accettazione popup (versione + flag)
+    fd.append('dichiarazioneAccettata', 'true');
+    fd.append('dichiarazionePopupVersion', PENALI.POPUP_VERSION);
 
     startSubmit(async () => {
       await submitNuovaPraticaAction(fd);
@@ -516,7 +528,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 Indietro
               </Button>
               <Button
-                onClick={handleFinalSubmit}
+                onClick={() => {
+                  setDichiarazioneAccettata(false);
+                  setShowDichiarazione(true);
+                }}
                 disabled={!canSubmit || submitting}
                 loading={submitting}
                 loadingLabel="Invio pratica…"
@@ -527,6 +542,18 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           </div>
         )}
       </div>
+
+      <DichiarazionePopup
+        open={showDichiarazione}
+        accepted={dichiarazioneAccettata}
+        pending={submitting}
+        onAcceptedChange={setDichiarazioneAccettata}
+        onConfirm={() => {
+          setShowDichiarazione(false);
+          handleFinalSubmit();
+        }}
+        onClose={() => setShowDichiarazione(false)}
+      />
     </>
   );
 }

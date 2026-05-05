@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
@@ -10,6 +11,33 @@ import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { computeFees } from '@/lib/pricing';
+
+/**
+ * Anonimizza IP per GDPR (Sistema Penali Broker — SP-A).
+ * IPv4: maschera l'ultimo ottetto. IPv6: tiene primi 4 hextet.
+ */
+function anonimizeIp(ip: string): string {
+  if (!ip) return '';
+  if (ip.includes('.')) {
+    const parts = ip.split('.');
+    if (parts.length === 4) return `${parts[0]}.${parts[1]}.${parts[2]}.x`;
+  }
+  if (ip.includes(':')) {
+    const hextets = ip.split(':').filter((h) => h.length > 0);
+    return hextets.slice(0, 4).join(':') + '::x';
+  }
+  return ip;
+}
+
+async function getRequestMetadata(): Promise<{ ip: string; userAgent: string }> {
+  const h = await headers();
+  const xff = h.get('x-forwarded-for') ?? '';
+  const rawIp = xff.split(',')[0]?.trim() || h.get('x-real-ip') || '';
+  return {
+    ip: anonimizeIp(rawIp),
+    userAgent: (h.get('user-agent') ?? '').slice(0, 300),
+  };
+}
 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
@@ -102,6 +130,10 @@ const submitSchema = z.object({
     .trim()
     .length(2)
     .transform((s) => s.toUpperCase()),
+
+  // Sistema Penali Broker (SP-A): popup di responsabilità accettato
+  dichiarazioneAccettata: formBool,
+  dichiarazionePopupVersion: z.string().trim().min(1).max(20),
 });
 
 async function nextCodicePratica(): Promise<string> {
@@ -143,6 +175,13 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   }
   if (d.tipo === 'MINIVOLTURE_MULTIPLE' && d.numeroVeicoli < 2) {
     redirect('/pratiche/nuova?error=Minivolture%20multiple%20richiedono%20almeno%202%20veicoli');
+  }
+
+  // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
+  if (!d.dichiarazioneAccettata) {
+    redirect(
+      '/pratiche/nuova?error=Devi%20accettare%20la%20dichiarazione%20di%20responsabilita%20prima%20di%20inviare',
+    );
   }
 
   // Pricing derivato dal tipo + numero veicoli (engine in lib/pricing.ts).
@@ -200,6 +239,24 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       submittedAt: now,
     },
   });
+
+  // Sistema Penali Broker (SP-A): log immutabile dell'accettazione popup.
+  // Best-effort: se fallisce il log non blocchiamo il submit, ma resta
+  // tracciata l'accettazione via flag formData.
+  try {
+    const meta = await getRequestMetadata();
+    await prisma.brokerDichiarazione.create({
+      data: {
+        praticaId: pratica.id,
+        userId,
+        ip: meta.ip || null,
+        userAgent: meta.userAgent || null,
+        popupVersion: d.dichiarazionePopupVersion,
+      },
+    });
+  } catch {
+    // best-effort log
+  }
 
   // Apre il round 1 tramite engine distribuzione: crea PraticaAssegnazione
   // con countdown per-agenzia basato sugli orari di apertura dichiarati.

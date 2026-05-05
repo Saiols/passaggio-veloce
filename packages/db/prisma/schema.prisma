@@ -140,6 +140,23 @@ enum TransazioneWalletTipo {
   PAYOUT_MANUALE
   RETTIFICA_ADMIN
   STORNO
+  PENALE_BROKER
+}
+
+// Tipologia di problema segnalato dall'agenzia su una pratica accettata
+// (Sistema Penali Broker — SP-A release 2026-05).
+enum SegnalazionePraticaTipo {
+  FERMO_AMMINISTRATIVO
+  IPOTECA
+  DOCUMENTO_NON_VALIDO
+  ALTRO
+}
+
+// Ciclo di vita della segnalazione lato admin (Sistema Penali Broker).
+enum SegnalazionePraticaStato {
+  RICEVUTA
+  CONFERMATA
+  RESPINTA
 }
 
 enum PayoutStato {
@@ -193,6 +210,9 @@ enum NotificaTipo {
   N14_ACCOUNT_SOSPESO
   N15_ACCOUNT_RIATTIVATO
   N16_ACCOUNT_ELIMINATO
+  N17_BROKER_PENALE_ADDEBITATA
+  N18_AGENZIA_SEGNALAZIONE_CONFERMATA
+  N19_ADMIN_NUOVA_SEGNALAZIONE
 }
 
 enum NotificaCanale {
@@ -331,6 +351,9 @@ model User {
   // Notifiche dirette all'utente
   notifiche NotificaInviata[]
 
+  // Dichiarazioni di responsabilità accettate (Sistema Penali Broker)
+  dichiarazioni BrokerDichiarazione[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -459,6 +482,20 @@ model Pratica {
   accettataAt     DateTime?
   processataAt    DateTime?
   firmaAvvenutaAt DateTime?
+
+  // Sistema Penali Broker (SP-A release 2026-05): segnalazione fermo/ipoteca
+  // dall'agenzia, gestione admin, log penale addebitata.
+  flagSegnalata           Boolean                   @default(false)
+  tipoSegnalazione        SegnalazionePraticaTipo?
+  notaSegnalazione        String?
+  segnalataAt             DateTime?
+  segnalataDaUserId       String?                   @db.Uuid
+  segnalazioneStato       SegnalazionePraticaStato?
+  segnalazioneEsitaAt     DateTime?
+  segnalazioneEsitaDaId   String?                   @db.Uuid
+  // Importo penale addebitata al broker per questa pratica (audit). Null se
+  // pratica non ha generato penale.
+  penaleAddebitatoCent    Int?
   autoAddebitoAt  DateTime?
   scadutaAt       DateTime?
   annullataAt     DateTime?
@@ -470,6 +507,7 @@ model Pratica {
   feeAddebiti             FeeAddebito[]
   valutazione             Valutazione?
   commissioniAffiliazione CommissioneAffiliazione[]
+  dichiarazioniBroker     BrokerDichiarazione[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -480,7 +518,31 @@ model Pratica {
   @@index([stato])
   @@index([provincia])
   @@index([comune])
+  @@index([flagSegnalata])
   @@map("pratiche")
+}
+
+// Log immutabile dell'accettazione del popup di responsabilità broker
+// (Sistema Penali Broker — SP-A release 2026-05). Una riga per ogni submit
+// di pratica: timestamp, IP anonimizzato, userId, versione del testo popup.
+model BrokerDichiarazione {
+  id           String   @id @default(uuid()) @db.Uuid
+
+  praticaId    String   @db.Uuid
+  pratica      Pratica  @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  userId       String   @db.Uuid
+  user         User     @relation(fields: [userId], references: [id])
+
+  ip           String?  // GDPR: IPv4 = primi 3 ottetti; IPv6 = primi 4 hextet
+  userAgent    String?
+  popupVersion String   // "v1.0", "v1.1" — audit se il testo cambia
+
+  createdAt    DateTime @default(now())
+
+  @@index([praticaId])
+  @@index([userId])
+  @@map("broker_dichiarazioni")
 }
 
 model PraticaAssegnazione {

@@ -2,9 +2,13 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-05 (Release post-demo 2026-05: 19 item bug+feature in `bugfix-feature-list.md`)
+> Ultimo aggiornamento: 2026-05-06 (Release post-demo 2026-05 chiusa; nuove spec aggiunte: Sistema Penali Broker + Schema Documentale v7)
 
-> **Release attiva:** vedi `docs/bugfix-feature-list.md` per i 19 item raccolti dai soci dopo demo del 2026-05-01. Source-of-truth dedicata per la release in corso, fasi del piano restano invariate.
+> **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
+
+> **Spec attive da implementare:**
+> - `docs/sistema-penali-broker.md` — popup pre-invio, segnalazione agenzia, penale €100, wallet negativo (3 bundle SP-A/B/C)
+> - `docs/schema-documentale-v7.md` — engine documentale + wizard branching + revisione manuale (4 bundle SD-A/B/C/D, ultimo richiede AI/OCR account esterno)
 
 ---
 
@@ -681,4 +685,6 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | B6 | Budget bot AI Vapi.ai | Aperto | Impatta Fase 10.5 + stima costi complessiva | Andrea + CTO |
 | B7 | Testi SMS / script vocale / copy mail per stati S0-S10 | Aperto | Blocca Fase 10.7 | Sales + marketing |
 | B8 | Validazioni AF1–AF5 sistema affiliazione (fiscale + CRM + anti-collusione + cap durata + mini voltura) | Aperto | Blocca Fase 13 | Alberto + Andrea + Commercialista + CTO |
-| B9 | Dubbi 1-6 release post-demo 2026-05 (vedi `bugfix-feature-list.md` §"Dubbi aperti") | Aperto | Blocca alcuni bundle | Alberto + CTO |
+| B9 | Dubbi 1-6 release post-demo 2026-05 (vedi `bugfix-feature-list.md` §"Dubbi aperti") | Risolto in `bugfix-feature-list.md` §"Decisioni prese" | — | — |
+| B10 | Validazione legale clausole popup penale + wallet negativo (vedi `sistema-penali-broker.md` §"Punti di accordo legale") | Aperto | Blocca prod-launch sistema penali | Legale + Alberto |
+| B11 | Validazione legale documenti successione/procura/comodato (vedi `schema-documentale-v7.md` §"Punti aperti") | Aperto | Blocca prod-launch schema documentale | Notaio + Legale + Alberto |

@@ -347,14 +347,14 @@ Migrazioni stimate: 3-4 (`add_pratica_processata`, `team_email_per_company`, `ad
 
 ## Stato avanzamento (aggiorna durante sessione)
 
-- [ ] Bundle A — Workflow pratica (3 item)
-- [ ] Bundle B — Pulizia visibilità (4 item)
-- [ ] Bundle C — Team & utenti (4 item)
-- [ ] Bundle D — Registrazione split (1 item)
-- [ ] Bundle E — Wallet & dashboard performance (3 item)
-- [ ] Bundle F — Admin tools (4 item)
+- [x] Bundle A — Workflow pratica (3 item) — commit `273594c`
+- [x] Bundle B — Pulizia visibilità (4 item) — commit `0390807`
+- [x] Bundle C — Team & utenti (4 item) — commit `e5cb1c1`
+- [x] Bundle D — Registrazione split (1 item) — commit `1ddaca9`
+- [x] Bundle E — Wallet & dashboard performance (3 item) — commit `984aa07`
+- [x] Bundle F — Admin tools (4 item) — commit `fe7f0ca`
 
-**Totale:** 19/19 item
+**Totale:** 19/19 item ✅ — Release completata 2026-05-05
 
 ---
 

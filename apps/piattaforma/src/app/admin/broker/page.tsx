@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { StatCard } from '@/components/ui';
 import { TextSearchFilter } from '@/components/text-search-filter';
 import { SuspendButton } from '../suspend-button';
+import { PENALI } from '@/lib/penali/config';
 
 type SearchParams = { q?: string };
 
@@ -36,6 +37,33 @@ export default async function AdminBrokerPage({
   });
 
   const sospesi = broker.filter((b) => b.suspendedAt !== null);
+
+  // Sistema Penali Broker — SP-C: conteggio penali per broker (per badge ⚠️
+  // nella lista + alert sospensione quando >= MAX_PENALI_BEFORE_ALERT).
+  // Aggregare via Wallet evita join multipli: ogni penale è una transazione.
+  const wallets = await prisma.wallet.findMany({
+    where: { companyId: { in: broker.map((b) => b.id) } },
+    select: { id: true, companyId: true },
+  });
+  const walletByCompany = new Map(wallets.map((w) => [w.companyId, w.id]));
+  const penaliCounts = wallets.length
+    ? await prisma.transazioneWallet.groupBy({
+        by: ['walletId'],
+        where: {
+          walletId: { in: wallets.map((w) => w.id) },
+          tipo: 'PENALE_BROKER',
+        },
+        _count: { _all: true },
+      })
+    : [];
+  const penaliByWallet = new Map(
+    penaliCounts.map((p) => [p.walletId, p._count._all]),
+  );
+  function countPenali(companyId: string): number {
+    const wid = walletByCompany.get(companyId);
+    if (!wid) return 0;
+    return penaliByWallet.get(wid) ?? 0;
+  }
 
   return (
     <AppShell session={session!} activePath="/admin/broker">
@@ -86,7 +114,11 @@ export default async function AdminBrokerPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-pv-slate-200">
-                {broker.map((b) => (
+                {broker.map((b) => {
+                  const penali = countPenali(b.id);
+                  const penaliCritico =
+                    penali >= PENALI.MAX_PENALI_BEFORE_ALERT;
+                  return (
                   <tr key={b.id} className="transition-colors hover:bg-pv-slate-50">
                     <td className="px-5 py-3 font-semibold text-pv-navy-800">
                       <Link
@@ -98,6 +130,23 @@ export default async function AdminBrokerPage({
                       {b.suspendedAt && (
                         <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
                           Sospeso admin
+                        </span>
+                      )}
+                      {penali > 0 && (
+                        <span
+                          className={
+                            'ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ' +
+                            (penaliCritico
+                              ? 'bg-pv-red-50 text-pv-red-500'
+                              : 'bg-pv-amber-50 text-pv-amber-500')
+                          }
+                          title={
+                            penaliCritico
+                              ? `Soglia di alert raggiunta: valuta sospensione (${penali} penali)`
+                              : `${penali} penal${penali === 1 ? 'e' : 'i'} addebitate`
+                          }
+                        >
+                          ⚠️ {penali} penal{penali === 1 ? 'e' : 'i'}
                         </span>
                       )}
                       <p className="text-[11px] font-normal text-pv-slate-500">
@@ -123,7 +172,8 @@ export default async function AdminBrokerPage({
                       />
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

@@ -79,6 +79,11 @@ export default async function WalletPage({
         ? 'manual'
         : 'below';
 
+  // Sistema Penali Broker — SP-C: il wallet può andare in negativo se sono
+  // state addebitate penali superiori al saldo. In tal caso mostriamo banner
+  // dedicato che invita a reintegrare per sbloccare i payout.
+  const saldoNegativo = saldoCent < 0;
+
   // Rendimento periodo (item 03 release 2026-05). Default 30d.
   const rendimentoPeriod: RendimentoPeriod = PERIOD_OPTIONS.some(
     (o) => o.value === sp.rendimento,
@@ -106,6 +111,17 @@ export default async function WalletPage({
             {formatCurrencyCent(thresholdAutoCent)}.
           </p>
         </header>
+
+        {saldoNegativo && (
+          <div className="mb-6">
+            <Alert variant="warning" title="Saldo wallet negativo">
+              Il tuo saldo è sotto zero a causa di una o più penali addebitate.
+              I payout sono bloccati finché il saldo non torna positivo. Le
+              pratiche successive accumuleranno credito normalmente fino al
+              riallineamento.
+            </Alert>
+          </div>
+        )}
 
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <StatCard
@@ -174,7 +190,12 @@ export default async function WalletPage({
           <div className="mt-4">
             <PayoutButton disabled={saldoCent < WALLET.MIN_PAYOUT_CENT} />
           </div>
-          {saldoCent >= thresholdAutoCent && (
+          {saldoNegativo && (
+            <p className="mt-2 text-xs font-semibold text-pv-amber-500">
+              ⚠️ Saldo negativo: reintegra prima di poter richiedere payout.
+            </p>
+          )}
+          {!saldoNegativo && saldoCent >= thresholdAutoCent && (
             <p className="mt-2 text-xs text-pv-slate-500">
               🎯 Sei sopra la soglia automatica. In DEMO il payout si attiva via Demo Control.
             </p>

@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "PraticaStato" ADD VALUE 'PROCESSATA';
+
+-- AlterEnum
+ALTER TYPE "NotificaTipo" ADD VALUE 'N13_BROKER_PRATICA_PROCESSATA';

@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Button, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { PraticheFilters } from './filters';
+import { QuickActionButton } from './quick-action-button';
 
 const PAGE_SIZE = 15;
 
@@ -17,6 +18,7 @@ const STATI: { value: string; label: string }[] = [
   { value: 'IN_ATTESA_ROUND_3', label: 'In attesa · R3' },
   { value: 'IN_ESCALATION', label: 'Escalation' },
   { value: 'ACCETTATA', label: 'Accettata' },
+  { value: 'PROCESSATA', label: 'Processata' },
   { value: 'FIRMATA', label: 'Firmata' },
   { value: 'SCADUTA', label: 'Scaduta' },
   { value: 'ANNULLATA', label: 'Annullata' },
@@ -197,8 +199,24 @@ export default async function PratichePage({
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      <span className="relative z-10">
+                      <span className="relative z-10 inline-flex items-center gap-2">
                         <StatusChip stato={p.stato as PraticaStato} />
+                        {companyType === 'AGENZIA' &&
+                          p.agenziaAssegnataId === companyId &&
+                          p.stato === 'ACCETTATA' && (
+                            <QuickActionButton
+                              praticaId={p.id}
+                              action="processata"
+                            />
+                          )}
+                        {companyType === 'AGENZIA' &&
+                          p.agenziaAssegnataId === companyId &&
+                          p.stato === 'PROCESSATA' && (
+                            <QuickActionButton
+                              praticaId={p.id}
+                              action="firma"
+                            />
+                          )}
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 lg:table-cell">

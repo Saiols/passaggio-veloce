@@ -2,7 +2,9 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-04-17
+> Ultimo aggiornamento: 2026-05-05 (Release post-demo 2026-05: 19 item bug+feature in `bugfix-feature-list.md`)
+
+> **Release attiva:** vedi `docs/bugfix-feature-list.md` per i 19 item raccolti dai soci dopo demo del 2026-05-01. Source-of-truth dedicata per la release in corso, fasi del piano restano invariate.
 
 ---
 
@@ -399,9 +401,10 @@
 
 ## FASE 10 - CRM Vendite + Growth Stack
 
-> **Architettura di riferimento:** `docs/crm-architettura.md` (Aprile 2026).
+> **Architettura tecnica:** `docs/crm-architettura.md` (integrazione webhook, schema, matching)
+> **Paper operativo:** `docs/ecosistema-crm-ai.md` (function calling, multi-canale, 3 pagine, chatbot)
 > Il CRM è un **sistema esterno** (HubSpot/Airtable + Make + Vapi.ai + Lemlist +
-> Wistia + Twilio) — la piattaforma è solo **emettitore di eventi** verso il CRM.
+> Wistia + Twilio + WATI/Manychat) — la piattaforma è solo **emettitore di eventi** verso il CRM.
 > Questo permette di avviare il CRM in parallelo allo sviluppo piattaforma,
 > con un team/contractor separato focalizzato su growth e sales ops.
 
@@ -475,6 +478,54 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [ ] Testi SMS per ogni trigger
 - [ ] Template mail branded per ogni trigger
 - [ ] A/B test varianti testo + sentiment tracking
+- [ ] **Database Q&A obiezioni ≥80–100 voci** (agenzie + broker separati, vedi `ecosistema-crm-ai.md` §8.7)
+- [ ] Raccolta obiezioni reali via 20–30 chiamate sales umane di briefing pre-bot
+
+### 10.8 Sales Agent vocale — configurazione avanzata (paper v2)
+
+- [ ] Pagina Sales CRM: creazione/edit agenti AI (nome, voce, accento, prompt, script per fase)
+- [ ] Creazione campagna (selezione contatti, max tentativi/giorno, orari, giorni, behaviors)
+- [ ] Multi-sales agent (più agenti selezionabili per campagna)
+- [ ] Dashboard live chiamate (volumi, tasso risposta per giorno/ora, blacklist)
+- [ ] Blacklist automatica su "stop" verbale (opt-out immediato)
+- [ ] Chiusura automatica campagna al raggiungimento target/esaurimento contatti
+
+### 10.9 Function calling Vapi — raccolta dati real-time
+
+- [ ] Layer proxy (Cloudflare Worker / Vercel Edge) tra Vapi e CRM con async write + cache read (§8.4)
+- [ ] Function `collectEmail` con conferma verbale spelling
+- [ ] Function `collectWhatsApp` con conferma verbale numero
+- [ ] Function `updateContactState` (S0 → S3 ecc.)
+- [ ] Function `tagObjection` (aggiunge tag obiezione al contatto)
+- [ ] Function `scheduleNextContact` (data/canale prossimo contatto)
+- [ ] Benchmark accuratezza STT spelling italiano (target ≥95% §8.1)
+
+### 10.10 Invio multi-canale post-chiamata
+
+- [ ] Trigger Make `S0/S1 → S3`: SMS sempre + WhatsApp se numero WA + Mail se email
+- [ ] Template SMS approvato + pixel tracking
+- [ ] Template WhatsApp approvato Meta + limite finestra 24h
+- [ ] Template email con pixel Lemlist + video tutorial Wistia allegato
+- [ ] Fallback "solo fisso, no digital": rimane S3 + richiamata AI a 48h con script recupero recapito
+
+### 10.11 Chatbot testuale (inbound)
+
+- [ ] Pagina Chatbot CRM: creazione/configurazione bot testuali multipli
+- [ ] Chatbot sito — widget su passaggioveloce.it + wizard `/register`
+- [ ] Chatbot WhatsApp — risposta inbound in finestra 24h (WATI/Manychat)
+- [ ] Chatbot mail — risposte preimpostate a mail in arrivo
+- [ ] Dashboard conversazioni (storico, FAQ, escalation umana)
+- [ ] Integrazione Q&A DB condiviso col Sales Agent vocale
+- [ ] **Priorità CTO:** il chatbot sito è **primo nell'ordine** (§8.6), bot vocale outbound secondo
+
+### 10.12 Compliance & legal (bloccanti go-live outbound)
+
+- [ ] Informativa verbale AI nelle prime 10 parole chiamata
+- [ ] Consenso registrazione esplicito a inizio chiamata + fallback no-record
+- [ ] Check Registro Pubblico Opposizioni (RPO) pre-campagna per tutti i numeri fissi
+- [ ] Base giuridica legittimo interesse documentata + registro trattamenti aggiornato
+- [ ] DPO review scritta + firma
+- [ ] Process opt-out immediato ("stop" = blacklist + conferma scritta)
 
 ---
 
@@ -525,6 +576,63 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ---
 
+## FASE 13 - Sistema di Affiliazione
+
+> **Architettura di riferimento:** `docs/sistema-affiliazione.md` (spec v3 Aprile 2026 + review CTO).
+> Società costituita e rete di contatti già pronta: si procede al lancio pieno
+> del programma in parallelo alla FASE 10 CRM per sfruttare da subito la leva virale.
+> Sinergia esplicita con CRM via tie-breaker paternità lead (`ecosistema-crm-ai.md` §8.8).
+
+### 13.1 Validazione e pre-requisiti (bloccanti)
+- [ ] Validazione commercialista trattamento fiscale commissioni affiliazione (AF1)
+- [ ] Review §8 osservazioni CTO con Alberto + Andrea (AF2)
+- [ ] Completamento policy pixel tracking e finestra di attribuzione (AF3)
+- [ ] Verifica bidirezionale CRM per stato S0–S10 (dipende B5 FASE 10) (AF4)
+- [ ] Policy controlli anti-collusione (same IBAN / admin / IP / dominio) (AF5)
+- [ ] Decisione durata cap commissione (per sempre vs 24 mesi — §8.1)
+- [ ] Decisione commissione su mini voltura (€5 vs €0 — §8.2)
+- [ ] Decisione soglia payout agenzie (€500 uniforme vs differenziato — §8.7)
+
+### 13.2 Schema e backend
+- [ ] `AffiliationLink` (token univoco + `ownerCompanyId` + counter click)
+- [ ] `AffiliationClick` (timestamp, IP, UA, UTM, cookie-id) per attribuzione
+- [ ] `Company.referralBy` campo permanente (FK self-relation)
+- [ ] Wallet broker: doppia voce `importoPraticheCent` / `importoAffiliazioneCent` (oggi saldo unico)
+- [ ] Wallet agenzia: modello wallet dedicato (oggi agenzie non hanno wallet)
+- [ ] Engine split commissione al trigger `Pratica.FIRMATA` (integrato in `completaPratica`)
+- [ ] Generazione automatica link al passaggio `User.status = ACTIVE`
+- [ ] Job guardia anti-collusione pre-accredito
+
+### 13.3 Frontend
+- [ ] Landing pubblica `/r/:token` con UTM capture + fingerprint + cookie 30gg
+- [ ] Redirect `/r/:token` → `/register?ref=token` con sessione tracciata
+- [ ] Pagina `/affiliazione` menu dashboard broker
+- [ ] Pagina `/affiliazione` menu dashboard agenzia
+- [ ] Componente "Il tuo link" (copy + share WhatsApp + QR code PNG/SVG)
+- [ ] Componente statistiche (click, iscrizioni, referral attivi, commissioni)
+- [ ] Componente lista referral con stato + pratiche completate
+- [ ] Componente wallet con etichette LORDO e barra soglia €500
+- [ ] Video tutorial integrato 60–90s (asset esterno, Wistia)
+
+### 13.4 Notifiche dedicate
+- [ ] `N_REFERRAL_SIGNUP` (referral registrato)
+- [ ] `N_REFERRAL_FIRST_PRATICA` (referral ha caricato la prima pratica)
+- [ ] `N_MONTHLY_AFFILIATION_RECAP` (riepilogo mensile cron)
+- [ ] `N_PAYOUT_AFFILIATION_AVAILABLE` (soglia €500 raggiunta)
+
+### 13.5 Payout affiliazione
+- [ ] Pulsante "Richiedi payout" attivo da €500 lordi
+- [ ] Cron giorno 15 per erogazione mensile (integrato con Stripe Payout FASE 5)
+- [ ] Rendiconto PDF dedicato (separare quota pratiche da quota affiliazione)
+
+### 13.6 Admin
+- [ ] Dashboard programma (click, iscrizioni da referral, % conversione, costo aggregato)
+- [ ] Lista `AffiliationLink` + referral chain navigabile
+- [ ] Vista flag anti-collusione per review manuale
+- [ ] Override admin su singolo referral (disattiva / riattiva commissioni)
+
+---
+
 ## Target MVP - KPI da raggiungere
 
 - [ ] 100 dealer attivi
@@ -553,8 +661,9 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 7 Valutazioni/Ranking | ~85% | Form 5⭐, rating integrato in distribuzione, sospensione auto. Manca push notification + unsuspend UI |
 | 8 Listini / Osservatorio | 0% | — |
 | 9 Admin panel | ~50% | Route guard, overview, lista pratiche/utenti/agenzie/escalation, tick manuale. Manca assegnazione manuale, report |
-| 10 CRM vendite esterno | 0% | Documento architettura pronto (`crm-architettura.md`), integrazione in attesa di costituzione |
+| 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
 | 11 QA/Compliance/Lancio | 0% | — |
+| 13 Sistema Affiliazione | 0% | Spec v3 + review CTO pronto (`sistema-affiliazione.md`), lancio pieno in parallelo a FASE 10 |
 
 **Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
 
@@ -571,3 +680,5 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | B5 | Scelta CRM core (HubSpot vs Airtable) | Aperto | Sblocca Fase 10.3 | CTO |
 | B6 | Budget bot AI Vapi.ai | Aperto | Impatta Fase 10.5 + stima costi complessiva | Andrea + CTO |
 | B7 | Testi SMS / script vocale / copy mail per stati S0-S10 | Aperto | Blocca Fase 10.7 | Sales + marketing |
+| B8 | Validazioni AF1–AF5 sistema affiliazione (fiscale + CRM + anti-collusione + cap durata + mini voltura) | Aperto | Blocca Fase 13 | Alberto + Andrea + Commercialista + CTO |
+| B9 | Dubbi 1-6 release post-demo 2026-05 (vedi `bugfix-feature-list.md` §"Dubbi aperti") | Aperto | Blocca alcuni bundle | Alberto + CTO |

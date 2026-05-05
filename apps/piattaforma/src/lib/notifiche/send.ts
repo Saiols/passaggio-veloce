@@ -6,6 +6,7 @@ import {
   tplN10AdminEscalation,
   tplN11BrokerEscalation,
   tplN12AffiliazioneCommissione,
+  tplN13BrokerPraticaProcessata,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -16,6 +17,7 @@ import {
   type N10AdminEscalationPayload,
   type N11BrokerEscalationPayload,
   type N12AffiliazioneCommissionePayload,
+  type N13BrokerPraticaProcessataPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -46,6 +48,11 @@ type SendInput =
       tipo: 'N12_AFFILIAZIONE_COMMISSIONE';
       target: Target;
       payload: N12AffiliazioneCommissionePayload;
+    }
+  | {
+      tipo: 'N13_BROKER_PRATICA_PROCESSATA';
+      target: Target;
+      payload: N13BrokerPraticaProcessataPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -70,6 +77,8 @@ function render(input: SendInput): NotificaContent {
       return tplN11BrokerEscalation(input.payload);
     case 'N12_AFFILIAZIONE_COMMISSIONE':
       return tplN12AffiliazioneCommissione(input.payload);
+    case 'N13_BROKER_PRATICA_PROCESSATA':
+      return tplN13BrokerPraticaProcessata(input.payload);
   }
 }
 

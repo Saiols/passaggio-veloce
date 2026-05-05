@@ -5,7 +5,11 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
-import { markFirmaAvvenutaAction, annullaPraticaAction } from '../actions';
+import {
+  markFirmaAvvenutaAction,
+  markPraticaProcessataAction,
+  annullaPraticaAction,
+} from '../actions';
 import { ValutazioneForm } from './valutazione-form';
 
 export default async function PraticaDetailPage({
@@ -13,7 +17,12 @@ export default async function PraticaDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ firmata?: string; annullata?: string; error?: string }>;
+  searchParams: Promise<{
+    firmata?: string;
+    processata?: string;
+    annullata?: string;
+    error?: string;
+  }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -52,10 +61,15 @@ export default async function PraticaDetailPage({
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
-  const canFirma =
+  const canProcessata =
     companyType === 'AGENZIA' &&
     pratica.agenziaAssegnataId === companyId &&
     pratica.stato === 'ACCETTATA';
+
+  const canFirma =
+    companyType === 'AGENZIA' &&
+    pratica.agenziaAssegnataId === companyId &&
+    pratica.stato === 'PROCESSATA';
 
   const canAnnulla =
     companyType === 'DEALER' &&
@@ -65,6 +79,7 @@ export default async function PraticaDetailPage({
     pratica.stato !== 'SCADUTA';
 
   const firmaBound = markFirmaAvvenutaAction.bind(null, pratica.id);
+  const processataBound = markPraticaProcessataAction.bind(null, pratica.id);
   const annullaBound = annullaPraticaAction.bind(null, pratica.id);
 
   const canValutare =
@@ -103,9 +118,24 @@ export default async function PraticaDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {canProcessata && (
+              <form action={processataBound}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="animate-pulse-soft"
+                >
+                  Pratica processata
+                </Button>
+              </form>
+            )}
             {canFirma && (
               <form action={firmaBound}>
-                <Button type="submit" size="sm">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="animate-pulse-soft"
+                >
                   Firma avvenuta
                 </Button>
               </form>
@@ -130,6 +160,13 @@ export default async function PraticaDetailPage({
           <div className="mb-5">
             <Alert variant="success" title="Firma registrata">
               Credito accreditato al broker, auto-addebito programmato.
+            </Alert>
+          </div>
+        )}
+        {sp.processata && (
+          <div className="mb-5">
+            <Alert variant="success" title="Pratica processata">
+              Il broker è stato avvisato. Manca solo la firma del cliente.
             </Alert>
           </div>
         )}
@@ -482,6 +519,7 @@ function Timeline({
     round3StartedAt: Date | null;
     escalationAt: Date | null;
     accettataAt: Date | null;
+    processataAt: Date | null;
     firmaAvvenutaAt: Date | null;
     autoAddebitoAt: Date | null;
     scadutaAt: Date | null;
@@ -496,6 +534,7 @@ function Timeline({
     { label: 'Round 3 — provincia', at: pratica.round3StartedAt },
     { label: 'Escalation admin', at: pratica.escalationAt },
     { label: 'Accettata', at: pratica.accettataAt },
+    { label: 'Processata', at: pratica.processataAt },
     { label: 'Firma avvenuta', at: pratica.firmaAvvenutaAt },
     { label: 'Auto-addebito giorno 20', at: pratica.autoAddebitoAt },
     { label: 'Scaduta', at: pratica.scadutaAt },

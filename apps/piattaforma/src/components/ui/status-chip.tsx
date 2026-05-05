@@ -7,6 +7,7 @@ export type PraticaStato =
   | 'IN_ATTESA_ROUND_3'
   | 'IN_ESCALATION'
   | 'ACCETTATA'
+  | 'PROCESSATA'
   | 'FIRMATA'
   | 'SCADUTA'
   | 'ANNULLATA';
@@ -35,6 +36,10 @@ const styles: Record<PraticaStato, { label: string; cls: string }> = {
   ACCETTATA: {
     label: 'Accettata',
     cls: 'bg-pv-navy-100 text-pv-navy-700',
+  },
+  PROCESSATA: {
+    label: 'Processata',
+    cls: 'bg-pv-amber-50 text-pv-amber-500',
   },
   FIRMATA: {
     label: 'Firmata',

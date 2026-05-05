@@ -63,6 +63,7 @@ enum PraticaStato {
   IN_ATTESA_ROUND_3
   IN_ESCALATION
   ACCETTATA
+  PROCESSATA
   FIRMATA
   SCADUTA
   ANNULLATA
@@ -188,6 +189,7 @@ enum NotificaTipo {
   N10_ADMIN_ESCALATION
   N11_BROKER_ESCALATION
   N12_AFFILIAZIONE_COMMISSIONE
+  N13_BROKER_PRATICA_PROCESSATA
 }
 
 enum NotificaCanale {
@@ -437,6 +439,7 @@ model Pratica {
   round3StartedAt DateTime?
   escalationAt    DateTime?
   accettataAt     DateTime?
+  processataAt    DateTime?
   firmaAvvenutaAt DateTime?
   autoAddebitoAt  DateTime?
   scadutaAt       DateTime?

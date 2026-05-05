@@ -79,6 +79,29 @@ body {
   color: var(--foreground);
 }
 
+/* Animazione "pulse-soft": pulsazione di scala + box-shadow per richiamare
+   l'attenzione su bottoni che fanno avanzare workflow + generano notifiche.
+   Più visibile di animate-pulse di Tailwind (che varia solo opacity).
+   Usata sui bottoni "Pratica processata" e "Firma avvenuta". */
+@keyframes pv-pulse-soft {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgb(0 84 166 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgb(0 84 166 / 0);
+  }
+}
+
+.animate-pulse-soft {
+  animation: pv-pulse-soft 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-soft {
+    animation: none;
+  }
+}
+
 button:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 summary {

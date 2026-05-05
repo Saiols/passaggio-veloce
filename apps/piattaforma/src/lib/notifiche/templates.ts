@@ -90,6 +90,13 @@ export type N7AgenziaPromemoriaCountdownPayload = {
   firmaEntroAt: Date;
 };
 
+export type N13BrokerPraticaProcessataPayload = {
+  codicePratica: string;
+  targa: string | null;
+  agenziaNome: string;
+  nomeBroker: string;
+};
+
 export type N12AffiliazioneCommissionePayload = {
   codicePratica: string;
   targa: string | null;
@@ -339,6 +346,29 @@ export function tplN12AffiliazioneCommissione(
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Continua a invitare colleghi: la commissione si attiva automaticamente ad ogni firma.
     </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN13BrokerPraticaProcessata(
+  p: N13BrokerPraticaProcessataPayload,
+): NotificaContent {
+  const subject = `Pratica ${p.codicePratica} processata — manca solo la firma`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `${p.agenziaNome} ha completato la lavorazione della pratica ${p.codicePratica}` +
+    `${p.targa ? ` (${p.targa})` : ''}.\n` +
+    `Manca solo la firma del cliente per concludere il passaggio.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Pratica processata</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      <strong>${p.agenziaNome}</strong> ha completato la lavorazione della pratica
+      <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.
+    </p>
+    <div style="background:#fef3c7;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
+      Documenti pronti, attesa firma del cliente. Riceverai un'altra notifica al completamento del passaggio.
+    </div>
   `);
   return { subject, html, text };
 }

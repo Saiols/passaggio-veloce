@@ -19,6 +19,88 @@ function computeAutoAddebitoAt(now: Date): Date {
   return new Date(now.getTime() + AUTO_ADDEBITO_DAYS * 86_400_000);
 }
 
+/**
+ * Step intermedio del workflow (item 11 release 2026-05): l'agenzia segna la
+ * pratica come "processata" quando ha completato la lavorazione e attende solo
+ * la firma del cliente. Transizione forzata: ACCETTATA → PROCESSATA → FIRMATA.
+ */
+export async function markPraticaProcessataAction(praticaId: string): Promise<void> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.companyType !== 'AGENZIA') {
+    redirect('/dashboard');
+  }
+  const agenziaId = session.user.companyId!;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const pratica = await tx.pratica.findUnique({ where: { id: praticaId } });
+      if (!pratica) throw new Error('Pratica non trovata');
+      if (pratica.agenziaAssegnataId !== agenziaId) {
+        throw new Error('Pratica non assegnata a questa agenzia');
+      }
+      if (pratica.stato !== 'ACCETTATA') {
+        throw new Error('Pratica non nello stato ACCETTATA');
+      }
+
+      await tx.pratica.update({
+        where: { id: praticaId },
+        data: {
+          stato: 'PROCESSATA',
+          processataAt: new Date(),
+        },
+      });
+    });
+  } catch (err) {
+    redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
+  }
+
+  // N13: notifica al broker che la pratica è stata processata, manca solo la firma.
+  try {
+    const full = await prisma.pratica.findUnique({
+      where: { id: praticaId },
+      include: {
+        broker: {
+          include: {
+            users: {
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              select: { email: true, nome: true, id: true },
+              take: 1,
+            },
+          },
+        },
+        agenziaAssegnata: {
+          select: { ragioneSociale: true },
+        },
+      },
+    });
+    const brokerUser = full?.broker.users[0];
+    if (full && brokerUser) {
+      await sendNotification({
+        tipo: 'N13_BROKER_PRATICA_PROCESSATA',
+        target: {
+          email: brokerUser.email,
+          userId: brokerUser.id,
+          companyId: full.broker.id,
+        },
+        payload: {
+          codicePratica: full.codicePratica ?? '—',
+          targa: full.targa,
+          agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
+          nomeBroker: brokerUser.nome,
+        },
+      }).catch(() => undefined);
+    }
+  } catch {
+    // best-effort
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/pratiche');
+  revalidatePath(`/pratiche/${praticaId}`);
+  redirect(`/pratiche/${praticaId}?processata=1`);
+}
+
 export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -52,8 +134,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       if (pratica.agenziaAssegnataId !== agenziaId) {
         throw new Error('Pratica non assegnata a questa agenzia');
       }
-      if (pratica.stato !== 'ACCETTATA') {
-        throw new Error('Pratica non nello stato ACCETTATA');
+      if (pratica.stato !== 'PROCESSATA') {
+        throw new Error('La pratica deve essere prima processata');
       }
 
       const now = new Date();

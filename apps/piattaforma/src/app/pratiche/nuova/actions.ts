@@ -10,6 +10,7 @@ import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
+import { classifyDocumento } from '@/lib/documenti/classifier';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 
@@ -426,6 +427,15 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
         originalFilename: f.name,
         mimeType: f.type,
       });
+      // A4: gating rule-based al momento dell'upload. Il classificatore
+      // decide PASSED/FAILED in base a MIME, dimensioni e naming hints.
+      // Quando arriva Document AI, swap del classifier; il resto è invariato.
+      const gating = classifyDocumento({
+        tipo: docTipo,
+        mimeType: partyPut.mimeType,
+        sizeBytes: partyPut.sizeBytes,
+        originalFilename: partyPut.originalFilename,
+      });
       await prisma.documento.create({
         data: {
           tipo: docTipo,
@@ -438,7 +448,8 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
           originalFilename: partyPut.originalFilename,
           uploadedById: userId,
           ocrStato: 'NONE',
-          gatingStato: 'NONE',
+          gatingStato: gating.stato,
+          gatingError: gating.stato === 'FAILED' ? gating.reason : null,
         },
       });
     }

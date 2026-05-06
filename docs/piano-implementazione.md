@@ -789,12 +789,16 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Raggio 15 km round 2 (oggi province limitrofe Veneto hardcoded) — usa libreria geo o tabella distanze comune→comune
 - Stima: 2-3 commit, 1 giornata
 
-**A4. FASE 3.3 — Gating documentale (UI senza IA)**
-- Modello dati `Documento.gatingStato` già esiste
-- Wizard step CI/CF/visura già documentato in spec v7
-- UI gating + override admin (regole semplici: scadenza CI, presenza P.IVA su visura, ecc.)
-- Quando arriva Document AI, swap del classificatore — UI invariata
-- Stima: 3-4 commit, ~2 giornate
+**A4. ✅ DONE — Gating documentale UI (rule-based)**
+- `lib/documenti/classifier.ts` con `classifyDocumento(input)` puro: regole MIME accettato (PDF/JPG/PNG), size minima 30KB, size massima 10MB, naming hints fronte/retro per CI
+- 8 unit test verdi
+- Cablato in `createPraticaAction`: ogni Documento per parte (CI, CF, procura, visura, permesso) viene classificato all'upload, `gatingStato` = PASSED/FAILED, `gatingError` valorizzato in caso di FAILED
+- UI `/pratiche/[id]` mostra badge gating (✓ ok / ✗ scartato / ⓿ override / pending / —) per ogni documento
+- Per documenti FAILED: messaggio errore chiaro inline (es. "File troppo piccolo (12 KB). Probabilmente vuoto o placeholder.")
+- Bottone "Forza PASSED" (admin-only) → `overrideGatingAction` setta `gatingStato=OVERRIDDEN` con audit `gatingOverrideById/At`
+- Indicatore "ⓘ Validazione forzata da admin" dopo override
+- Quando arriva Document AI: swap interno di `classifyDocumento`, UI invariata
+- Backlog: blocco hard pre-invio pratica se almeno un documento richiesto è FAILED senza override (oggi soft, broker vede il warning ma può procedere)
 
 **A5. ✅ DONE — Admin completamento (4/4 voci coperte)**
 - ✅ **Assegnazione manuale escalation** — già implementata (`/admin/escalation` con `<AssignForm>` + `assegnaEscalationAction`, preload agenzie per provincia con rating + count valutazioni)

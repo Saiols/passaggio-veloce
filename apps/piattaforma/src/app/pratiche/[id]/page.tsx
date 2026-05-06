@@ -12,6 +12,7 @@ import {
 } from '../actions';
 import { SegnalaProblemaButton } from './segnala-button';
 import { ValutazioneForm } from './valutazione-form';
+import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
 export default async function PraticaDetailPage({
   params,
@@ -333,37 +334,57 @@ export default async function PraticaDetailPage({
                 </p>
               ) : (
                 <ul className="mt-3 space-y-2">
-                  {pratica.documenti.map((d) => (
-                    <li
-                      key={d.id}
-                      className="flex items-center justify-between rounded-[10px] border border-pv-slate-200 px-3 py-2 text-[13px]"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold text-pv-navy-800">
-                          {labelDocumento(d.tipo)}
-                          {d.owner ? ` — ${labelOwner(d.owner)}` : ''}
-                        </p>
-                        <p className="truncate text-[12px] text-pv-slate-500">
-                          {d.originalFilename} · {formatBytes(d.sizeBytes)}
-                        </p>
-                      </div>
-                      <div className="ml-3 flex shrink-0 items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                          {d.gatingStato === 'PASSED'
-                            ? '✓ ok'
-                            : d.gatingStato === 'FAILED'
-                              ? '✗ scartato'
-                              : d.gatingStato.toLowerCase()}
-                        </span>
-                        <a
-                          href={`/api/documenti/${d.id}`}
-                          className="rounded-lg border border-pv-slate-300 px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-                        >
-                          Scarica
-                        </a>
-                      </div>
-                    </li>
-                  ))}
+                  {pratica.documenti.map((d) => {
+                    const failed = d.gatingStato === 'FAILED';
+                    const overridden = d.gatingStato === 'OVERRIDDEN';
+                    return (
+                      <li
+                        key={d.id}
+                        className={
+                          'rounded-[10px] border px-3 py-2 text-[13px] ' +
+                          (failed
+                            ? 'border-pv-red-500/30 bg-pv-red-50/30'
+                            : 'border-pv-slate-200')
+                        }
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-pv-navy-800">
+                              {labelDocumento(d.tipo)}
+                              {d.owner ? ` — ${labelOwner(d.owner)}` : ''}
+                            </p>
+                            <p className="truncate text-[12px] text-pv-slate-500">
+                              {d.originalFilename} · {formatBytes(d.sizeBytes)}
+                            </p>
+                          </div>
+                          <div className="ml-3 flex shrink-0 items-center gap-2">
+                            <GatingBadge stato={d.gatingStato} />
+                            <a
+                              href={`/api/documenti/${d.id}`}
+                              className="rounded-lg border border-pv-slate-300 px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                            >
+                              Scarica
+                            </a>
+                          </div>
+                        </div>
+                        {failed && d.gatingError && (
+                          <p className="mt-2 rounded-[6px] bg-pv-red-50 px-2 py-1 text-[11.5px] text-pv-red-500">
+                            ⚠ {d.gatingError}
+                          </p>
+                        )}
+                        {overridden && (
+                          <p className="mt-2 text-[11px] text-pv-orange-500">
+                            ⓘ Validazione forzata da admin
+                          </p>
+                        )}
+                        {failed && session.user.role === 'ADMIN_PIATTAFORMA' && (
+                          <div className="mt-2">
+                            <OverrideGatingButton documentoId={d.id} />
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </Card>
@@ -544,6 +565,27 @@ function formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
   return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function GatingBadge({ stato }: { stato: string }): React.ReactElement {
+  const map: Record<string, { label: string; cls: string }> = {
+    PASSED: { label: '✓ ok', cls: 'bg-pv-green-50 text-pv-green-500' },
+    FAILED: { label: '✗ scartato', cls: 'bg-pv-red-50 text-pv-red-500' },
+    OVERRIDDEN: { label: '⓿ override', cls: 'bg-pv-orange-50 text-pv-orange-500' },
+    PENDING: { label: 'pending', cls: 'bg-pv-slate-100 text-pv-slate-500' },
+    NONE: { label: '—', cls: 'bg-pv-slate-100 text-pv-slate-500' },
+  };
+  const m = map[stato] ?? map.NONE!;
+  return (
+    <span
+      className={
+        'rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider ' +
+        m.cls
+      }
+    >
+      {m.label}
+    </span>
+  );
 }
 
 type TimelineStep = { label: string; at: Date | null | undefined; active?: boolean };

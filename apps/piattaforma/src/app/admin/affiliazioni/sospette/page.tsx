@@ -5,7 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
-import { formatCurrencyCent, formatDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { flagLabel, type CollusionFlag } from '@/lib/affiliazione/check-util';
 import { SospetteClient } from './client';
 
@@ -135,19 +135,3 @@ export default async function SospettePage() {
   );
 }
 
-export type SospettaItem = {
-  id: string;
-  praticaCodice: string;
-  praticaTarga: string | null;
-  referenteRagioneSociale: string;
-  referenteTipo: string;
-  referralRagioneSociale: string;
-  referralTipo: string | null;
-  importoCent: number;
-  flags: CollusionFlag[];
-  flagsLabels: string[];
-  createdAtIso: string;
-  createdAtLabel: string;
-};
-
-export const _itemFormat = formatCurrencyCent;

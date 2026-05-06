@@ -776,10 +776,12 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Dashboard admin osservatorio
 - Stima: 4-5 commit logici, ~2-3 giornate
 
-**A2. FASE 4.1 — Trigger automatico distribuzione (vercel.json crons)**
-- Aggiungere `vercel.json` con schedule per: `distribuzione-tick`, `send-solleciti`, `process-fee-scheduled`, `trigger-auto-payout`, `crm-sync`
-- Tutti gli endpoint esistono già — manca solo il file di config
-- Stima: 1 commit, 30 minuti
+**A2. ✅ DONE — Vercel Cron schedule**
+- `apps/piattaforma/vercel.json` con 6 cron paths (distribuzione-tick ogni 30min, send-solleciti 9:00, process-fee-scheduled ogni 6h, process-payouts 1:00, trigger-auto-payout 1:30, crm-sync 2:00)
+- Helper `lib/jobs/auth.ts` con `requireAdminOrCron(req)`: bearer `CRON_SECRET` (Vercel) OR sessione `ADMIN_PIATTAFORMA` (admin manuale)
+- Tutti i 6 route job ora supportano sia `GET` (Vercel) sia `POST` (admin demo-control)
+- `.env.example`: aggiunto `CRON_SECRET` con doc
+- Da fare lato Vercel dashboard: aggiungere env var `CRON_SECRET` con valore casuale
 
 **A3. FASE 4.1 — Anti-abuso ranking + raggio km reale**
 - Decay rifiuti consecutivi (engine già esiste, basta aggiungere logica)

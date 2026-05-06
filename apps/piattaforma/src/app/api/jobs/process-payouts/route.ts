@@ -1,12 +1,16 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { processPayouts } from '@/lib/jobs/process-payouts';
+import { requireAdminOrCron } from '@/lib/jobs/auth';
 
-export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'ADMIN_PIATTAFORMA') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
+/**
+ * Processa payout pendenti. Schedule cron Vercel: 1x/giorno notte.
+ */
+async function run(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireAdminOrCron(req);
+  if (guard) return guard;
   const result = await processPayouts();
   return NextResponse.json({ ok: true, ...result });
 }
+
+export const GET = run;
+export const POST = run;

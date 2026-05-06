@@ -1,22 +1,17 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { tickAllPraticheInDistribuzione } from '@/lib/distribuzione';
+import { requireAdminOrCron } from '@/lib/jobs/auth';
 
 /**
- * Trigger manuale del ciclo di distribuzione.
- * In prod diventerà Vercel Cron / GitHub Actions schedule.
- *
- * Auth:
- * - Browser (UI admin): richiede sessione ADMIN_PIATTAFORMA
- * - Script/cron: header X-Cron-Secret uguale a env CRON_SECRET (non ancora
- *   configurato — finché env.CRON_SECRET non esiste, solo admin via UI)
+ * Tick distribuzione: avanza pratiche in IN_ATTESA_ROUND_X scadute.
+ * Schedule cron Vercel: ogni 30min (vercel.json).
  */
-export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'ADMIN_PIATTAFORMA') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
-
+async function run(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireAdminOrCron(req);
+  if (guard) return guard;
   const result = await tickAllPraticheInDistribuzione();
   return NextResponse.json({ ok: true, ...result });
 }
+
+export const GET = run;
+export const POST = run;

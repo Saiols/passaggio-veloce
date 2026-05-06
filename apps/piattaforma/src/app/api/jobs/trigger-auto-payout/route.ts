@@ -1,12 +1,17 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { triggerAutoPayout } from '@/lib/jobs/trigger-auto-payout';
+import { requireAdminOrCron } from '@/lib/jobs/auth';
 
-export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'ADMIN_PIATTAFORMA') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
+/**
+ * Trigger payout automatici al raggiungimento soglia wallet.
+ * Schedule cron Vercel: 1x/giorno notte (dopo process-payouts).
+ */
+async function run(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireAdminOrCron(req);
+  if (guard) return guard;
   const result = await triggerAutoPayout();
   return NextResponse.json({ ok: true, ...result });
 }
+
+export const GET = run;
+export const POST = run;

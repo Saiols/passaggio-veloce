@@ -1,12 +1,16 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { processFeeScheduled } from '@/lib/jobs/process-fee-scheduled';
+import { requireAdminOrCron } from '@/lib/jobs/auth';
 
-export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'ADMIN_PIATTAFORMA') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
+/**
+ * Processa FeeAddebito SCHEDULED scaduti. Schedule cron Vercel: ogni 6h.
+ */
+async function run(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireAdminOrCron(req);
+  if (guard) return guard;
   const result = await processFeeScheduled();
   return NextResponse.json({ ok: true, ...result });
 }
+
+export const GET = run;
+export const POST = run;

@@ -1,21 +1,17 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { NextResponse, type NextRequest } from 'next/server';
 import { syncCrmFromPlatform } from '@/lib/crm/sync';
+import { requireAdminOrCron } from '@/lib/jobs/auth';
 
 /**
- * Trigger manuale del sync CRM ↔ piattaforma.
- * In prod diventerà Vercel Cron / GitHub Actions schedule (1x/giorno).
- *
- * Auth:
- * - Browser (UI admin): richiede sessione ADMIN_PIATTAFORMA
- * - Script/cron: header X-Cron-Secret uguale a env CRON_SECRET (futuro)
+ * Sync CRM ↔ piattaforma. Schedule cron Vercel: 1x/giorno (vercel.json).
+ * Auth: bearer CRON_SECRET (Vercel Cron) OR sessione ADMIN_PIATTAFORMA.
  */
-export async function POST() {
-  const session = await auth();
-  if (session?.user?.role !== 'ADMIN_PIATTAFORMA') {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-  }
-
+async function run(req: NextRequest): Promise<NextResponse> {
+  const guard = await requireAdminOrCron(req);
+  if (guard) return guard;
   const result = await syncCrmFromPlatform();
   return NextResponse.json({ ok: true, ...result });
 }
+
+export const GET = run;
+export const POST = run;

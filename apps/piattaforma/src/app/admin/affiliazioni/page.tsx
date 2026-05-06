@@ -148,9 +148,16 @@ export default async function AdminAffiliazioniPage({
   });
 
   // AF-AC: count commissioni DA_REVISIONARE per il banner anti-collusione.
-  const sospetteCount = await prisma.commissioneAffiliazione.count({
-    where: { stato: 'DA_REVISIONARE' },
-  });
+  // Resilience: se lo schema prod non è ancora migrato (enum mancante), il
+  // banner non viene mostrato e la dashboard resta navigabile.
+  let sospetteCount = 0;
+  try {
+    sospetteCount = await prisma.commissioneAffiliazione.count({
+      where: { stato: 'DA_REVISIONARE' },
+    });
+  } catch {
+    sospetteCount = 0;
+  }
 
   const exportParams = new URLSearchParams();
   if (sp.periodo) exportParams.set('periodo', sp.periodo);

@@ -808,10 +808,12 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - N25 recap mensile: cron + template (enum già aggiunto in FASE 13.4)
 - Stima: 2 commit, 1 giornata
 
-**A7. FASE 7 — Unsuspend UI + push notification post-firma**
-- Pagina admin per riattivare agenzie sospese con nota
-- Push notification (web push API native) post-firma per il dealer
-- Stima: 2 commit, ~mezza giornata
+**A7. ✅ DONE — Unsuspend UI + banner valuta post-firma**
+- `SuspendButton` ora apre dialog con nota motivazione (sospensione + riattivazione) — salvata su `Company.suspensionLastNote` per audit
+- Template N15_ACCOUNT_RIATTIVATO accetta `motivo` opzionale (incluso nell'email)
+- Banner "Da valutare" sulla dashboard broker con elenco delle ultime 5 pratiche FIRMATA non valutate + CTA "Valuta ora →"
+- Smoke test: sospensione + riattivazione + banner verde end-to-end
+- Schema: nuovo campo `Company.suspensionLastNote` (push schema applicato dev+prod)
 
 **A8. FASE 11 — Setup QA**
 - Cookie banner + consensi (componente client + persist su User)

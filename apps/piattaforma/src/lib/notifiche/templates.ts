@@ -106,6 +106,8 @@ export type N14AccountSospesoPayload = {
 export type N15AccountRiattivatoPayload = {
   nomeUtente: string;
   ragioneSociale: string;
+  /** Nota admin opzionale sul motivo di riattivazione (A7). */
+  motivo?: string | null;
 };
 
 export type N16AccountEliminatoPayload = {
@@ -460,10 +462,16 @@ export function tplN15AccountRiattivato(
   p: N15AccountRiattivatoPayload,
 ): NotificaContent {
   const subject = `Account ${p.ragioneSociale} riattivato`;
+  const motivoLine = p.motivo
+    ? `\nNota dall'admin: ${p.motivo}`
+    : '';
   const text =
     `Ciao ${p.nomeUtente},\n` +
     `il tuo account ${p.ragioneSociale} e' stato riattivato. ` +
-    `Puoi accedere di nuovo a Passaggio Veloce dalle tue credenziali abituali.`;
+    `Puoi accedere di nuovo a Passaggio Veloce dalle tue credenziali abituali.${motivoLine}`;
+  const motivoHtml = p.motivo
+    ? `<div style="margin-top:14px;padding:10px 12px;background:#f1f5f9;border-radius:8px;font-size:12.5px;color:#334155"><strong>Nota dall'admin:</strong><br>${escapeHtml(p.motivo)}</div>`
+    : '';
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#16a34a">Account riattivato</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
@@ -472,8 +480,18 @@ export function tplN15AccountRiattivato(
       stato riattivato. Puoi accedere di nuovo a Passaggio Veloce con le
       tue credenziali abituali.
     </p>
+    ${motivoHtml}
   `);
   return { subject, html, text };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export function tplN16AccountEliminato(

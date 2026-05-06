@@ -15,6 +15,7 @@ import { sendNotification } from '@/lib/notifiche';
 async function notifyCompanyLifecycle(
   companyId: string,
   tipo: 'N14_ACCOUNT_SOSPESO' | 'N15_ACCOUNT_RIATTIVATO' | 'N16_ACCOUNT_ELIMINATO',
+  motivo?: string | null,
 ): Promise<void> {
   try {
     const company = await prisma.company.findUnique({
@@ -37,7 +38,7 @@ async function notifyCompanyLifecycle(
           payload: {
             nomeUtente: u.nome,
             ragioneSociale: company.ragioneSociale,
-            motivo: null,
+            motivo: motivo ?? null,
           },
         }).catch(() => undefined);
       } else if (tipo === 'N15_ACCOUNT_RIATTIVATO') {
@@ -47,6 +48,7 @@ async function notifyCompanyLifecycle(
           payload: {
             nomeUtente: u.nome,
             ragioneSociale: company.ragioneSociale,
+            motivo: motivo ?? null,
           },
         }).catch(() => undefined);
       } else {
@@ -108,23 +110,25 @@ export async function reactivateUserAction(userId: string): Promise<SuspensionRe
  */
 export async function suspendCompanyAction(
   companyId: string,
+  noteRaw?: string,
 ): Promise<SuspensionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!isAdminOrAssistente(session.user.role)) {
     return { ok: false, error: 'Operazione riservata ad admin/assistente' };
   }
+  const note = sanitizeNote(noteRaw);
   await prisma.$transaction([
     prisma.company.update({
       where: { id: companyId },
-      data: { suspendedAt: new Date() },
+      data: { suspendedAt: new Date(), suspensionLastNote: note },
     }),
     prisma.user.updateMany({
       where: { companyId },
       data: { status: 'SUSPENDED' },
     }),
   ]);
-  await notifyCompanyLifecycle(companyId, 'N14_ACCOUNT_SOSPESO');
+  await notifyCompanyLifecycle(companyId, 'N14_ACCOUNT_SOSPESO', note);
   revalidatePath('/admin/agenzie');
   revalidatePath('/admin/broker');
   revalidatePath('/admin/utenti');
@@ -133,27 +137,36 @@ export async function suspendCompanyAction(
 
 export async function reactivateCompanyAction(
   companyId: string,
+  noteRaw?: string,
 ): Promise<SuspensionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!isAdminOrAssistente(session.user.role)) {
     return { ok: false, error: 'Operazione riservata ad admin/assistente' };
   }
+  const note = sanitizeNote(noteRaw);
   await prisma.$transaction([
     prisma.company.update({
       where: { id: companyId },
-      data: { suspendedAt: null },
+      data: { suspendedAt: null, suspensionLastNote: note },
     }),
     prisma.user.updateMany({
       where: { companyId, status: 'SUSPENDED' },
       data: { status: 'ACTIVE' },
     }),
   ]);
-  await notifyCompanyLifecycle(companyId, 'N15_ACCOUNT_RIATTIVATO');
+  await notifyCompanyLifecycle(companyId, 'N15_ACCOUNT_RIATTIVATO', note);
   revalidatePath('/admin/agenzie');
   revalidatePath('/admin/broker');
   revalidatePath('/admin/utenti');
   return { ok: true };
+}
+
+function sanitizeNote(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 1000);
 }
 
 /**

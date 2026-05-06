@@ -301,6 +301,10 @@ model Company {
   // null = ACTIVE; valorizzato = SUSPENDED.
   suspendedAt DateTime?
 
+  /// A7: ultima nota admin sull'azione di sospensione/riattivazione.
+  /// Audit semplificato: una sola nota, sovrascritta ad ogni transizione.
+  suspensionLastNote String?
+
   // FASE 13 affiliazione: chi ha portato questa Company in piattaforma.
   // null = iscritto diretto. Auto-relazione (può puntare a broker o agenzia).
   referenteId String?   @db.Uuid

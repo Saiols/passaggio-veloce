@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-06 (CRM interno: bundle A/B/C/F in prod; FASE 14 tracking aggiunta)
+> Ultimo aggiornamento: 2026-05-06 (FASE 14 CRM A-G + FASE 13 AF-N+AF-AC in prod; mappa lavoro residuo aggiunta)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -734,27 +734,115 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ## Stato MVP al 2026-05-06
 
-**Progresso complessivo (effort-weighted): ~75-78%**
+**Progresso complessivo (effort-weighted): ~80%** · **Production:** https://passaggio-veloce-piattaforma-cm8unpjkg-saiols-projects.vercel.app/
 
 | Fase | % | Note |
 |---|---|---|
 | 0 Pre-sviluppo | ~30% | Stack scelto, naming, CTO. Resto su decisioni business/legali |
-| 1 Fondamenta | ~75% | Monorepo, CI, DB, Prisma, Sentry, Docker, seed. Manca staging/prod/backup |
-| 2 Auth | ~60% | Login, wizard registrazione, logout. Manca invito utenti, 2FA, rate limit, email reale |
+| 1 Fondamenta | ~80% | Monorepo, CI, DB Prisma, Sentry, Docker, seed, **deploy Vercel attivo**. Manca staging dedicato + backup automatici Neon |
+| 2 Auth | ~75% | Login, wizard split dealer/agenzia, **invito utenti team operativo** (`/team`, `/invito/[token]`), reset password, magic verify. Manca 2FA, rate-limit, email reale |
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
-| 3 Documenti/OCR/Pratiche | ~50% | Storage+OCR mock operativi, wizard nuova pratica, lista/detail. Manca gating IA + upload CI/CF/visura |
-| 4 Distribuzione + agenzia | ~85% | Engine 3-round + ore lavorative + ranking. Manca cron automatico, anti-abuso, raggio km reale |
-| 5 Pagamenti/Wallet/SDI | ~25% | Logica DB completa (wallet, fee, transazioni, payout). Blocca Stripe → commercialista |
-| 6 Notifiche | ~60% | 7/10 tipi agganciati + audit. Manca N3/N5/N7 (cron-based), unsubscribe |
-| 7 Valutazioni/Ranking | ~85% | Form 5⭐, rating integrato in distribuzione, sospensione auto. Manca push notification + unsuspend UI |
-| 8 Listini / Osservatorio | 0% | — |
-| 9 Admin panel | ~50% | Route guard, overview, lista pratiche/utenti/agenzie/escalation, tick manuale. Manca assegnazione manuale, report |
-| 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
-| 11 QA/Compliance/Lancio | 0% | — |
-| 13 Sistema Affiliazione | ~85% | Backend/UI/notifiche/AF-N/AF-AC in prod. Aperti: AF-PDF (backlog), AF-P (bloccato Stripe), N25 cron mensile |
-| 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H (Vapi — bloccato da account esterno) |
+| 3 Documenti/OCR/Pratiche | ~55% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, lista/detail, schema documentale v7 (SD-A/B/C in prod). Manca gating IA + integrazione OCR reale |
+| 4 Distribuzione + agenzia | ~88% | Engine 3-round + ore lavorative + ranking + tick endpoint. Manca solo `vercel.json` cron schedule, anti-abuso, raggio km |
+| 5 Pagamenti/Wallet/SDI | ~30% | Logica wallet completa, FeeAddebito SCHEDULED, payout job, MockPaymentProvider. Blocca Stripe → commercialista (B1) |
+| 6 Notifiche | ~85% | **23 NotificaTipo cablati** (N1-N17, N18-N21 sistema penali + revisioni, N22-N24 affiliazione referral). Job `send-solleciti` invia N3+N7, `trigger-auto-payout` per N5. Manca solo trigger Vercel Cron + unsubscribe |
+| 7 Valutazioni/Ranking | ~85% | Form 5⭐, rating in distribuzione, sospensione auto. Manca unsuspend UI dedicato |
+| 8 Listini / Osservatorio | 0% | Modello DB pronto. UI da costruire — fattibile senza esterni |
+| 9 Admin panel | ~75% | Overview + finanze, dashboard, gestione pratiche/broker/agenzie/utenti/escalation/segnalazioni/revisioni/affiliazioni/assistenti, sospensione, eliminazione account. Manca solo assegnazione manuale escalation, report export, configurazione parametri |
+| 10 CRM vendite esterno | — | **Superato** dalla FASE 14 (CRM nativo) post-decisione 2026-05-06 |
+| 11 QA/Compliance/Lancio | ~10% | 53 unit test verde, smoke E2E browser. Manca audit GDPR formale, cookie banner, DPA fornitori, beta test |
+| 13 Sistema Affiliazione | ~85% | Backend/UI/notifiche/AF-N/AF-AC in prod. Aperti: AF-PDF (backlog), AF-P payout (bloccato Stripe), N25 recap mensile |
+| 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H Vapi (bloccato B6 account esterno) |
 
-**Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
+**Account esterni richiesti per:**
+- **Resend** → email reale (oggi `ConsoleEmailProvider` salva `.dev-emails/*.html`)
+- **S3** o Vercel Blob attivato → storage producton (Vercel Blob è già implementato e swap-ready, manca env)
+- **Google Document AI** → OCR reale (oggi `MockOcrProvider` deterministico)
+- **Stripe Connect** → addebiti SEPA + payout (mock provider, schema completo)
+- **Vapi.ai + Twilio** → bot vocale CRM-H + SMS post-call
+- **SDI provider** (Aruba/altro) → fatturazione elettronica B2B
+
+---
+
+## Mappa lavoro residuo (per pianificazione)
+
+### A · Fattibile ORA — nessuna dipendenza esterna
+
+**A1. FASE 8 — Listini & Osservatorio Prezzi (intero modulo)**
+- Popup post-registrazione agenzia (skippabile)
+- Sezione `/profilo/listino` con form strutturato + upload PDF
+- Engine normalizzazione + media zona/comune
+- Benchmark "Tu vs media zona" su dashboard agenzia
+- Dashboard admin osservatorio
+- Stima: 4-5 commit logici, ~2-3 giornate
+
+**A2. FASE 4.1 — Trigger automatico distribuzione (vercel.json crons)**
+- Aggiungere `vercel.json` con schedule per: `distribuzione-tick`, `send-solleciti`, `process-fee-scheduled`, `trigger-auto-payout`, `crm-sync`
+- Tutti gli endpoint esistono già — manca solo il file di config
+- Stima: 1 commit, 30 minuti
+
+**A3. FASE 4.1 — Anti-abuso ranking + raggio km reale**
+- Decay rifiuti consecutivi (engine già esiste, basta aggiungere logica)
+- Sospensione automatica timeout >5
+- Raggio 15 km round 2 (oggi province limitrofe Veneto hardcoded) — usa libreria geo o tabella distanze comune→comune
+- Stima: 2-3 commit, 1 giornata
+
+**A4. FASE 3.3 — Gating documentale (UI senza IA)**
+- Modello dati `Documento.gatingStato` già esiste
+- Wizard step CI/CF/visura già documentato in spec v7
+- UI gating + override admin (regole semplici: scadenza CI, presenza P.IVA su visura, ecc.)
+- Quando arriva Document AI, swap del classificatore — UI invariata
+- Stima: 3-4 commit, ~2 giornate
+
+**A5. FASE 9 — Admin completamento**
+- Assegnazione manuale escalation a partner di fiducia (lista già esiste, manca azione assign)
+- Report finanziari export CSV (engine dashboard già esiste)
+- Configurazione parametri runtime (N agenzie/round, timeout giorni, soglie wallet)
+- Audit log accessi (campo `lastLoginAt` già popolato, manca pagina)
+- Stima: 3-4 commit, ~2 giornate
+
+**A6. FASE 13 — AF-PDF + N25 recap mensile**
+- AF-PDF: rendiconto separato pratiche/affiliazione (libreria PDF lato server, schema dati già pronto)
+- N25 recap mensile: cron + template (enum già aggiunto in FASE 13.4)
+- Stima: 2 commit, 1 giornata
+
+**A7. FASE 7 — Unsuspend UI + push notification post-firma**
+- Pagina admin per riattivare agenzie sospese con nota
+- Push notification (web push API native) post-firma per il dealer
+- Stima: 2 commit, ~mezza giornata
+
+**A8. FASE 11 — Setup QA**
+- Cookie banner + consensi (componente client + persist su User)
+- Pagina `/privacy`, `/cookie`, `/termini` con copy boilerplate
+- Test E2E base con Playwright (login, registrazione, wizard pratica, firma)
+- Stima: 4-5 commit, ~2-3 giornate
+
+**A9. FASE 2.2 — 2FA TOTP + rate limit**
+- 2FA via app authenticator (TOTP, no SMS — non serve esterno)
+- Rate limit login (in-memory, swap-ready a Redis)
+- Stima: 2 commit, 1 giornata
+
+### B · Bloccato da account/decisione esterna
+
+| Blocco | Cosa serve | Cosa sblocca |
+|---|---|---|
+| **B1 Stripe Connect** | Validazione commercialista (Andrea) + onboarding Stripe | FASE 5 intera (addebiti SEPA, payout broker/affiliazione, fattura elettronica) |
+| **B6 Vapi.ai account** | Budget approvato + sottoscrizione | CRM-H (chiamate vocali AI, function calling, blacklist) |
+| **B7 Testi vocali** | Script S0-S10 da Sales + Q&A obiezioni | CRM-H (configurazione agent base) |
+| **B8 Validazione AF1-AF5** | Commercialista + legale + CTO review | Sblocca produzione FASE 13 (oggi è in prod ma in attesa di sign-off legale) |
+| **B10 Legale popup penali** | Review clausole `sistema-penali-broker.md` | Sblocca enforcement reale del wallet negativo |
+| **B11 Legale procura/successione** | Notaio + legale review | Sblocca SD-D (revisione manuale + AI documenti speciali) |
+| **Resend** | Account + DNS SPF/DKIM/DMARC | Email reali (oggi sviluppo via `.dev-emails/*.html`) |
+| **Google Document AI** | Account + key + addestramento OCR libretto | OCR reale (oggi `MockOcrProvider`) |
+| **Vercel Blob env var** | Generare token in dashboard Vercel | Storage prod (provider già implementato, manca env `BLOB_READ_WRITE_TOKEN`) |
+| **SDI provider** | Scelta tra Aruba/altro + onboarding | Fatturazione elettronica FASE 5.3 |
+
+### C · Da decidere
+
+- B2 fallback 5 agenzie (proposta in §0.5, manca ok finale)
+- B5 era "scelta HubSpot vs Airtable" — **superato** dalla FASE 14 CRM nativo
+- Cap durata commissione affiliazione (sempre vs 24 mesi) — D-04 risolto a "sempre"
+- Soglia payout uniforme — D-05 risolto a "uguale per tutti"
 
 ---
 

@@ -768,13 +768,17 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ### A · Fattibile ORA — nessuna dipendenza esterna
 
-**A1. FASE 8 — Listini & Osservatorio Prezzi (intero modulo)**
-- Popup post-registrazione agenzia (skippabile)
-- Sezione `/profilo/listino` con form strutturato + upload PDF
-- Engine normalizzazione + media zona/comune
-- Benchmark "Tu vs media zona" su dashboard agenzia
-- Dashboard admin osservatorio
-- Stima: 4-5 commit logici, ~2-3 giornate
+**A1. ✅ DONE — Listini & Osservatorio Prezzi (FASE 8 intera)**
+- `/profilo/listino` con toggle Form strutturato / Upload PDF (toggle button)
+  - Form: prezzoBaseTrapasso, prezzoMinivoltura, maggiorazione pre-2015, sconto lotto massivo, province coperte (sigle CSV)
+  - Upload: PDF/JPG/PNG (max 10MB), province coperte, riusa StorageProvider esistente
+- Server actions `saveListinoFormAction`, `uploadListinoFileAction`, `deleteListinoAction` (gated AGENZIA)
+- Engine `lib/listini/observatory.ts`: `statsForProvincia`, `statsAllProvincie`, `getBenchmarkForAgenzia` (count/min/media/max per trapasso e minivoltura)
+- Benchmark "Tu vs media zona" sulla pagina /profilo/listino (provincia principale del listino)
+- Dashboard admin `/admin/listini` con: 4 stat card (totale listini, strutturati, upload, province coperte), tabella per provincia con colonne min/media/max trapasso e minivoltura, footer rilevazioni totali
+- Banner "📋 Pubblica il tuo listino" sulla dashboard agenzia se nessun listino è ancora pubblicato (sostituisce popup post-registrazione)
+- Card "Listino prezzi" nella pagina /profilo per accesso diretto
+- Link admin "Listini" in nav
 
 **A2. ✅ DONE — Vercel Cron schedule**
 - `apps/piattaforma/vercel.json` con 6 cron paths (distribuzione-tick ogni 30min, send-solleciti 9:00, process-fee-scheduled ogni 6h, process-payouts 1:00, trigger-auto-payout 1:30, crm-sync 2:00)

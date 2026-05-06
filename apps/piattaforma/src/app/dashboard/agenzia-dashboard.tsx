@@ -4,7 +4,7 @@ import { StatCard, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 
 export async function AgenziaDashboard({ companyId }: { companyId: string }) {
-  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti] = await Promise.all([
+  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, listino] = await Promise.all([
     prisma.praticaAssegnazione.count({
       where: { agenziaId: companyId, esito: 'PENDING' },
     }),
@@ -35,6 +35,11 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
         },
       },
     }),
+    // A1: presenza listino per banner "Pubblica il tuo listino"
+    prisma.listino.findFirst({
+      where: { agenziaId: companyId },
+      select: { id: true, formato: true },
+    }),
   ]);
 
   const ratingValue = rating._count._all >= 5 && rating._avg.stelle
@@ -55,6 +60,32 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
           Pratiche da gestire
         </h1>
       </header>
+
+      {!listino && (
+        <div className="mb-6 rounded-[16px] border-[1.5px] border-pv-orange-500/40 bg-pv-orange-50/40 p-5 shadow-[var(--pv-shadow-card)]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-pv-orange-500">
+                📋 Pubblica il tuo listino
+              </p>
+              <h2 className="mt-1 text-[18px] font-bold text-pv-navy-900">
+                Aiuta l&apos;Osservatorio Prezzi e attira nuovi clienti
+              </h2>
+              <p className="mt-1 text-[12.5px] text-pv-slate-700">
+                Inserisci i prezzi base trapasso/minivoltura e le province coperte:
+                comparirai nel benchmark e i broker potranno valutarti meglio. I tuoi
+                prezzi sono mostrati solo in forma aggregata.
+              </p>
+            </div>
+            <Link
+              href="/profilo/listino"
+              className="shrink-0 rounded-[10px] bg-pv-orange-500 px-4 py-2 text-[13px] font-bold text-white hover:brightness-95"
+            >
+              Pubblica ora →
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="In arrivo" value={inArrivo} hint="Da accettare/rifiutare" icon={<InboxIcon />} accent="orange" />

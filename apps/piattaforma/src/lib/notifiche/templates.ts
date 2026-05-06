@@ -754,6 +754,20 @@ export type N24PayoutAffiliationAvailablePayload = {
   sogliaCent: number;
 };
 
+export type N25MonthlyAffiliationRecapPayload = {
+  nomeReferente: string;
+  /** Mese del recap in formato "Aprile 2026" */
+  meseLabel: string;
+  /** Numero commissioni accreditate il mese */
+  numCommissioni: number;
+  /** Importo totale accreditato il mese (cent) */
+  totaleAccreditatoCent: number;
+  /** Numero referral attivi (referral con almeno 1 pratica firmata) */
+  numReferralAttivi: number;
+  /** Saldo wallet attuale (cent) — utile per CTA payout */
+  saldoWalletCent: number;
+};
+
 export function tplN22ReferralSignup(p: N22ReferralSignupPayload): NotificaContent {
   const tipoLabel = p.tipoReferral === 'BROKER' ? 'broker' : 'agenzia';
   const subject = `🎉 ${p.referralRagioneSociale} si è iscritto col tuo link`;
@@ -830,6 +844,49 @@ export function tplN24PayoutAffiliationAvailable(
     <p style="margin:16px 0 0;font-size:13px;color:#334155">
       Puoi richiedere il payout dalla sezione <strong>Wallet</strong> della tua dashboard
       quando vuoi.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN25MonthlyAffiliationRecap(
+  p: N25MonthlyAffiliationRecapPayload,
+): NotificaContent {
+  const subject = `📊 Recap affiliazione ${p.meseLabel} — ${formatCurrencyCent(p.totaleAccreditatoCent)} accreditati`;
+  const text =
+    `Ciao ${p.nomeReferente},\n` +
+    `ecco il recap delle commissioni di affiliazione per ${p.meseLabel}:\n` +
+    `- ${p.numCommissioni} commission${p.numCommissioni === 1 ? 'e' : 'i'} accreditate\n` +
+    `- Totale: ${formatCurrencyCent(p.totaleAccreditatoCent)}\n` +
+    `- Referral attivi (con almeno 1 pratica firmata): ${p.numReferralAttivi}\n` +
+    `Saldo wallet attuale: ${formatCurrencyCent(p.saldoWalletCent)}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Recap affiliazione ${p.meseLabel}</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      Ecco il recap del programma affiliazione per <strong>${p.meseLabel}</strong>:
+    </p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 16px">
+      <tr style="background:#f1f5f9">
+        <td style="padding:10px 12px;font-size:12.5px;color:#64748b;border-radius:8px 0 0 8px">Commissioni accreditate</td>
+        <td style="padding:10px 12px;font-size:14px;font-weight:bold;color:#0a2540;text-align:right;border-radius:0 8px 8px 0">${p.numCommissioni}</td>
+      </tr>
+      <tr style="height:4px"></tr>
+      <tr style="background:#f1f5f9">
+        <td style="padding:10px 12px;font-size:12.5px;color:#64748b;border-radius:8px 0 0 8px">Totale accreditato</td>
+        <td style="padding:10px 12px;font-size:16px;font-weight:bold;color:#16a34a;text-align:right;border-radius:0 8px 8px 0">${formatCurrencyCent(p.totaleAccreditatoCent)}</td>
+      </tr>
+      <tr style="height:4px"></tr>
+      <tr style="background:#f1f5f9">
+        <td style="padding:10px 12px;font-size:12.5px;color:#64748b;border-radius:8px 0 0 8px">Referral attivi</td>
+        <td style="padding:10px 12px;font-size:14px;font-weight:bold;color:#0a2540;text-align:right;border-radius:0 8px 8px 0">${p.numReferralAttivi}</td>
+      </tr>
+    </table>
+    <div style="background:#fff7ed;border-left:3px solid #e86d21;padding:10px 12px;font-size:13px;color:#334155;border-radius:8px">
+      <strong>Saldo wallet attuale:</strong> ${formatCurrencyCent(p.saldoWalletCent)}
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Continua a invitare colleghi: il tuo link è sempre disponibile nella sezione Affiliazione.
     </p>
   `);
   return { subject, html, text };

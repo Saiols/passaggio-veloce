@@ -803,10 +803,15 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Audit log accessi (campo `lastLoginAt` già popolato, manca pagina)
 - Stima: 3-4 commit, ~2 giornate
 
-**A6. FASE 13 — AF-PDF + N25 recap mensile**
-- AF-PDF: rendiconto separato pratiche/affiliazione (libreria PDF lato server, schema dati già pronto)
-- N25 recap mensile: cron + template (enum già aggiunto in FASE 13.4)
-- Stima: 2 commit, 1 giornata
+**A6. ✅ DONE — AF-PDF rendiconto + N25 cron mensile**
+- `lib/pdf/rendiconto.ts` con `pdf-lib` (puro JS, no chromium): rendiconto A4 portrait con sezioni separate "Crediti da pratiche" + "Crediti da affiliazione" + totali e subtotali
+- Endpoint `GET /api/wallet/rendiconto?year=YYYY&month=MM` (auth dealer/agenzia)
+- `RendicontoCard` su `/wallet` con picker mese/anno e download diretto
+- Job `lib/jobs/affiliation-monthly-recap.ts` aggrega commissioni ACCREDITATA del mese precedente per referenteId, manda N25 a tutti gli admin azienda
+- Endpoint `POST/GET /api/jobs/affiliation-monthly-recap` con `requireAdminOrCron`
+- `vercel.json` cron schedule `0 9 1 * *` (1° del mese alle 9:00)
+- Bottone "📊 Recap mensile affiliazione" in `/admin/demo-control` per trigger manuale
+- Smoke test: PDF 200 OK con magic bytes %PDF, endpoint N25 risponde scanned/notified count
 
 **A7. ✅ DONE — Unsuspend UI + banner valuta post-firma**
 - `SuspendButton` ora apre dialog con nota motivazione (sospensione + riattivazione) — salvata su `Company.suspensionLastNote` per audit

@@ -18,6 +18,7 @@ import {
   tplN22ReferralSignup,
   tplN23ReferralFirstPratica,
   tplN24PayoutAffiliationAvailable,
+  tplN25MonthlyAffiliationRecap,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -40,6 +41,7 @@ import {
   type N22ReferralSignupPayload,
   type N23ReferralFirstPraticaPayload,
   type N24PayoutAffiliationAvailablePayload,
+  type N25MonthlyAffiliationRecapPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -130,6 +132,11 @@ type SendInput =
       tipo: 'N24_PAYOUT_AFFILIATION_AVAILABLE';
       target: Target;
       payload: N24PayoutAffiliationAvailablePayload;
+    }
+  | {
+      tipo: 'N25_MONTHLY_AFFILIATION_RECAP';
+      target: Target;
+      payload: N25MonthlyAffiliationRecapPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -178,6 +185,8 @@ function render(input: SendInput): NotificaContent {
       return tplN23ReferralFirstPratica(input.payload);
     case 'N24_PAYOUT_AFFILIATION_AVAILABLE':
       return tplN24PayoutAffiliationAvailable(input.payload);
+    case 'N25_MONTHLY_AFFILIATION_RECAP':
+      return tplN25MonthlyAffiliationRecap(input.payload);
   }
 }
 

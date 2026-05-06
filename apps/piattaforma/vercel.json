@@ -24,6 +24,10 @@
     {
       "path": "/api/jobs/crm-sync",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/jobs/affiliation-monthly-recap",
+      "schedule": "0 9 1 * *"
     }
   ]
 }

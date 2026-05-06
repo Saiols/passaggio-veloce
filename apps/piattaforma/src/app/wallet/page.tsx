@@ -9,6 +9,7 @@ import { WALLET } from '@/lib/wallet/config';
 import { getRendimento, type RendimentoPeriod } from './rendimento';
 import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
+import { RendicontoCard } from './rendiconto-card';
 
 const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
 
@@ -218,6 +219,10 @@ export default async function WalletPage({
               </div>
             </div>
           )}
+        </div>
+
+        <div className="mb-5">
+          <RendicontoCard minYear={2026} />
         </div>
 
         <Card className="mb-5">

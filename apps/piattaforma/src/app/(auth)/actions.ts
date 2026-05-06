@@ -8,7 +8,10 @@ import { signIn, signOut } from '@/auth';
 import { env } from '@/env';
 import { hashPassword } from '@/lib/auth/password';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
+import { headers } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
+import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
+import { anonymizeIp } from '@/lib/net/ip';
 import {
   loginSchema,
   registerFullSchema,
@@ -130,6 +133,12 @@ export async function registerAction(
   const passwordHash = await hashPassword(account.password);
   const verificationToken = generateSecureToken();
 
+  // AF-AC: cattura IP signup (anonymizzato GDPR) per il check anti-collusione.
+  const hdrs = await headers();
+  const signupIpRaw =
+    hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? null;
+  const signupIp = anonymizeIp(signupIpRaw);
+
   let createdCompanyId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
@@ -163,6 +172,7 @@ export async function registerAction(
           termsAcceptedAt: new Date(),
           referralCode,
           referenteId,
+          signupIp,
         },
       });
 
@@ -198,6 +208,9 @@ export async function registerAction(
     // il flusso registrazione in caso di errore.
     if (createdCompanyId) {
       void tryMatchCrmContact(createdCompanyId);
+      // AF-N: se il nuovo iscritto ha un referenteId, notifica al referente
+      // (template N22 Referral Signup).
+      void notifyReferralSignup(createdCompanyId);
     }
 
     if (env.DEMO_MODE) {

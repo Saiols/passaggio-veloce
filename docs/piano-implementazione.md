@@ -619,22 +619,30 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [ ] Componente wallet con etichette LORDO e barra soglia €500
 - [ ] Video tutorial integrato 60–90s (asset esterno, Wistia)
 
-### 13.4 Notifiche dedicate
-- [ ] `N_REFERRAL_SIGNUP` (referral registrato)
-- [ ] `N_REFERRAL_FIRST_PRATICA` (referral ha caricato la prima pratica)
-- [ ] `N_MONTHLY_AFFILIATION_RECAP` (riepilogo mensile cron)
-- [ ] `N_PAYOUT_AFFILIATION_AVAILABLE` (soglia €500 raggiunta)
+### 13.4 Notifiche dedicate (AF-N ✅ DONE — manca solo recap mensile)
+- [x] `N22_REFERRAL_SIGNUP` (referral registrato) — hook in registrazione
+- [x] `N23_REFERRAL_FIRST_PRATICA` (referral ha caricato la prima pratica) — hook post-firma
+- [x] `N24_PAYOUT_AFFILIATION_AVAILABLE` (cross-over soglia payout per-company)
+- [x] Enum `N25_MONTHLY_AFFILIATION_RECAP` aggiunto allo schema (cron in arrivo, no template)
 
 ### 13.5 Payout affiliazione
 - [ ] Pulsante "Richiedi payout" attivo da €500 lordi
 - [ ] Cron giorno 15 per erogazione mensile (integrato con Stripe Payout FASE 5)
 - [ ] Rendiconto PDF dedicato (separare quota pratiche da quota affiliazione)
 
-### 13.6 Admin
-- [ ] Dashboard programma (click, iscrizioni da referral, % conversione, costo aggregato)
-- [ ] Lista `AffiliationLink` + referral chain navigabile
-- [ ] Vista flag anti-collusione per review manuale
-- [ ] Override admin su singolo referral (disattiva / riattiva commissioni)
+### 13.6 Admin (parzialmente DONE)
+- [x] Dashboard programma `/admin/affiliazioni` (click, iscrizioni, % conversione, KPI)
+- [x] Lista referral chain (drill-down per agenzia/pratica già implementato)
+- [x] **AF-AC** ✅: vista flag anti-collusione `/admin/affiliazioni/sospette` con approva/rifiuta + nota review
+- [x] **AF-AC** ✅: detector `lib/affiliazione/check.ts` (SAME_IBAN, SAME_IP_SIGNUP, SAME_EMAIL_DOMAIN, SAME_ADMIN) integrato nell'engine accredit
+- [x] **AF-AC** ✅: stato `DA_REVISIONARE` su `CommissioneAffiliazione` + audit trail `reviewedAt/By/Notes`
+- [x] **AF-AC** ✅: cattura `signupIp` (anonymizzato GDPR) su `Company.create` da wizard registrazione
+- [ ] Override admin "soft" su singolo referral attivo (disattiva commissioni future, mantiene storico) — backlog
+
+### 13.7 Aperti residui FASE 13 (blocchi esterni o backlog)
+- [ ] **AF-PDF** Rendiconto PDF dedicato (separare quota pratiche da quota affiliazione) — backlog
+- [ ] **AF-P** Pulsante "Richiedi payout" + cron giorno 15 — bloccato da B5 (Stripe Connect)
+- [ ] N25 recap mensile — solo cron + query, da fare in qualsiasi momento
 
 ---
 
@@ -743,7 +751,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 9 Admin panel | ~50% | Route guard, overview, lista pratiche/utenti/agenzie/escalation, tick manuale. Manca assegnazione manuale, report |
 | 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
 | 11 QA/Compliance/Lancio | 0% | — |
-| 13 Sistema Affiliazione | 0% | Spec v3 + review CTO pronto (`sistema-affiliazione.md`), lancio pieno in parallelo a FASE 10 |
+| 13 Sistema Affiliazione | ~85% | Backend/UI/notifiche/AF-N/AF-AC in prod. Aperti: AF-PDF (backlog), AF-P (bloccato Stripe), N25 cron mensile |
 | 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H (Vapi — bloccato da account esterno) |
 
 **Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).

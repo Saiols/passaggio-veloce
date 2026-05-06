@@ -1,6 +1,7 @@
 import 'server-only';
 import { Prisma } from '@pv/db';
 import { computeFees, type PraticaTipoEconomico } from '@/lib/pricing';
+import { detectCollusion } from './check';
 
 /**
  * Distribuisce un importo totale (in cent) tra N referenti.
@@ -34,10 +35,22 @@ export type AccreditCommissioniInput = {
  * Auto-affiliazione consentita: nessun controllo che referente == broker pratica,
  * la quota viene comunque accreditata (decisione §1.2 triage).
  */
+export type AccreditoEseguito = {
+  referenteId: string;
+  tipo: 'REFERENTE_BROKER' | 'REFERENTE_AGENZIA';
+  importoCent: number;
+  walletPreCent: number;
+  walletPostCent: number;
+};
+
 export async function accreditCommissioniAffiliazione(
   tx: Prisma.TransactionClient,
   input: AccreditCommissioniInput,
-): Promise<{ commissioniCreate: number; importoTotaleCent: number }> {
+): Promise<{
+  commissioniCreate: number;
+  importoTotaleCent: number;
+  accrediti: AccreditoEseguito[];
+}> {
   const eligibleBroker =
     input.brokerReferente &&
     !input.brokerReferente.suspendedAt &&
@@ -53,7 +66,7 @@ export async function accreditCommissioniAffiliazione(
 
   const numReferenti = (eligibleBroker ? 1 : 0) + (eligibleAgenzia ? 1 : 0);
   if (numReferenti === 0) {
-    return { commissioniCreate: 0, importoTotaleCent: 0 };
+    return { commissioniCreate: 0, importoTotaleCent: 0, accrediti: [] };
   }
 
   const fees = computeFees({ tipo: input.tipo, numeroVeicoli: input.numeroVeicoli });
@@ -62,54 +75,91 @@ export async function accreditCommissioniAffiliazione(
 
   let createdCount = 0;
   let totaleAccreditato = 0;
+  const accrediti: AccreditoEseguito[] = [];
 
+  // ID del referral (chi ha lavorato la pratica): il broker se questo
+  // referente è REFERENTE_BROKER, l'agenzia se è REFERENTE_AGENZIA.
   for (const ref of [
     eligibleBroker
-      ? { ref: eligibleBroker, tipo: 'REFERENTE_BROKER' as const }
+      ? {
+          ref: eligibleBroker,
+          tipo: 'REFERENTE_BROKER' as const,
+          referralId: input.brokerId,
+        }
       : null,
     eligibleAgenzia
-      ? { ref: eligibleAgenzia, tipo: 'REFERENTE_AGENZIA' as const }
+      ? {
+          ref: eligibleAgenzia,
+          tipo: 'REFERENTE_AGENZIA' as const,
+          referralId: input.agenziaAssegnataId,
+        }
       : null,
   ].filter((x): x is NonNullable<typeof x> => x !== null)) {
+    // AF-AC: detector anti-collusione. Se almeno un flag è triggered,
+    // la commissione resta DA_REVISIONARE finché un admin non sblocca.
+    const flags = await detectCollusion(tx, ref.ref.id, ref.referralId);
+    const sospetta = flags.length > 0;
+
     const wallet = await tx.wallet.upsert({
       where: { companyId: ref.ref.id },
       update: {},
       create: { companyId: ref.ref.id, saldoCent: 0 },
     });
+    const walletPreCent = wallet.saldoCent;
 
-    const nuovoSaldo = wallet.saldoCent + quota;
+    let nuovoSaldo = walletPreCent;
+    let transazioneId: string | null = null;
 
-    const transazione = await tx.transazioneWallet.create({
-      data: {
-        walletId: wallet.id,
-        tipo: 'CREDITO_AFFILIAZIONE',
-        importoCent: quota,
-        saldoPostCent: nuovoSaldo,
-        praticaId: input.praticaId,
-      },
-    });
-
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: { saldoCent: nuovoSaldo },
-    });
+    // Wallet popolato solo se NON sospetta. Se sospetta, l'accredit
+    // arriverà al momento della review admin (approveCommissioneAction).
+    if (!sospetta) {
+      nuovoSaldo = walletPreCent + quota;
+      const transazione = await tx.transazioneWallet.create({
+        data: {
+          walletId: wallet.id,
+          tipo: 'CREDITO_AFFILIAZIONE',
+          importoCent: quota,
+          saldoPostCent: nuovoSaldo,
+          praticaId: input.praticaId,
+        },
+      });
+      transazioneId = transazione.id;
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { saldoCent: nuovoSaldo },
+      });
+    }
 
     await tx.commissioneAffiliazione.create({
       data: {
         praticaId: input.praticaId,
         referenteId: ref.ref.id,
         tipo: ref.tipo,
-        stato: 'ACCREDITATA',
+        stato: sospetta ? 'DA_REVISIONARE' : 'ACCREDITATA',
         importoLordoCent: quota,
         importoNettoCent: quota,
         // expiresAt null per D-04 (sempre attivo).
-        transazioneWalletId: transazione.id,
+        transazioneWalletId: transazioneId,
+        flagsDetected: sospetta ? flags.join(',') : null,
       },
     });
 
     createdCount += 1;
-    totaleAccreditato += quota;
+    if (!sospetta) {
+      totaleAccreditato += quota;
+      accrediti.push({
+        referenteId: ref.ref.id,
+        tipo: ref.tipo,
+        importoCent: quota,
+        walletPreCent,
+        walletPostCent: nuovoSaldo,
+      });
+    }
   }
 
-  return { commissioniCreate: createdCount, importoTotaleCent: totaleAccreditato };
+  return {
+    commissioniCreate: createdCount,
+    importoTotaleCent: totaleAccreditato,
+    accrediti,
+  };
 }

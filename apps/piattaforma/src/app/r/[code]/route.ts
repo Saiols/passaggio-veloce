@@ -13,24 +13,10 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { prisma } from '@pv/db';
+import { anonymizeIp } from '@/lib/net/ip';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function anonymizeIp(raw: string | undefined | null): string | null {
-  if (!raw) return null;
-  const trimmed = raw.split(',')[0]?.trim() ?? '';
-  if (!trimmed) return null;
-  if (trimmed.includes(':')) {
-    // IPv6 → primi 4 gruppi di hextet
-    const parts = trimmed.split(':');
-    return parts.slice(0, 4).join(':') + '::';
-  }
-  // IPv4 → primi 3 ottetti
-  const parts = trimmed.split('.');
-  if (parts.length !== 4) return trimmed.slice(0, 32);
-  return `${parts[0]}.${parts[1]}.${parts[2]}.0`;
-}
 
 function truncate(s: string | null, max: number): string | null {
   if (!s) return null;

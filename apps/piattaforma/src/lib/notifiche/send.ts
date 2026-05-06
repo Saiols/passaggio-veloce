@@ -15,6 +15,9 @@ import {
   tplN19AdminNuovaSegnalazione,
   tplN20AdminRevisioneRichiesta,
   tplN21BrokerRevisioneCompletata,
+  tplN22ReferralSignup,
+  tplN23ReferralFirstPratica,
+  tplN24PayoutAffiliationAvailable,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -34,6 +37,9 @@ import {
   type N19AdminNuovaSegnalazionePayload,
   type N20AdminRevisioneRichiestaPayload,
   type N21BrokerRevisioneCompletataPayload,
+  type N22ReferralSignupPayload,
+  type N23ReferralFirstPraticaPayload,
+  type N24PayoutAffiliationAvailablePayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -109,6 +115,21 @@ type SendInput =
       tipo: 'N21_BROKER_REVISIONE_COMPLETATA';
       target: Target;
       payload: N21BrokerRevisioneCompletataPayload;
+    }
+  | {
+      tipo: 'N22_REFERRAL_SIGNUP';
+      target: Target;
+      payload: N22ReferralSignupPayload;
+    }
+  | {
+      tipo: 'N23_REFERRAL_FIRST_PRATICA';
+      target: Target;
+      payload: N23ReferralFirstPraticaPayload;
+    }
+  | {
+      tipo: 'N24_PAYOUT_AFFILIATION_AVAILABLE';
+      target: Target;
+      payload: N24PayoutAffiliationAvailablePayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -151,6 +172,12 @@ function render(input: SendInput): NotificaContent {
       return tplN20AdminRevisioneRichiesta(input.payload);
     case 'N21_BROKER_REVISIONE_COMPLETATA':
       return tplN21BrokerRevisioneCompletata(input.payload);
+    case 'N22_REFERRAL_SIGNUP':
+      return tplN22ReferralSignup(input.payload);
+    case 'N23_REFERRAL_FIRST_PRATICA':
+      return tplN23ReferralFirstPratica(input.payload);
+    case 'N24_PAYOUT_AFFILIATION_AVAILABLE':
+      return tplN24PayoutAffiliationAvailable(input.payload);
   }
 }
 

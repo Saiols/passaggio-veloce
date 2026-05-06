@@ -248,6 +248,10 @@ enum NotificaTipo {
   N19_ADMIN_NUOVA_SEGNALAZIONE
   N20_ADMIN_REVISIONE_RICHIESTA
   N21_BROKER_REVISIONE_COMPLETATA
+  N22_REFERRAL_SIGNUP
+  N23_REFERRAL_FIRST_PRATICA
+  N24_PAYOUT_AFFILIATION_AVAILABLE
+  N25_MONTHLY_AFFILIATION_RECAP
 }
 
 enum NotificaCanale {
@@ -288,6 +292,10 @@ model Company {
   sepaMandateAcceptedAt DateTime?
 
   termsAcceptedAt DateTime?
+
+  /// AF-AC: IP di signup (truncato 3 ottetti) — usato per il check
+  /// anti-collusione "stesso IP signup tra referente e referral".
+  signupIp String?
 
   // F-01: sospensione temporanea (riattivabile). Diversa da deletedAt (totale).
   // null = ACTIVE; valorizzato = SUSPENDED.
@@ -396,6 +404,9 @@ model User {
   // CRM team interno (release CRM-A)
   crmContactsAssegnati CrmContact[]  @relation("CrmContactAssigned")
   crmCampagneOwned     CrmCampaign[] @relation("CrmCampaignOwner")
+
+  // AF-AC: review commissioni affiliazione sospette
+  commissioniReviewed CommissioneAffiliazione[] @relation("CommissioneAffiliazioneReviewer")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -844,6 +855,9 @@ enum CommissioneAffiliazioneStato {
   MATURATA
   ACCREDITATA
   ANNULLATA
+  /// Bloccata da check anti-collusione: in attesa di review admin (AF-AC).
+  /// Non popola wallet finché un admin non la approva (→ ACCREDITATA).
+  DA_REVISIONARE
 }
 
 // ============================================================
@@ -902,11 +916,24 @@ model CommissioneAffiliazione {
   transazioneWalletId String?            @unique @db.Uuid
   transazioneWallet   TransazioneWallet? @relation(fields: [transazioneWalletId], references: [id])
 
+  /// AF-AC: flag di sospetta collusione rilevati al momento dell'accredit.
+  /// CSV di codici (es. "SAME_IBAN,SAME_IP_SIGNUP"). Se valorizzato,
+  /// stato è DA_REVISIONARE finché un admin non sblocca.
+  flagsDetected String?
+
+  /// AF-AC: review admin (popolato quando passa a ACCREDITATA o ANNULLATA
+  /// dopo flag DA_REVISIONARE).
+  reviewedAt   DateTime?
+  reviewedById String?   @db.Uuid
+  reviewedBy   User?     @relation("CommissioneAffiliazioneReviewer", fields: [reviewedById], references: [id])
+  reviewNotes  String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([praticaId])
   @@index([referenteId, stato])
+  @@index([stato])
   @@map("commissioni_affiliazione")
 }
 

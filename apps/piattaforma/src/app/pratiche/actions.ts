@@ -6,7 +6,14 @@ import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification } from '@/lib/notifiche';
-import { accreditCommissioniAffiliazione } from '@/lib/affiliazione/accredit';
+import {
+  accreditCommissioniAffiliazione,
+  type AccreditoEseguito,
+} from '@/lib/affiliazione/accredit';
+import {
+  notifyReferralFirstPratica,
+  notifyPayoutThresholdCrossed,
+} from '@/lib/affiliazione/notifications';
 import { onPraticaFirmata } from '@/lib/crm/sync';
 import { env } from '@/env';
 
@@ -18,6 +25,56 @@ function computeAutoAddebitoAt(now: Date): Date {
     return new Date(now.getTime() + AUTO_ADDEBITO_DEMO_MINUTES * 60_000);
   }
   return new Date(now.getTime() + AUTO_ADDEBITO_DAYS * 86_400_000);
+}
+
+/**
+ * AF-N: notifiche affiliazione post-firma. Per ogni accredit eseguito:
+ *  - N24 al referente se il saldo wallet ha attraversato la soglia payout
+ *  - N23 al referente del broker se questa è la prima pratica firmata del broker
+ */
+async function notifyAffiliationPostFirma(
+  praticaId: string,
+  accrediti: AccreditoEseguito[],
+): Promise<void> {
+  if (accrediti.length === 0) return;
+  try {
+    const pratica = await prisma.pratica.findUnique({
+      where: { id: praticaId },
+      select: { id: true, codicePratica: true, brokerId: true },
+    });
+    if (!pratica) return;
+
+    // Conta firme precedenti del broker (escludendo la corrente).
+    const firmateBefore = await prisma.pratica.count({
+      where: {
+        brokerId: pratica.brokerId,
+        deletedAt: null,
+        stato: 'FIRMATA',
+        id: { not: praticaId },
+      },
+    });
+    const isFirstFirmaForBroker = firmateBefore === 0;
+
+    for (const acc of accrediti) {
+      // N24: cross-over soglia payout
+      void notifyPayoutThresholdCrossed({
+        referenteCompanyId: acc.referenteId,
+        prevSaldoCent: acc.walletPreCent,
+        newSaldoCent: acc.walletPostCent,
+      });
+
+      // N23: prima pratica del referral (solo per il referente broker)
+      if (isFirstFirmaForBroker && acc.tipo === 'REFERENTE_BROKER') {
+        void notifyReferralFirstPratica({
+          brokerCompanyId: pratica.brokerId,
+          codicePratica: pratica.codicePratica ?? pratica.id.slice(0, 8),
+          importoCommissioneCent: acc.importoCent,
+        });
+      }
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 /**
@@ -110,6 +167,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   }
   const agenziaId = session.user.companyId!;
 
+  let accreditiResult: AccreditoEseguito[] = [];
+
   try {
     await prisma.$transaction(async (tx) => {
       const pratica = await tx.pratica.findUnique({
@@ -192,7 +251,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
 
       // FASE 13: commissioni affiliazione ai referenti di broker e/o agenzia
       // (skip se referente sospeso o eliminato).
-      await accreditCommissioniAffiliazione(tx, {
+      const accreditOut = await accreditCommissioniAffiliazione(tx, {
         praticaId: pratica.id,
         tipo: pratica.tipo as 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE',
         numeroVeicoli: pratica.numeroVeicoli,
@@ -201,6 +260,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         brokerReferente: pratica.broker.referente,
         agenziaReferente: pratica.agenziaAssegnata?.referente ?? null,
       });
+      accreditiResult = accreditOut.accrediti;
     });
   } catch (err) {
     redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
@@ -209,6 +269,10 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   // CRM-G: avanzamento stato CRM del broker (S7→S8 prima volta, S8→S9
   // ricorrente). Best-effort, non blocca il flusso firma.
   void onPraticaFirmata(praticaId);
+
+  // AF-N: notifiche affiliazione post-firma (N23 prima pratica del referral,
+  // N24 soglia payout attraversata). Best-effort, non blocca il flusso.
+  void notifyAffiliationPostFirma(praticaId, accreditiResult);
 
   // N4 (broker) + N8 (agenzia): best-effort post-commit
   try {

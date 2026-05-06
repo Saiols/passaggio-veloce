@@ -147,6 +147,11 @@ export default async function AdminAffiliazioniPage({
     },
   });
 
+  // AF-AC: count commissioni DA_REVISIONARE per il banner anti-collusione.
+  const sospetteCount = await prisma.commissioneAffiliazione.count({
+    where: { stato: 'DA_REVISIONARE' },
+  });
+
   const exportParams = new URLSearchParams();
   if (sp.periodo) exportParams.set('periodo', sp.periodo);
   if (sp.agenzia) exportParams.set('agenzia', sp.agenzia);
@@ -183,12 +188,22 @@ export default async function AdminAffiliazioniPage({
               commissioni accreditate, drill-down per agenzia/pratica.
             </p>
           </div>
-          <a
-            href={exportHref}
-            className="rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-semibold text-white hover:bg-pv-navy-800"
-          >
-            Esporta CSV
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            {sospetteCount > 0 && (
+              <Link
+                href="/admin/affiliazioni/sospette"
+                className="rounded-[10px] border-[1.5px] border-pv-amber-500/50 bg-pv-amber-50 px-4 py-2 text-[13px] font-semibold text-pv-amber-500 hover:bg-pv-amber-100"
+              >
+                ⚠ {sospetteCount} sospett{sospetteCount === 1 ? 'a' : 'e'} da revisionare
+              </Link>
+            )}
+            <a
+              href={exportHref}
+              className="rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-semibold text-white hover:bg-pv-navy-800"
+            >
+              Esporta CSV
+            </a>
+          </div>
         </header>
 
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">

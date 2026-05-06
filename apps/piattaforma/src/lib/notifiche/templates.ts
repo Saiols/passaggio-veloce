@@ -703,3 +703,116 @@ export function tplN11BrokerEscalation(p: N11BrokerEscalationPayload): NotificaC
   `);
   return { subject, html, text };
 }
+
+// ════════════════════════════════════════════════════════
+// AF-N — Notifiche referral (FASE 13)
+// ════════════════════════════════════════════════════════
+
+export type N22ReferralSignupPayload = {
+  /** Referente che riceve la notifica */
+  nomeReferente: string;
+  /** Ragione sociale del nuovo iscritto */
+  referralRagioneSociale: string;
+  /** Tipo del nuovo iscritto */
+  tipoReferral: 'BROKER' | 'AGENZIA';
+  /** Città/provincia del referral per contesto */
+  citta: string;
+  provincia: string;
+};
+
+export type N23ReferralFirstPraticaPayload = {
+  nomeReferente: string;
+  referralRagioneSociale: string;
+  tipoReferral: 'BROKER' | 'AGENZIA';
+  codicePratica: string;
+  importoCommissioneCent: number;
+};
+
+export type N24PayoutAffiliationAvailablePayload = {
+  nomeReferente: string;
+  /** Saldo wallet attuale (totale) — se ≥ soglia il payout è disponibile */
+  saldoWalletCent: number;
+  /** Soglia configurata (es. 50000 cent = €500) */
+  sogliaCent: number;
+};
+
+export function tplN22ReferralSignup(p: N22ReferralSignupPayload): NotificaContent {
+  const tipoLabel = p.tipoReferral === 'BROKER' ? 'broker' : 'agenzia';
+  const subject = `🎉 ${p.referralRagioneSociale} si è iscritto col tuo link`;
+  const text =
+    `Ciao ${p.nomeReferente},\n` +
+    `${p.referralRagioneSociale} (${tipoLabel} di ${p.citta}, ${p.provincia}) ` +
+    `si è appena registrato a Passaggio Veloce col tuo link affiliazione.\n` +
+    `Da ora, ogni pratica che firmano genera per te una commissione automatica.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Nuovo referral 🎉</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      <strong>${p.referralRagioneSociale}</strong> (${tipoLabel} di ${p.citta},
+      ${p.provincia}) si è appena registrato col tuo link affiliazione.
+    </p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      Da ora, ogni pratica firmata dal tuo referral genera per te una commissione
+      automatica nel wallet.
+    </p>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Continua a invitare colleghi: vedi i tuoi referral attivi nella sezione Affiliazione.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN23ReferralFirstPratica(
+  p: N23ReferralFirstPraticaPayload,
+): NotificaContent {
+  const tipoLabel = p.tipoReferral === 'BROKER' ? 'broker' : 'agenzia';
+  const subject = `Prima pratica di ${p.referralRagioneSociale} firmata 🚗`;
+  const text =
+    `Ciao ${p.nomeReferente},\n` +
+    `${p.referralRagioneSociale} (tuo referral ${tipoLabel}) ha firmato la prima ` +
+    `pratica ${p.codicePratica}.\n` +
+    `Hai guadagnato ${formatCurrencyCent(p.importoCommissioneCent)} di commissione affiliazione.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Prima pratica! 🚗</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      <strong>${p.referralRagioneSociale}</strong> (tuo referral ${tipoLabel}) ha
+      firmato la sua prima pratica <strong>${p.codicePratica}</strong>.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Commissione accreditata:
+      <strong style="color:#16a34a">+${formatCurrencyCent(p.importoCommissioneCent)}</strong>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Continueremo ad accreditarti la commissione su tutte le pratiche future del tuo referral.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN24PayoutAffiliationAvailable(
+  p: N24PayoutAffiliationAvailablePayload,
+): NotificaContent {
+  const subject = `💰 Hai raggiunto la soglia per il payout (${formatCurrencyCent(p.saldoWalletCent)})`;
+  const text =
+    `Ciao ${p.nomeReferente},\n` +
+    `il tuo wallet ha superato la soglia di ${formatCurrencyCent(p.sogliaCent)} ` +
+    `(saldo attuale: ${formatCurrencyCent(p.saldoWalletCent)}).\n` +
+    `Puoi richiedere il payout dalla sezione Wallet quando vuoi.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Soglia payout raggiunta 💰</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      Il tuo wallet ha superato la soglia di
+      <strong>${formatCurrencyCent(p.sogliaCent)}</strong>.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Saldo attuale: <strong>${formatCurrencyCent(p.saldoWalletCent)}</strong>
+    </div>
+    <p style="margin:16px 0 0;font-size:13px;color:#334155">
+      Puoi richiedere il payout dalla sezione <strong>Wallet</strong> della tua dashboard
+      quando vuoi.
+    </p>
+  `);
+  return { subject, html, text };
+}

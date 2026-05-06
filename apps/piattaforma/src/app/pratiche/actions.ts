@@ -7,6 +7,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification } from '@/lib/notifiche';
 import { accreditCommissioniAffiliazione } from '@/lib/affiliazione/accredit';
+import { onPraticaFirmata } from '@/lib/crm/sync';
 import { env } from '@/env';
 
 const AUTO_ADDEBITO_DAYS = 20;
@@ -204,6 +205,10 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   } catch (err) {
     redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
   }
+
+  // CRM-G: avanzamento stato CRM del broker (S7→S8 prima volta, S8→S9
+  // ricorrente). Best-effort, non blocca il flusso firma.
+  void onPraticaFirmata(praticaId);
 
   // N4 (broker) + N8 (agenzia): best-effort post-commit
   try {

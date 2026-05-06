@@ -693,11 +693,15 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [ ] Grafici call-volume per giorno/ora — differiti a CRM-H (richiedono dati Vapi)
 - [ ] Tempo medio S0→S3 / S3→S7 — differiti a CRM-G (richiedono storico stato)
 
-### 14.7 CRM-G — Sync con piattaforma (cron + webhook)
-- [ ] Cron giornaliero che porta su `CrmContact` lo stato platform-side (`statusAccount`, `praticheTotali`, `ultimoAccesso`)
-- [ ] Webhook outbound piattaforma → CRM su signup/pratica events (`user.signup.completed`, `pratica.first.created`, ecc.)
-- [ ] Matching email/telefono/P.IVA e merge automatico (Caso A: contatto esistente → aggancia user; Caso B: nuovo iscritto → crea CrmContact)
-- [ ] Outbox `CrmOutboundEvent` con retry esponenziale + HMAC firma + idempotency-key
+### 14.7 CRM-G — Sync con piattaforma (cron + hook in-process) ✅ DONE
+- [x] `lib/crm/sync.ts` engine sync interno (CRM nativo, no webhook esterno HMAC)
+- [x] `tryMatchCrmContact(companyId)` cascade email → tel → P.IVA + auto-promote a S7
+- [x] Hook post-registrazione (`app/(auth)/actions.ts`) chiama il match best-effort
+- [x] `onPraticaFirmata(praticaId)` hook in `app/pratiche/actions.ts`: S7→S8 prima volta, S8→S9 ricorrente, set `primaPratica`
+- [x] Cron `syncCrmFromPlatform()` aggrega `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`, `tassoComp` per i contatti agganciati
+- [x] Endpoint `POST /api/jobs/crm-sync` admin-only, con bottone in `/admin/demo-control` per trigger manuale
+- [x] Util puri (`normalizePhone`, `isPreIscrizione`) testabili senza prisma — 7 unit test
+- L'outbox HMAC + retry è applicabile solo per CRM esterno e resta nella vecchia FASE 10 (non più attiva)
 
 ### 14.8 CRM-H — Vapi.ai integration (deferito post account esterno)
 - [ ] Sblocco account Vapi.ai (B6 — Budget bot AI)
@@ -740,7 +744,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
 | 11 QA/Compliance/Lancio | 0% | — |
 | 13 Sistema Affiliazione | 0% | Spec v3 + review CTO pronto (`sistema-affiliazione.md`), lancio pieno in parallelo a FASE 10 |
-| 14 CRM interno team PV | ~75% | Bundle A/B/C/D/E/F in prod. Mancano G (sync), H (Vapi — bloccato da account esterno) |
+| 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H (Vapi — bloccato da account esterno) |
 
 **Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
 

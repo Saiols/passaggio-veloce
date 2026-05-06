@@ -9,6 +9,7 @@ const jobs = [
   { key: 'tick', label: '🔁 Avanza tick distribuzione', endpoint: '/api/jobs/distribuzione-tick' },
   { key: 'solleciti', label: '📨 Invia solleciti pratiche', endpoint: '/api/jobs/send-solleciti' },
   { key: 'autoPayout', label: '🎯 Trigger payout automatici', endpoint: '/api/jobs/trigger-auto-payout' },
+  { key: 'crmSync', label: '🔄 Sync CRM ↔ piattaforma', endpoint: '/api/jobs/crm-sync' },
 ];
 
 type JobState = { running: boolean; result?: string; error?: string };

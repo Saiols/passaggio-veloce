@@ -8,6 +8,7 @@ import { signIn, signOut } from '@/auth';
 import { env } from '@/env';
 import { hashPassword } from '@/lib/auth/password';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
+import { tryMatchCrmContact } from '@/lib/crm/sync';
 import {
   loginSchema,
   registerFullSchema,
@@ -129,6 +130,7 @@ export async function registerAction(
   const passwordHash = await hashPassword(account.password);
   const verificationToken = generateSecureToken();
 
+  let createdCompanyId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
       // Genera codice referral con retry su collisione (rarissima ma possibile).
@@ -187,7 +189,16 @@ export async function registerAction(
           expiresAt: expiresIn(24),
         },
       });
+
+      createdCompanyId = createdCompany.id;
     });
+
+    // CRM-G: match best-effort post-iscrizione (Caso A: contatto lead
+    // pre-esistente → aggancia + auto-promote a S7). Non deve bloccare
+    // il flusso registrazione in caso di errore.
+    if (createdCompanyId) {
+      void tryMatchCrmContact(createdCompanyId);
+    }
 
     if (env.DEMO_MODE) {
       await prisma.$transaction(async (tx) => {

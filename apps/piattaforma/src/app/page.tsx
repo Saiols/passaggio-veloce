@@ -3,6 +3,10 @@ import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
 import { SiteChatbot } from '@/components/site-chatbot';
 
+// Cache la home per 5 minuti — il DB lookup SiteChatbot non blocca il
+// render iniziale prerender al deploy se lo schema prod non è ancora migrato.
+export const revalidate = 300;
+
 export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col bg-white">

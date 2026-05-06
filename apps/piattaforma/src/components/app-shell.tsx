@@ -130,16 +130,20 @@ export function AppShell({
       <main className="flex-1">{children}</main>
 
       <footer className="border-t border-pv-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-5 py-4 text-[12px] text-pv-slate-500 sm:px-6">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-5 py-4 text-[12px] text-pv-slate-500 sm:flex-row sm:items-center sm:px-6">
           <p>
             © {new Date().getFullYear()} Passaggio Veloce ·{' '}
             <span className="text-pv-slate-700 font-semibold">{roleBadgeLabel(session.user.role, session.user.companyType)}</span>
           </p>
-          <p className="flex items-center gap-2 text-[11px]">
+          <nav className="flex flex-wrap items-center gap-2 text-[11px]">
+            <Link href="/privacy" className="hover:text-pv-navy-900">Privacy</Link>
+            <Link href="/cookie" className="hover:text-pv-navy-900">Cookie</Link>
+            <Link href="/termini" className="hover:text-pv-navy-900">Termini</Link>
+            <span className="text-pv-slate-300">·</span>
             <span className="font-mono text-pv-slate-400">build {(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)}</span>
             <span className="text-pv-slate-300">·</span>
             <span>{session.user.email}</span>
-          </p>
+          </nav>
         </div>
       </footer>
     </div>

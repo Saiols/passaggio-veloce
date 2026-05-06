@@ -830,11 +830,14 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Smoke test: sospensione + riattivazione + banner verde end-to-end
 - Schema: nuovo campo `Company.suspensionLastNote` (push schema applicato dev+prod)
 
-**A8. FASE 11 — Setup QA**
-- Cookie banner + consensi (componente client + persist su User)
-- Pagina `/privacy`, `/cookie`, `/termini` con copy boilerplate
-- Test E2E base con Playwright (login, registrazione, wizard pratica, firma)
-- Stima: 4-5 commit, ~2-3 giornate
+**A8. ✅ DONE — Compliance + QA setup**
+- `<CookieBanner />` GDPR-compliant montato in root layout: 3 azioni "Accetta tutti" / "Solo necessari" / "Personalizza" con toggle granulare analytics/marketing. Persistenza LocalStorage via `useSyncExternalStore` (SSR-safe, multi-tab consistency).
+- Pagine `/privacy`, `/cookie`, `/termini` con copy boilerplate ITA, footer pubblico e AppShell linkano sempre alle 3 pagine.
+- `<title>` e meta description del root layout aggiornati ("Passaggio Veloce — Broker digitale automotive").
+- Setup Playwright: `playwright.config.ts` (base URL configurabile, project chromium), scripts `test:e2e` e `test:e2e:install`.
+- 4 smoke test E2E in `e2e/smoke.spec.ts`: home pubblica + CTA, pagine legali raggiungibili, cookie banner accept flow, login admin con credenziali seed.
+- `.gitignore` esteso (playwright-report, test-results).
+- Backlog: copy legali definitivi (B10/B11), test E2E avanzati (registrazione + wizard pratica + firma — richiedono fixtures e teardown DB).
 
 **A9. FASE 2.2 — 2FA TOTP + rate limit**
 - 2FA via app authenticator (TOTP, no SMS — non serve esterno)

@@ -39,7 +39,7 @@ const TOP_TABS: {
     label: 'Sales',
     hint: 'Agent vocali + campagne',
     href: '/admin/crm/sales',
-    enabled: false,
+    enabled: true,
     matches: ['sales'],
   },
   {

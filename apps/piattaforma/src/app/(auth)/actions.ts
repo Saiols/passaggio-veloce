@@ -12,6 +12,7 @@ import { headers } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
 import { anonymizeIp } from '@/lib/net/ip';
+import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
 import {
   loginSchema,
   registerFullSchema,
@@ -39,12 +40,27 @@ export async function loginAction(
     return { error: 'Email o password non valide' };
   }
 
+  // A9 rate limit: chiave per IP+email, 5 tentativi / 15 min poi 15 min block
+  const hdrs = await headers();
+  const ipRaw = hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? '';
+  const ip = anonymizeIp(ipRaw) ?? 'unknown';
+  const emailLower = parsed.data.email.toLowerCase();
+  const rateKey = `login:${ip}:${emailLower}`;
+  const rl = checkRateLimit(rateKey);
+  if (!rl.allowed) {
+    const minutes = Math.ceil(rl.retryAfterSeconds / 60);
+    return {
+      error: `Troppi tentativi. Riprova tra ${minutes} minut${minutes === 1 ? 'o' : 'i'}.`,
+    };
+  }
+
   try {
     await signIn('credentials', {
-      email: parsed.data.email.toLowerCase(),
+      email: emailLower,
       password: parsed.data.password,
       redirectTo: '/dashboard',
     });
+    resetRateLimit(rateKey);
     return {};
   } catch (error) {
     if (error instanceof AuthError) {

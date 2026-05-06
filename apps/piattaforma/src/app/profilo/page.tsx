@@ -145,6 +145,25 @@ export default async function ProfiloPage() {
               </div>
             </Card>
           )}
+
+          <Card>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-bold text-pv-navy-800">
+                  Sicurezza account
+                </h2>
+                <p className="mt-1 text-[12.5px] text-pv-slate-500">
+                  Autenticazione a due fattori (TOTP), password.
+                </p>
+              </div>
+              <Link
+                href="/profilo/sicurezza"
+                className="rounded-[8px] border border-pv-slate-300 bg-white px-3 py-1 text-[12px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+              >
+                Gestisci
+              </Link>
+            </div>
+          </Card>
         </div>
       </div>
     </AppShell>

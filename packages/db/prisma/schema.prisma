@@ -396,6 +396,14 @@ model User {
 
   lastLoginAt DateTime?
 
+  /// A9: TOTP 2FA. Se enabled=true, dopo password serve anche il codice TOTP.
+  /// twoFactorSecret è il secret base32 condiviso con l'app authenticator.
+  twoFactorEnabled       Boolean  @default(false)
+  twoFactorSecret        String?
+  /// 10 backup codes hashati (bcrypt). Array JSON di stringhe.
+  /// Ogni codice consumato viene rimosso dall'array.
+  twoFactorBackupCodes   Json?
+
   // Documenti caricati da questo utente
   documentiCaricati Documento[] @relation("DocumentiUploader")
 

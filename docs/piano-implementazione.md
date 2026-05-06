@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-06 (FASE 14 CRM A-G + FASE 13 AF-N+AF-AC in prod; mappa lavoro residuo aggiunta)
+> Ultimo aggiornamento: 2026-05-06 (cluster A1-A9 fattibile-ora completati; restano solo blocchi esterni)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -734,24 +734,24 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ## Stato MVP al 2026-05-06
 
-**Progresso complessivo (effort-weighted): ~80%** · **Production:** https://passaggio-veloce-piattaforma-cm8unpjkg-saiols-projects.vercel.app/
+**Progresso complessivo (effort-weighted): ~92%** · **Production:** https://passaggio-veloce-piattaforma-cm8unpjkg-saiols-projects.vercel.app/
 
 | Fase | % | Note |
 |---|---|---|
 | 0 Pre-sviluppo | ~30% | Stack scelto, naming, CTO. Resto su decisioni business/legali |
-| 1 Fondamenta | ~80% | Monorepo, CI, DB Prisma, Sentry, Docker, seed, **deploy Vercel attivo**. Manca staging dedicato + backup automatici Neon |
-| 2 Auth | ~75% | Login, wizard split dealer/agenzia, **invito utenti team operativo** (`/team`, `/invito/[token]`), reset password, magic verify. Manca 2FA, rate-limit, email reale |
+| 1 Fondamenta | ~85% | Monorepo, CI, DB Prisma, Sentry, Docker, seed, **deploy Vercel attivo + Vercel Cron schedule (A2)**. Manca staging dedicato + backup automatici Neon |
+| 2 Auth | ~92% | Login, wizard split dealer/agenzia, invito utenti team, reset password, **2FA TOTP setup pronto + rate-limit login attivo (A9)**. Manca solo email reale (Resend) e check 2FA al sign-in (backlog) |
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
-| 3 Documenti/OCR/Pratiche | ~55% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, lista/detail, schema documentale v7 (SD-A/B/C in prod). Manca gating IA + integrazione OCR reale |
-| 4 Distribuzione + agenzia | ~88% | Engine 3-round + ore lavorative + ranking + tick endpoint. Manca solo `vercel.json` cron schedule, anti-abuso, raggio km |
-| 5 Pagamenti/Wallet/SDI | ~30% | Logica wallet completa, FeeAddebito SCHEDULED, payout job, MockPaymentProvider. Blocca Stripe → commercialista (B1) |
-| 6 Notifiche | ~85% | **23 NotificaTipo cablati** (N1-N17, N18-N21 sistema penali + revisioni, N22-N24 affiliazione referral). Job `send-solleciti` invia N3+N7, `trigger-auto-payout` per N5. Manca solo trigger Vercel Cron + unsubscribe |
-| 7 Valutazioni/Ranking | ~85% | Form 5⭐, rating in distribuzione, sospensione auto. Manca unsuspend UI dedicato |
-| 8 Listini / Osservatorio | 0% | Modello DB pronto. UI da costruire — fattibile senza esterni |
-| 9 Admin panel | ~75% | Overview + finanze, dashboard, gestione pratiche/broker/agenzie/utenti/escalation/segnalazioni/revisioni/affiliazioni/assistenti, sospensione, eliminazione account. Manca solo assegnazione manuale escalation, report export, configurazione parametri |
+| 3 Documenti/OCR/Pratiche | ~75% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**. Manca solo OCR reale (Document AI) |
+| 4 Distribuzione + agenzia | 100% | Engine 3-round, ore lavorative, ranking con **anti-abuso decay rifiuti + auto-suspend 5 timeout (A3)**, **110 province italiane (A3)**, cron automatico (A2). Tutto pronto |
+| 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1) |
+| 6 Notifiche | ~95% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6). Cron Vercel automatico (A2). Manca solo unsubscribe granulare |
+| 7 Valutazioni/Ranking | 100% | Form 5⭐, rating in distribuzione, sospensione auto, **unsuspend UI con nota motivazione + banner valuta dashboard dealer (A7)** |
+| 8 Listini / Osservatorio | 100% | **Modulo intero in prod (A1)**: form/upload listino agenzia, engine osservatorio per provincia, benchmark "tu vs media zona", dashboard admin |
+| 9 Admin panel | ~95% | Tutto in prod incluso **audit log accessi (A5)**. Manca solo configurazione parametri runtime (DB-driven, backlog) |
 | 10 CRM vendite esterno | — | **Superato** dalla FASE 14 (CRM nativo) post-decisione 2026-05-06 |
-| 11 QA/Compliance/Lancio | ~10% | 53 unit test verde, smoke E2E browser. Manca audit GDPR formale, cookie banner, DPA fornitori, beta test |
-| 13 Sistema Affiliazione | ~85% | Backend/UI/notifiche/AF-N/AF-AC in prod. Aperti: AF-PDF (backlog), AF-P payout (bloccato Stripe), N25 recap mensile |
+| 11 QA/Compliance/Lancio | ~50% | 72 unit test, **cookie banner GDPR + pagine privacy/cookie/termini (A8) + Playwright setup con 4 smoke test (A8)**. Manca audit GDPR formale, copy legali revisionati, beta test |
+| 13 Sistema Affiliazione | ~95% | Backend/UI/notifiche/AF-N/AF-AC in prod, **AF-PDF + N25 cron mensile (A6)**. Aperti: AF-P payout (bloccato Stripe) |
 | 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H Vapi (bloccato B6 account esterno) |
 
 **Account esterni richiesti per:**
@@ -839,10 +839,14 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - `.gitignore` esteso (playwright-report, test-results).
 - Backlog: copy legali definitivi (B10/B11), test E2E avanzati (registrazione + wizard pratica + firma — richiedono fixtures e teardown DB).
 
-**A9. FASE 2.2 — 2FA TOTP + rate limit**
-- 2FA via app authenticator (TOTP, no SMS — non serve esterno)
-- Rate limit login (in-memory, swap-ready a Redis)
-- Stima: 2 commit, 1 giornata
+**A9. ✅ DONE — 2FA TOTP setup + rate limit login**
+- Schema: `User.twoFactorEnabled`, `twoFactorSecret`, `twoFactorBackupCodes` (JSON, hashed bcrypt)
+- `lib/auth/totp.ts` con `otplib` v13: generateTotpSecret, verifyTotpCode (epochTolerance ±30s), generateBackupCodes (10× 8-char), hashBackupCodes, verifyBackupCode
+- Pagina `/profilo/sicurezza`: setup wizard con QR code (qrcode lib), conferma con codice TOTP, mostra backup codes UNA VOLTA, disable con password
+- Card "Sicurezza account" su /profilo
+- `lib/auth/rate-limit.ts`: sliding window in-memory (Map), 5 tentativi / 15 min poi block 15 min, swap-ready a Redis. 4 unit test verdi
+- Cablato in `loginAction`: chiave `login:{ip-anonimizzato}:{email}`, reset al login OK
+- Backlog: integrazione check 2FA al sign-in (oggi setup pronto + secret salvato, ma il signIn callback non interroga il codice TOTP — serve custom credentials provider). Punto chiaro nel commit.
 
 ### B · Bloccato da account/decisione esterna
 

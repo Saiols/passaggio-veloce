@@ -685,11 +685,13 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [ ] Dashboard conversazioni per bot (storico, tagging, escalation umana) — differita a CRM-H
 - [ ] Embed Chatbot WhatsApp/mail (WATI/Manychat) — differito a CRM-H
 
-### 14.6 CRM-E — Dashboard CRM
-- [ ] `/admin/crm/dashboard` aggregati (lead per stato S0..S10, conversion funnel S0→S7, fonti, agenti per performance)
-- [ ] Grafici call-volume per giorno/ora (pre Vapi: dati mock; post Vapi: real)
-- [ ] Tabella campagne attive con tasso risposta + conversione
-- [ ] KPI: tempo medio S0→S3, S3→S7, costo per acquisizione
+### 14.6 CRM-E — Dashboard CRM ✅ DONE
+- [x] `/admin/crm/dashboard` 6 stat cards (totale, iscritti S8+S9, conversione S3+S5+S6, link aperti, sales agent, campagne attive)
+- [x] Grafico "Contatti per mese" (ultimi 6 mesi) — riusa `RendimentoChart` con prop `formatValue` (refactor light)
+- [x] Progress bars distribuzione stato S0..S10 con conteggio + percentuale
+- [x] Sezione "Dati economici" gated da `canViewCrmFinancials` — Revenue mese, Pratiche mese, Wallet broker aggregato, Revenue/pratica
+- [ ] Grafici call-volume per giorno/ora — differiti a CRM-H (richiedono dati Vapi)
+- [ ] Tempo medio S0→S3 / S3→S7 — differiti a CRM-G (richiedono storico stato)
 
 ### 14.7 CRM-G — Sync con piattaforma (cron + webhook)
 - [ ] Cron giornaliero che porta su `CrmContact` lo stato platform-side (`statusAccount`, `praticheTotali`, `ultimoAccesso`)
@@ -738,7 +740,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
 | 11 QA/Compliance/Lancio | 0% | — |
 | 13 Sistema Affiliazione | 0% | Spec v3 + review CTO pronto (`sistema-affiliazione.md`), lancio pieno in parallelo a FASE 10 |
-| 14 CRM interno team PV | ~62% | Bundle A/B/C/D/F in prod. Mancano E (dashboard), G (sync), H (Vapi — bloccato da account esterno) |
+| 14 CRM interno team PV | ~75% | Bundle A/B/C/D/E/F in prod. Mancano G (sync), H (Vapi — bloccato da account esterno) |
 
 **Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
 

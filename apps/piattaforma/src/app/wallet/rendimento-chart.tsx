@@ -24,9 +24,12 @@ const MAX_X_LABELS = 8;
 export function RendimentoChart({
   buckets,
   accent = 'navy',
+  formatValue = formatCurrencyCent,
 }: {
   buckets: RendimentoBucket[];
   accent?: 'navy' | 'orange';
+  /** Override formatting valore (default: currency da cent). */
+  formatValue?: (n: number) => string;
 }) {
   if (buckets.length === 0) {
     return (
@@ -67,7 +70,7 @@ export function RendimentoChart({
           fontSize="10"
           fill="var(--pv-slate-500)"
         >
-          {formatCurrencyCent(maxVal)}
+          {formatValue(maxVal)}
         </text>
         <text
           x={PADDING_X - 8}
@@ -120,9 +123,9 @@ export function RendimentoChart({
                   transformOrigin: `${cx}px ${baseline}px`,
                   animationDelay: `${i * 25}ms`,
                 }}
-                aria-label={`${b.label}: ${formatCurrencyCent(b.importoCent)}`}
+                aria-label={`${b.label}: ${formatValue(b.importoCent)}`}
               >
-                <title>{`${b.label}: ${formatCurrencyCent(b.importoCent)}`}</title>
+                <title>{`${b.label}: ${formatValue(b.importoCent)}`}</title>
               </rect>
               {showLabel && (
                 <text

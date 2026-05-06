@@ -55,7 +55,7 @@ const TOP_TABS: {
     label: 'Dashboard',
     hint: 'KPI funnel + dati economici',
     href: '/admin/crm/dashboard',
-    enabled: false,
+    enabled: true,
     matches: ['dashboard'],
   },
   {

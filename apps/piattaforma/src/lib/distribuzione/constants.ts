@@ -11,26 +11,6 @@ export const DISTRIBUZIONE = {
 } as const;
 
 /**
- * Province limitrofe (MVP Veneto-centric) usate dal round 2 come
- * approssimazione del raggio 15 km. In produzione useremo API geo
- * o tabella comuni con coordinate.
- */
-export const PROVINCE_LIMITROFE: Record<string, readonly string[]> = {
-  // Veneto
-  VE: ['PD', 'TV', 'RO'],
-  PD: ['VE', 'TV', 'VI', 'RO'],
-  TV: ['VE', 'PD', 'BL', 'VI'],
-  VI: ['PD', 'TV', 'VR'],
-  BL: ['TV'],
-  VR: ['VI', 'MN'],
-  RO: ['VE', 'PD', 'FE'],
-};
-
-export function provinceLimitrofe(provincia: string): readonly string[] {
-  return PROVINCE_LIMITROFE[provincia.toUpperCase()] ?? [];
-}
-
-/**
  * Soglie ranking agenzie.
  * - `MIN_RATINGS_FOR_RANK`: numero minimo di valutazioni perché il rating
  *   sia considerato affidabile (sotto, l'agenzia è "non rankata" — neutra)
@@ -40,4 +20,20 @@ export function provinceLimitrofe(provincia: string): readonly string[] {
 export const RANKING = {
   MIN_RATINGS_FOR_RANK: 5,
   MIN_AVG_TO_STAY_ACTIVE: 2.5,
+} as const;
+
+/**
+ * Anti-abuso ranking (A3).
+ * - `REJECT_DECAY_PER_REJECT`: penalità (in stelle) sottratta dallo score
+ *   ordering per ogni rifiuto consecutivo recente. Es. 3 rifiuti consecutivi
+ *   → ratingAvg effettivo ridotto di 0.6 nel sort.
+ * - `REJECT_DECAY_LOOKBACK`: numero massimo di assegnazioni recenti
+ *   considerate per il calcolo dei "rifiuti consecutivi".
+ * - `AUTO_SUSPEND_TIMEOUT_THRESHOLD`: dopo N TIMEOUT consecutivi (no-show),
+ *   l'agenzia viene sospesa automaticamente con motivo audit.
+ */
+export const ANTI_ABUSO = {
+  REJECT_DECAY_PER_REJECT: 0.2,
+  REJECT_DECAY_LOOKBACK: 10,
+  AUTO_SUSPEND_TIMEOUT_THRESHOLD: 5,
 } as const;

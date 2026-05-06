@@ -783,11 +783,14 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - `.env.example`: aggiunto `CRON_SECRET` con doc
 - Da fare lato Vercel dashboard: aggiungere env var `CRON_SECRET` con valore casuale
 
-**A3. FASE 4.1 — Anti-abuso ranking + raggio km reale**
-- Decay rifiuti consecutivi (engine già esiste, basta aggiungere logica)
-- Sospensione automatica timeout >5
-- Raggio 15 km round 2 (oggi province limitrofe Veneto hardcoded) — usa libreria geo o tabella distanze comune→comune
-- Stima: 2-3 commit, 1 giornata
+**A3. ✅ DONE — Anti-abuso ranking + raggio territoriale esteso**
+- `ANTI_ABUSO` constants: `REJECT_DECAY_PER_REJECT=0.2`, `REJECT_DECAY_LOOKBACK=10`, `AUTO_SUSPEND_TIMEOUT_THRESHOLD=5`
+- `effectiveScore = ratingAvg − recentRejects × 0.2`: agenzia con 6 rifiuti consecutivi (4.5⭐) viene posizionata sotto un'agenzia onesta a 3.5⭐
+- `attachRating` ora carica anche le ultime 10 assegnazioni per agenzia e conta i rifiuti consecutivi recenti (rotti al primo ACCETTATA/TIMEOUT)
+- `checkAutoSuspendForAgenzie` cablato nel tickPratica dopo updateMany TIMEOUT: se 5 timeout consecutivi → `Company.suspendedAt` + cascade users SUSPENDED + nota audit "Auto: 5 TIMEOUT consecutivi (anti-abuso A3)"
+- `province-limitrofe.ts` espanso da 7 voci Veneto a 110 province italiane complete (vicini reali ISTAT 2024)
+- Util pure `ranking-util.ts` (no server-only) per testabilità isolata; 7 unit test
+- Backlog: raggio km vero (Haversine su lat/lng) richiede geocoding esterno (Nominatim/Google) — escluso da A3
 
 **A4. ✅ DONE — Gating documentale UI (rule-based)**
 - `lib/documenti/classifier.ts` con `classifyDocumento(input)` puro: regole MIME accettato (PDF/JPG/PNG), size minima 30KB, size massima 10MB, naming hints fronte/retro per CI

@@ -1,8 +1,10 @@
 import 'server-only';
 import { prisma, Prisma } from '@pv/db';
-import { DISTRIBUZIONE, provinceLimitrofe } from './constants';
+import { DISTRIBUZIONE } from './constants';
+import { provinceLimitrofe } from './province-limitrofe';
 import { computeCountdown, loadOrariPerAgenzie } from './countdown';
 import { attachRating, rankCandidates } from './ranking';
+import { checkAutoSuspendForAgenzie } from './auto-suspend';
 import {
   getAdminEmails,
   sendNotification,
@@ -71,6 +73,10 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
         a.esito = 'TIMEOUT';
         a.esitoAt = now;
       }
+      // A3 anti-abuso: dopo aver marcato TIMEOUT, controlla se le
+      // agenzie hanno ora 5+ timeout consecutivi → auto-suspend.
+      const idsToCheck = Array.from(new Set(daScadere.map((a) => a.agenziaId)));
+      await checkAutoSuspendForAgenzie(tx, idsToCheck);
     }
 
     const ancoraPending = assegnazioniCorrenti.some((a) => a.esito === 'PENDING');

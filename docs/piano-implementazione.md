@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-06 (Release post-demo 2026-05 chiusa; nuove spec aggiunte: Sistema Penali Broker + Schema Documentale v7)
+> Ultimo aggiornamento: 2026-05-06 (CRM interno: bundle A/B/C/F in prod; FASE 14 tracking aggiunta)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -638,6 +638,71 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ---
 
+## FASE 14 - CRM interno team PV
+
+> Spec di riferimento: `docs/crm-spec-implementativa.md` (12 decisioni, 8 bundle CRM-A..H).
+> CRM nativo dentro `apps/piattaforma`, riservato al team interno (companyId NULL),
+> ruoli ADMIN_PIATTAFORMA / AD / CTO / CFO / SALES_MANAGER / SALES.
+> Sostituisce il vecchio approccio "CRM esterno HubSpot+Make+Vapi" della FASE 10
+> (mantenuta come riferimento per integrazione vocale Vapi a CRM-H).
+
+### 14.1 CRM-A — Schema + ruoli + migrazione ✅ DONE
+- [x] 11 enum (`CrmContactCategoria`, `CrmStatoContatto` S0..S10, `CrmFonteAcquisizione`, `CrmCallEsito`, `CrmSentiment`, `CrmPlatStatus`, `CrmAgentLingua/Voce/Accento`, `CrmCampaignGiorni/Stato`, `CrmChatbotCanale`)
+- [x] 5 modelli (`CrmContact`, `CrmSalesAgent`, `CrmCampaign` + `CrmCampaignAssegnazione`, `CrmCall`, `CrmChatbot`)
+- [x] `UserRole` esteso: AD / CTO / CFO / SALES_MANAGER / SALES
+- [x] 14 helper RBAC in `lib/auth/permissions.ts` (incluso `canManageCrmCampaign` owner-based)
+
+### 14.2 CRM-B — Pipeline contatti + modale 4 tab ✅ DONE
+- [x] `/admin/crm` hub a 6 tab (Contatti / Sales / Chatbot / Dashboard / Utenti team / Permessi)
+- [x] `/admin/crm/contatti` con sub-tab Pipeline / Operativi
+- [x] Stat card (totale, S0, S3, S7, ultimi 30gg)
+- [x] Modale 4 tab create/edit (Anagrafica, Contatti, Stato/Note, Storia)
+- [x] Filtri (categoria, stato S0..S10, fonte, regione, owner)
+- [x] Import CSV (admin + sales manager)
+- [x] Soft delete + cron purge 90gg
+
+### 14.3 CRM-F — Utenti team interno + permessi ✅ DONE
+- [x] `/admin/crm/utenti` lista + create/edit/reset password
+- [x] Filtri ruolo via `creatableCrmRoles(role)` (gerarchia: ADMIN > AD/CTO > SALES_MANAGER > SALES)
+- [x] `/admin/crm/permessi` matrice readonly delle policy
+
+### 14.4 CRM-C — Sales Agents + Campagne ✅ DONE
+- [x] `/admin/crm/sales` 2 colonne (agent / campagne)
+- [x] CRUD Sales Agent (10 campi: nome, lingua/voce/accento, prompt, script primo+followup, Q&A, post-call) — delete bloccato se ha campagne attive/pausate
+- [x] CRUD Campagna (12 campi) con filtri target (regione/cat/statoTarget) e parametri call (maxTry, intervallo, finestra oraria, giorni attivi)
+- [x] Lancio campagna in transazione: bulk-create `CrmCampaignAssegnazione` per i contatti che matchano i filtri
+- [x] Status transitions ATTIVA / PAUSATA / CHIUSA
+- [x] RBAC owner-based: SALES_MANAGER edita solo le proprie campagne, ADMIN/AD/CTO edita tutte
+
+### 14.5 CRM-D — Chatbot config + embed sito
+- [ ] `/admin/crm/chatbot` lista bot multipli (sito / WA / mail) con stato
+- [ ] CRUD bot: nome, canale, prompt, Q&A DB condiviso col Sales Agent
+- [ ] Widget chatbot embed su passaggioveloce.it + wizard `/register`
+- [ ] Dashboard conversazioni per bot (storico, tagging, escalation umana)
+- [ ] Flag "primo nell'ordine" come da §10.11/§8.6 (chatbot inbound prima del bot vocale outbound)
+
+### 14.6 CRM-E — Dashboard CRM
+- [ ] `/admin/crm/dashboard` aggregati (lead per stato S0..S10, conversion funnel S0→S7, fonti, agenti per performance)
+- [ ] Grafici call-volume per giorno/ora (pre Vapi: dati mock; post Vapi: real)
+- [ ] Tabella campagne attive con tasso risposta + conversione
+- [ ] KPI: tempo medio S0→S3, S3→S7, costo per acquisizione
+
+### 14.7 CRM-G — Sync con piattaforma (cron + webhook)
+- [ ] Cron giornaliero che porta su `CrmContact` lo stato platform-side (`statusAccount`, `praticheTotali`, `ultimoAccesso`)
+- [ ] Webhook outbound piattaforma → CRM su signup/pratica events (`user.signup.completed`, `pratica.first.created`, ecc.)
+- [ ] Matching email/telefono/P.IVA e merge automatico (Caso A: contatto esistente → aggancia user; Caso B: nuovo iscritto → crea CrmContact)
+- [ ] Outbox `CrmOutboundEvent` con retry esponenziale + HMAC firma + idempotency-key
+
+### 14.8 CRM-H — Vapi.ai integration (deferito post account esterno)
+- [ ] Sblocco account Vapi.ai (B6 — Budget bot AI)
+- [ ] Push agent config (prompt, voce, accento, script) → Vapi via API
+- [ ] Function calling Vapi: `collectEmail`, `collectWhatsApp`, `updateContactState`, `tagObjection`, `scheduleNextContact`
+- [ ] Webhook inbound Vapi → `CrmCall` (esito, sentiment, trascrizione, tag obiezioni)
+- [ ] Trigger campagna scheduler (rispetta finestra oraria, giorni attivi, max tentativi)
+- [ ] Blacklist automatica su "stop" verbale + RPO check (B7 + §10.12)
+
+---
+
 ## Target MVP - KPI da raggiungere
 
 - [ ] 100 dealer attivi
@@ -649,9 +714,9 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ---
 
-## Stato MVP al 2026-04-17
+## Stato MVP al 2026-05-06
 
-**Progresso complessivo (effort-weighted): ~72-75%**
+**Progresso complessivo (effort-weighted): ~75-78%**
 
 | Fase | % | Note |
 |---|---|---|
@@ -669,6 +734,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
 | 11 QA/Compliance/Lancio | 0% | — |
 | 13 Sistema Affiliazione | 0% | Spec v3 + review CTO pronto (`sistema-affiliazione.md`), lancio pieno in parallelo a FASE 10 |
+| 14 CRM interno team PV | ~50% | Bundle A/B/C/F in prod. Mancano D (chatbot), E (dashboard), G (sync), H (Vapi — bloccato da account esterno) |
 
 **Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
 

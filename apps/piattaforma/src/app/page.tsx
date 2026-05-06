@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
+import { SiteChatbot } from '@/components/site-chatbot';
 
 export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col bg-white">
       <SiteHeader />
+      <SiteChatbot posizione="Homepage" />
 
       {/* Hero */}
       <section className="bg-pv-slate-50">

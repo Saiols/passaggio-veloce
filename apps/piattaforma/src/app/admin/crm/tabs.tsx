@@ -47,7 +47,7 @@ const TOP_TABS: {
     label: 'Chatbot',
     hint: 'Bot testuali sito/WhatsApp/mail',
     href: '/admin/crm/chatbot',
-    enabled: false,
+    enabled: true,
     matches: ['chatbot'],
   },
   {

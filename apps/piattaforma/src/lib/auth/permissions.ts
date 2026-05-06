@@ -83,6 +83,10 @@ export function canViewChatbot(role: string | undefined): boolean {
   return inSet(CRM_FULL, role);
 }
 
+export function canManageChatbot(role: string | undefined): boolean {
+  return inSet(CRM_FULL, role);
+}
+
 export function canViewCrmDashboard(role: string | undefined): boolean {
   return inSet(CRM_FULL_PLUS_SM, role);
 }

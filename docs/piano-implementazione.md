@@ -674,12 +674,16 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [x] Status transitions ATTIVA / PAUSATA / CHIUSA
 - [x] RBAC owner-based: SALES_MANAGER edita solo le proprie campagne, ADMIN/AD/CTO edita tutte
 
-### 14.5 CRM-D — Chatbot config + embed sito
-- [ ] `/admin/crm/chatbot` lista bot multipli (sito / WA / mail) con stato
-- [ ] CRUD bot: nome, canale, prompt, Q&A DB condiviso col Sales Agent
-- [ ] Widget chatbot embed su passaggioveloce.it + wizard `/register`
-- [ ] Dashboard conversazioni per bot (storico, tagging, escalation umana)
-- [ ] Flag "primo nell'ordine" come da §10.11/§8.6 (chatbot inbound prima del bot vocale outbound)
+### 14.5 CRM-D — Chatbot config + embed sito ✅ DONE
+- [x] `/admin/crm/chatbot` lista bot multipli (sito / WA / mail) con badge canale/target/posizione/stato
+- [x] CRUD bot: nome, canale, posizione, prompt, obiettivo, Q&A, escalation message
+- [x] Toggle Attiva/Disattiva inline + soft delete
+- [x] Widget chatbot embed inline (`<SiteChatbot posizione="..." />`) montato su home (decisione D-09: stessa Next app, no iframe)
+- [x] Provider stub `lib/providers/chatbot/` con parser Q&A e matching keyword (sostituibile con LLM reale post-Manychat/WATI)
+- [x] API `POST /api/chatbot/[botId]` per il widget (rate-limit a 1000 char/messaggio)
+- [x] Unit test provider (parseQa + respondAsBot, 6 case)
+- [ ] Dashboard conversazioni per bot (storico, tagging, escalation umana) — differita a CRM-H
+- [ ] Embed Chatbot WhatsApp/mail (WATI/Manychat) — differito a CRM-H
 
 ### 14.6 CRM-E — Dashboard CRM
 - [ ] `/admin/crm/dashboard` aggregati (lead per stato S0..S10, conversion funnel S0→S7, fonti, agenti per performance)
@@ -734,7 +738,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 10 CRM vendite esterno | 0% | Architettura + paper operativo pronti (`crm-architettura.md` + `ecosistema-crm-ai.md`), pronta a partire |
 | 11 QA/Compliance/Lancio | 0% | — |
 | 13 Sistema Affiliazione | 0% | Spec v3 + review CTO pronto (`sistema-affiliazione.md`), lancio pieno in parallelo a FASE 10 |
-| 14 CRM interno team PV | ~50% | Bundle A/B/C/F in prod. Mancano D (chatbot), E (dashboard), G (sync), H (Vapi — bloccato da account esterno) |
+| 14 CRM interno team PV | ~62% | Bundle A/B/C/D/F in prod. Mancano E (dashboard), G (sync), H (Vapi — bloccato da account esterno) |
 
 **Servono account esterni per:** email reale (Resend), storage (S3), OCR reale (Google Document AI), pagamenti (Stripe), CRM vendite stack (HubSpot/Make/Vapi/Twilio/Lemlist/Wistia).
 

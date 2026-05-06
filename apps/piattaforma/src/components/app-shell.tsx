@@ -33,6 +33,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       adminLinks.push({ href: '/admin/revisioni', label: 'Revisioni' });
       adminLinks.push({ href: '/admin/affiliazioni', label: 'Affiliazioni' });
       adminLinks.push({ href: '/admin/assistenti', label: 'Assistenti' });
+      adminLinks.push({ href: '/admin/audit-log', label: 'Audit log' });
     }
     return adminLinks;
   }

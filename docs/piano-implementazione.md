@@ -796,12 +796,11 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Quando arriva Document AI, swap del classificatore — UI invariata
 - Stima: 3-4 commit, ~2 giornate
 
-**A5. FASE 9 — Admin completamento**
-- Assegnazione manuale escalation a partner di fiducia (lista già esiste, manca azione assign)
-- Report finanziari export CSV (engine dashboard già esiste)
-- Configurazione parametri runtime (N agenzie/round, timeout giorni, soglie wallet)
-- Audit log accessi (campo `lastLoginAt` già popolato, manca pagina)
-- Stima: 3-4 commit, ~2 giornate
+**A5. ✅ DONE — Admin completamento (4/4 voci coperte)**
+- ✅ **Assegnazione manuale escalation** — già implementata (`/admin/escalation` con `<AssignForm>` + `assegnaEscalationAction`, preload agenzie per provincia con rating + count valutazioni)
+- ✅ **Report finanziari export CSV** — già implementati per affiliazioni (`/api/admin/affiliazioni/export`), dashboard finanze (`/api/admin/dashboard/export`), contatti (`/api/admin/contatti/export`)
+- ✅ **Audit log accessi** — pagina `/admin/audit-log` con: 4 stat cards (utenti totali, login oggi, login ultimi 7gg, mai loggati), filtro ruolo + ricerca testuale (email/nome/ragione sociale), paginazione 50/pagina, sortato per `lastLoginAt` desc, gated `ADMIN_PIATTAFORMA`
+- ⏭ **Configurazione parametri runtime** — differita a backlog: richiede modello DB `Settings` chiave-valore o approccio simile, scope troppo grosso per scope A5. Oggi: parametri hardcoded in `lib/distribuzione/config.ts`, `lib/wallet/config.ts`, `lib/ranking.ts` con `payoutThresholdCent` configurabile per company.
 
 **A6. ✅ DONE — AF-PDF rendiconto + N25 cron mensile**
 - `lib/pdf/rendiconto.ts` con `pdf-lib` (puro JS, no chromium): rendiconto A4 portrait con sezioni separate "Crediti da pratiche" + "Crediti da affiliazione" + totali e subtotali

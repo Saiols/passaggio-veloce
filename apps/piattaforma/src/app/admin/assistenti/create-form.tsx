@@ -3,7 +3,9 @@
 import { useState, useTransition } from 'react';
 import { createAssistenteAction } from './actions';
 
-export function CreateAssistenteForm() {
+export function CreateAssistenteForm({
+  onSuccess,
+}: { onSuccess?: () => void } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -24,6 +26,7 @@ export function CreateAssistenteForm() {
       setSuccess(
         `Assistente creato per ${email}. Comunica le credenziali fuori piattaforma.`,
       );
+      onSuccess?.();
     });
   }
 

@@ -6,7 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatDate, formatRelative } from '@/lib/format';
-import { CreateAssistenteForm } from './create-form';
+import { AssistentiPageClient } from './assistenti-page-client';
 import { SuspendButton } from '../suspend-button';
 
 export default async function AdminAssistentiPage() {
@@ -41,32 +41,23 @@ export default async function AdminAssistentiPage() {
 
   return (
     <AppShell session={session} activePath="/admin/assistenti">
-      <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
-        <header className="mb-7">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            Admin
-          </p>
-          <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            Assistenti
-          </h1>
-          <p className="mt-1 text-[13px] text-pv-slate-500">
-            Account operativi con accesso a pratiche, anagrafiche, wallet,
-            catalogo contatti ed escalation. Non vedono la dashboard
-            finanziaria aggregata (riservata a te).
-          </p>
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              Admin
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              Assistenti
+            </h1>
+            <p className="mt-1 text-[13px] text-pv-slate-500">
+              Account operativi con accesso a pratiche, anagrafiche, wallet,
+              catalogo contatti ed escalation. Non vedono la dashboard
+              finanziaria aggregata (riservata a te).
+            </p>
+          </div>
+          <AssistentiPageClient />
         </header>
-
-        <Card className="mb-6">
-          <h2 className="text-[15px] font-bold text-pv-navy-800">
-            Crea nuovo assistente
-          </h2>
-          <p className="mt-1 text-[12.5px] text-pv-slate-500">
-            Imposti tu email e password iniziale. Comunichi le credenziali
-            all&apos;assistente fuori piattaforma. L&apos;account è attivo da
-            subito.
-          </p>
-          <CreateAssistenteForm />
-        </Card>
 
         <Card>
           <h2 className="text-[15px] font-bold text-pv-navy-800">

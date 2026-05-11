@@ -45,3 +45,46 @@ test('login admin con credenziali seed', async ({ page }) => {
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
   await expect(page.getByText('Admin Piattaforma')).toBeVisible();
 });
+
+test('team modale Aggiungi utente apre, switch tab, chiude con Esc', async ({
+  page,
+}) => {
+  // Login dealer
+  await page.goto('/login');
+  await page.getByLabel('Email').fill('dealer1@passaggioveloce.it');
+  await page.getByLabel('Password').fill('DevPass123!');
+  await page.getByRole('button', { name: 'Accedi' }).click();
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
+
+  // Apri /team
+  await page.goto('/team');
+  await expect(
+    page.getByRole('heading', { name: /^Team$/, level: 1 }),
+  ).toBeVisible();
+
+  // CTA in alto a destra
+  const cta = page.getByRole('button', { name: /Aggiungi utente/i });
+  await expect(cta).toBeVisible();
+
+  // Apri modale
+  await cta.click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /Aggiungi utente/i, level: 2 }),
+  ).toBeVisible();
+
+  // Tab Imposta password attivo di default → email input visibile
+  await expect(
+    page.getByPlaceholder(/dipendente@azienda\.it/i),
+  ).toBeVisible();
+
+  // Switch al tab Invita via email
+  await page.getByRole('button', { name: /Invita via email/i }).click();
+  await expect(
+    page.getByPlaceholder(/utente@azienda\.it/i),
+  ).toBeVisible();
+
+  // Esc chiude
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});

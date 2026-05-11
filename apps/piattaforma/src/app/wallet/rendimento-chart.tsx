@@ -3,7 +3,9 @@ import type { RendimentoBucket } from './rendimento';
 
 const W = 720;
 const H = 220;
-const PADDING_X = 44;
+// PADDING_X dimensionato per contenere la label massima dell'asse Y
+// ("9.999,99 €" ≈ 50u a fontSize 10) con textAnchor="end" a x=PADDING_X-8.
+const PADDING_X = 64;
 const PADDING_TOP = 18;
 const PADDING_BOTTOM = 32;
 

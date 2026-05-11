@@ -91,7 +91,10 @@ Una volta committati, i file SVG diventano la **single source of truth** del bra
 - Generazione SVG "outlined" con path al posto di `<text>` per uso stampa (richiede font tooling esterno)
 - Animazioni del logo (loader, micro-interaction)
 - Brand book completo (linee guida tipografia, spaziature minime, esempi d'uso vietati)
-- Swap dei reference attuali al logo PNG nei punti d'uso esistenti — verrà fatto in un commit successivo
+
+## Swap nei punti d'uso (incluso su richiesta utente 2026-05-12)
+
+Dopo aver generato gli SVG, sostituire i riferimenti al logo esistente in tutti i punti d'uso identificati (vedi sezione "Utilizzo nella piattaforma" sopra). Ogni gruppo logico di sostituzioni va in un commit dedicato per facilitare review/rollback.
 
 ## Riferimenti
 

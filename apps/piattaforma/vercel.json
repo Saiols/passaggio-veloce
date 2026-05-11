@@ -28,6 +28,10 @@
     {
       "path": "/api/jobs/affiliation-monthly-recap",
       "schedule": "0 9 1 * *"
+    },
+    {
+      "path": "/api/jobs/purge-deleted-team-users",
+      "schedule": "0 3 * * *"
     }
   ]
 }

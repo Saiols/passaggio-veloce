@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { InviteForm } from './invite-form';
-import { CreateUserForm } from './create-user-form';
 import { RevokeButton } from './revoke-button';
+import { DisableTeamUserButton } from './disable-button';
+import { TeamPageClient } from './team-page-client';
 import { formatRelative } from '@/lib/format';
 
 export default async function TeamPage() {
@@ -16,7 +16,7 @@ export default async function TeamPage() {
 
   const [users, invitations] = await Promise.all([
     prisma.user.findMany({
-      where: { companyId },
+      where: { companyId, deletedAt: null },
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, email: true, nome: true, cognome: true,
@@ -32,38 +32,26 @@ export default async function TeamPage() {
 
   return (
     <AppShell session={session} activePath="/team">
-      <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
-        <header className="mb-6">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            Azienda
-          </p>
-          <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            Team
-          </h1>
-          <p className="mt-1 text-[13px] text-pv-slate-500">
-            Gestisci gli utenti che possono operare per conto della tua azienda.
-          </p>
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              Azienda
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              Team
+            </h1>
+            <p className="mt-1 text-[13px] text-pv-slate-500">
+              Gestisci gli utenti che possono operare per conto della tua azienda.
+            </p>
+          </div>
+          <TeamPageClient />
         </header>
 
         <section className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
-          <h2 className="text-base font-bold text-pv-navy-900">Crea account utente</h2>
-          <p className="mt-1 text-[12.5px] text-pv-slate-500">
-            Imposti tu email e password. Comunichi le credenziali al
-            dipendente fuori piattaforma. L&apos;utente è attivo da subito.
-          </p>
-          <CreateUserForm />
-        </section>
-
-        <details className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
-          <summary className="cursor-pointer text-[13px] font-semibold text-pv-slate-700">
-            In alternativa: invia un invito via email (l&apos;utente imposta la
-            password)
-          </summary>
-          <InviteForm />
-        </details>
-
-        <section className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
-          <h2 className="text-base font-bold text-pv-navy-900">Utenti attivi</h2>
+          <h2 className="text-base font-bold text-pv-navy-900">
+            Utenti attivi ({users.length})
+          </h2>
           <ul className="mt-3 divide-y divide-pv-slate-100">
             {users.map((u) => (
               <li
@@ -84,12 +72,19 @@ export default async function TeamPage() {
                     : 'Mai entrato'}
                 </span>
                 {u.id !== session.user.id && (
-                  <Link
-                    href={`/team/${u.id}/edit`}
-                    className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-                  >
-                    Modifica
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/team/${u.id}/edit`}
+                      className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                    >
+                      Modifica
+                    </Link>
+                    <DisableTeamUserButton
+                      userId={u.id}
+                      nome={u.nome}
+                      cognome={u.cognome}
+                    />
+                  </div>
                 )}
               </li>
             ))}

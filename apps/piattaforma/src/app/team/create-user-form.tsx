@@ -3,7 +3,9 @@
 import { useState, useTransition } from 'react';
 import { createUserDirectAction } from './actions';
 
-export function CreateUserForm() {
+export function CreateUserForm({
+  onSuccess,
+}: { onSuccess?: () => void } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -24,6 +26,7 @@ export function CreateUserForm() {
       setSuccess(
         `Account creato per ${email}. Comunica le credenziali al dipendente fuori piattaforma.`,
       );
+      onSuccess?.();
     });
   }
 

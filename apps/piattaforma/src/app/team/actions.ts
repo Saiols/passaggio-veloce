@@ -329,6 +329,45 @@ export async function resetTeamUserPasswordAction(
   return { ok: true, newPassword };
 }
 
+export type DisableTeamUserResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Disabilitazione immediata di un utente team: status=SUSPENDED +
+ * deletedAt=now(). L'utente non può più accedere e sparisce dalla lista
+ * /team. Stesso pattern di deleteCompanyAction (item 17 release 2026-05).
+ * L'anonimizzazione PII per compliance GDPR avviene dopo 90gg via cron
+ * `purge-deleted-team-users`.
+ */
+export async function disableTeamUserAction(
+  userId: string,
+): Promise<DisableTeamUserResult> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'ADMIN_AZIENDA') {
+    return { ok: false, error: "Solo l'admin azienda può eliminare utenti" };
+  }
+  if (userId === session.user.id) {
+    return { ok: false, error: 'Non puoi eliminare il tuo stesso account' };
+  }
+  const companyId = session.user.companyId!;
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target || target.companyId !== companyId) {
+    return { ok: false, error: 'Utente non trovato nella tua azienda' };
+  }
+  if (target.deletedAt) {
+    return { ok: false, error: 'Utente già eliminato' };
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { status: 'SUSPENDED', deletedAt: new Date() },
+  });
+
+  revalidatePath('/team');
+  return { ok: true };
+}
+
 export async function revokeInvitationAction(invitationId: string): Promise<void> {
   const session = await auth();
   if (!session?.user) redirect('/login');

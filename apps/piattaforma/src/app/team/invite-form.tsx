@@ -3,7 +3,9 @@
 import { useState, useTransition } from 'react';
 import { createInvitationAction } from './actions';
 
-export function InviteForm() {
+export function InviteForm({
+  onSuccess,
+}: { onSuccess?: () => void } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [demoLink, setDemoLink] = useState<string | null>(null);
@@ -17,6 +19,7 @@ export function InviteForm() {
       if (!res.ok) { setError(res.error); return; }
       setSuccess(`Invito inviato a ${email}.`);
       if (res.demoLink) setDemoLink(res.demoLink);
+      if (!res.demoLink) onSuccess?.();
     });
   }
 

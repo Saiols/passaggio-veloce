@@ -55,7 +55,7 @@ export default async function AdminCompanyDetailPage({
 
   return (
     <AppShell session={session} activePath={listaHref}>
-      <div className="mx-auto w-full max-w-5xl px-5 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <Link
           href={listaHref}
           className="mb-4 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"

@@ -36,7 +36,7 @@ export default async function NotifichePage() {
 
   return (
     <AppShell session={session} activePath="/notifiche">
-      <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
             Storico comunicazioni

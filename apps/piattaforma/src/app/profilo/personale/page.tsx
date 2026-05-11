@@ -25,7 +25,7 @@ export default async function ProfiloPersonalePage() {
 
   return (
     <AppShell session={session} activePath="/profilo">
-      <div className="mx-auto w-full max-w-2xl px-5 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <Link
           href="/profilo"
           className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"

@@ -36,7 +36,7 @@ export default async function AdminAssistenteEditPage({
 
   return (
     <AppShell session={session} activePath="/admin/assistenti">
-      <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <Link
           href="/admin/assistenti"
           className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"

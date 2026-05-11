@@ -46,7 +46,7 @@ export function ProfiloPersonaleForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="text-[12px] font-semibold text-pv-slate-700">Nome</span>
           <input
@@ -65,27 +65,27 @@ export function ProfiloPersonaleForm({
             className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
           />
         </label>
+        <label className="block sm:col-span-2">
+          <span className="text-[12px] font-semibold text-pv-slate-700">Email</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+          />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="text-[12px] font-semibold text-pv-slate-700">
+            Codice fiscale (opzionale)
+          </span>
+          <input
+            value={codiceFiscale}
+            onChange={(e) => setCodiceFiscale(e.target.value.toUpperCase())}
+            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 font-mono text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+          />
+        </label>
       </div>
-      <label className="block">
-        <span className="text-[12px] font-semibold text-pv-slate-700">Email</span>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
-        />
-      </label>
-      <label className="block">
-        <span className="text-[12px] font-semibold text-pv-slate-700">
-          Codice fiscale (opzionale)
-        </span>
-        <input
-          value={codiceFiscale}
-          onChange={(e) => setCodiceFiscale(e.target.value.toUpperCase())}
-          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 font-mono text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
-        />
-      </label>
 
       {error && <p className="text-[12px] text-pv-red-500">{error}</p>}
       {savedAt && !error && (

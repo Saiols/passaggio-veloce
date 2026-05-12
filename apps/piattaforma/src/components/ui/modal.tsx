@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 export type ModalSize = 'sm' | 'md' | 'lg';
@@ -35,6 +35,7 @@ export function Modal({
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -79,8 +80,6 @@ export function Modal({
 
   if (!open) return null;
   if (typeof document === 'undefined') return null;
-
-  const titleId = `modal-title-${Math.random().toString(36).slice(2, 9)}`;
 
   return createPortal(
     <div

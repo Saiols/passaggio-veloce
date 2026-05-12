@@ -16,6 +16,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Passaggio Veloce — Broker digitale automotive",
   description: "Connettiamo dealer e agenzie pratiche auto in una piattaforma unica.",
+  icons: {
+    icon: [
+      { url: "/brand/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/brand/icon.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default function RootLayout({

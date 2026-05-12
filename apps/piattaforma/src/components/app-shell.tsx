@@ -94,11 +94,15 @@ export function AppShell({
         <DemoBanner isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />
         <header className="bg-pv-navy-800 text-white shadow-[0_2px_12px_rgb(10_37_64_/_0.25)]">
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
-          <Link href="/dashboard" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white">
-              <Image src="/brand/logo.svg" alt="" width={18} height={18} className="h-[18px] w-[18px]" />
-            </span>
-            <span className="text-[14px] font-extrabold tracking-tight">Passaggio Veloce</span>
+          <Link href="/dashboard" className="flex items-center">
+            <Image
+              src="/brand/logo-dark.svg"
+              alt="Passaggio Veloce"
+              width={190}
+              height={32}
+              className="h-8 w-auto"
+              priority
+            />
           </Link>
           <UserMenu session={session} />
         </div>

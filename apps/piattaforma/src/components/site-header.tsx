@@ -10,17 +10,15 @@ export function SiteHeader({ variant = 'marketing' }: Props) {
   return (
     <header className="sticky top-0 z-30 border-b border-pv-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5">
+        <Link href="/" className="flex items-center">
           <Image
-            src="/brand/logo.svg"
-            alt=""
-            width={32}
-            height={32}
-            className="h-8 w-8"
+            src="/brand/logo-primary.svg"
+            alt="Passaggio Veloce"
+            width={214}
+            height={36}
+            className="h-9 w-auto"
+            priority
           />
-          <span className="text-[15px] font-extrabold tracking-tight text-pv-navy-800">
-            Passaggio Veloce
-          </span>
         </Link>
         <nav className="flex items-center gap-2">
           {variant === 'marketing' ? (

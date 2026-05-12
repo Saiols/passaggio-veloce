@@ -125,7 +125,29 @@ export async function generateRendicontoPDF(
     height: 42,
     color: NAVY,
   });
-  drawText(page, 'PASSAGGIO VELOCE', margin, 815, {
+
+  // Logo: icona documento+lampo (variante dark, scale 0.42 → ~27px su viewBox 64)
+  // drawSvgPath converte Y auto: con y=833 il top dell'arte SVG (y=8) appare a PDF y=833-8*0.42=829.6
+  const logoX = margin;
+  const logoTopY = 833;
+  const logoScale = 0.42;
+  page.drawSvgPath('M14 8 H38 L52 22 V58 H14 Z', {
+    x: logoX,
+    y: logoTopY,
+    scale: logoScale,
+    color: rgb(1, 1, 1), // documento bianco
+  });
+  page.drawSvgPath('M37 13 L26 33 L34 33 L29 51 L46 29 L38 29 Z', {
+    x: logoX,
+    y: logoTopY,
+    scale: logoScale,
+    color: ORANGE,
+    borderColor: rgb(1, 1, 1),
+    borderWidth: 1.2,
+  });
+
+  // Testo brand affiancato (offset dopo l'icona ~27px + 8px gap)
+  drawText(page, 'PASSAGGIO VELOCE', margin + 36, 815, {
     font: helvBold,
     size: 14,
     color: rgb(1, 1, 1),

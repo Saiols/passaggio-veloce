@@ -169,7 +169,11 @@ export type N12AffiliazioneCommissionePayload = {
 
 export type NotificaContent = { subject: string; html: string; text: string };
 
-const header = `<div style="background:#0a2540;padding:18px 20px;border-radius:12px 12px 0 0;color:#fff">
+const header = `<div style="background:#0a2540;padding:14px 20px;border-radius:12px 12px 0 0;color:#fff;display:flex;align-items:center;gap:10px">
+  <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;display:block" aria-hidden="true">
+    <path d="M14 8 H38 L52 22 V58 H14 Z" fill="#ffffff"/>
+    <path d="M37 13 L26 33 L34 33 L29 51 L46 29 L38 29 Z" fill="#ff7a00" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+  </svg>
   <strong style="font-size:16px;letter-spacing:-0.01em">Passaggio Veloce</strong>
 </div>`;
 

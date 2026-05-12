@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/jobs/distribuzione-tick",
-      "schedule": "*/30 * * * *"
+      "schedule": "0 4 * * *"
     },
     {
       "path": "/api/jobs/send-solleciti",
@@ -11,7 +11,7 @@
     },
     {
       "path": "/api/jobs/process-fee-scheduled",
-      "schedule": "0 */6 * * *"
+      "schedule": "0 5 * * *"
     },
     {
       "path": "/api/jobs/process-payouts",

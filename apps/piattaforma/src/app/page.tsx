@@ -2,12 +2,24 @@ import Link from 'next/link';
 import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
 import { SiteChatbot } from '@/components/site-chatbot';
+import { env } from '@/env';
 
 // Cache la home per 5 minuti — il DB lookup SiteChatbot non blocca il
 // render iniziale prerender al deploy se lo schema prod non è ancora migrato.
 export const revalidate = 300;
 
+// Pre-lancio (LANDING_ONLY): le CTA di registrazione/accesso diventano un
+// contatto email, così la vetrina raccoglie interesse senza esporre l'app.
+function richiediAccessoHref(contesto?: string) {
+  const subject = contesto
+    ? `Richiesta accesso Passaggio Veloce - ${contesto}`
+    : 'Richiesta accesso Passaggio Veloce';
+  return `mailto:info@passaggioveloce.it?subject=${encodeURIComponent(subject)}`;
+}
+
 export default function HomePage() {
+  const landingOnly = env.LANDING_ONLY;
+
   return (
     <main className="flex min-h-screen flex-col bg-white">
       <SiteHeader />
@@ -31,17 +43,32 @@ export default function HomePage() {
             </p>
 
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
-              <Link href="/register">
-                <Button size="md" className="w-full sm:w-auto">
-                  Registra la tua azienda
-                </Button>
-              </Link>
-              <Link href="/login">
-                <Button size="md" variant="secondary" className="w-full sm:w-auto">
-                  Accedi
-                </Button>
-              </Link>
+              {landingOnly ? (
+                <a href={richiediAccessoHref()}>
+                  <Button size="md" className="w-full sm:w-auto">
+                    Richiedi accesso anticipato
+                  </Button>
+                </a>
+              ) : (
+                <>
+                  <Link href="/register">
+                    <Button size="md" className="w-full sm:w-auto">
+                      Registra la tua azienda
+                    </Button>
+                  </Link>
+                  <Link href="/login">
+                    <Button size="md" variant="secondary" className="w-full sm:w-auto">
+                      Accedi
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
+            {landingOnly && (
+              <p className="mt-4 text-[13px] text-pv-slate-500">
+                Registrazioni in apertura a breve — scrivici per essere tra i primi.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -115,8 +142,8 @@ export default function HomePage() {
               'Crediti accumulati nel wallet, payout automatico oltre i 1.000€',
               'Valuta il servizio post-firma per migliorare il network',
             ]}
-            ctaLabel="Iscrivi la concessionaria"
-            ctaHref="/register"
+            ctaLabel={landingOnly ? 'Richiedi accesso' : 'Iscrivi la concessionaria'}
+            ctaHref={landingOnly ? richiediAccessoHref('Concessionaria') : '/register'}
           />
           <PersonaCard
             badge="Per agenzie pratiche auto"
@@ -128,8 +155,8 @@ export default function HomePage() {
               'Sistema di ranking trasparente basato sulle valutazioni reali',
               "Importi le tue tariffe una volta, l'osservatorio prezzi le aggiorna",
             ]}
-            ctaLabel="Diventa agenzia partner"
-            ctaHref="/register"
+            ctaLabel={landingOnly ? 'Richiedi accesso' : 'Diventa agenzia partner'}
+            ctaHref={landingOnly ? richiediAccessoHref('Agenzia') : '/register'}
           />
         </div>
       </section>
@@ -260,20 +287,31 @@ export default function HomePage() {
             Pronto a smettere di portare in giro fascicoli?
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-[14px] leading-relaxed text-[#b8cdea] sm:text-[16px]">
-            Registra la tua azienda in 3 minuti. Niente carta di credito, nessun vincolo.
-            Inizia a caricare pratiche subito.
+            {landingOnly
+              ? 'Stiamo per aprire le registrazioni. Lascia i tuoi contatti e ti avvisiamo appena la piattaforma è online.'
+              : 'Registra la tua azienda in 3 minuti. Niente carta di credito, nessun vincolo. Inizia a caricare pratiche subito.'}
           </p>
           <div className="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
-            <Link href="/register">
-              <Button size="md" className="w-full sm:w-auto">
-                Registra la tua azienda
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button size="md" variant="secondary" className="w-full sm:w-auto">
-                Ho già un account
-              </Button>
-            </Link>
+            {landingOnly ? (
+              <a href={richiediAccessoHref()}>
+                <Button size="md" className="w-full sm:w-auto">
+                  Richiedi accesso anticipato
+                </Button>
+              </a>
+            ) : (
+              <>
+                <Link href="/register">
+                  <Button size="md" className="w-full sm:w-auto">
+                    Registra la tua azienda
+                  </Button>
+                </Link>
+                <Link href="/login">
+                  <Button size="md" variant="secondary" className="w-full sm:w-auto">
+                    Ho già un account
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -366,11 +404,19 @@ function PersonaCard({
         ))}
       </ul>
       <div className="mt-7">
-        <Link href={ctaHref}>
-          <Button size="md" className="w-full sm:w-auto">
-            {ctaLabel}
-          </Button>
-        </Link>
+        {ctaHref.startsWith('mailto:') ? (
+          <a href={ctaHref}>
+            <Button size="md" className="w-full sm:w-auto">
+              {ctaLabel}
+            </Button>
+          </a>
+        ) : (
+          <Link href={ctaHref}>
+            <Button size="md" className="w-full sm:w-auto">
+              {ctaLabel}
+            </Button>
+          </Link>
+        )}
       </div>
     </div>
   );

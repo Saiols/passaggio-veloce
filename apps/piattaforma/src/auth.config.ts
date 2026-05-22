@@ -2,6 +2,12 @@ import type { NextAuthConfig } from 'next-auth';
 
 // Edge-compatible config (no Node-only modules like bcryptjs).
 // Used by middleware.ts. Full config with Credentials provider lives in auth.ts.
+
+// Pagine pubbliche della vetrina marketing: home + pagine legali. Sono
+// accessibili senza login e sono l'unico contenuto raggiungibile quando il
+// gate pre-lancio LANDING_ONLY è attivo.
+const PUBLIC_PATHS = new Set(['/', '/privacy', '/cookie', '/termini']);
+
 export const authConfig = {
   trustHost: true,
   pages: {
@@ -13,14 +19,21 @@ export const authConfig = {
   },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
+      const path = nextUrl.pathname;
+
+      // Gate pre-lancio: con LANDING_ONLY="true" è raggiungibile solo la
+      // vetrina marketing pubblica; ogni altra rotta torna alla home.
+      // Si disattiva rimuovendo la env var LANDING_ONLY al go-live.
+      if (process.env.LANDING_ONLY === 'true' && !PUBLIC_PATHS.has(path)) {
+        return Response.redirect(new URL('/', nextUrl));
+      }
+
       const isLoggedIn = Boolean(auth?.user);
       const isOnAuthPage =
-        nextUrl.pathname.startsWith('/login') ||
-        nextUrl.pathname.startsWith('/register') ||
-        nextUrl.pathname.startsWith('/reset-password') ||
-        nextUrl.pathname.startsWith('/verify-email');
-
-      const isPublicPage = nextUrl.pathname === '/';
+        path.startsWith('/login') ||
+        path.startsWith('/register') ||
+        path.startsWith('/reset-password') ||
+        path.startsWith('/verify-email');
 
       if (isOnAuthPage) {
         if (isLoggedIn) {
@@ -29,7 +42,7 @@ export const authConfig = {
         return true;
       }
 
-      if (isPublicPage) return true;
+      if (PUBLIC_PATHS.has(path)) return true;
 
       // Everything else requires auth.
       return isLoggedIn;

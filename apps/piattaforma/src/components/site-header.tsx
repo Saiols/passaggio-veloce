@@ -1,6 +1,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
+import { env } from '@/env';
+
+const CONTATTACI_HREF =
+  'mailto:info@passaggioveloce.it?subject=' +
+  encodeURIComponent('Richiesta accesso Passaggio Veloce');
 
 type Props = {
   variant?: 'marketing' | 'auth';
@@ -21,7 +26,19 @@ export function SiteHeader({ variant = 'marketing' }: Props) {
           />
         </Link>
         <nav className="flex items-center gap-2">
-          {variant === 'marketing' ? (
+          {variant === 'auth' ? (
+            <Link
+              href="/"
+              className="text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-navy-700"
+            >
+              Torna al sito
+            </Link>
+          ) : env.LANDING_ONLY ? (
+            // Pre-lancio: niente login/registrazione pubblici, solo contatto.
+            <a href={CONTATTACI_HREF}>
+              <Button size="sm">Contattaci</Button>
+            </a>
+          ) : (
             <>
               <Link href="/login">
                 <Button variant="ghost" size="sm">
@@ -32,13 +49,6 @@ export function SiteHeader({ variant = 'marketing' }: Props) {
                 <Button size="sm">Registrati</Button>
               </Link>
             </>
-          ) : (
-            <Link
-              href="/"
-              className="text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-navy-700"
-            >
-              Torna al sito
-            </Link>
           )}
         </nav>
       </div>

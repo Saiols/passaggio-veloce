@@ -31,5 +31,5 @@ export const BRAND = {
 export function siteUrl(path?: string): string {
   if (!path) return BRAND.url;
   const normalized = path.startsWith('/') ? path : `/${path}`;
-  return `${BRAND.url}${normalized === '/' ? '/' : normalized}`;
+  return BRAND.url + normalized;
 }

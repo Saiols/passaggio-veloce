@@ -78,6 +78,7 @@ export function webPageJsonLd(opts: {
   return {
     '@context': 'https://schema.org',
     '@type': 'WebPage' as const,
+    '@id': opts.url,
     url: opts.url,
     name: opts.name,
     description: opts.description,

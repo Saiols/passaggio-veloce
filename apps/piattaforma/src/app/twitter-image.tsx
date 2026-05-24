@@ -1,2 +1,6 @@
 // Next 16 cerca esplicitamente twitter-image.* separato. Riusiamo l'OG.
-export { default, alt, size, contentType, runtime } from './opengraph-image';
+// runtime esplicito: Next non riconosce il `runtime` re-esportato via barrel
+// (build warning altrimenti). Duplicato per safety; deve restare allineato
+// con opengraph-image.tsx.
+export { default, alt, size, contentType } from './opengraph-image';
+export const runtime = 'nodejs';

@@ -137,6 +137,7 @@ describe('webPageJsonLd', () => {
       description: 'Informativa privacy.',
     });
     expect(wp['@type']).toBe('WebPage');
+    expect(wp['@id']).toBe('https://passaggioveloce.it/privacy');
     expect(wp.url).toBe('https://passaggioveloce.it/privacy');
     expect(wp.name).toBe('Privacy Policy');
     expect(wp.isPartOf).toEqual({ '@id': WEBSITE_ID });

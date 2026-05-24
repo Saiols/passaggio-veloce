@@ -5,14 +5,18 @@ import { FAQ_ITEMS } from '@/lib/seo/faqItems';
 
 export const dynamic = 'force-dynamic';
 
-const NOT_AVAILABLE = new Response('Not found', {
-  status: 404,
-  headers: { 'content-type': 'text/plain; charset=utf-8' },
-});
+// Factory: Response body può essere consumato una sola volta, quindi
+// costruiamo un nuovo oggetto ad ogni 404 (evita "body already used" su
+// hit ripetuti nello stesso process lifecycle).
+const notFound = () =>
+  new Response('Not found', {
+    status: 404,
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+  });
 
 export async function GET() {
   const host = (await headers()).get('host');
-  if (!isGatedHost(host)) return NOT_AVAILABLE;
+  if (!isGatedHost(host)) return notFound();
 
   const body = renderLlmsTxt();
   return new Response(body, {

@@ -1,12 +1,8 @@
 import type { NextAuthConfig } from 'next-auth';
+import { isGatedHost, PUBLIC_PATHS } from '@/lib/landing-gate';
 
 // Edge-compatible config (no Node-only modules like bcryptjs).
 // Used by middleware.ts. Full config with Credentials provider lives in auth.ts.
-
-// Pagine pubbliche della vetrina marketing: home + pagine legali. Sono
-// accessibili senza login e sono l'unico contenuto raggiungibile quando il
-// gate pre-lancio LANDING_ONLY è attivo.
-const PUBLIC_PATHS = new Set(['/', '/privacy', '/cookie', '/termini']);
 
 export const authConfig = {
   trustHost: true,
@@ -18,13 +14,16 @@ export const authConfig = {
     strategy: 'jwt',
   },
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request }) {
+      const { nextUrl } = request;
       const path = nextUrl.pathname;
 
-      // Gate pre-lancio: con LANDING_ONLY="true" è raggiungibile solo la
-      // vetrina marketing pubblica; ogni altra rotta torna alla home.
-      // Si disattiva rimuovendo la env var LANDING_ONLY al go-live.
-      if (process.env.LANDING_ONLY === 'true' && !PUBLIC_PATHS.has(path)) {
+      // Gate pre-lancio host-based: sui domini in GATED_HOSTS
+      // (vedi src/lib/landing-gate.ts) è raggiungibile solo la vetrina
+      // marketing pubblica. Sugli altri host (Vercel default + preview)
+      // l'app è completamente accessibile.
+      const host = request.headers.get('host');
+      if (isGatedHost(host) && !PUBLIC_PATHS.has(path)) {
         return Response.redirect(new URL('/', nextUrl));
       }
 

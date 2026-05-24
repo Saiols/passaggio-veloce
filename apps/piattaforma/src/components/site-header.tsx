@@ -1,7 +1,8 @@
+import { headers } from 'next/headers';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
-import { env } from '@/env';
+import { isGatedHost } from '@/lib/landing-gate';
 
 const CONTATTACI_HREF =
   'mailto:info@passaggioveloce.it?subject=' +
@@ -11,7 +12,10 @@ type Props = {
   variant?: 'marketing' | 'auth';
 };
 
-export function SiteHeader({ variant = 'marketing' }: Props) {
+export async function SiteHeader({ variant = 'marketing' }: Props) {
+  const host = (await headers()).get('host');
+  const landingOnly = isGatedHost(host);
+
   return (
     <header className="sticky top-0 z-30 border-b border-pv-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-5 sm:px-6">
@@ -33,8 +37,9 @@ export function SiteHeader({ variant = 'marketing' }: Props) {
             >
               Torna al sito
             </Link>
-          ) : env.LANDING_ONLY ? (
-            // Pre-lancio: niente login/registrazione pubblici, solo contatto.
+          ) : landingOnly ? (
+            // Dominio gated (vetrina pubblica): niente login/registrazione,
+            // solo contatto. Vedi src/lib/landing-gate.ts.
             <a href={CONTATTACI_HREF}>
               <Button size="sm">Contattaci</Button>
             </a>

@@ -1,19 +1,15 @@
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
 import { SiteChatbot } from '@/components/site-chatbot';
-import { env } from '@/env';
+import { isGatedHost } from '@/lib/landing-gate';
 
-// Render dynamic: il flag LANDING_ONLY controlla le CTA via env, e su ISR/SSG
-// Next.js valuta l'env solo al build — vars Vercel marcate "Sensitive" non
-// sono esposte al build, quindi un prerender catturerebbe il valore sbagliato.
-// Forzando dynamic la landing rilegge process.env ad ogni request.
-// TODO: tornare a ISR (revalidate = 300) dopo che il gate LANDING_ONLY è
-// stato rimosso al go-live della piattaforma.
-export const dynamic = 'force-dynamic';
-
-// Pre-lancio (LANDING_ONLY): le CTA di registrazione/accesso diventano un
-// contatto email, così la vetrina raccoglie interesse senza esporre l'app.
+// Pre-lancio (gate host-based): sui domini gated le CTA di registrazione
+// e accesso diventano un contatto email, così la vetrina raccoglie
+// interesse senza esporre l'app. L'uso di headers() rende la pagina
+// dynamic automaticamente (necessario perché il gate dipende dall'host
+// della singola request, non dal build).
 function richiediAccessoHref(contesto?: string) {
   const subject = contesto
     ? `Richiesta accesso Passaggio Veloce - ${contesto}`
@@ -21,8 +17,9 @@ function richiediAccessoHref(contesto?: string) {
   return `mailto:info@passaggioveloce.it?subject=${encodeURIComponent(subject)}`;
 }
 
-export default function HomePage() {
-  const landingOnly = env.LANDING_ONLY;
+export default async function HomePage() {
+  const host = (await headers()).get('host');
+  const landingOnly = isGatedHost(host);
 
   return (
     <main className="flex min-h-screen flex-col bg-white">

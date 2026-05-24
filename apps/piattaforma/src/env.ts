@@ -14,14 +14,6 @@ export const env = createEnv({
       .default('false')
       .transform((v) => v === 'true'),
 
-    // Gate pre-lancio: con "true" è raggiungibile solo la vetrina marketing
-    // pubblica (home + pagine legali), il resto della piattaforma è chiuso.
-    // Si rimuove la env var al go-live.
-    LANDING_ONLY: z
-      .enum(['true', 'false'])
-      .default('false')
-      .transform((v) => v === 'true'),
-
     STORAGE_PROVIDER: z.enum(['local', 's3', 'vercel-blob']).default('local'),
     STORAGE_LOCAL_DIR: z.string().default('./uploads'),
     BLOB_READ_WRITE_TOKEN: z.string().optional(),
@@ -46,7 +38,6 @@ export const env = createEnv({
     AUTH_URL: process.env.AUTH_URL,
     NODE_ENV: process.env.NODE_ENV,
     DEMO_MODE: process.env.DEMO_MODE,
-    LANDING_ONLY: process.env.LANDING_ONLY,
     STORAGE_PROVIDER: process.env.STORAGE_PROVIDER,
     STORAGE_LOCAL_DIR: process.env.STORAGE_LOCAL_DIR,
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,

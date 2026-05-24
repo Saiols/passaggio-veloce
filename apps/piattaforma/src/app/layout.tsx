@@ -51,7 +51,8 @@ export const metadata: Metadata = {
     },
   },
   alternates: {
-    canonical: '/',
+    // canonical NON impostato qui: ogni pagina (home, privacy, cookie, termini)
+    // setta il proprio canonical esplicitamente — evita default '/' contaminante.
     languages: { 'it-IT': '/' },
   },
   openGraph: {

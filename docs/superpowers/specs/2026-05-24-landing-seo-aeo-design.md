@@ -321,16 +321,24 @@ Validatori esterni (l'utente clicca):
 - AMP / Speed insights tuning — non prioritario nel 2026.
 - Backlink strategy, outreach, content marketing — non tecnico.
 
-## Dati da fornire prima dell'esecuzione
+## Dati anagrafici (confermati dall'utente, 2026-05-24)
 
-Bloccanti per popolare `src/lib/seo/brand.ts`:
-- P.IVA Passaggio Veloce SRL
-- Codice fiscale (se diverso da P.IVA)
-- Indirizzo sede legale completo (via, civico, CAP, città, provincia)
-- Telefono di contatto (opzionale, ma raccomandato per ContactPoint schema)
-- Eventuali URL profili social già attivi (LinkedIn aziendale, X, Facebook)
+Da inserire direttamente in `src/lib/seo/brand.ts`, niente placeholder:
 
-Se non disponibili al momento dell'implementazione, l'autore lascerà placeholder TODO commentati e il go-live SEO completo richiederà una piccola PR di follow-up con i dati reali.
+| Campo | Valore |
+|---|---|
+| `legalName` | `Passaggio Veloce SRL` |
+| `vatId` | `14688390963` (formato schema.org: `IT14688390963`) |
+| `taxId` | `14688390963` (stesso della P.IVA — standard SRL italiane) |
+| `phone` | `+39 3462877310` (formato E.164 per ContactPoint) |
+| `address.street` | `Via delle Querce 5` |
+| `address.postalCode` | `20057` |
+| `address.city` | `Assago` |
+| `address.region` | `MI` (Milano) |
+| `address.countryCode` | `IT` |
+| `email` | `info@passaggioveloce.it` (già esposta nelle CTA) |
+| `sameAs` | `[]` (vuoto fino ad attivazione social) |
+| `founders` | `['Andrea Saino', 'Francesco Sioli']` |
 
 ## Riferimenti
 

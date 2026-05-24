@@ -19,5 +19,7 @@ export function GET() {
     vercelUrl: process.env.VERCEL_URL ?? null,
     authSecretSet: Boolean(process.env.AUTH_SECRET),
     authSecretLen: process.env.AUTH_SECRET?.length ?? 0,
+    // Sonda diagnostica temporanea — rimuovere dopo verifica gate.
+    landingOnlyRaw: process.env.LANDING_ONLY ?? null,
   });
 }

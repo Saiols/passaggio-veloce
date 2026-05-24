@@ -4,6 +4,29 @@ import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
 import { SiteChatbot } from '@/components/site-chatbot';
 import { isGatedHost } from '@/lib/landing-gate';
+import type { Metadata } from 'next';
+import { JsonLd } from '@/lib/seo/JsonLdScript';
+import { BRAND } from '@/lib/seo/brand';
+import { FAQ_ITEMS } from '@/lib/seo/faqItems';
+import {
+  serviceJsonLd,
+  faqJsonLd,
+  softwareApplicationJsonLd,
+  webPageJsonLd,
+} from '@/lib/seo/jsonLd';
+
+export const metadata: Metadata = {
+  title: 'Broker digitale per passaggi di proprietà auto — dealer e agenzie',
+  description:
+    'Passaggio Veloce connette concessionarie e agenzie pratiche auto in un\'unica piattaforma SaaS: gestione documentale IA, payout automatici, conformità ACI/GDPR/SDI. Iscrizione gratuita.',
+  alternates: { canonical: '/' },
+  openGraph: {
+    title: 'Passaggio Veloce — Broker digitale per passaggi di proprietà auto',
+    description:
+      'Connettiamo dealer e agenzie pratiche auto in una piattaforma unica. Gestisci pratiche, documenti e pagamenti senza carta, in conformità ACI.',
+    url: '/',
+  },
+};
 
 // Pre-lancio (gate host-based): sui domini gated le CTA di registrazione
 // e accesso diventano un contatto email, così la vetrina raccoglie
@@ -25,6 +48,18 @@ export default async function HomePage() {
     <main className="flex min-h-screen flex-col bg-white">
       <SiteHeader />
       <SiteChatbot posizione="Homepage" />
+      <JsonLd
+        data={[
+          webPageJsonLd({
+            url: BRAND.url,
+            name: 'Passaggio Veloce — Broker digitale automotive',
+            description: BRAND.description,
+          }),
+          serviceJsonLd(),
+          faqJsonLd(FAQ_ITEMS),
+          softwareApplicationJsonLd(),
+        ]}
+      />
 
       {/* Hero */}
       <section className="bg-pv-slate-50">
@@ -39,8 +74,9 @@ export default async function HomePage() {
               <span className="text-pv-navy-700">veloci e sicuri</span>.
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-pv-slate-700 sm:text-base">
-              Connettiamo dealer e agenzie pratiche auto in una piattaforma unica.
-              Gestisci pratiche, documenti e pagamenti senza carta, in conformità ACI.
+              <strong>Passaggio Veloce</strong> è il broker digitale italiano che connette
+              concessionarie auto e agenzie pratiche in un'unica piattaforma: gestisci pratiche,
+              documenti e pagamenti senza carta, in conformità ACI, GDPR e SDI.
             </p>
 
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
@@ -96,13 +132,13 @@ export default async function HomePage() {
       </section>
 
       {/* Come funziona */}
-      <section className="bg-pv-slate-50">
+      <section className="bg-pv-slate-50" id="come-funziona" aria-labelledby="h-come-funziona">
         <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-[11px] font-bold uppercase tracking-wider text-pv-orange-500">
               Come funziona
             </span>
-            <h2 className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[34px]">
+            <h2 id="h-come-funziona" className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[34px]">
               Dal libretto alla firma in tre passi
             </h2>
             <p className="mt-3 text-[14px] leading-relaxed text-pv-slate-500 sm:text-[15px]">
@@ -131,7 +167,7 @@ export default async function HomePage() {
       </section>
 
       {/* Per dealer / Per agenzia */}
-      <section className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20">
+      <section id="per-chi" className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <PersonaCard
             badge="Per dealer e concessionari"
@@ -163,13 +199,13 @@ export default async function HomePage() {
       </section>
 
       {/* Vantaggi tangibili */}
-      <section className="bg-pv-slate-50">
+      <section className="bg-pv-slate-50" id="funzionalita" aria-labelledby="h-funzionalita">
         <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-[11px] font-bold uppercase tracking-wider text-pv-orange-500">
               Cosa ottieni
             </span>
-            <h2 className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[34px]">
+            <h2 id="h-funzionalita" className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[34px]">
               Tutto quello che serve, in un unico posto
             </h2>
           </div>
@@ -200,13 +236,13 @@ export default async function HomePage() {
       </section>
 
       {/* Tutele */}
-      <section className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20">
+      <section id="tutele" aria-labelledby="h-tutele" className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-6 sm:py-20">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_2fr] lg:gap-12">
           <div>
             <span className="text-[11px] font-bold uppercase tracking-wider text-pv-orange-500">
               Le tue tutele
             </span>
-            <h2 className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+            <h2 id="h-tutele" className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
               Compliance e sicurezza, by design
             </h2>
             <p className="mt-3 text-[14px] leading-relaxed text-pv-slate-500 sm:text-[15px]">
@@ -245,38 +281,21 @@ export default async function HomePage() {
       </section>
 
       {/* FAQ */}
-      <section className="bg-pv-slate-50">
+      <section className="bg-pv-slate-50" id="faq" aria-labelledby="h-faq">
         <div className="mx-auto w-full max-w-3xl px-5 py-14 sm:px-6 sm:py-20">
           <div className="text-center">
             <span className="text-[11px] font-bold uppercase tracking-wider text-pv-orange-500">
               Domande frequenti
             </span>
-            <h2 className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+            <h2 id="h-faq" className="mt-2 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
               Le risposte rapide
             </h2>
           </div>
 
           <div className="mt-8 space-y-3">
-            <FAQ
-              q="Quanto costa registrarsi?"
-              a="L'iscrizione è gratuita sia per dealer che per agenzie. Paghi solo quando una pratica viene completata: il dealer accumula crediti, l'agenzia riceve la fee al netto della nostra commissione."
-            />
-            <FAQ
-              q="Quanto tempo serve per chiudere una pratica?"
-              a="In media 48 ore lavorative dal caricamento del libretto alla firma in agenzia. La distribuzione automatica trova un'agenzia disponibile entro 1 giorno lavorativo nel 92% dei casi."
-            />
-            <FAQ
-              q="Cosa succede se nessuna agenzia accetta la pratica?"
-              a="Il sistema estende la ricerca prima ai comuni limitrofi, poi all'intera provincia. In ultima istanza, il nostro team si attiva manualmente per garantire la chiusura."
-            />
-            <FAQ
-              q="I dati dei miei clienti sono al sicuro?"
-              a="Sì. CI, codici fiscali e visure sono criptati end-to-end. Solo l'agenzia assegnata può scaricarli, e tutti gli accessi sono loggati. Conforme GDPR e direttive ACI."
-            />
-            <FAQ
-              q="Come vengo pagato come dealer?"
-              a="Ogni pratica chiusa ti accredita 25€ sul wallet. Sotto i 500€ il saldo si accumula, fra 500 e 999€ puoi richiedere payout manuale, da 1.000€ il payout è automatico mensile su IBAN."
-            />
+            {FAQ_ITEMS.map((item) => (
+              <FAQ key={item.q} q={item.q} a={item.a} />
+            ))}
           </div>
         </div>
       </section>
@@ -318,17 +337,36 @@ export default async function HomePage() {
       </section>
 
       <footer className="mt-auto bg-pv-navy-900 text-pv-slate-300">
-        <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-5 py-6 text-[13px] sm:flex-row sm:items-center sm:px-6">
-          <p>© {new Date().getFullYear()} Passaggio Veloce · Tutti i diritti riservati</p>
-          <nav className="flex flex-wrap items-center gap-3 text-[12px]">
-            <Link href="/privacy" className="hover:text-white">Privacy</Link>
-            <Link href="/cookie" className="hover:text-white">Cookie</Link>
-            <Link href="/termini" className="hover:text-white">Termini</Link>
-            <span className="text-pv-slate-500/40">·</span>
+        <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-[1fr_auto]">
+            <address className="not-italic text-[13px] leading-relaxed">
+              <p className="font-bold text-white">{BRAND.legalName}</p>
+              <p>
+                {BRAND.address.street} — {BRAND.address.postalCode} {BRAND.address.city} ({BRAND.address.region})
+              </p>
+              <p>
+                P.IVA {BRAND.vatId} ·{' '}
+                <a href={`mailto:${BRAND.email}`} className="hover:text-white">
+                  {BRAND.email}
+                </a>{' '}
+                ·{' '}
+                <a href={`tel:${BRAND.phoneE164}`} className="hover:text-white">
+                  {BRAND.phoneDisplay}
+                </a>
+              </p>
+            </address>
+            <nav className="flex flex-wrap items-start gap-3 text-[12px]">
+              <Link href="/privacy" className="hover:text-white">Privacy</Link>
+              <Link href="/cookie" className="hover:text-white">Cookie</Link>
+              <Link href="/termini" className="hover:text-white">Termini</Link>
+            </nav>
+          </div>
+          <div className="mt-6 flex flex-col items-start justify-between gap-2 border-t border-pv-navy-800 pt-4 text-[12px] sm:flex-row sm:items-center">
+            <p>© {new Date().getFullYear()} {BRAND.shortName} · Tutti i diritti riservati</p>
             <span className="font-mono text-[11px] text-pv-slate-500/70">
               build {(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7)}
             </span>
-          </nav>
+          </div>
         </div>
       </footer>
     </main>

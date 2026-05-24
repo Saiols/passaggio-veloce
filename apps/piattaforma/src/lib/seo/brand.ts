@@ -24,6 +24,8 @@ export const BRAND = {
     countryCode: 'IT',
   },
   founders: ['Andrea Saino', 'Francesco Sioli'] as const,
+  // Trust Blue navy — primary theme color, usato in viewport, manifest, OG image.
+  themeColor: '#0b1e3a',
   // Popolare quando i social aziendali sono attivi.
   sameAs: [] as readonly string[],
 } as const;

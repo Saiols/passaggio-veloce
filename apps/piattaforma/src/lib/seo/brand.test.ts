@@ -10,6 +10,7 @@ describe('BRAND', () => {
     expect(BRAND.vatId).toBe('14688390963');
     expect(BRAND.vatIdSchema).toBe('IT14688390963');
     expect(BRAND.phoneE164).toBe('+393462877310');
+    expect(BRAND.themeColor).toBe('#0b1e3a');
   });
 
   it('indirizzo sede legale completo', () => {

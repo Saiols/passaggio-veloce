@@ -17,7 +17,7 @@ export const GATED_HOSTS: ReadonlySet<string> = new Set([
   'www.passaggioveloce.it',
 ]);
 
-// Pagine raggiungibili sul dominio gated: home + pagine legali + OG image.
+// Pagine raggiungibili sul dominio gated: home + pagine legali + asset SEO/AEO (OG image, llms.txt, manifest).
 // Tutto il resto viene rediretto qui.
 export const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   '/',
@@ -26,6 +26,8 @@ export const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   '/termini',
   '/opengraph-image',
   '/twitter-image',
+  '/llms.txt',
+  '/manifest.webmanifest',
 ]);
 
 // Type guard: dopo `if (isGatedHost(host))` TypeScript sa che host è string,

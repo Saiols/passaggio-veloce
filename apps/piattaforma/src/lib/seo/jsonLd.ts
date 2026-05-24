@@ -21,7 +21,10 @@ export function organizationJsonLd() {
     name: BRAND.shortName,
     legalName: BRAND.legalName,
     url: BRAND.url,
-    logo: siteUrl('/brand/logo-primary.svg'),
+    logo: {
+      '@type': 'ImageObject' as const,
+      url: siteUrl('/brand/logo-primary.svg'),
+    },
     image: siteUrl('/opengraph-image'),
     description: BRAND.description,
     email: BRAND.email,
@@ -142,7 +145,7 @@ export function softwareApplicationJsonLd() {
   };
 }
 
-export function breadcrumbJsonLd(items: { name: string; url: string }[]) {
+export function breadcrumbJsonLd(items: readonly { name: string; url: string }[]) {
   return {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList' as const,

@@ -8,6 +8,7 @@ import {
   breadcrumbJsonLd,
   softwareApplicationJsonLd,
   ORGANIZATION_ID,
+  WEBSITE_ID,
 } from './jsonLd';
 
 describe('organizationJsonLd', () => {
@@ -138,7 +139,7 @@ describe('webPageJsonLd', () => {
     expect(wp['@type']).toBe('WebPage');
     expect(wp.url).toBe('https://passaggioveloce.it/privacy');
     expect(wp.name).toBe('Privacy Policy');
-    expect(wp.isPartOf).toEqual({ '@id': `${ORGANIZATION_ID.replace('#organization', '#website')}` });
+    expect(wp.isPartOf).toEqual({ '@id': WEBSITE_ID });
   });
 });
 

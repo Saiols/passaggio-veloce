@@ -4,9 +4,13 @@ import { SiteHeader } from '@/components/site-header';
 import { SiteChatbot } from '@/components/site-chatbot';
 import { env } from '@/env';
 
-// Cache la home per 5 minuti — il DB lookup SiteChatbot non blocca il
-// render iniziale prerender al deploy se lo schema prod non è ancora migrato.
-export const revalidate = 300;
+// Render dynamic: il flag LANDING_ONLY controlla le CTA via env, e su ISR/SSG
+// Next.js valuta l'env solo al build — vars Vercel marcate "Sensitive" non
+// sono esposte al build, quindi un prerender catturerebbe il valore sbagliato.
+// Forzando dynamic la landing rilegge process.env ad ogni request.
+// TODO: tornare a ISR (revalidate = 300) dopo che il gate LANDING_ONLY è
+// stato rimosso al go-live della piattaforma.
+export const dynamic = 'force-dynamic';
 
 // Pre-lancio (LANDING_ONLY): le CTA di registrazione/accesso diventano un
 // contatto email, così la vetrina raccoglie interesse senza esporre l'app.

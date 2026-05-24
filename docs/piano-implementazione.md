@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-06 (cluster A1-A9 fattibile-ora completati; restano solo blocchi esterni)
+> Ultimo aggiornamento: 2026-05-24 (cluster A1-A10 fattibile-ora completati; restano solo blocchi esterni)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -10,6 +10,7 @@
 > - `docs/sistema-penali-broker.md` — popup pre-invio, segnalazione agenzia, penale €100, wallet negativo (3 bundle SP-A/B/C) ✅ in prod
 > - `docs/schema-documentale-v7.md` — engine documentale + wizard branching + revisione manuale (4 bundle SD-A/B/C/D, ultimo richiede AI/OCR account esterno) ✅ A/B/C in prod
 > - `docs/crm-spec-implementativa.md` — CRM interno team PV (Pipeline Lead, Sales Agents, Campagne, Chatbot, Dashboard, RBAC interno). 8 bundle CRM-A..H. Sostituisce il placeholder "FASE 14 differita".
+> - `docs/sistema-fatturazione.md` — modello fatturazione delegata + sezione UI admin/agenzia/broker (5 bundle FT-A/B/C/D/E). Sostituisce il vecchio "rendiconto + fattura broker" di FASE 5.2/5.3. Bloccato su B1 commercialista per parte XML/IVA, fondamenta UI fattibili.
 
 ---
 
@@ -32,7 +33,7 @@
 - [ ] Definizione competitor diretti e posizionamento
 
 ### 0.2 Blocchi legali/fiscali
-- [!] Validazione commercialista modello wallet / rendiconto / fattura broker (in attesa risposta)
+- [!] Validazione commercialista modello fatturazione delegata (vedi `docs/sistema-fatturazione.md` §9: split forfettario 55+20, TD01/TD06/ricevuta privato, IVA, ritenuta d'acconto, somme di terzi, numerazione progressiva)
 - [x] Definizione fallback se nessuna delle 5 agenzie accetta la pratica (vedi §0.5)
 - [ ] Redazione T&C con clausola limitazione responsabilità + autorizzazione SEPA
 - [ ] Informativa privacy GDPR (dati sensibili CI/CF/visura)
@@ -315,21 +316,53 @@
 - [x] Notifica agenzia pre-addebito automatico (N8 al momento della firma)
 
 ### 5.2 Wallet broker
-- [x] Accredito automatico 25 EUR per trapasso netto a firma confermata
+- [x] Accredito automatico per trapasso netto a firma confermata (25 EUR ord / 20 EUR forf — split dinamico per regime, vedi `sistema-fatturazione.md` §1.1)
 - [x] Visualizzazione saldo wallet (`/wallet`)
 - [x] Storico movimenti (ultimi 20 con saldo-post per audit)
 - [x] Soglia <500 EUR: nessun payout (logica frontend + badge)
 - [x] Soglia 500-999 EUR: alert payout manuale disponibile
 - [ ] Pulsante richiesta payout manuale (UI placeholder — Stripe in Fase 5)
 - [ ] Soglia ≥1000 EUR: payout automatico (logica da implementare + cron)
-- [ ] Generazione rendiconto payout (PDF)
-- [ ] Flusso fattura broker → TF basato su rendiconto
+- [x] Generazione rendiconto payout (PDF) — A6 in prod
+- [~] Modello fatturazione: passaggio dal vecchio "rendiconto → fattura broker manuale" al nuovo modello delegato (vedi `docs/sistema-fatturazione.md`)
 
-### 5.3 Fatturazione
-- [ ] Fatturazione elettronica SDI verso agenzie (fee incassate)
-- [ ] Ricezione fatture broker (da rendiconto)
-- [ ] Gestione codici IVA / esenzioni
-- [ ] Export contabile per commercialista
+### 5.3 Fatturazione (riferimento: `docs/sistema-fatturazione.md`)
+
+**Modello adottato:** fatturazione delegata stile Booking/Airbnb. PV emette per conto del broker, broker trasmette allo SDI.
+
+**Bundle FT-A — Schema + iscrizione**
+- [ ] Migrazione `RegimeFiscale` enum + estensione `Company` (numeratore fiscale annuale, OTP, accettazione clausola delega, regime fiscale)
+- [ ] Migrazione `DocumentoFiscale` (modello + 4 enum: tipo, FatturaPaTipo, statoPagamento)
+- [ ] Wizard broker: step "Dati fiscali" obbligatorio (regime, P.IVA condizionale, indirizzo, IBAN, checkbox delega esplicito)
+- [ ] Wizard agenzia: validazione "SDI OR PEC obbligatori" + step OTP SMS verifica
+- [ ] Provider OTP (mock dev → Twilio prod swap-ready)
+- [ ] Aggiornamento `seed.ts` con regime fiscale per utenti test
+
+**Bundle FT-B — Generazione PDF + lista lato agenzia/broker**
+- [ ] `lib/fatturazione/generate.ts` orchestrator + `pdf.ts` (template con logo, dati emittente/destinatario, importi, QR placeholder) — riusa `pdf-lib` (no Chromium per coerenza serverless Vercel)
+- [ ] `lib/fatturazione/numerator.ts` con SELECT FOR UPDATE per numerazione progressiva atomica
+- [ ] Hook in `completaPratica`: split dinamico per regime broker, generazione 1 (minivoltura) o 2 (trapasso) `DocumentoFiscale` post-firma
+- [ ] Sezione `/fatturazione` agenzia: dashboard + lista + filtri base + download PDF
+- [ ] Sezione `/fatturazione` broker: lista doc broker emessi + stato SDI manuale
+- [ ] Icone PDF inline in `/pratiche` per agenzia e broker
+
+**Bundle FT-C — Admin panel + KPI + export**
+- [ ] Sezione `/admin/fatturazione` con 3 tab (KPI / Lista / Somme di terzi)
+- [ ] Endpoint export ZIP/CSV background con notifica al completamento
+- [ ] Notifiche `N26/N27/N28` cablate con allegato PDF
+- [ ] Cron `N29` (fatture non pagate >15gg) + `N30` (doc non trasmessi >30gg)
+
+**Bundle FT-D — XML FatturaPA + integrazione SDI** _(bloccato B1 + SDI provider)_
+- [ ] `lib/fatturazione/xml-fatturapa.ts` con generazione XSD-compliant
+- [ ] Validazione XML schema ufficiale Agenzia Entrate
+- [ ] QR code verifica autenticità nel PDF
+- [ ] Toggle "Segna come trasmesso allo SDI" lato broker (manuale)
+- [ ] Eventuale integrazione SDI provider per fatture PV verso agenzie (Aruba o equivalente)
+
+**Bundle FT-E — Note di variazione + casi speciali** _(bloccato B1)_
+- [ ] Workflow nota di credito / nota di debito (TD04/TD05)
+- [ ] Pratica `ANNULLATA` post-emissione → genera automaticamente nota di credito
+- [ ] Penale broker → eventuale documento separato (post-decisione commercialista — vedi `sistema-fatturazione.md` §6.4)
 
 ---
 
@@ -744,13 +777,13 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
 | 3 Documenti/OCR/Pratiche | ~75% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**. Manca solo OCR reale (Document AI) |
 | 4 Distribuzione + agenzia | 100% | Engine 3-round, ore lavorative, ranking con **anti-abuso decay rifiuti + auto-suspend 5 timeout (A3)**, **110 province italiane (A3)**, cron automatico (A2). Tutto pronto |
-| 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1) |
+| 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1). Modello fatturazione delegata in spec — vedi `sistema-fatturazione.md` (5 bundle FT-A/B/C/D/E) |
 | 6 Notifiche | ~95% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6). Cron Vercel automatico (A2). Manca solo unsubscribe granulare |
 | 7 Valutazioni/Ranking | 100% | Form 5⭐, rating in distribuzione, sospensione auto, **unsuspend UI con nota motivazione + banner valuta dashboard dealer (A7)** |
 | 8 Listini / Osservatorio | 100% | **Modulo intero in prod (A1)**: form/upload listino agenzia, engine osservatorio per provincia, benchmark "tu vs media zona", dashboard admin |
 | 9 Admin panel | ~95% | Tutto in prod incluso **audit log accessi (A5)**. Manca solo configurazione parametri runtime (DB-driven, backlog) |
 | 10 CRM vendite esterno | — | **Superato** dalla FASE 14 (CRM nativo) post-decisione 2026-05-06 |
-| 11 QA/Compliance/Lancio | ~50% | 72 unit test, **cookie banner GDPR + pagine privacy/cookie/termini (A8) + Playwright setup con 4 smoke test (A8)**. Manca audit GDPR formale, copy legali revisionati, beta test |
+| 11 QA/Compliance/Lancio | ~60% | 92 unit test, **cookie banner GDPR + pagine privacy/cookie/termini (A8) + Playwright setup con 4 smoke test (A8) + SEO/AEO fondamenta (A10)**. Manca audit GDPR formale, copy legali revisionati, beta test |
 | 13 Sistema Affiliazione | ~95% | Backend/UI/notifiche/AF-N/AF-AC in prod, **AF-PDF + N25 cron mensile (A6)**. Aperti: AF-P payout (bloccato Stripe) |
 | 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H Vapi (bloccato B6 account esterno) |
 
@@ -848,11 +881,27 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Cablato in `loginAction`: chiave `login:{ip-anonimizzato}:{email}`, reset al login OK
 - Backlog: integrazione check 2FA al sign-in (oggi setup pronto + secret salvato, ma il signIn callback non interroga il codice TOTP — serve custom credentials provider). Punto chiaro nel commit.
 
+**A10. ✅ DONE — [2026-05-24] Landing SEO/AEO fondamenta tecniche**
+- `lang="it-IT"` su `<html>`, metadata completi Next.js (title, description, canonical, OG, Twitter Card) su layout + ogni pagina pubblica
+- `src/lib/seo/brand.ts`: costanti anagrafiche PV SRL (P.IVA 14688390963, Assago, themeColor)
+- `src/lib/seo/faqItems.ts`: 5 FAQ canoniche condivise tra JSON-LD e llms.txt
+- `src/lib/seo/jsonLd.ts`: generatori type-safe Organization, WebSite, FAQPage, Service, SoftwareApplication, WebPage, BreadcrumbList
+- `src/lib/seo/JsonLdScript.tsx`: componente `<JsonLd>` per iniezione `<script type="application/ld+json">`
+- `app/sitemap.ts`: sitemap host-aware (solo passaggioveloce.it, 4 URL pubblici)
+- `app/robots.ts`: robots host-aware (allow AI crawler GPTBot/Claude/Perplexity su prod, Disallow: / su Vercel preview)
+- `app/manifest.ts`: Web App Manifest (theme color BRAND, icone SVG)
+- `app/opengraph-image.tsx`: OG image programmatica 1200×630 (gradient brand, logo, pill compliance)
+- `app/twitter-image.tsx`: Twitter Card image (riusa OG image)
+- `app/llms.txt/route.ts`: endpoint AEO gated (solo passaggioveloce.it) con dati aziendali + 5 FAQ structured
+- `src/lib/landing-gate.ts`: PUBLIC_PATHS esteso con 4 nuovi asset path SEO
+- 21 unit test (brand.test.ts × 5, jsonLd.test.ts × 16)
+- Spec: `docs/superpowers/specs/2026-05-24-landing-seo-aeo-design.md` · Plan: `docs/superpowers/plans/2026-05-24-landing-seo-aeo.md`
+
 ### B · Bloccato da account/decisione esterna
 
 | Blocco | Cosa serve | Cosa sblocca |
 |---|---|---|
-| **B1 Stripe Connect** | Validazione commercialista (Andrea) + onboarding Stripe | FASE 5 intera (addebiti SEPA, payout broker/affiliazione, fattura elettronica) |
+| **B1 Stripe Connect + commercialista fatturazione** | Validazione modello fatturazione delegata (split forfettario 55+20, TD01/TD06/IVA, ritenuta privato, somme di terzi) + onboarding Stripe | FASE 5 intera (addebiti SEPA, payout broker/affiliazione, fattura elettronica). Spec: `sistema-fatturazione.md` §9 |
 | **B6 Vapi.ai account** | Budget approvato + sottoscrizione | CRM-H (chiamate vocali AI, function calling, blacklist) |
 | **B7 Testi vocali** | Script S0-S10 da Sales + Q&A obiezioni | CRM-H (configurazione agent base) |
 | **B8 Validazione AF1-AF5** | Commercialista + legale + CTO review | Sblocca produzione FASE 13 (oggi è in prod ma in attesa di sign-off legale) |
@@ -876,7 +925,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 | # | Blocco | Stato | Impatto | Owner |
 |---|--------|-------|---------|-------|
-| B1 | Validazione commercialista wallet/rendiconto | Aperto | Blocca Fase 5 | Andrea + Commercialista |
+| B1 | Validazione commercialista modello fatturazione delegata (`sistema-fatturazione.md` §9) | Aperto | Blocca Fase 5 (XML/IVA), UI fattibile in parallelo | Andrea + Commercialista |
 | B2 | Fallback 5 agenzie non accettano | Proposta in §0.5, da validare | Sblocca Fase 4.1 una volta approvato | Alberto + Andrea |
 | B3 | Naming definitivo | Risolto: **Passaggio Veloce** | — | — |
 | B4 | CTO socio fondatore | Risolto: **Francesco Sioli** | — | — |

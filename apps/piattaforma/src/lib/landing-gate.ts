@@ -26,7 +26,9 @@ export const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   '/termini',
 ]);
 
-export function isGatedHost(host: string | null | undefined): boolean {
+// Type guard: dopo `if (isGatedHost(host))` TypeScript sa che host è string,
+// così il redirect può costruire l'URL `https://${host}/` senza null check.
+export function isGatedHost(host: string | null | undefined): host is string {
   if (!host) return false;
   // Toglie eventuale porta (host:port) — utile in dev/test.
   const bare = host.split(':')[0].toLowerCase();

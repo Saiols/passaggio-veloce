@@ -22,9 +22,16 @@ export const authConfig = {
       // (vedi src/lib/landing-gate.ts) è raggiungibile solo la vetrina
       // marketing pubblica. Sugli altri host (Vercel default + preview)
       // l'app è completamente accessibile.
+      //
+      // Importante: il redirect usa esplicitamente `https://${host}/`
+      // invece di `new URL('/', nextUrl)`. Su Vercel, quando AUTH_URL
+      // env var è settata, nextUrl.origin può essere normalizzato all'URL
+      // canonico Auth.js (es. passaggio-veloce-piattaforma.vercel.app) →
+      // chi tenta /login su passaggioveloce.it finirebbe su .vercel.app
+      // dove il gate è spento, vanificando il gate stesso.
       const host = request.headers.get('host');
       if (isGatedHost(host) && !PUBLIC_PATHS.has(path)) {
-        return Response.redirect(new URL('/', nextUrl));
+        return Response.redirect(`https://${host}/`);
       }
 
       const isLoggedIn = Boolean(auth?.user);

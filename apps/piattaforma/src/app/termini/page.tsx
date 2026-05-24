@@ -1,8 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/site-header';
+import { JsonLd } from '@/lib/seo/JsonLdScript';
+import { webPageJsonLd } from '@/lib/seo/jsonLd';
+import { siteUrl } from '@/lib/seo/brand';
 
-export const metadata = {
-  title: 'Termini di Servizio — Passaggio Veloce',
+export const metadata: Metadata = {
+  title: 'Termini e Condizioni',
+  description: 'Termini e condizioni di utilizzo della piattaforma Passaggio Veloce: registrazione, account, responsabilità, foro competente.',
+  alternates: { canonical: '/termini' },
+  robots: { index: true, follow: true },
 };
 
 /**
@@ -13,6 +20,13 @@ export default function TerminiPage() {
   return (
     <main className="flex min-h-screen flex-col bg-white">
       <SiteHeader />
+      <JsonLd
+        data={webPageJsonLd({
+          url: siteUrl('/termini'),
+          name: 'Termini e Condizioni',
+          description: 'Termini e condizioni di utilizzo di Passaggio Veloce.',
+        })}
+      />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Termini di Servizio

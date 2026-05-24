@@ -1,14 +1,29 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/site-header';
+import { JsonLd } from '@/lib/seo/JsonLdScript';
+import { webPageJsonLd } from '@/lib/seo/jsonLd';
+import { siteUrl } from '@/lib/seo/brand';
 
-export const metadata = {
-  title: 'Cookie Policy — Passaggio Veloce',
+export const metadata: Metadata = {
+  title: 'Cookie Policy',
+  description: 'Cookie policy di Passaggio Veloce: cookie tecnici, analytics, finalità, gestione delle preferenze.',
+  alternates: { canonical: '/cookie' },
+  robots: { index: true, follow: true },
 };
 
 export default function CookiePage() {
   return (
     <main className="flex min-h-screen flex-col bg-white">
       <SiteHeader />
+      <JsonLd
+        data={webPageJsonLd({
+          url: siteUrl('/cookie'),
+          name: 'Cookie Policy',
+          description: 'Cookie policy di Passaggio Veloce.',
+          lastModified: '2026-05-06',
+        })}
+      />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Cookie Policy

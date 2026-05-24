@@ -1,8 +1,15 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/site-header';
+import { JsonLd } from '@/lib/seo/JsonLdScript';
+import { webPageJsonLd } from '@/lib/seo/jsonLd';
+import { siteUrl } from '@/lib/seo/brand';
 
-export const metadata = {
-  title: 'Privacy Policy — Passaggio Veloce',
+export const metadata: Metadata = {
+  title: 'Privacy Policy',
+  description: 'Informativa privacy di Passaggio Veloce: titolare, dati raccolti, finalità, base giuridica, conservazione, diritti dell\'interessato.',
+  alternates: { canonical: '/privacy' },
+  robots: { index: true, follow: true },
 };
 
 /**
@@ -14,6 +21,14 @@ export default function PrivacyPage() {
   return (
     <main className="flex min-h-screen flex-col bg-white">
       <SiteHeader />
+      <JsonLd
+        data={webPageJsonLd({
+          url: siteUrl('/privacy'),
+          name: 'Privacy Policy',
+          description: 'Informativa privacy di Passaggio Veloce.',
+          lastModified: '2026-05-06',
+        })}
+      />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Privacy Policy

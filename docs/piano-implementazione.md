@@ -236,6 +236,7 @@
 - [x] Rilevamento comodato d'uso (mock flag)
 - [x] UI correzione dati estratti (wizard step 1, form editabile pre-submit)
 - [ ] Fallback manuale in caso di OCR fallito (richiede UI skip)
+- [x] Integrazione Mindee Custom API (Fase 1 sprint OCR, 2026-05) — spec `docs/superpowers/specs/2026-05-25-ocr-sprint-design.md`, plan `docs/superpowers/plans/2026-05-25-ocr-mindee-fase1.md`
 - [ ] Integrazione Google Document AI (richiede account, swap del provider)
 
 ### 3.3 Gating documentale IA (killer feature)
@@ -775,7 +776,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 1 Fondamenta | ~85% | Monorepo, CI, DB Prisma, Sentry, Docker, seed, **deploy Vercel attivo + Vercel Cron schedule (A2)**. Manca staging dedicato + backup automatici Neon |
 | 2 Auth | ~92% | Login, wizard split dealer/agenzia, invito utenti team, reset password, **2FA TOTP setup pronto + rate-limit login attivo (A9)**. Manca solo email reale (Resend) e check 2FA al sign-in (backlog) |
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
-| 3 Documenti/OCR/Pratiche | ~75% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**. Manca solo OCR reale (Document AI) |
+| 3 Documenti/OCR/Pratiche | ~80% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**, **OCR Mindee provider integrato (Fase 1 sprint OCR 2026-05) — pronto per swap su prod test appena env vars disponibili**. Document AI custom-trained in attesa di raccolta libretti reali dal beta (Fase 2 sprint OCR). |
 | 4 Distribuzione + agenzia | 100% | Engine 3-round, ore lavorative, ranking con **anti-abuso decay rifiuti + auto-suspend 5 timeout (A3)**, **110 province italiane (A3)**, cron automatico (A2). Tutto pronto |
 | 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1). Modello fatturazione delegata in spec — vedi `sistema-fatturazione.md` (5 bundle FT-A/B/C/D/E) |
 | 6 Notifiche | ~95% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6). Cron Vercel automatico (A2). Manca solo unsubscribe granulare |

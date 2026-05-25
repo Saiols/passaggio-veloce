@@ -29,7 +29,13 @@ export async function SiteHeader({ variant = 'marketing' }: Props) {
             priority
           />
         </Link>
-        <nav className="flex items-center gap-2">
+        <nav className="flex items-center gap-2 sm:gap-4">
+          <Link
+            href="/guide"
+            className="hidden text-[13px] font-semibold text-pv-slate-700 transition-colors hover:text-pv-navy-700 sm:inline-flex"
+          >
+            Guide
+          </Link>
           {variant === 'auth' ? (
             <Link
               href="/"

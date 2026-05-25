@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-24 (cluster A1-A10 fattibile-ora completati; restano solo blocchi esterni)
+> Ultimo aggiornamento: 2026-05-25 (cluster A1-A11 fattibile-ora completati; restano solo blocchi esterni)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -783,7 +783,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 8 Listini / Osservatorio | 100% | **Modulo intero in prod (A1)**: form/upload listino agenzia, engine osservatorio per provincia, benchmark "tu vs media zona", dashboard admin |
 | 9 Admin panel | ~95% | Tutto in prod incluso **audit log accessi (A5)**. Manca solo configurazione parametri runtime (DB-driven, backlog) |
 | 10 CRM vendite esterno | — | **Superato** dalla FASE 14 (CRM nativo) post-decisione 2026-05-06 |
-| 11 QA/Compliance/Lancio | ~60% | 92 unit test, **cookie banner GDPR + pagine privacy/cookie/termini (A8) + Playwright setup con 4 smoke test (A8) + SEO/AEO fondamenta (A10)**. Manca audit GDPR formale, copy legali revisionati, beta test |
+| 11 QA/Compliance/Lancio | ~60% | 116 unit test, **cookie banner GDPR + pagine privacy/cookie/termini (A8) + Playwright setup con 4 smoke test (A8) + SEO/AEO fondamenta (A10) + pillar pages B2C (A11)**. Manca audit GDPR formale, copy legali revisionati, beta test |
 | 13 Sistema Affiliazione | ~95% | Backend/UI/notifiche/AF-N/AF-AC in prod, **AF-PDF + N25 cron mensile (A6)**. Aperti: AF-P payout (bloccato Stripe) |
 | 14 CRM interno team PV | ~88% | Bundle A/B/C/D/E/F/G in prod. Manca solo H Vapi (bloccato B6 account esterno) |
 
@@ -896,6 +896,15 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - `src/lib/landing-gate.ts`: PUBLIC_PATHS esteso con 4 nuovi asset path SEO
 - 21 unit test (brand.test.ts × 5, jsonLd.test.ts × 16)
 - Spec: `docs/superpowers/specs/2026-05-24-landing-seo-aeo-design.md` · Plan: `docs/superpowers/plans/2026-05-24-landing-seo-aeo.md`
+
+**A11. ✅ DONE —** [2026-05-25] Landing SEO/AEO Fase 2 — pillar pages B2C
+- Hub `/guide` + 3 pillar evergreen: come fare, costi 2026, documenti necessari (~6500 parole totali)
+- JSON-LD HowTo, Article, CollectionPage, BreadcrumbList aggiunti
+- CTA dual-track B2B principale + B2C educational
+- Internal linking pillar↔pillar via RelatedGuides
+- 4 nuove URL in sitemap (totale 8); /llms.txt include sezione Guide; SiteHeader link sempre visibile
+- Refactor: SiteFooter estratto componente, isPublicPath helper con prefix /guide
+- Spec: `docs/superpowers/specs/2026-05-25-guide-b2c-design.md` · Plan: `docs/superpowers/plans/2026-05-25-guide-b2c.md`
 
 ### B · Bloccato da account/decisione esterna
 

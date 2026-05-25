@@ -74,12 +74,21 @@ export async function extractLibrettoAction(
 
   const buffer = await bufferFromFile(file);
   const ocr = getOcr();
-  const data = await ocr.extractLibretto({
-    buffer,
-    mimeType: file.type,
-    originalFilename: file.name,
-  });
-  return { ok: true, data };
+  try {
+    const data = await ocr.extractLibretto({
+      buffer,
+      mimeType: file.type,
+      originalFilename: file.name,
+    });
+    return { ok: true, data };
+  } catch (e) {
+    console.error('[ocr] extractLibretto failed', e);
+    return {
+      ok: false,
+      error:
+        'OCR non riuscito sul documento. Compila manualmente i campi del veicolo.',
+    };
+  }
 }
 
 // Tratta correttamente "false" / "true" / "on" / assenza di campo dalle FormData

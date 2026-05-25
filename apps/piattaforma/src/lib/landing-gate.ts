@@ -30,6 +30,15 @@ export const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   '/manifest.webmanifest',
 ]);
 
+// Check unificato: include i path esatti in PUBLIC_PATHS più tutti quelli sotto /guide
+// (future-proof per le pillar B2C). Usa questa funzione invece di PUBLIC_PATHS.has(path)
+// direttamente nei consumer.
+export function isPublicPath(path: string): boolean {
+  if (PUBLIC_PATHS.has(path)) return true;
+  if (path === '/guide' || path.startsWith('/guide/')) return true;
+  return false;
+}
+
 // Type guard: dopo `if (isGatedHost(host))` TypeScript sa che host è string,
 // così il redirect può costruire l'URL `https://${host}/` senza null check.
 export function isGatedHost(host: string | null | undefined): host is string {

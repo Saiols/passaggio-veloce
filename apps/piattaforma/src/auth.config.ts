@@ -1,5 +1,5 @@
 import type { NextAuthConfig } from 'next-auth';
-import { isGatedHost, PUBLIC_PATHS } from '@/lib/landing-gate';
+import { isGatedHost, isPublicPath } from '@/lib/landing-gate';
 
 // Edge-compatible config (no Node-only modules like bcryptjs).
 // Used by middleware.ts. Full config with Credentials provider lives in auth.ts.
@@ -30,7 +30,7 @@ export const authConfig = {
       // chi tenta /login su passaggioveloce.it finirebbe su .vercel.app
       // dove il gate è spento, vanificando il gate stesso.
       const host = request.headers.get('host');
-      if (isGatedHost(host) && !PUBLIC_PATHS.has(path)) {
+      if (isGatedHost(host) && !isPublicPath(path)) {
         return Response.redirect(`https://${host}/`);
       }
 
@@ -48,7 +48,7 @@ export const authConfig = {
         return true;
       }
 
-      if (PUBLIC_PATHS.has(path)) return true;
+      if (isPublicPath(path)) return true;
 
       // Everything else requires auth.
       return isLoggedIn;

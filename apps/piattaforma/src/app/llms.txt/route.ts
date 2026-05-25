@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { isGatedHost } from '@/lib/landing-gate';
 import { BRAND } from '@/lib/seo/brand';
 import { FAQ_ITEMS } from '@/lib/seo/faqItems';
+import { GUIDES } from '@/lib/seo/guides';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +76,9 @@ allegati e fascicoli cartacei.
 ## FAQ canoniche
 
 ${faqBlock}
+
+## Guide approfondite (B2C + B2B)
+${GUIDES.map((g) => `- ${g.shortTitle}: ${BRAND.url}${g.url} — ${g.metaDescription}`).join('\n')}
 
 ## Risorse
 - Sito: ${BRAND.url}

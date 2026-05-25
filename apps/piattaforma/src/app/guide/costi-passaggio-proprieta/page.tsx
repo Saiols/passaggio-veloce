@@ -39,7 +39,7 @@ const IPT_PROVINCE = [
 const FAQS = [
   {
     q: "Quanto costa in totale il passaggio di proprietà nel 2026?",
-    a: "Tra 50€ e 250€ per un'auto standard, escluso l'onorario dell'agenzia se ti rivolgi a un intermediario. Il valore esatto dipende soprattutto dall'IPT, che varia per provincia e potenza del veicolo.",
+    a: "Per un'auto: tra ~250€ (cilindrata bassa in provincia senza maggiorazione) e ~350€ (alta cilindrata, maggiorazione massima), escluso l'onorario di agenzia. Per una moto piccola si parte da ~50€. Il valore esatto dipende soprattutto dall'IPT, che varia per provincia e potenza.",
   },
   {
     q: "L'IPT è uguale in tutta Italia?",
@@ -143,9 +143,9 @@ export default function CostiPassaggioPage() {
 
           <Callout variant="info" title="Esempio concreto">
             Auto usata 70 kW intestata a residente in <strong>Milano</strong>: 150,81€ (IPT base) +
-            ~17,55€ (5 kW oltre 53 × 3,51€) = 168,36€ × 1,20 (maggiorazione 20%) ={' '}
-            <strong>~202€ di IPT</strong>. Aggiungi 27€ + 32€ + 32€ + 10,20€ ={' '}
-            <strong>≈ 303€ totali</strong> di tasse di legge. Con agenzia: ~380€.
+            ~59,67€ (17 kW oltre 53 × 3,51€) = 210,48€ × 1,20 (maggiorazione 20%) ={' '}
+            <strong>~253€ di IPT</strong>. Aggiungi 27€ + 32€ + 32€ + 10,20€ ={' '}
+            <strong>≈ 354€ totali</strong> di tasse di legge. Con agenzia: ~434€.
           </Callout>
 
           <h2 className="mt-10 text-[24px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[28px]">

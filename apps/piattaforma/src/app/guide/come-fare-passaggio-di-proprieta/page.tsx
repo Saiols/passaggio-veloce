@@ -55,7 +55,7 @@ const FAQS = [
   },
   {
     q: 'Quanto costa in totale?',
-    a: 'Tra 50€ e 250€ a seconda della provincia (per IPT), della potenza del veicolo (kW) e di eventuali onorari di agenzia. La guida ai costi dettaglia ogni voce.',
+    a: "Per un'auto: tra ~250€ (cilindrata bassa, provincia senza maggiorazione) e ~350€ (alta cilindrata, maggiorazione massima). Per una moto piccola si parte da ~50€. La guida ai costi dettaglia ogni voce.",
   },
 ];
 
@@ -85,7 +85,7 @@ export default function ComeFarePassaggioPage() {
             name: GUIDE.title,
             description: GUIDE.metaDescription,
             totalTime: 'PT2D',
-            estimatedCostEUR: '50-250',
+            estimatedCostEUR: '50-350',
             supplies: [
               "Carta d'identità in corso di validità",
               'Codice fiscale',
@@ -122,7 +122,7 @@ export default function ComeFarePassaggioPage() {
         <KeyTakeaway
           items={[
             'Tempo medio: 1-2 giorni lavorativi se i documenti sono in ordine.',
-            'Costo totale: 50-250€ a seconda della provincia e della potenza del veicolo.',
+            'Costo totale: ~250-350€ per auto (da ~50€ per moto piccola), a seconda di provincia e potenza.',
             'Dove farlo: ACI, agenzia pratiche, notaio, oppure online via SPID (con qualche limite).',
             "Documenti chiave: carta d'identità, codice fiscale e libretto/CdP di entrambe le parti.",
             "Termine inderogabile: 60 giorni dall'atto, altrimenti scatta sanzione fino a 3.629€.",

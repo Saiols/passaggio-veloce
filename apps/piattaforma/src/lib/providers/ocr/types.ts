@@ -1,4 +1,4 @@
-export type OcrProviderName = 'mock' | 'google_documentai';
+export type OcrProviderName = 'mock' | 'mindee' | 'google_documentai';
 
 export type LibrettoCircolazioneData = {
   targa?: string;

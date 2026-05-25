@@ -23,7 +23,9 @@ export const env = createEnv({
     EMAIL_FROM: z.string().email().default('noreply@passaggioveloce.it'),
     RESEND_API_KEY: z.string().optional(),
 
-    OCR_PROVIDER: z.enum(['mock', 'google_documentai']).default('mock'),
+    OCR_PROVIDER: z.enum(['mock', 'mindee', 'google_documentai']).default('mock'),
+    MINDEE_API_KEY: z.string().optional(),
+    MINDEE_ENDPOINT_URL: z.string().url().optional(),
 
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
     STRIPE_SECRET_KEY: z.string().optional(),
@@ -46,6 +48,8 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     OCR_PROVIDER: process.env.OCR_PROVIDER,
+    MINDEE_API_KEY: process.env.MINDEE_API_KEY,
+    MINDEE_ENDPOINT_URL: process.env.MINDEE_ENDPOINT_URL,
     PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

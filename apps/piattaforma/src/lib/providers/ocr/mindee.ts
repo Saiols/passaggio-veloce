@@ -64,6 +64,7 @@ export class MindeeOcrProvider implements OcrProvider {
       proprietarioAttuale: p.proprietario_attuale?.value,
       dataImmatricolazione: dataIso,
       preImm2015,
+      // Mindee classification returns 'sì' or 'no' (Italian, as configured in the Custom Extractor)
       flagComodatoDuso: p.flag_comodato_uso?.value === 'sì',
       confidenceScore: averageConfidence(p),
       rawText: undefined,
@@ -71,6 +72,8 @@ export class MindeeOcrProvider implements OcrProvider {
   }
 }
 
+// flag_comodato_uso is excluded: it is a sì/no classification, not a text extraction,
+// and averaging its confidence would distort the "check your data" badge in the wizard.
 function averageConfidence(p: MindeePrediction): number {
   const scores = [
     p.targa?.confidence,

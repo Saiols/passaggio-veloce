@@ -13,6 +13,7 @@ import { sendNotification } from '@/lib/notifiche';
 import { classifyDocumento } from '@/lib/documenti/classifier';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
+import { env } from '@/env';
 
 /**
  * Anonimizza IP per GDPR (Sistema Penali Broker — SP-A).
@@ -406,7 +407,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       originalFilename: put.originalFilename,
       uploadedById: userId,
       ocrStato: 'SUCCESS',
-      ocrProvider: 'mock',
+      ocrProvider: env.OCR_PROVIDER,
       ocrData: ocrSnapshot,
       ocrAt: now,
       gatingStato: 'PASSED',

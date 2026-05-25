@@ -791,7 +791,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 **Account esterni richiesti per:**
 - **Resend** → email reale (oggi `ConsoleEmailProvider` salva `.dev-emails/*.html`)
 - **S3** o Vercel Blob attivato → storage producton (Vercel Blob è già implementato e swap-ready, manca env)
-- **Google Document AI** → OCR reale (oggi `MockOcrProvider` deterministico)
+- **Google Document AI** → OCR custom-trained (Fase 2 sprint OCR) — oggi `MindeeOcrProvider` in Fase 1 attesa di env vars
 - **Stripe Connect** → addebiti SEPA + payout (mock provider, schema completo)
 - **Vapi.ai + Twilio** → bot vocale CRM-H + SMS post-call
 - **SDI provider** (Aruba/altro) → fatturazione elettronica B2B

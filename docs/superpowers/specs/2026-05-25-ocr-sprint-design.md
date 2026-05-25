@@ -44,7 +44,7 @@ apps/piattaforma/src/
 Fase 1:
 - `OCR_PROVIDER=mindee` (era `mock`)
 - `MINDEE_API_KEY=...` (segreto)
-- `MINDEE_ENDPOINT_URL=...` (URL completo del Custom OCR endpoint dopo setup dashboard)
+- `MINDEE_MODEL_ID=...` (UUID del modello pre-trained EU Vehicle Registration — visibile nel tab Documentation Mindee; non più MINDEE_ENDPOINT_URL — V2 SDK gestisce gli endpoint internamente)
 
 Fase 2 (additivo, non rimuove Mindee):
 - `OCR_PROVIDER=google_documentai`
@@ -55,22 +55,35 @@ Fase 2 (additivo, non rimuove Mindee):
 
 ## Fase 1 — MindeeOcrProvider (giorni 1-5)
 
+> **Aggiornamento 2026-05-25**: l'implementazione usa il **V2 SDK ufficiale `mindee` npm** con il modello pre-trained **European Vehicle Registration** (non un Custom Document Extractor). Il modello è già addestrato da Mindee su documenti EU — nessun training richiesto. Il training step descritto sotto è obsoleto: i 5-10 libretti reali servono solo per smoke test di accuratezza, non per training.
+
 ### Setup esterno (owner: Francesco)
 
 1. Sottoscrizione account Mindee aziendale (https://platform.mindee.com)
    - Piano consigliato per beta: Free (250 doc/mese) — sufficiente per primi 30-60 giorni di beta. Upgrade Starter (~€50/mese, 2000 doc) quando si avvicina la soglia.
-2. Creazione **Custom-Built API** (non i template pre-addestrati)
-   - Tipo: Custom Document Extractor
-   - Campi da configurare (esattamente i campi di `LibrettoCircolazioneData`):
-     - `targa` — text field
-     - `telaio` — text field (numero VIN, 17 caratteri)
-     - `proprietario_attuale` — text field
-     - `data_immatricolazione` — date field
-     - `flag_comodato_uso` — classification (sì/no, basato su presenza dicitura "comodato")
-   - Training: upload 5-10 libretti italiani campione (Francesco fornisce)
-   - Mindee Auto-Train: training automatico in pochi minuti
-3. Generazione API key + URL endpoint custom (formato `https://api.mindee.net/v1/products/{username}/{endpoint_name}/v{version}/predict`)
-4. Consegna a Claude: `MINDEE_API_KEY` + `MINDEE_ENDPOINT_URL`
+2. Accesso al modello pre-trained **European Vehicle Registration** in Libraries → EU Documents
+   - **Nessun training necessario**: il modello è pre-addestrato da Mindee su documenti EU standard (include carta di circolazione italiana)
+   - Il modello restituisce campi con codici ICAO EU standard (non nomi campo personalizzati)
+3. Generazione API key in Account Settings → API Keys → New Key
+4. Recupero del `modelId` (UUID) dal tab "Documentation" del modello (es. `3788acbb-63ba-4554-b7d0-b1937e14eb14`)
+5. Consegna a Claude: `MINDEE_API_KEY` + `MINDEE_MODEL_ID`
+
+### Mappatura codici ICAO EU → LibrettoCircolazioneData
+
+| Codice ICAO | Significato | Campo LibrettoCircolazioneData |
+|-------------|-------------|-------------------------------|
+| `a`  | Registration number (targa) | `targa` (uppercase, no spaces) |
+| `e`  | VIN (telaio) | `telaio` (uppercase, no spaces) |
+| `c1` | Owner name (proprietario) | `proprietarioAttuale` |
+| `b`  | Date of first registration | `dataImmatricolazione` + `preImm2015` |
+| `x1` | Free-text notes | `flagComodatoDuso` (parse "COMODATO" substring) |
+| `i`  | Date of current registration | non usato |
+| `document_number` | Libretto serial number | non usato (non è la targa) |
+
+**Env vars Fase 1:**
+- `OCR_PROVIDER=mindee`
+- `MINDEE_API_KEY=...` (segreto)
+- `MINDEE_MODEL_ID=...` (UUID del modello pre-trained EU Vehicle Registration, visibile nel tab Documentation Mindee)
 
 ### Implementazione (owner: Claude)
 

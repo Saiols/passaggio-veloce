@@ -25,7 +25,7 @@ export const env = createEnv({
 
     OCR_PROVIDER: z.enum(['mock', 'mindee', 'google_documentai']).default('mock'),
     MINDEE_API_KEY: z.string().optional(),
-    MINDEE_ENDPOINT_URL: z.string().url().optional(),
+    MINDEE_MODEL_ID: z.string().optional(),
 
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
     STRIPE_SECRET_KEY: z.string().optional(),
@@ -49,7 +49,7 @@ export const env = createEnv({
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     OCR_PROVIDER: process.env.OCR_PROVIDER,
     MINDEE_API_KEY: process.env.MINDEE_API_KEY,
-    MINDEE_ENDPOINT_URL: process.env.MINDEE_ENDPOINT_URL,
+    MINDEE_MODEL_ID: process.env.MINDEE_MODEL_ID,
     PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

@@ -14,10 +14,10 @@
 
 **Prerequisiti esterni (owner: Francesco, NON in questo piano):**
 - Account Mindee aziendale (https://platform.mindee.com)
-- Custom Document Extractor creato e trained con 5-10 libretti italiani campione, configurato con i campi: `targa`, `telaio`, `proprietario_attuale`, `data_immatricolazione`, `flag_comodato_uso`
-- API key Mindee (`MINDEE_API_KEY`)
-- URL endpoint custom (`MINDEE_ENDPOINT_URL`, formato `https://api.mindee.net/v1/products/{username}/{endpoint_name}/v{version}/predict`)
-- 5-10 libretti reali di test (anonimizzati o autorizzati) per smoke test finale
+- Accesso al modello pre-trained **European Vehicle Registration** in Libraries → EU Documents. **Nessun training necessario**: il modello è già addestrato da Mindee — non servono 5-10 libretti per training.
+- API key Mindee (`MINDEE_API_KEY`) — da Account Settings → API Keys
+- UUID del modello (`MINDEE_MODEL_ID`, es. `3788acbb-63ba-4554-b7d0-b1937e14eb14`) — visibile nel tab "Documentation" del modello nella dashboard Mindee. Non più `MINDEE_ENDPOINT_URL`: il V2 SDK gestisce gli endpoint internamente.
+- 5-10 libretti reali di test (anonimizzati o autorizzati) per smoke test finale (accuratezza, non training)
 
 ---
 
@@ -574,7 +574,7 @@ git commit -m "docs(env): document MINDEE_API_KEY and MINDEE_ENDPOINT_URL"
 
 ## Task 8: Smoke test manuale su prod test (gate: env vars reali fornite)
 
-**Prerequisito:** Francesco ha completato il setup esterno e ha fornito `MINDEE_API_KEY` + `MINDEE_ENDPOINT_URL` reali, più 5-10 libretti reali per il test.
+**Prerequisito:** Francesco ha completato il setup esterno e ha fornito `MINDEE_API_KEY` + `MINDEE_MODEL_ID` reali, più 5-10 libretti reali per il smoke test.
 
 **Files:** nessun file modificato (testing manuale + dashboard Vercel).
 
@@ -583,7 +583,7 @@ git commit -m "docs(env): document MINDEE_API_KEY and MINDEE_ENDPOINT_URL"
 Vercel Dashboard → progetto piattaforma → Settings → Environment Variables → ambiente "Preview" o l'ambiente associato al link di test:
 - `OCR_PROVIDER` = `mindee`
 - `MINDEE_API_KEY` = `<valore reale>` (encrypted)
-- `MINDEE_ENDPOINT_URL` = `<URL reale>` (plain)
+- `MINDEE_MODEL_ID` = `<UUID modello EU Vehicle Registration>` (plain, es. `3788acbb-63ba-4554-b7d0-b1937e14eb14`)
 
 - [ ] **Step 2: Trigger redeploy del prod test**
 

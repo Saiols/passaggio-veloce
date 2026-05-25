@@ -15,12 +15,12 @@ export function getOcr(): OcrProvider {
       instance = new MockOcrProvider();
       break;
     case 'mindee':
-      if (!env.MINDEE_API_KEY || !env.MINDEE_ENDPOINT_URL) {
+      if (!env.MINDEE_API_KEY || !env.MINDEE_MODEL_ID) {
         throw new Error(
-          'MINDEE_API_KEY e MINDEE_ENDPOINT_URL sono obbligatori per OCR_PROVIDER=mindee',
+          'MINDEE_API_KEY e MINDEE_MODEL_ID sono obbligatori per OCR_PROVIDER=mindee',
         );
       }
-      instance = new MindeeOcrProvider(env.MINDEE_API_KEY, env.MINDEE_ENDPOINT_URL);
+      instance = new MindeeOcrProvider(env.MINDEE_API_KEY, env.MINDEE_MODEL_ID);
       break;
     case 'google_documentai':
       throw new Error('Google Document AI OCR provider not yet implemented (Fase 2)');

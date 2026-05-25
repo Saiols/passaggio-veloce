@@ -1,50 +1,34 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MindeeOcrProvider } from './mindee';
+import { describe, expect, it, vi } from 'vitest';
+import { mapResponseToLibretto, MindeeOcrProvider } from './mindee';
 import { OcrFailedError } from './types';
 
-const API_KEY = 'test-key';
-const ENDPOINT = 'https://api.mindee.net/v1/products/u/libretto/v1/predict';
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-describe('MindeeOcrProvider', () => {
-  const provider = new MindeeOcrProvider(API_KEY, ENDPOINT);
+type FieldLike = { stringValue?: string | null; confidence?: string };
 
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
-  });
+function makeFields(
+  entries: Record<string, { stringValue?: string | null; confidence?: string }>,
+): Map<string, FieldLike> {
+  return new Map(Object.entries(entries));
+}
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+// ---------------------------------------------------------------------------
+// Unit tests for the pure mapping function (no SDK mocking needed)
+// ---------------------------------------------------------------------------
 
-  function mockMindeeResponse(prediction: Record<string, unknown>, status = 200) {
-    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          document: { inference: { prediction } },
-        }),
-        { status, headers: { 'content-type': 'application/json' } },
-      ),
-    );
-  }
-
-  it('exposes name = "mindee"', () => {
-    expect(provider.name).toBe('mindee');
-  });
-
-  it('maps a full Mindee response to LibrettoCircolazioneData with normalized fields', async () => {
-    mockMindeeResponse({
-      targa: { value: 'fa 123 gh', confidence: 0.95 },
-      telaio: { value: 'zfa19500005123456', confidence: 0.92 },
-      proprietario_attuale: { value: 'Mario Rossi', confidence: 0.9 },
-      data_immatricolazione: { value: '2012-06-15', confidence: 0.88 },
-      flag_comodato_uso: { value: 'no', confidence: 0.99 },
+describe('mapResponseToLibretto', () => {
+  it('maps all ICAO EU fields to LibrettoCircolazioneData with normalization', () => {
+    const fields = makeFields({
+      a: { stringValue: 'fa 123 gh', confidence: 'High' },
+      e: { stringValue: 'zfa19500005123456', confidence: 'Certain' },
+      c1: { stringValue: 'Mario Rossi', confidence: 'High' },
+      b: { stringValue: '2012-06-15', confidence: 'Medium' },
+      x1: { stringValue: 'LUNGHEZZA 3,970 M - nessuna clausola' },
     });
 
-    const result = await provider.extractLibretto({
-      buffer: Buffer.from('fake pdf'),
-      mimeType: 'application/pdf',
-      originalFilename: 'libretto.pdf',
-    });
+    const result = mapResponseToLibretto(fields);
 
     expect(result.targa).toBe('FA123GH');
     expect(result.telaio).toBe('ZFA19500005123456');
@@ -52,66 +36,141 @@ describe('MindeeOcrProvider', () => {
     expect(result.dataImmatricolazione).toBe('2012-06-15');
     expect(result.preImm2015).toBe(true);
     expect(result.flagComodatoDuso).toBe(false);
-    expect(result.confidenceScore).toBeCloseTo((0.95 + 0.92 + 0.9 + 0.88) / 4, 3);
+    // confidence: High=0.75, Certain=1.0, High=0.75, Medium=0.5 → avg = 3.0/4 = 0.75
+    expect(result.confidenceScore).toBeCloseTo((0.75 + 1.0 + 0.75 + 0.5) / 4, 5);
   });
 
-  it('flags comodato d\'uso when Mindee returns "sì"', async () => {
-    mockMindeeResponse({
-      targa: { value: 'AB123CD', confidence: 0.9 },
-      flag_comodato_uso: { value: 'sì', confidence: 0.95 },
-    });
-
-    const result = await provider.extractLibretto({
-      buffer: Buffer.from('x'),
-      mimeType: 'image/jpeg',
-    });
-
-    expect(result.flagComodatoDuso).toBe(true);
+  it('preImm2015 = true for date 2014-12-31', () => {
+    const fields = makeFields({ b: { stringValue: '2014-12-31' } });
+    expect(mapResponseToLibretto(fields).preImm2015).toBe(true);
   });
 
-  it('handles missing data_immatricolazione gracefully', async () => {
-    mockMindeeResponse({
-      targa: { value: 'CD456EF', confidence: 0.85 },
-      telaio: { value: 'ABCDEFGH123456789', confidence: 0.8 },
-    });
+  it('preImm2015 = false for date 2015-01-01', () => {
+    const fields = makeFields({ b: { stringValue: '2015-01-01' } });
+    expect(mapResponseToLibretto(fields).preImm2015).toBe(false);
+  });
 
-    const result = await provider.extractLibretto({
-      buffer: Buffer.from('x'),
-      mimeType: 'image/png',
-    });
+  it('flagComodatoDuso = true when x1 contains "COMODATO D\'USO" (uppercase)', () => {
+    const fields = makeFields({ x1: { stringValue: "LUNGHEZZA 3,970 M - COMODATO D'USO IN ESSERE" } });
+    expect(mapResponseToLibretto(fields).flagComodatoDuso).toBe(true);
+  });
 
+  it('flagComodatoDuso = true when x1 contains "comodato d\'uso" (lowercase)', () => {
+    const fields = makeFields({ x1: { stringValue: "comodato d'uso" } });
+    expect(mapResponseToLibretto(fields).flagComodatoDuso).toBe(true);
+  });
+
+  it('flagComodatoDuso = false when x1 is missing', () => {
+    const fields = makeFields({ a: { stringValue: 'AB123CD' } });
+    expect(mapResponseToLibretto(fields).flagComodatoDuso).toBe(false);
+  });
+
+  it('flagComodatoDuso = false when x1 does not contain "comodato"', () => {
+    const fields = makeFields({ x1: { stringValue: 'LUNGHEZZA 3,970 M - FINANZIAMENTO' } });
+    expect(mapResponseToLibretto(fields).flagComodatoDuso).toBe(false);
+  });
+
+  it('confidenceScore = 0.9 (fallback) when all field confidences are null/undefined', () => {
+    const fields = makeFields({
+      a: { stringValue: 'AB123CD' },
+      e: { stringValue: 'VIN12345678901234' },
+      c1: { stringValue: 'Mario Rossi' },
+      b: { stringValue: '2020-01-01' },
+    });
+    // No confidence on any field → fallback 0.9
+    expect(mapResponseToLibretto(fields).confidenceScore).toBe(0.9);
+  });
+
+  it('confidenceScore is computed average when some confidences are present', () => {
+    const fields = makeFields({
+      a: { stringValue: 'AB123CD', confidence: 'Certain' }, // 1.0
+      e: { stringValue: 'VIN12345678901234', confidence: 'Low' }, // 0.25
+      // c1 and b missing confidence → filtered out
+    });
+    expect(mapResponseToLibretto(fields).confidenceScore).toBeCloseTo((1.0 + 0.25) / 2, 5);
+  });
+
+  it('handles missing b field gracefully (undefined dataImmatricolazione, preImm2015 false)', () => {
+    const fields = makeFields({ a: { stringValue: 'AB123CD', confidence: 'High' } });
+    const result = mapResponseToLibretto(fields);
     expect(result.dataImmatricolazione).toBeUndefined();
     expect(result.preImm2015).toBe(false);
   });
 
-  it('marks post-2015 vehicles correctly', async () => {
-    mockMindeeResponse({
-      data_immatricolazione: { value: '2020-03-01', confidence: 0.9 },
+  it('targa and telaio are undefined when fields a and e are absent', () => {
+    const fields = makeFields({ c1: { stringValue: 'Mario Rossi' } });
+    const result = mapResponseToLibretto(fields);
+    expect(result.targa).toBeUndefined();
+    expect(result.telaio).toBeUndefined();
+  });
+
+  it('strips all whitespace from targa and telaio and uppercases them', () => {
+    const fields = makeFields({
+      a: { stringValue: '  ab  12  cd  ' },
+      e: { stringValue: ' vin 1234 5678 9012 34 ' },
+    });
+    expect(mapResponseToLibretto(fields).targa).toBe('AB12CD');
+    expect(mapResponseToLibretto(fields).telaio).toBe('VIN123456789012 34'.replace(/\s+/g, ''));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integration-level test for MindeeOcrProvider.extractLibretto (SDK mocked)
+// ---------------------------------------------------------------------------
+
+// Shared mock function that tests can configure per-call
+const mockEnqueueAndGetResult = vi.fn();
+
+vi.mock('mindee', () => {
+  // Use a class so `new mindee.Client(...)` works as a constructor
+  class MockClient {
+    enqueueAndGetResult = mockEnqueueAndGetResult;
+  }
+  // Use a class so `new mindee.BufferInput(...)` works as a constructor
+  class MockBufferInput {}
+
+  return {
+    Client: MockClient,
+    BufferInput: MockBufferInput,
+    product: { Extraction: 'Extraction' },
+  };
+});
+
+describe('MindeeOcrProvider.extractLibretto', () => {
+  const provider = new MindeeOcrProvider('test-api-key', 'test-model-id');
+
+  it('exposes name = "mindee"', () => {
+    expect(provider.name).toBe('mindee');
+  });
+
+  it('maps SDK response fields to LibrettoCircolazioneData', async () => {
+    mockEnqueueAndGetResult.mockResolvedValueOnce({
+      inference: {
+        result: {
+          fields: makeFields({
+            a: { stringValue: 'xx 123 yy', confidence: 'Certain' },
+            e: { stringValue: 'vin00000000000001', confidence: 'High' },
+            c1: { stringValue: 'Giulia Bianchi', confidence: 'High' },
+            b: { stringValue: '2010-03-22', confidence: 'Medium' },
+          }),
+        },
+      },
     });
 
     const result = await provider.extractLibretto({
-      buffer: Buffer.from('x'),
+      buffer: Buffer.from('pdf-bytes'),
       mimeType: 'application/pdf',
+      originalFilename: 'libretto.pdf',
     });
 
-    expect(result.preImm2015).toBe(false);
+    expect(result.targa).toBe('XX123YY');
+    expect(result.telaio).toBe('VIN00000000000001');
+    expect(result.proprietarioAttuale).toBe('Giulia Bianchi');
+    expect(result.preImm2015).toBe(true);
   });
 
-  it('returns confidenceScore 0 when no fields have confidence', async () => {
-    mockMindeeResponse({});
-
-    const result = await provider.extractLibretto({
-      buffer: Buffer.from('x'),
-      mimeType: 'application/pdf',
-    });
-
-    expect(result.confidenceScore).toBe(0);
-  });
-
-  it('throws OcrFailedError on HTTP 401', async () => {
-    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response('Unauthorized', { status: 401 }),
-    );
+  it('throws OcrFailedError when SDK throws', async () => {
+    mockEnqueueAndGetResult.mockRejectedValueOnce(new Error('Network timeout'));
 
     await expect(
       provider.extractLibretto({
@@ -119,36 +178,5 @@ describe('MindeeOcrProvider', () => {
         mimeType: 'application/pdf',
       }),
     ).rejects.toBeInstanceOf(OcrFailedError);
-  });
-
-  it('throws OcrFailedError on HTTP 500', async () => {
-    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      new Response('Server error', { status: 500 }),
-    );
-
-    await expect(
-      provider.extractLibretto({
-        buffer: Buffer.from('x'),
-        mimeType: 'application/pdf',
-      }),
-    ).rejects.toBeInstanceOf(OcrFailedError);
-  });
-
-  it('sends the file as multipart form-data with Authorization header', async () => {
-    mockMindeeResponse({ targa: { value: 'XX000XX', confidence: 0.9 } });
-
-    await provider.extractLibretto({
-      buffer: Buffer.from('hello'),
-      mimeType: 'application/pdf',
-      originalFilename: 'mybook.pdf',
-    });
-
-    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe(ENDPOINT);
-    expect(init.method).toBe('POST');
-    expect(init.headers).toMatchObject({ Authorization: `Token ${API_KEY}` });
-    expect(init.body).toBeInstanceOf(FormData);
   });
 });

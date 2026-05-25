@@ -158,3 +158,98 @@ export function breadcrumbJsonLd(items: readonly { name: string; url: string }[]
     })),
   };
 }
+
+export function articleJsonLd(opts: {
+  url: string;
+  headline: string;
+  description: string;
+  datePublished: string;
+  dateModified: string;
+  imageUrl?: string;
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Article' as const,
+    '@id': opts.url,
+    headline: opts.headline,
+    description: opts.description,
+    url: opts.url,
+    image: opts.imageUrl ?? siteUrl('/opengraph-image'),
+    datePublished: opts.datePublished,
+    dateModified: opts.dateModified,
+    author: { '@id': ORGANIZATION_ID },
+    publisher: { '@id': ORGANIZATION_ID },
+    inLanguage: 'it-IT',
+    isPartOf: { '@id': WEBSITE_ID },
+    mainEntityOfPage: opts.url,
+  };
+}
+
+export function howToJsonLd(opts: {
+  url: string;
+  name: string;
+  description: string;
+  totalTime: string;
+  estimatedCostEUR?: string;
+  supplies?: readonly string[];
+  tools?: readonly string[];
+  steps: readonly { title: string; body: string }[];
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo' as const,
+    '@id': opts.url,
+    name: opts.name,
+    description: opts.description,
+    totalTime: opts.totalTime,
+    ...(opts.estimatedCostEUR && {
+      estimatedCost: {
+        '@type': 'MonetaryAmount' as const,
+        currency: 'EUR',
+        value: opts.estimatedCostEUR,
+      },
+    }),
+    ...(opts.supplies && {
+      supply: opts.supplies.map((name) => ({ '@type': 'HowToSupply' as const, name })),
+    }),
+    ...(opts.tools && {
+      tool: opts.tools.map((name) => ({ '@type': 'HowToTool' as const, name })),
+    }),
+    step: opts.steps.map((s, i) => ({
+      '@type': 'HowToStep' as const,
+      position: i + 1,
+      name: s.title,
+      text: s.body,
+      url: `${opts.url}#step-${i + 1}`,
+    })),
+    inLanguage: 'it-IT',
+    isPartOf: { '@id': WEBSITE_ID },
+  };
+}
+
+export function collectionPageJsonLd(opts: {
+  url: string;
+  name: string;
+  description: string;
+  items: readonly { url: string; name: string }[];
+}) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage' as const,
+    '@id': opts.url,
+    url: opts.url,
+    name: opts.name,
+    description: opts.description,
+    inLanguage: 'it-IT',
+    isPartOf: { '@id': WEBSITE_ID },
+    mainEntity: {
+      '@type': 'ItemList' as const,
+      itemListElement: opts.items.map((item, i) => ({
+        '@type': 'ListItem' as const,
+        position: i + 1,
+        url: item.url,
+        name: item.name,
+      })),
+    },
+  };
+}

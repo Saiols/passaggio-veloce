@@ -484,7 +484,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                       Estrazione dati in corso…
                     </p>
                     <p className="mt-0.5 text-[12px] text-pv-slate-600">
-                      L'OCR analizza il libretto: l'operazione può richiedere fino a 30-60 secondi.
+                      L’OCR analizza il libretto: l’operazione può richiedere fino a 30-60 secondi.
                       Non chiudere la pagina.
                     </p>
                   </div>

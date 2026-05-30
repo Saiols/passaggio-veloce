@@ -74,27 +74,57 @@ export async function extractLibrettoAction(
   }
 
   const buffer = await bufferFromFile(file);
-  try {
-    const ocr = getOcr();
-    const data = await ocr.extractLibretto({
-      buffer,
-      mimeType: file.type,
-      originalFilename: file.name,
-    });
-    return { ok: true, data };
-  } catch (e) {
-    const errInfo = {
-      name: e instanceof Error ? e.name : 'Unknown',
-      message: e instanceof Error ? e.message : String(e),
-      code: (e as { code?: string })?.code,
-      stack: e instanceof Error ? e.stack?.split('\n').slice(0, 6).join(' | ') : undefined,
-    };
-    console.error('[ocr][DEBUG] extractLibretto failed:', JSON.stringify(errInfo));
-    return {
-      ok: false,
-      error: `OCR DEBUG: ${errInfo.name} ${errInfo.code ?? ''} ${errInfo.message}`.slice(0, 600),
-    };
+  const ocr = getOcr();
+  const input = {
+    buffer,
+    mimeType: file.type,
+    originalFilename: file.name,
+  };
+
+  type AttemptResult =
+    | { ok: true; data: LibrettoCircolazioneData }
+    | {
+        ok: false;
+        errName: string;
+        errCode: string | undefined;
+        errMessage: string;
+        elapsedMs: number;
+        isTransient: boolean;
+      };
+
+  const startedAt = Date.now();
+  const attemptExtract = async (): Promise<AttemptResult> => {
+    try {
+      const data = await ocr.extractLibretto(input);
+      return { ok: true, data };
+    } catch (e) {
+      const elapsedMs = Date.now() - startedAt;
+      const errName = e instanceof Error ? e.name : 'Unknown';
+      const errMessage = e instanceof Error ? e.message : String(e);
+      const errCode = (e as { code?: string })?.code;
+      const isTransient = /other side closed|ECONNRESET|fetch failed|socket hang up/i.test(errMessage);
+      console.error(
+        '[ocr][DEBUG] extractLibretto attempt failed:',
+        JSON.stringify({ errName, errCode, errMessage, elapsedMs, isTransient }),
+      );
+      return { ok: false, errName, errCode, errMessage, elapsedMs, isTransient };
+    }
+  };
+
+  let attempt = await attemptExtract();
+  if (!attempt.ok && attempt.isTransient) {
+    console.warn('[ocr][DEBUG] retrying once after transient error');
+    attempt = await attemptExtract();
   }
+
+  if (attempt.ok) return { ok: true, data: attempt.data };
+  return {
+    ok: false,
+    error: `OCR DEBUG: ${attempt.errName} ${attempt.errCode ?? ''} ${attempt.errMessage} [elapsed=${attempt.elapsedMs}ms]`.slice(
+      0,
+      600,
+    ),
+  };
 }
 
 // Tratta correttamente "false" / "true" / "on" / assenza di campo dalle FormData

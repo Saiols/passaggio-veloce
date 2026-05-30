@@ -3,6 +3,11 @@ import { auth } from '@/auth';
 import { AppShell } from '@/components/app-shell';
 import { WizardNuovaPratica } from './wizard';
 
+// Vercel function timeout: 60s su Hobby plan (max), 300s su Pro.
+// L'OCR Mindee V2 (enqueueAndGetResult) fa polling async che può superare
+// i default 10s, quindi richiediamo esplicitamente il massimo.
+export const maxDuration = 60;
+
 export default async function NuovaPraticaPage({
   searchParams,
 }: {

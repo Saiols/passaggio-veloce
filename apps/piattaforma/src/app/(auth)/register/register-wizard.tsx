@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,15 +13,25 @@ import {
 } from '@/lib/auth/schemas';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
+import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
 import { registerAction } from '../actions';
 
 type AccountData = z.infer<typeof registerStep1AccountSchema>;
 type CompanyData = z.infer<typeof registerStep2CompanySchema>;
 type PaymentData = z.infer<typeof registerStep4PaymentSchema>;
 
+type DocumentsData = {
+  ciFronte: File;
+  ciRetro: File;
+  codiceFiscale: File;
+  visuraCamerale: File;
+  visuraData: string; // ISO yyyy-mm-dd
+};
+
 type WizardData = {
   account?: AccountData;
   company?: CompanyData;
+  documents?: DocumentsData;
   payment?: PaymentData;
 };
 
@@ -64,31 +74,38 @@ export function RegisterWizard({
     setStep(3);
   };
 
-  const handleDocumentsSkip = () => setStep(4);
+  const handleDocuments = (values: DocumentsData) => {
+    setData((d) => ({ ...d, documents: values }));
+    setStep(4);
+  };
 
   const handlePayment = (values: PaymentData) => {
     setData((d) => ({ ...d, payment: values }));
-    if (!data.account || !data.company) {
+    if (!data.account || !data.company || !data.documents) {
       setSubmitError('Dati mancanti, ricomincia il wizard');
       setStep(1);
       return;
     }
 
     setSubmitError(null);
+    const docs = data.documents;
     startTransition(async () => {
-      // Bridge minimale verso la nuova firma FormData di registerAction.
-      // Task 6 (DocumentsStep reale) sostituirà questo con la raccolta dei
-      // file KYC; per ora inviamo il solo payload strutturato.
       const fd = new FormData();
       fd.set(
         'payload',
         JSON.stringify({
-          account: data.account!,
-          company: data.company!,
+          account: data.account,
+          company: data.company,
           payment: values,
           referralCode,
+          visuraData: docs.visuraData,
         }),
       );
+      fd.set('CI_FRONTE', docs.ciFronte);
+      fd.set('CI_RETRO', docs.ciRetro);
+      fd.set('CODICE_FISCALE', docs.codiceFiscale);
+      fd.set('VISURA_CAMERALE', docs.visuraCamerale);
+
       const result = await registerAction(fd);
 
       if (result.ok) {
@@ -150,7 +167,11 @@ export function RegisterWizard({
             />
           )}
           {step === 3 && (
-            <DocumentsStep onBack={() => setStep(2)} onNext={handleDocumentsSkip} />
+            <DocumentsStep
+              defaultValues={data.documents}
+              onBack={() => setStep(2)}
+              onNext={handleDocuments}
+            />
           )}
           {step === 4 && (
             <PaymentStep
@@ -339,26 +360,123 @@ function CompanyStep({
 }
 
 // ============================================================
-// STEP 3 - DOCUMENTI (placeholder, attivato in Fase 3)
+// STEP 3 - DOCUMENTI KYC
 // ============================================================
 
-function DocumentsStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+const ACCEPT = 'application/pdf,image/jpeg,image/png';
+
+function DocFileInput({
+  label,
+  file,
+  onChange,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
   return (
-    <div className="space-y-4">
-      <Alert variant="warning" title="Upload documenti — disponibile in Fase 3">
-        Qui chiederemo: CI fronte/retro, Codice Fiscale, Visura Camerale (max 6 mesi). Lo
-        storage sicuro e la validazione IA verranno attivati nella prossima fase di
-        sviluppo. Per ora puoi proseguire e completare la registrazione.
+    <Field label={label} required>
+      <input
+        type="file"
+        accept={ACCEPT}
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        className="block w-full text-sm text-pv-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-pv-navy-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-pv-navy-700"
+      />
+      {file && (
+        <p className="mt-1 text-xs text-pv-slate-500">
+          {file.name} — {(file.size / 1024 / 1024).toFixed(2)} MB
+        </p>
+      )}
+    </Field>
+  );
+}
+
+function DocumentsStep({
+  defaultValues,
+  onBack,
+  onNext,
+}: {
+  defaultValues?: DocumentsData;
+  onBack: () => void;
+  onNext: (data: DocumentsData) => void;
+}) {
+  const [ciFronte, setCiFronte] = useState<File | null>(defaultValues?.ciFronte ?? null);
+  const [ciRetro, setCiRetro] = useState<File | null>(defaultValues?.ciRetro ?? null);
+  const [codiceFiscale, setCodiceFiscale] = useState<File | null>(
+    defaultValues?.codiceFiscale ?? null,
+  );
+  const [visuraCamerale, setVisuraCamerale] = useState<File | null>(
+    defaultValues?.visuraCamerale ?? null,
+  );
+  const [visuraData, setVisuraData] = useState<string>(defaultValues?.visuraData ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const allFiles = ciFronte && ciRetro && codiceFiscale && visuraCamerale;
+
+  const validation =
+    allFiles && visuraData
+      ? validateRegistrationDocuments(
+          [
+            { tipo: 'CI_FRONTE', mimeType: ciFronte.type, sizeBytes: ciFronte.size, originalFilename: ciFronte.name },
+            { tipo: 'CI_RETRO', mimeType: ciRetro.type, sizeBytes: ciRetro.size, originalFilename: ciRetro.name },
+            { tipo: 'CODICE_FISCALE', mimeType: codiceFiscale.type, sizeBytes: codiceFiscale.size, originalFilename: codiceFiscale.name },
+            { tipo: 'VISURA_CAMERALE', mimeType: visuraCamerale.type, sizeBytes: visuraCamerale.size, originalFilename: visuraCamerale.name },
+          ],
+          visuraData,
+        )
+      : { ok: false as const, error: 'Carica tutti i documenti e indica la data della visura' };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!validation.ok) {
+      setError(validation.error);
+      return;
+    }
+    setError(null);
+    onNext({
+      ciFronte: ciFronte!,
+      ciRetro: ciRetro!,
+      codiceFiscale: codiceFiscale!,
+      visuraCamerale: visuraCamerale!,
+      visuraData,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Alert variant="info">
+        Carica i documenti KYC dell&apos;amministratore e dell&apos;azienda. Formati
+        ammessi: PDF, JPG, PNG (max 10 MB per file).
       </Alert>
+
+      <DocFileInput label="Carta d'identità — Fronte" file={ciFronte} onChange={setCiFronte} />
+      <DocFileInput label="Carta d'identità — Retro" file={ciRetro} onChange={setCiRetro} />
+      <DocFileInput
+        label="Codice Fiscale / Tessera Sanitaria"
+        file={codiceFiscale}
+        onChange={setCodiceFiscale}
+      />
+      <DocFileInput label="Visura Camerale" file={visuraCamerale} onChange={setVisuraCamerale} />
+
+      <Field label="Data emissione visura" required>
+        <Input
+          type="date"
+          value={visuraData}
+          onChange={(e) => setVisuraData(e.target.value)}
+        />
+      </Field>
+
+      {error && <Alert variant="error">{error}</Alert>}
+
       <div className="flex flex-col-reverse gap-3 sm:flex-row">
         <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto">
           Indietro
         </Button>
-        <Button type="button" onClick={onNext} className="sm:flex-1">
+        <Button type="submit" disabled={!validation.ok} className="sm:flex-1">
           Avanti
         </Button>
       </div>
-    </div>
+    </form>
   );
 }
 

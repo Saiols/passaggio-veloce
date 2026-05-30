@@ -454,7 +454,41 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               </Field>
 
               {extracting && (
-                <p className="mt-3 text-[13px] text-pv-slate-500">Estrazione dati in corso…</p>
+                <div
+                  className="mt-3 flex items-center gap-3 rounded-[12px] border border-pv-navy-200 bg-pv-navy-50 p-4"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <svg
+                    className="h-5 w-5 shrink-0 animate-spin text-pv-navy-700"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                    />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-[14px] font-semibold text-pv-navy-900">
+                      Estrazione dati in corso…
+                    </p>
+                    <p className="mt-0.5 text-[12px] text-pv-slate-600">
+                      L'OCR analizza il libretto: l'operazione può richiedere fino a 30-60 secondi.
+                      Non chiudere la pagina.
+                    </p>
+                  </div>
+                </div>
               )}
               {ocrError && (
                 <div className="mt-3">

@@ -13,11 +13,14 @@ import { tryMatchCrmContact } from '@/lib/crm/sync';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
 import { anonymizeIp } from '@/lib/net/ip';
 import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
+import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
+import { randomUUID } from 'node:crypto';
+import { getStorage } from '@/lib/providers/storage';
+import { getRegistroImprese } from '@/lib/providers/registro-imprese';
 import {
-  loginSchema,
-  registerFullSchema,
-  type RegisterFullInput,
-} from '@/lib/auth/schemas';
+  validateRegistrationDocuments,
+  type RegistrationDocInput,
+} from '@/lib/auth/document-validation';
 
 // ============================================================
 // LOGIN
@@ -82,6 +85,16 @@ export async function logoutAction() {
 // REGISTER
 // ============================================================
 
+const MAX_DOC_BYTES = 10 * 1024 * 1024; // 10 MB
+
+// Slot file attesi nel FormData del wizard (step 3). chiave === DocumentoTipo.
+const REGISTRATION_DOC_SLOTS = [
+  'CI_FRONTE',
+  'CI_RETRO',
+  'CODICE_FISCALE',
+  'VISURA_CAMERALE',
+] as const;
+
 export type RegisterActionResult =
   | { ok: true; emailVerificationToken: string }
   | { ok: false; error: string; field?: string };
@@ -94,9 +107,21 @@ function generateReferralCode(): string {
 }
 
 export async function registerAction(
-  input: RegisterFullInput & { referralCode?: string },
+  formData: FormData,
 ): Promise<RegisterActionResult> {
-  const parsed = registerFullSchema.safeParse(input);
+  // 1. Parse del payload strutturato (account/company/payment/referral/visura).
+  const payloadRaw = formData.get('payload');
+  if (typeof payloadRaw !== 'string') {
+    return { ok: false, error: 'Dati di registrazione mancanti' };
+  }
+  let payloadObj: unknown;
+  try {
+    payloadObj = JSON.parse(payloadRaw);
+  } catch {
+    return { ok: false, error: 'Dati di registrazione non validi' };
+  }
+
+  const parsed = registerFullSchema.safeParse(payloadObj);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     return {
@@ -106,8 +131,42 @@ export async function registerAction(
     };
   }
 
+  const visuraData =
+    typeof (payloadObj as { visuraData?: unknown }).visuraData === 'string'
+      ? (payloadObj as { visuraData: string }).visuraData
+      : '';
+  const refCodeFromPayload =
+    typeof (payloadObj as { referralCode?: unknown }).referralCode === 'string'
+      ? (payloadObj as { referralCode: string }).referralCode
+      : undefined;
+
+  // 2. Estrai i 4 file obbligatori dal FormData.
+  const docFiles: { tipo: (typeof REGISTRATION_DOC_SLOTS)[number]; file: File }[] = [];
+  for (const slot of REGISTRATION_DOC_SLOTS) {
+    const f = formData.get(slot);
+    if (!(f instanceof File) || f.size === 0) {
+      return { ok: false, error: 'Carica tutti i documenti richiesti' };
+    }
+    if (f.size > MAX_DOC_BYTES) {
+      return { ok: false, error: 'Un documento supera il limite di 10 MB' };
+    }
+    docFiles.push({ tipo: slot, file: f });
+  }
+
+  // 3. Validazione documenti (gating rule-based + visura ≤ 6 mesi). Bloccante.
+  const docInputs: RegistrationDocInput[] = docFiles.map(({ tipo, file }) => ({
+    tipo,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    originalFilename: file.name,
+  }));
+  const docCheck = validateRegistrationDocuments(docInputs, visuraData);
+  if (!docCheck.ok) {
+    return { ok: false, error: docCheck.error };
+  }
+
   const { account, company, payment } = parsed.data;
-  const refCodeInput = input.referralCode?.trim().toLowerCase();
+  const refCodeInput = refCodeFromPayload?.trim().toLowerCase();
 
   // Lookup referente (silente: se codice invalido, registrazione procede senza)
   let referenteId: string | null = null;
@@ -155,6 +214,29 @@ export async function registerAction(
     hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? null;
   const signupIp = anonymizeIp(signupIpRaw);
 
+  // Pre-generiamo gli id così lo scope storage coincide col companyId e i
+  // Documento possono referenziare l'uploader (User) nella stessa transaction.
+  const companyId = randomUUID();
+  const userId = randomUUID();
+
+  // Upload dei file su storage PRIMA della transaction (filesystem/S3 sono
+  // fuori dalla transaction DB). Se un put fallisce l'eccezione interrompe
+  // tutto: nessun record creato. In caso di fallimento della transaction
+  // restano al massimo file orfani su storage (raro, ripulibili).
+  const storage = getStorage();
+  const storedDocs = await Promise.all(
+    docFiles.map(async ({ tipo, file }) => {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const put = await storage.put({
+        scope: `company/${companyId}`,
+        buffer,
+        originalFilename: file.name,
+        mimeType: file.type,
+      });
+      return { tipo, put };
+    }),
+  );
+
   let createdCompanyId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
@@ -171,6 +253,7 @@ export async function registerAction(
 
       const createdCompany = await tx.company.create({
         data: {
+          id: companyId,
           type: company.type,
           ragioneSociale: company.ragioneSociale,
           partitaIva: company.partitaIva,
@@ -189,11 +272,13 @@ export async function registerAction(
           referralCode,
           referenteId,
           signupIp,
+          visuraCameraleData: new Date(visuraData),
         },
       });
 
       await tx.user.create({
         data: {
+          id: userId,
           email: emailLower,
           passwordHash,
           nome: account.nome,
@@ -216,7 +301,24 @@ export async function registerAction(
         },
       });
 
-      createdCompanyId = createdCompany.id;
+      for (const { tipo, put } of storedDocs) {
+        await tx.documento.create({
+          data: {
+            tipo,
+            companyId,
+            storageKey: put.storageKey,
+            storageProvider: put.storageProvider,
+            mimeType: put.mimeType,
+            sizeBytes: put.sizeBytes,
+            originalFilename: put.originalFilename,
+            uploadedById: userId,
+            ocrStato: 'NONE',
+            gatingStato: 'PASSED',
+          },
+        });
+      }
+
+      createdCompanyId = companyId;
     });
 
     // CRM-G: match best-effort post-iscrizione (Caso A: contatto lead
@@ -228,6 +330,16 @@ export async function registerAction(
       // (template N22 Referral Signup).
       void notifyReferralSignup(createdCompanyId);
     }
+
+    // RegistroImprese (predisposizione swap): lookup best-effort non bloccante.
+    // Col provider mock è di fatto un no-op informativo; quando l'account
+    // esterno sarà attivo qui si potrà validare/arricchire i dati azienda.
+    void Promise.resolve()
+      .then(() => getRegistroImprese().lookupByPiva({ partitaIva: company.partitaIva }))
+      .then((reg) => {
+        if (reg) console.info('[registro-imprese] lookup', reg.partitaIva, reg.statoAttivita);
+      })
+      .catch((e) => console.warn('[registro-imprese] lookup fallito', e));
 
     if (env.DEMO_MODE) {
       await prisma.$transaction(async (tx) => {

@@ -76,12 +76,20 @@ export function RegisterWizard({
 
     setSubmitError(null);
     startTransition(async () => {
-      const result = await registerAction({
-        account: data.account!,
-        company: data.company!,
-        payment: values,
-        referralCode,
-      });
+      // Bridge minimale verso la nuova firma FormData di registerAction.
+      // Task 6 (DocumentsStep reale) sostituirà questo con la raccolta dei
+      // file KYC; per ora inviamo il solo payload strutturato.
+      const fd = new FormData();
+      fd.set(
+        'payload',
+        JSON.stringify({
+          account: data.account!,
+          company: data.company!,
+          payment: values,
+          referralCode,
+        }),
+      );
+      const result = await registerAction(fd);
 
       if (result.ok) {
         setToken(result.emailVerificationToken);

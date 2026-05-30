@@ -236,7 +236,7 @@
 - [x] Rilevamento comodato d'uso (mock flag)
 - [x] UI correzione dati estratti (wizard step 1, form editabile pre-submit)
 - [ ] Fallback manuale in caso di OCR fallito (richiede UI skip)
-- [x] Integrazione Mindee Custom API (Fase 1 sprint OCR, 2026-05) — spec `docs/superpowers/specs/2026-05-25-ocr-sprint-design.md`, plan `docs/superpowers/plans/2026-05-25-ocr-mindee-fase1.md`
+- [x] Integrazione Mindee SDK V2 + modello pre-trained "European Vehicle Registration" (Fase 1 sprint OCR, 2026-05) — spec `docs/superpowers/specs/2026-05-25-ocr-sprint-design.md`, plan `docs/superpowers/plans/2026-05-25-ocr-mindee-fase1.md`. Smoke test 2026-05-30 ✅: estrazione campi targa/telaio/proprietario/data funzionante in prod test, accuratezza sub-ottimale su targa italiana (atteso, modello generico EU non specifico libretto IT — Fase 2 Document AI custom-trained riadrà il gap). Fix tecnici applicati durante smoke: schema drift Neon Production, undici no-keep-alive dispatcher (other side closed), polling stretto, maxDuration=60s, banner UX con spinner per attesa 30-60s.
 - [ ] Integrazione Google Document AI (richiede account, swap del provider)
 
 ### 3.3 Gating documentale IA (killer feature)

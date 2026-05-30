@@ -361,6 +361,11 @@ model Company {
   // Quando il saldo wallet la supera, parte il job payout automatico.
   payoutThresholdCent Int @default(100000)
 
+  // KYC registrazione (step 3): data emissione della visura camerale caricata
+  // in fase di iscrizione. Usata per validare il vincolo "max 6 mesi" e, in
+  // futuro, per rilevare visure scadute lato admin.
+  visuraCameraleData DateTime? @db.Date
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

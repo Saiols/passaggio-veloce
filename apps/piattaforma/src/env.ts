@@ -27,6 +27,9 @@ export const env = createEnv({
     MINDEE_API_KEY: z.string().optional(),
     MINDEE_MODEL_ID: z.string().optional(),
 
+    REGISTRO_IMPRESE_PROVIDER: z.enum(['mock', 'openapi', 'infocamere']).default('mock'),
+    REGISTRO_IMPRESE_API_KEY: z.string().optional(),
+
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
     STRIPE_SECRET_KEY: z.string().optional(),
   },
@@ -50,6 +53,8 @@ export const env = createEnv({
     OCR_PROVIDER: process.env.OCR_PROVIDER,
     MINDEE_API_KEY: process.env.MINDEE_API_KEY,
     MINDEE_MODEL_ID: process.env.MINDEE_MODEL_ID,
+    REGISTRO_IMPRESE_PROVIDER: process.env.REGISTRO_IMPRESE_PROVIDER,
+    REGISTRO_IMPRESE_API_KEY: process.env.REGISTRO_IMPRESE_API_KEY,
     PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

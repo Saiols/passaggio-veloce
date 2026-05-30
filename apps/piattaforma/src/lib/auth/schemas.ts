@@ -51,11 +51,16 @@ export const registerStep2CompanySchema = z.object({
   provincia: z.string().length(2, 'Provincia (2 lettere)'),
 });
 
-// Step 3 (documenti): in Fase 3 quando lo storage e' pronto.
-// Per ora il wizard salta questo step (placeholder UI).
+// Step 3 (documenti KYC): i file (CI fronte/retro, CF, visura) sono gestiti
+// fuori da Zod (FormData) perché File non è serializzabile/validabile qui.
+// Lo schema valida solo la data di emissione della visura camerale.
 export const registerStep3DocumentsSchema = z.object({
-  documentiCaricatiPlaceholder: z.boolean().default(false),
+  visuraData: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data di emissione della visura obbligatoria'),
 });
+
+export type RegisterStep3DocumentsInput = z.infer<typeof registerStep3DocumentsSchema>;
 
 export const registerStep4PaymentSchema = z.object({
   iban: ibanItSchema,

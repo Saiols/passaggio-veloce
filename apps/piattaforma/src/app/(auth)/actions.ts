@@ -257,7 +257,18 @@ export async function registerAction(
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return { ok: false, error: 'Dato gia esistente' };
     }
-    throw error;
+    // TEMP DEBUG: surface real error to client instead of 500 to diagnose
+    const errInfo = {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      code: (error as { code?: string })?.code,
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 5).join(' | ') : undefined,
+    };
+    console.error('[register][DEBUG] error:', JSON.stringify(errInfo));
+    return {
+      ok: false,
+      error: `DEBUG: ${errInfo.name} ${errInfo.code ?? ''} ${errInfo.message}`.slice(0, 500),
+    };
   }
 }
 

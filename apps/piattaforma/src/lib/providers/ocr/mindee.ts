@@ -1,11 +1,26 @@
 import 'server-only';
 import * as mindee from 'mindee';
+import { Agent } from 'undici';
 import {
   type LibrettoCircolazioneData,
   type OcrExtractInput,
   type OcrProvider,
   OcrFailedError,
 } from './types';
+
+/**
+ * Dispatcher undici personalizzato per evitare "other side closed" durante il
+ * polling lungo del Mindee SDK V2. Default undici tiene aperta la connessione
+ * TCP via keep-alive; dopo ~30s di vita la connessione viene chiusa dal
+ * proxy/firewall mentre il SDK la riusa per il polling successivo, generando
+ * SocketError "other side closed". Forziamo keep-alive cortissimo così ogni
+ * polling apre una nuova connessione fresca.
+ */
+const NO_KEEPALIVE_DISPATCHER = new Agent({
+  keepAliveTimeout: 1_000,
+  keepAliveMaxTimeout: 2_000,
+  connectTimeout: 10_000,
+});
 
 /**
  * Mapping ICAO EU field codes from the Mindee pre-trained European Vehicle Registration model
@@ -43,7 +58,10 @@ export class MindeeOcrProvider implements OcrProvider {
     private readonly apiKey: string,
     private readonly modelId: string,
   ) {
-    this.client = new mindee.Client({ apiKey });
+    this.client = new mindee.Client({
+      apiKey,
+      dispatcher: NO_KEEPALIVE_DISPATCHER,
+    });
   }
 
   async extractLibretto(input: OcrExtractInput): Promise<LibrettoCircolazioneData> {
@@ -53,6 +71,13 @@ export class MindeeOcrProvider implements OcrProvider {
     });
 
     try {
+      // Polling stretto per stare sotto i 60s di Vercel function maxDuration.
+      // Default SDK = 2s initial + 1.5s × 80 = 122s. Riduciamo a ~52s max.
+      const pollingOptions = {
+        initialDelaySec: 2,
+        delaySec: 2,
+        maxRetries: 25,
+      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const response: any = await this.client.enqueueAndGetResult(
         mindee.product.Extraction,
@@ -64,6 +89,7 @@ export class MindeeOcrProvider implements OcrProvider {
           polygon: false,
           rag: false,
         },
+        pollingOptions,
       );
       const fields: Map<string, FieldLike> = response.inference.result.fields;
       return mapResponseToLibretto(fields);

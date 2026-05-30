@@ -96,6 +96,23 @@ function generateReferralCode(): string {
 export async function registerAction(
   input: RegisterFullInput & { referralCode?: string },
 ): Promise<RegisterActionResult> {
+  try {
+    return await registerActionInner(input);
+  } catch (error) {
+    const errInfo = {
+      name: error instanceof Error ? error.name : 'Unknown',
+      message: error instanceof Error ? error.message : String(error),
+      code: (error as { code?: string })?.code,
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 4).join(' | ') : undefined,
+    };
+    console.error('[register][OUTER-DEBUG]', JSON.stringify(errInfo));
+    return { ok: false, error: `OUTER: ${errInfo.name} ${errInfo.code ?? ''} ${errInfo.message}`.slice(0, 500) };
+  }
+}
+
+async function registerActionInner(
+  input: RegisterFullInput & { referralCode?: string },
+): Promise<RegisterActionResult> {
   const parsed = registerFullSchema.safeParse(input);
   if (!parsed.success) {
     const first = parsed.error.issues[0];

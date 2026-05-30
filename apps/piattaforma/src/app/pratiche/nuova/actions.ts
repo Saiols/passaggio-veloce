@@ -74,8 +74,8 @@ export async function extractLibrettoAction(
   }
 
   const buffer = await bufferFromFile(file);
-  const ocr = getOcr();
   try {
+    const ocr = getOcr();
     const data = await ocr.extractLibretto({
       buffer,
       mimeType: file.type,
@@ -83,11 +83,16 @@ export async function extractLibrettoAction(
     });
     return { ok: true, data };
   } catch (e) {
-    console.error('[ocr] extractLibretto failed', e);
+    const errInfo = {
+      name: e instanceof Error ? e.name : 'Unknown',
+      message: e instanceof Error ? e.message : String(e),
+      code: (e as { code?: string })?.code,
+      stack: e instanceof Error ? e.stack?.split('\n').slice(0, 6).join(' | ') : undefined,
+    };
+    console.error('[ocr][DEBUG] extractLibretto failed:', JSON.stringify(errInfo));
     return {
       ok: false,
-      error:
-        'OCR non riuscito sul documento. Compila manualmente i campi del veicolo.',
+      error: `OCR DEBUG: ${errInfo.name} ${errInfo.code ?? ''} ${errInfo.message}`.slice(0, 600),
     };
   }
 }

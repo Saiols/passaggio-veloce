@@ -46,6 +46,15 @@ describe('validateVisuraData', () => {
     const r = validateVisuraData('non-una-data', NOW);
     expect(r.ok).toBe(false);
   });
+
+  it('accetta una visura emessa esattamente 6 mesi fa (boundary)', () => {
+    expect(validateVisuraData('2025-11-30', NOW)).toEqual({ ok: true });
+  });
+
+  it('non rifiuta per overflow di fine mese (31 ago - 6 mesi = 28 feb)', () => {
+    const lateAug = new Date('2026-08-31T12:00:00Z');
+    expect(validateVisuraData('2026-03-01', lateAug)).toEqual({ ok: true });
+  });
 });
 
 describe('validateRegistrationDocuments', () => {

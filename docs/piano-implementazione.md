@@ -189,8 +189,8 @@
 ### 2.1 Registrazione (stesso form dealer/agenzia)
 - [x] Form registrazione azienda (ragione sociale, P.IVA, SDI, PEC, indirizzo)
 - [x] Form dati amministratore (Nome, Cognome, data/luogo nascita, CF)
-- [ ] Upload CI + CF amministratore (placeholder: attivato in Fase 3 con storage)
-- [ ] Upload Visura Camerale (max 6 mesi) (placeholder: Fase 3)
+- [x] Upload CI + CF amministratore (attivato in Fase 3 con storage — step 3 registrazione)
+- [x] Upload Visura Camerale (max 6 mesi) — campo data + validazione + storage
 - [x] Inserimento IBAN + flag autorizzazione SEPA (mandato Stripe reale in Fase 5)
 - [x] Accettazione T&C con timestamp (registro IP da aggiungere)
 - [~] Verifica email — token generato e tabella `verification_tokens` pronta; invio email reale in Fase 6

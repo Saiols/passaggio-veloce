@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type FormEvent } from 'react';
+import { useState, useMemo, useTransition, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -363,7 +363,7 @@ function CompanyStep({
 // STEP 3 - DOCUMENTI KYC
 // ============================================================
 
-const ACCEPT = 'application/pdf,image/jpeg,image/png';
+const ACCEPT = 'application/pdf,image/jpeg,image/png,image/jpg';
 
 function DocFileInput({
   label,
@@ -374,9 +374,11 @@ function DocFileInput({
   file: File | null;
   onChange: (f: File | null) => void;
 }) {
+  const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   return (
-    <Field label={label} required>
+    <Field label={label} required htmlFor={inputId}>
       <input
+        id={inputId}
         type="file"
         accept={ACCEPT}
         onChange={(e) => onChange(e.target.files?.[0] ?? null)}
@@ -411,20 +413,20 @@ function DocumentsStep({
   const [visuraData, setVisuraData] = useState<string>(defaultValues?.visuraData ?? '');
   const [error, setError] = useState<string | null>(null);
 
-  const allFiles = ciFronte && ciRetro && codiceFiscale && visuraCamerale;
-
-  const validation =
-    allFiles && visuraData
-      ? validateRegistrationDocuments(
-          [
-            { tipo: 'CI_FRONTE', mimeType: ciFronte.type, sizeBytes: ciFronte.size, originalFilename: ciFronte.name },
-            { tipo: 'CI_RETRO', mimeType: ciRetro.type, sizeBytes: ciRetro.size, originalFilename: ciRetro.name },
-            { tipo: 'CODICE_FISCALE', mimeType: codiceFiscale.type, sizeBytes: codiceFiscale.size, originalFilename: codiceFiscale.name },
-            { tipo: 'VISURA_CAMERALE', mimeType: visuraCamerale.type, sizeBytes: visuraCamerale.size, originalFilename: visuraCamerale.name },
-          ],
-          visuraData,
-        )
-      : { ok: false as const, error: 'Carica tutti i documenti e indica la data della visura' };
+  const validation = useMemo(() => {
+    if (!(ciFronte && ciRetro && codiceFiscale && visuraCamerale) || !visuraData) {
+      return { ok: false as const, error: 'Carica tutti i documenti e indica la data della visura' };
+    }
+    return validateRegistrationDocuments(
+      [
+        { tipo: 'CI_FRONTE', mimeType: ciFronte.type, sizeBytes: ciFronte.size, originalFilename: ciFronte.name },
+        { tipo: 'CI_RETRO', mimeType: ciRetro.type, sizeBytes: ciRetro.size, originalFilename: ciRetro.name },
+        { tipo: 'CODICE_FISCALE', mimeType: codiceFiscale.type, sizeBytes: codiceFiscale.size, originalFilename: codiceFiscale.name },
+        { tipo: 'VISURA_CAMERALE', mimeType: visuraCamerale.type, sizeBytes: visuraCamerale.size, originalFilename: visuraCamerale.name },
+      ],
+      visuraData,
+    );
+  }, [ciFronte, ciRetro, codiceFiscale, visuraCamerale, visuraData]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

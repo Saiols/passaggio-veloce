@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
 import { StatCard, StatusChip, type PraticaStato } from '@/components/ui';
-import { formatRelative } from '@/lib/format';
+import { formatRelative, formatCurrencyCent } from '@/lib/format';
+import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
 
 export async function AgenziaDashboard({ companyId }: { companyId: string }) {
-  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, listino] = await Promise.all([
+  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, listino, prossimiAddebiti] = await Promise.all([
     prisma.praticaAssegnazione.count({
       where: { agenziaId: companyId, esito: 'PENDING' },
     }),
@@ -39,6 +40,12 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
     prisma.listino.findFirst({
       where: { agenziaId: companyId },
       select: { id: true, formato: true },
+    }),
+    prisma.feeAddebito.findMany({
+      where: { agenziaId: companyId, stato: 'SCHEDULED', scheduledAt: { not: null } },
+      orderBy: { scheduledAt: 'asc' },
+      take: 3,
+      include: { pratica: { select: { id: true, codicePratica: true } } },
     }),
   ]);
 
@@ -93,6 +100,41 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
         <StatCard label="Firmate / mese" value={firmateMese} icon={<CheckIcon />} accent="green" />
         <StatCard label="Rating" value={ratingValue} hint={ratingHint} icon={<StarIcon />} accent="navy" />
       </div>
+
+      {prossimiAddebiti.length > 0 && (
+        <section className="mb-6 rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
+          <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
+            <h2 className="text-[15px] font-bold text-pv-navy-800">Prossimi addebiti</h2>
+            <Link href="/addebiti" className="text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4">
+              Vedi tutti →
+            </Link>
+          </header>
+          <ul className="divide-y divide-pv-slate-200">
+            {prossimiAddebiti.map((f) => {
+              const giorni = computeGiorniResidui(f.scheduledAt, new Date());
+              const level = countdownLevel(giorni);
+              const badge =
+                level === 'overdue' ? 'text-pv-red-500'
+                : level === 'urgent' ? 'text-pv-orange-500'
+                : level === 'warn' ? 'text-pv-amber-500'
+                : 'text-pv-slate-500';
+              return (
+                <li key={f.id} className="flex items-center justify-between px-5 py-3 text-[13px]">
+                  <Link href={`/pratiche/${f.praticaId}`} className="font-mono font-semibold text-pv-navy-800 hover:underline">
+                    {f.pratica?.codicePratica ?? '—'}
+                  </Link>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-pv-navy-800">{formatCurrencyCent(f.importoCent)}</span>
+                    <span className={`text-[12px] font-bold ${badge}`}>
+                      {giorni === null ? '—' : giorni < 0 ? `scaduto ${-giorni}g` : `tra ${giorni}g`}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
         <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">

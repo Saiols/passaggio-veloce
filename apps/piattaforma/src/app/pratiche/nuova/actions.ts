@@ -46,6 +46,16 @@ async function getRequestMetadata(): Promise<{ ip: string; userAgent: string }> 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
 
+/** Tipi documento di parte (venditore/acquirente) gestiti dal wizard pratica. */
+const PARTY_DOC_TIPI = [
+  'CI_FRONTE',
+  'CI_RETRO',
+  'CODICE_FISCALE',
+  'PROCURA',
+  'VISURA_CAMERALE',
+  'PERMESSO_SOGGIORNO',
+] as const;
+
 const CURRENT_YEAR = new Date().getFullYear();
 
 async function bufferFromFile(file: File): Promise<Buffer> {
@@ -303,14 +313,6 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   // blocca il submit se almeno uno NON passa il gating rule-based. L'override
   // admin resta la valvola di sfogo post-submit (qui i FAILED non vengono mai
   // creati). Stessi nomi campo del loop di persistenza piu' sotto.
-  const PARTY_DOC_TIPI = [
-    'CI_FRONTE',
-    'CI_RETRO',
-    'CODICE_FISCALE',
-    'PROCURA',
-    'VISURA_CAMERALE',
-    'PERMESSO_SOGGIORNO',
-  ] as const;
   const gatingCandidates: GatingCandidate[] = [];
   for (const owner of ['venditore', 'acquirente'] as const) {
     for (const docTipo of PARTY_DOC_TIPI) {
@@ -490,18 +492,12 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
 
   // Documenti aggiuntivi per parte (D-06): CI, CF, procura, visura, permesso.
   // Tutti opzionali. Salviamo file su storage + record Documento con owner.
-  const DOC_TIPI_PARTE = [
-    'CI_FRONTE',
-    'CI_RETRO',
-    'CODICE_FISCALE',
-    'PROCURA',
-    'VISURA_CAMERALE',
-    'PERMESSO_SOGGIORNO',
-  ] as const;
   for (const owner of ['venditore', 'acquirente'] as const) {
-    for (const docTipo of DOC_TIPI_PARTE) {
+    for (const docTipo of PARTY_DOC_TIPI) {
       const f = formData.get(`${owner}_${docTipo}`);
       if (!(f instanceof File) || f.size === 0) continue;
+      // Difesa in profondita': il pre-check hard-block piu' sopra ha gia'
+      // scartato MIME/size non validi; questi skip restano come rete di sicurezza.
       if (f.size > MAX_LIBRETTO_BYTES) continue; // skip silently se troppo grande
       if (!ACCEPTED_MIME.includes(f.type)) continue;
       const buf = await bufferFromFile(f);

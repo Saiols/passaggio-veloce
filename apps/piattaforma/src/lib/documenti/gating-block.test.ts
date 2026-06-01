@@ -31,4 +31,20 @@ describe('findBlockingDocuments', () => {
   it('returns empty for an empty input list', () => {
     expect(findBlockingDocuments([])).toEqual([]);
   });
+
+  it('flags a CI_FRONTE whose filename suggests retro', () => {
+    const blocking = findBlockingDocuments([
+      { owner: 'venditore', tipo: 'CI_FRONTE', mimeType: 'image/jpeg', sizeBytes: 200 * 1024, originalFilename: 'documento-retro.jpg' },
+    ]);
+    expect(blocking).toHaveLength(1);
+    expect(blocking[0].reason).toContain('retro');
+  });
+
+  it('preserves the acquirente owner on blocking docs', () => {
+    const blocking = findBlockingDocuments([
+      { owner: 'acquirente', tipo: 'CODICE_FISCALE', mimeType: 'application/zip', sizeBytes: 200 * 1024, originalFilename: 'cf.zip' },
+    ]);
+    expect(blocking).toHaveLength(1);
+    expect(blocking[0].owner).toBe('acquirente');
+  });
 });

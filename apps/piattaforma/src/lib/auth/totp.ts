@@ -79,3 +79,23 @@ export async function verifyBackupCode(
   }
   return -1;
 }
+
+/**
+ * Verifica un codice 2FA: prima come TOTP (se c'è un secret), poi come backup
+ * code. Ritorna `consumedBackupIndex` (>=0) se è stato usato un backup code,
+ * così il chiamante può rimuoverlo. Il TOTP-verifier è iniettabile per i test.
+ */
+export async function verifyTwoFactor(
+  input: { secret: string | null; backupCodeHashes: string[] },
+  code: string,
+  totpVerify: (secret: string, code: string) => boolean = verifyTotpCode,
+): Promise<{ ok: boolean; consumedBackupIndex: number | null }> {
+  const c = code.trim();
+  if (!c) return { ok: false, consumedBackupIndex: null };
+  if (input.secret && totpVerify(input.secret, c)) {
+    return { ok: true, consumedBackupIndex: null };
+  }
+  const idx = await verifyBackupCode(input.backupCodeHashes, c);
+  if (idx >= 0) return { ok: true, consumedBackupIndex: idx };
+  return { ok: false, consumedBackupIndex: null };
+}

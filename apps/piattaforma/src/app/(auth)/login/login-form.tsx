@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { Alert, Button, Field, Input } from '@/components/ui';
 import { loginAction, type LoginActionState } from '../actions';
 
@@ -9,6 +9,8 @@ const initialState: LoginActionState = {};
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   return (
     <div className="space-y-6">
@@ -20,7 +22,9 @@ export function LoginForm() {
           Accedi
         </h1>
         <p className="mt-2 text-[14px] text-pv-slate-500">
-          Inserisci le credenziali del tuo account.
+          {state.needTotp
+            ? 'Inserisci il codice del tuo autenticatore (o un backup code).'
+            : 'Inserisci le credenziali del tuo account.'}
         </p>
       </div>
 
@@ -35,6 +39,9 @@ export function LoginForm() {
             required
             autoComplete="email"
             placeholder="nome@azienda.it"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            readOnly={state.needTotp}
           />
         </Field>
 
@@ -46,11 +53,28 @@ export function LoginForm() {
             required
             autoComplete="current-password"
             placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            readOnly={state.needTotp}
           />
         </Field>
 
+        {state.needTotp && (
+          <Field label="Codice 2FA" htmlFor="totp" required>
+            <Input
+              id="totp"
+              name="totp"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              placeholder="123456 oppure backup code"
+            />
+          </Field>
+        )}
+
         <Button type="submit" loading={pending} loadingLabel="Accesso in corso…" fullWidth>
-          Accedi
+          {state.needTotp ? 'Verifica codice' : 'Accedi'}
         </Button>
       </form>
 

@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { txMock } = vi.hoisted(() => ({ txMock: vi.fn() }));
 vi.mock('@pv/db', () => ({
-  prisma: { $transaction: txMock, company: {}, user: {}, verificationToken: {} },
+  prisma: {
+    $transaction: txMock,
+    company: {},
+    user: { findMany: vi.fn(), update: vi.fn() },
+    verificationToken: {},
+  },
   Prisma: { PrismaClientKnownRequestError: class {} },
 }));
 vi.mock('next-auth', () => ({ AuthError: class AuthError extends Error {} }));
@@ -13,8 +18,25 @@ vi.mock('@/lib/crm/sync', () => ({ tryMatchCrmContact: vi.fn() }));
 vi.mock('@/lib/affiliazione/notifications', () => ({ notifyReferralSignup: vi.fn() }));
 vi.mock('@/lib/providers/storage', () => ({ getStorage: vi.fn() }));
 vi.mock('@/lib/providers/registro-imprese', () => ({ getRegistroImprese: vi.fn() }));
+// Rate limit: in test consentiamo sempre (deterministico, niente stato condiviso).
+vi.mock('@/lib/auth/rate-limit', () => ({
+  checkRateLimit: vi.fn(() => ({ allowed: true, remaining: 5 })),
+  resetRateLimit: vi.fn(),
+}));
+// bcrypt.compare mockato per velocità/determinismo: il match è pilotato per-test.
+vi.mock('bcryptjs', () => ({
+  default: { compare: vi.fn() },
+}));
 
-import { registerAction } from './actions';
+import bcrypt from 'bcryptjs';
+import { AuthError } from 'next-auth';
+import { prisma } from '@pv/db';
+import { signIn } from '@/auth';
+import { loginAction, registerAction } from './actions';
+
+const findManyMock = vi.mocked(prisma.user.findMany);
+const compareMock = vi.mocked(bcrypt.compare);
+const signInMock = vi.mocked(signIn);
 
 const validPayload = {
   account: {
@@ -77,5 +99,86 @@ describe('registerAction (early returns)', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('6 mesi');
     expect(txMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('loginAction', () => {
+  function loginForm(opts: { email?: string; password?: string; totp?: string } = {}): FormData {
+    const fd = new FormData();
+    fd.set('email', opts.email ?? 'mario@example.com');
+    fd.set('password', opts.password ?? 'Password123');
+    if (opts.totp !== undefined) fd.set('totp', opts.totp);
+    return fd;
+  }
+
+  // Candidate fittizio: passwordHash è irrilevante perché bcrypt.compare è mockato.
+  function candidate(twoFactorEnabled: boolean) {
+    return { passwordHash: 'hash', twoFactorEnabled };
+  }
+
+  beforeEach(() => {
+    findManyMock.mockReset();
+    compareMock.mockReset();
+    signInMock.mockReset();
+  });
+
+  it('utente 2FA + password corretta senza totp → { needTotp: true }, niente signIn', async () => {
+    findManyMock.mockResolvedValue([candidate(true)] as never);
+    compareMock.mockResolvedValue(true as never);
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r).toEqual({ needTotp: true });
+    expect(signInMock).not.toHaveBeenCalled();
+  });
+
+  it('utente senza 2FA + password corretta → chiama signIn e ritorna {}', async () => {
+    findManyMock.mockResolvedValue([candidate(false)] as never);
+    compareMock.mockResolvedValue(true as never);
+    signInMock.mockResolvedValue(undefined as never);
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r).toEqual({});
+    expect(signInMock).toHaveBeenCalledTimes(1);
+    expect(signInMock).toHaveBeenCalledWith(
+      'credentials',
+      expect.objectContaining({
+        email: 'mario@example.com',
+        password: 'Password123',
+        redirectTo: '/dashboard',
+      }),
+    );
+  });
+
+  it('password errata (nessun candidate combacia) → { error: "Credenziali non valide" }, niente signIn', async () => {
+    findManyMock.mockResolvedValue([candidate(false)] as never);
+    compareMock.mockResolvedValue(false as never);
+
+    const r = await loginAction({}, loginForm({ password: 'Sbagliata9' }));
+
+    expect(r).toEqual({ error: 'Credenziali non valide' });
+    expect(signInMock).not.toHaveBeenCalled();
+  });
+
+  it('utente 2FA + password corretta + totp errato → signIn lancia AuthError → { error: "Codice 2FA non valido", needTotp: true }', async () => {
+    findManyMock.mockResolvedValue([candidate(true)] as never);
+    compareMock.mockResolvedValue(true as never);
+    signInMock.mockRejectedValueOnce(new AuthError());
+
+    const r = await loginAction({}, loginForm({ totp: '000000' }));
+
+    expect(r).toEqual({ error: 'Codice 2FA non valido', needTotp: true });
+  });
+
+  it('utente senza 2FA + signIn lancia AuthError → { error: "Credenziali non valide" } e needTotp undefined', async () => {
+    findManyMock.mockResolvedValue([candidate(false)] as never);
+    compareMock.mockResolvedValue(true as never);
+    signInMock.mockRejectedValueOnce(new AuthError());
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r).toEqual({ error: 'Credenziali non valide' });
+    expect(r.needTotp).toBeUndefined();
   });
 });

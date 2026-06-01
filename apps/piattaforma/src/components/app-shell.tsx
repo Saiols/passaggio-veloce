@@ -46,6 +46,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
           { href: '/pratiche', label: 'Pratiche attive' },
           { href: '/orari', label: 'Orari' },
           { href: '/wallet', label: 'Wallet' },
+          { href: '/addebiti', label: 'Addebiti' },
           { href: '/affiliazione', label: 'Affiliazione' },
           { href: '/notifiche', label: 'Notifiche' },
           { href: '/profilo', label: 'Profilo' },

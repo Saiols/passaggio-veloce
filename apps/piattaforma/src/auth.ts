@@ -5,10 +5,12 @@ import { z } from 'zod';
 
 import { prisma } from '@pv/db';
 import { authConfig } from './auth.config';
+import { verifyTwoFactor } from '@/lib/auth/totp';
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  totp: z.string().optional(),
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -18,6 +20,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        totp: { label: 'Codice 2FA', type: 'text' },
       },
       async authorize(rawCredentials) {
         const parsed = credentialsSchema.safeParse(rawCredentials);
@@ -51,6 +54,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
         if (!matched) return null;
+
+        // P4: se il 2FA è attivo, il codice TOTP (o un backup code) è obbligatorio.
+        // authorize è la fonte autoritativa: consuma il backup code se usato.
+        if (matched.twoFactorEnabled) {
+          const code = parsed.data.totp ?? '';
+          const backupHashes = Array.isArray(matched.twoFactorBackupCodes)
+            ? (matched.twoFactorBackupCodes as string[])
+            : [];
+          const res = await verifyTwoFactor(
+            { secret: matched.twoFactorSecret, backupCodeHashes: backupHashes },
+            code,
+          );
+          if (!res.ok) return null;
+          if (res.consumedBackupIndex !== null) {
+            const remaining = backupHashes.filter((_, i) => i !== res.consumedBackupIndex);
+            await prisma.user.update({
+              where: { id: matched.id },
+              data: { twoFactorBackupCodes: remaining },
+            });
+          }
+        }
 
         await prisma.user.update({
           where: { id: matched.id },

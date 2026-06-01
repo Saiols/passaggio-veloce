@@ -32,6 +32,10 @@
     {
       "path": "/api/jobs/purge-deleted-team-users",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/jobs/purge-deleted-documenti",
+      "schedule": "30 3 * * *"
     }
   ]
 }

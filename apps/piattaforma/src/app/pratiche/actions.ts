@@ -319,6 +319,22 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
             nomeBroker: brokerUser.nome,
           },
         }).catch(() => undefined);
+
+        await sendNotification({
+          tipo: 'N31_VALUTA_AGENZIA',
+          target: {
+            email: brokerUser.email,
+            userId: brokerUser.id,
+            companyId: full.broker.id,
+          },
+          payload: {
+            codicePratica: full.codicePratica ?? '—',
+            targa: full.targa,
+            agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
+            nomeBroker: brokerUser.nome,
+            praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${praticaId}`,
+          },
+        }).catch(() => undefined);
       }
 
       const agenziaUser = full.agenziaAssegnata?.users[0];

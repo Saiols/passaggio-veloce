@@ -42,6 +42,17 @@ type Ocr = {
   flagComodatoDuso: boolean;
 };
 
+function emptyOcr(): Ocr {
+  return {
+    targa: '',
+    telaio: '',
+    proprietarioAttuale: '',
+    dataImmatricolazione: '',
+    preImm2015: false,
+    flagComodatoDuso: false,
+  };
+}
+
 // Tipi documento caricabili per parte (sottoinsieme di DocumentoTipo lato DB).
 const DOC_TIPI = [
   'CI_FRONTE',
@@ -225,6 +236,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     librettoRef.current = file;
     setLibrettoName(file.name);
     setOcrError(null);
+    setOcrManuale(false);
     setExtracting(true);
     try {
       const fd = new FormData();
@@ -500,14 +512,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                       type="button"
                       variant="secondary"
                       onClick={() => {
-                        setOcr({
-                          targa: '',
-                          telaio: '',
-                          proprietarioAttuale: '',
-                          dataImmatricolazione: '',
-                          preImm2015: false,
-                          flagComodatoDuso: false,
-                        });
+                        setOcr(emptyOcr());
                         setOcrManuale(true);
                         setOcrError(null);
                       }}

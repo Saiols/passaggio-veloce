@@ -484,7 +484,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       sizeBytes: put.sizeBytes,
       originalFilename: put.originalFilename,
       uploadedById: userId,
-      ocrStato: ocrManuale ? 'NONE' : 'SUCCESS',
+      ocrStato: ocrManuale ? 'FAILED' : 'SUCCESS',
       ocrProvider: env.OCR_PROVIDER,
       ocrData: ocrSnapshot,
       ocrAt: now,

@@ -853,6 +853,38 @@ export function tplN24PayoutAffiliationAvailable(
   return { subject, html, text };
 }
 
+export type N31ValutaAgenziaPayload = {
+  codicePratica: string;
+  targa: string | null;
+  agenziaNome: string;
+  nomeBroker: string;
+  /** URL assoluto alla pagina pratica dove valutare. */
+  praticaUrl: string;
+};
+
+export function tplN31ValutaAgenzia(p: N31ValutaAgenziaPayload): NotificaContent {
+  const subject = `Com'è andata con ${p.agenziaNome}? Lascia una valutazione`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} è stata completata da ` +
+    `${p.agenziaNome}. La tua valutazione aiuta gli altri broker e migliora il servizio.\n` +
+    `Valuta qui: ${p.praticaUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Valuta l'agenzia</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
+      completata da <strong>${p.agenziaNome}</strong>. La tua valutazione aiuta gli altri broker.
+    </p>
+    <p style="margin:0 0 4px">
+      <a href="${p.praticaUrl}" style="display:inline-block;background:#0054a6;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600">
+        Valuta l'agenzia →
+      </a>
+    </p>
+  `);
+  return { subject, html, text };
+}
+
 export function tplN25MonthlyAffiliationRecap(
   p: N25MonthlyAffiliationRecapPayload,
 ): NotificaContent {

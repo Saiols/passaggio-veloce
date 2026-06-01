@@ -252,6 +252,7 @@ enum NotificaTipo {
   N23_REFERRAL_FIRST_PRATICA
   N24_PAYOUT_AFFILIATION_AVAILABLE
   N25_MONTHLY_AFFILIATION_RECAP
+  N31_VALUTA_AGENZIA
 }
 
 enum NotificaCanale {
@@ -265,6 +266,7 @@ enum NotificaStato {
   SENT
   FAILED
   READ
+  SKIPPED
 }
 
 // ============================================================
@@ -408,6 +410,11 @@ model User {
   /// 10 backup codes hashati (bcrypt). Array JSON di stringhe.
   /// Ogni codice consumato viene rimosso dall'array.
   twoFactorBackupCodes   Json?
+
+  /// Preferenze notifiche opzionali: mappa { "<NotificaTipo>": boolean }. Default opt-in (assenza = true).
+  notifPrefs Json?
+  /// Token per unsubscribe one-click via link email (generato lazy al primo invio opzionale).
+  unsubscribeToken String? @unique
 
   // Documenti caricati da questo utente
   documentiCaricati Documento[] @relation("DocumentiUploader")

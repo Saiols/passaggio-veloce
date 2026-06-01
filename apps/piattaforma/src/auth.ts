@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@pv/db';
 import { authConfig } from './auth.config';
 import { verifyTwoFactor } from '@/lib/auth/totp';
+import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -34,13 +35,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // L'admin platform (companyId=null) prevale per disambiguare in caso
         // di hash uguali, poi viene il primo per createdAt.
         const candidates = await prisma.user.findMany({
-          where: {
-            email: email.toLowerCase(),
-            deletedAt: null,
-            status: { not: 'SUSPENDED' },
-          },
+          ...activeUserCredentialsQuery(email.toLowerCase()),
           include: { company: true },
-          orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
         });
 
         if (candidates.length === 0) return null;

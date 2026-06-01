@@ -14,6 +14,7 @@ import { tryMatchCrmContact } from '@/lib/crm/sync';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
 import { anonymizeIp } from '@/lib/net/ip';
 import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
+import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
 import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
 import { randomUUID } from 'node:crypto';
 import { getStorage } from '@/lib/providers/storage';
@@ -66,9 +67,8 @@ export async function loginAction(
   // per capire se il 2FA è richiesto. Non logga: serve solo a decidere se
   // mostrare il campo codice. La password NON viene mai ritornata al client.
   const candidates = await prisma.user.findMany({
-    where: { email: emailLower, deletedAt: null, status: { not: 'SUSPENDED' } },
+    ...activeUserCredentialsQuery(emailLower),
     select: { passwordHash: true, twoFactorEnabled: true },
-    orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
   });
   let matched: (typeof candidates)[number] | null = null;
   for (const c of candidates) {

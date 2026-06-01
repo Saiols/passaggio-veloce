@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
@@ -37,16 +38,24 @@ export default async function NotifichePage() {
   return (
     <AppShell session={session} activePath="/notifiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <header className="mb-6">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            Storico comunicazioni
-          </p>
-          <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            Notifiche
-          </h1>
-          <p className="mt-1 text-[13px] text-pv-slate-500">
-            Email e SMS che ti abbiamo inviato. Ultime {notifiche.length} mostrate.
-          </p>
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              Storico comunicazioni
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              Notifiche
+            </h1>
+            <p className="mt-1 text-[13px] text-pv-slate-500">
+              Email e SMS che ti abbiamo inviato. Ultime {notifiche.length} mostrate.
+            </p>
+          </div>
+          <Link
+            href="/profilo/notifiche"
+            className="shrink-0 text-[13px] font-bold text-pv-navy-700 hover:brightness-110"
+          >
+            Preferenze →
+          </Link>
         </header>
 
         {notifiche.length === 0 ? (

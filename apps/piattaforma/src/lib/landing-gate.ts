@@ -24,6 +24,7 @@ export const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   '/privacy',
   '/cookie',
   '/termini',
+  '/unsubscribe',
   '/opengraph-image',
   '/twitter-image',
   '/llms.txt',

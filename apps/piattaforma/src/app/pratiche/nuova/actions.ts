@@ -11,6 +11,7 @@ import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { classifyDocumento } from '@/lib/documenti/classifier';
+import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import { env } from '@/env';
@@ -294,6 +295,44 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     redirect(
       `/pratiche/nuova?error=${encodeURIComponent(
         `Dati incompleti: ${esitoSchema.mancanti.join(', ')}`,
+      )}`,
+    );
+  }
+
+  // P1.1 — Hard-block pre-invio: classifica i documenti di parte allegati e
+  // blocca il submit se almeno uno NON passa il gating rule-based. L'override
+  // admin resta la valvola di sfogo post-submit (qui i FAILED non vengono mai
+  // creati). Stessi nomi campo del loop di persistenza piu' sotto.
+  const PARTY_DOC_TIPI = [
+    'CI_FRONTE',
+    'CI_RETRO',
+    'CODICE_FISCALE',
+    'PROCURA',
+    'VISURA_CAMERALE',
+    'PERMESSO_SOGGIORNO',
+  ] as const;
+  const gatingCandidates: GatingCandidate[] = [];
+  for (const owner of ['venditore', 'acquirente'] as const) {
+    for (const docTipo of PARTY_DOC_TIPI) {
+      const f = formData.get(`${owner}_${docTipo}`);
+      if (!(f instanceof File) || f.size === 0) continue;
+      gatingCandidates.push({
+        owner,
+        tipo: docTipo,
+        mimeType: f.type,
+        sizeBytes: f.size,
+        originalFilename: f.name,
+      });
+    }
+  }
+  const blocking = findBlockingDocuments(gatingCandidates);
+  if (blocking.length > 0) {
+    const summary = blocking
+      .map((b) => `${b.owner} ${b.tipo}: ${b.reason}`)
+      .join(' | ');
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        `Documenti non validi, ricaricali prima di inviare — ${summary}`,
       )}`,
     );
   }

@@ -169,12 +169,14 @@ export default async function PraticaDetailPage({
                 </Button>
               </form>
             )}
-            <Link
-              href="#"
-              className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-            >
-              Scarica ZIP
-            </Link>
+            {pratica.documenti.length > 0 && (
+              <a
+                href={`/api/pratiche/${pratica.id}/zip`}
+                className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+              >
+                Scarica ZIP
+              </a>
+            )}
           </div>
         </header>
 

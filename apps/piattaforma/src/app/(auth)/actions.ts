@@ -1,6 +1,7 @@
 'use server';
 
 import { AuthError } from 'next-auth';
+import bcrypt from 'bcryptjs';
 import { Prisma } from '@pv/db';
 import { prisma } from '@pv/db';
 
@@ -28,6 +29,8 @@ import {
 
 export type LoginActionState = {
   error?: string;
+  /** true quando la password è corretta ma serve il codice 2FA. */
+  needTotp?: boolean;
 };
 
 export async function loginAction(
@@ -57,17 +60,45 @@ export async function loginAction(
     };
   }
 
+  const totp = (formData.get('totp') as string | null)?.trim() || undefined;
+
+  // Pre-check: individua l'utente la cui password combacia (mirror di authorize)
+  // per capire se il 2FA è richiesto. Non logga: serve solo a decidere se
+  // mostrare il campo codice. La password NON viene mai ritornata al client.
+  const candidates = await prisma.user.findMany({
+    where: { email: emailLower, deletedAt: null, status: { not: 'SUSPENDED' } },
+    select: { passwordHash: true, twoFactorEnabled: true },
+    orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
+  });
+  let matched: (typeof candidates)[number] | null = null;
+  for (const c of candidates) {
+    if (await bcrypt.compare(parsed.data.password, c.passwordHash)) {
+      matched = c;
+      break;
+    }
+  }
+  if (!matched) {
+    return { error: 'Credenziali non valide' };
+  }
+  if (matched.twoFactorEnabled && !totp) {
+    return { needTotp: true };
+  }
+
   try {
     await signIn('credentials', {
       email: emailLower,
       password: parsed.data.password,
+      totp,
       redirectTo: '/dashboard',
     });
     resetRateLimit(rateKey);
     return {};
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: 'Credenziali non valide' };
+      return {
+        error: matched.twoFactorEnabled ? 'Codice 2FA non valido' : 'Credenziali non valide',
+        needTotp: matched.twoFactorEnabled || undefined,
+      };
     }
     throw error;
   }

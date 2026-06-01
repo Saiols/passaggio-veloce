@@ -4,6 +4,9 @@ import { prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
 import { buildPraticaZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -75,7 +78,7 @@ export async function GET(
   const filename = `${pratica.codicePratica ?? pratica.id}.zip`;
   const headers = new Headers();
   headers.set('Content-Type', 'application/zip');
-  headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+  headers.set('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
   headers.set('Content-Length', String(zipBuffer.length));
   headers.set('Cache-Control', 'private, no-store');
   return new Response(new Uint8Array(zipBuffer), { headers });

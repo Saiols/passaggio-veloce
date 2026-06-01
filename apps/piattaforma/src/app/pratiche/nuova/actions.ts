@@ -463,6 +463,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   });
 
   // Salvo record documento + mock OCR result snapshot
+  const ocrManuale = formData.get('ocrManuale') === 'true';
   const ocrSnapshot: Prisma.InputJsonValue = {
     targa: d.targa,
     telaio: d.telaio,
@@ -470,6 +471,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     dataImmatricolazione: d.dataImmatricolazione,
     preImm2015: d.preImm2015,
     flagComodatoDuso: d.flagComodatoDuso,
+    ocrManuale,
   };
 
   await prisma.documento.create({
@@ -482,7 +484,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       sizeBytes: put.sizeBytes,
       originalFilename: put.originalFilename,
       uploadedById: userId,
-      ocrStato: 'SUCCESS',
+      ocrStato: ocrManuale ? 'NONE' : 'SUCCESS',
       ocrProvider: env.OCR_PROVIDER,
       ocrData: ocrSnapshot,
       ocrAt: now,

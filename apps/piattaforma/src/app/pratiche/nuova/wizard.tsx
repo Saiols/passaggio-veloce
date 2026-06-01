@@ -138,6 +138,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [librettoName, setLibrettoName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrManuale, setOcrManuale] = useState(false);
   const [ocr, setOcr] = useState<Ocr | null>(null);
 
   const [venditore, setVenditore] = useState<Parte>(emptyParte());
@@ -260,6 +261,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     fd.append('dataImmatricolazione', ocr.dataImmatricolazione);
     fd.append('preImm2015', ocr.preImm2015 ? 'true' : 'false');
     fd.append('flagComodatoDuso', ocr.flagComodatoDuso ? 'true' : 'false');
+    fd.append('ocrManuale', ocrManuale ? 'true' : 'false');
 
     fd.append('venditoreIsPG', venditore.isPG ? 'true' : 'false');
     if (venditore.isPG) {
@@ -491,8 +493,28 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 </div>
               )}
               {ocrError && (
-                <div className="mt-3">
+                <div className="mt-3 space-y-3">
                   <Alert variant="error">{ocrError}</Alert>
+                  {!ocr && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setOcr({
+                          targa: '',
+                          telaio: '',
+                          proprietarioAttuale: '',
+                          dataImmatricolazione: '',
+                          preImm2015: false,
+                          flagComodatoDuso: false,
+                        });
+                        setOcrManuale(true);
+                        setOcrError(null);
+                      }}
+                    >
+                      Inserisci i dati manualmente
+                    </Button>
+                  )}
                 </div>
               )}
 

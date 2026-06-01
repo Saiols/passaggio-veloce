@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { env } from '@/env';
 import { getEmail } from '@/lib/providers/email';
+import { isOptionalTipo, shouldSend } from './preferences';
 import {
   tplN10AdminEscalation,
   tplN11BrokerEscalation,
@@ -19,6 +20,7 @@ import {
   tplN23ReferralFirstPratica,
   tplN24PayoutAffiliationAvailable,
   tplN25MonthlyAffiliationRecap,
+  tplN31ValutaAgenzia,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -42,6 +44,7 @@ import {
   type N23ReferralFirstPraticaPayload,
   type N24PayoutAffiliationAvailablePayload,
   type N25MonthlyAffiliationRecapPayload,
+  type N31ValutaAgenziaPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -137,6 +140,11 @@ type SendInput =
       tipo: 'N25_MONTHLY_AFFILIATION_RECAP';
       target: Target;
       payload: N25MonthlyAffiliationRecapPayload;
+    }
+  | {
+      tipo: 'N31_VALUTA_AGENZIA';
+      target: Target;
+      payload: N31ValutaAgenziaPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -187,6 +195,8 @@ function render(input: SendInput): NotificaContent {
       return tplN24PayoutAffiliationAvailable(input.payload);
     case 'N25_MONTHLY_AFFILIATION_RECAP':
       return tplN25MonthlyAffiliationRecap(input.payload);
+    case 'N31_VALUTA_AGENZIA':
+      return tplN31ValutaAgenzia(input.payload);
   }
 }
 
@@ -198,6 +208,45 @@ function render(input: SendInput): NotificaContent {
 export async function sendNotification(input: SendInput): Promise<void> {
   const content = render(input);
   const payload: Prisma.InputJsonValue = JSON.parse(JSON.stringify(input.payload));
+
+  // P3: gating preferenze + footer unsubscribe SOLO per le notifiche opzionali.
+  // Le transazionali saltano interamente questo blocco (comportamento invariato).
+  let html = content.html;
+  let text = content.text;
+  if (isOptionalTipo(input.tipo) && input.target.userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: input.target.userId },
+      select: { notifPrefs: true, unsubscribeToken: true },
+    });
+    const prefs = (user?.notifPrefs as Record<string, boolean> | null) ?? null;
+    if (!shouldSend(input.tipo, prefs)) {
+      await prisma.notificaInviata.create({
+        data: {
+          tipo: input.tipo,
+          canale: 'EMAIL',
+          stato: 'SKIPPED',
+          userId: input.target.userId,
+          companyId: input.target.companyId ?? null,
+          destinazione: input.target.email,
+          subject: content.subject,
+          bodyPreview: content.text.slice(0, 200),
+          payload: JSON.parse(JSON.stringify(input.payload)) as Prisma.InputJsonValue,
+        },
+      });
+      return;
+    }
+    let token = user?.unsubscribeToken ?? null;
+    if (!token) {
+      token = crypto.randomUUID();
+      await prisma.user.update({
+        where: { id: input.target.userId },
+        data: { unsubscribeToken: token },
+      });
+    }
+    const url = `${env.NEXT_PUBLIC_APP_URL}/unsubscribe?token=${token}`;
+    html = html + `<p style="margin:16px 0 0;font-size:11px;color:#94a3b8;text-align:center">Non vuoi più ricevere queste email? <a href="${url}" style="color:#94a3b8">Disattiva</a></p>`;
+    text = text + `\n\nPer non ricevere più queste email: ${url}`;
+  }
 
   const record = await prisma.notificaInviata.create({
     data: {
@@ -219,8 +268,8 @@ export async function sendNotification(input: SendInput): Promise<void> {
       to: input.target.email,
       from: env.EMAIL_FROM,
       subject: content.subject,
-      html: content.html,
-      text: content.text,
+      html,
+      text,
       tag: input.tipo,
     });
 

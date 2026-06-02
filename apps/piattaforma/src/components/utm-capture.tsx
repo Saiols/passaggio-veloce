@@ -43,7 +43,8 @@ export function UtmCapture() {
     if (Object.keys(fields).length === 0) return;
 
     const value = encodeURIComponent(JSON.stringify(fields));
-    document.cookie = `${COOKIE_NAME}=${value}; path=/; max-age=${MAX_AGE_SECONDS}; SameSite=Lax`;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${COOKIE_NAME}=${value}; path=/; max-age=${MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
   }, []);
 
   return null;

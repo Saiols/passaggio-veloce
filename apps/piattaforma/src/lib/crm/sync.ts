@@ -1,5 +1,5 @@
 import 'server-only';
-import { prisma, CrmFonteAcquisizione } from '@pv/db';
+import { prisma, CrmFonteAcquisizione, type Prisma } from '@pv/db';
 import { isPreIscrizione, normalizePhone } from './util';
 
 export { normalizePhone };
@@ -94,7 +94,7 @@ export async function tryMatchCrmContact(
         select: { id: true, status: true },
       });
       if (found) {
-        const data: Parameters<typeof prisma.crmContact.update>[0]['data'] = {
+        const data: Prisma.CrmContactUncheckedUpdateInput = {
           companyId,
           // Auto-promote a S7 solo se il contatto era pre-iscrizione
           // (S0..S6). Se era già più avanti (es. ri-iscrizione), preserva.

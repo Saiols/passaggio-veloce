@@ -13,7 +13,10 @@ vi.mock('@pv/db', () => ({
 vi.mock('next-auth', () => ({ AuthError: class AuthError extends Error {} }));
 vi.mock('@/auth', () => ({ signIn: vi.fn(), signOut: vi.fn() }));
 vi.mock('@/env', () => ({ env: { DEMO_MODE: true } }));
-vi.mock('next/headers', () => ({ headers: async () => new Map() }));
+vi.mock('next/headers', () => ({
+  headers: async () => new Map(),
+  cookies: async () => ({ get: () => undefined }),
+}));
 vi.mock('@/lib/crm/sync', () => ({ tryMatchCrmContact: vi.fn() }));
 vi.mock('@/lib/affiliazione/notifications', () => ({ notifyReferralSignup: vi.fn() }));
 vi.mock('@/lib/providers/storage', () => ({ getStorage: vi.fn() }));

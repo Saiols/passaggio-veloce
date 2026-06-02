@@ -299,6 +299,12 @@ model Company {
   /// anti-collusione "stesso IP signup tra referente e referral".
   signupIp String?
 
+  // Attribuzione marketing UTM (first-touch, catturati alla landing)
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+
   // F-01: sospensione temporanea (riattivabile). Diversa da deletedAt (totale).
   // null = ACTIVE; valorizzato = SUSPENDED.
   suspendedAt DateTime?

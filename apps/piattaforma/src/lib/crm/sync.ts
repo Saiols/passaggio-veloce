@@ -1,5 +1,5 @@
 import 'server-only';
-import { prisma } from '@pv/db';
+import { prisma, CrmFonteAcquisizione } from '@pv/db';
 import { isPreIscrizione, normalizePhone } from './util';
 
 export { normalizePhone };
@@ -49,6 +49,7 @@ export async function tryMatchCrmContact(
         email: true,
         telefono: true,
         partitaIva: true,
+        referenteId: true,
       },
     });
     if (!company) return { matched: false };
@@ -93,17 +94,24 @@ export async function tryMatchCrmContact(
         select: { id: true, status: true },
       });
       if (found) {
+        const data: Parameters<typeof prisma.crmContact.update>[0]['data'] = {
+          companyId,
+          // Auto-promote a S7 solo se il contatto era pre-iscrizione
+          // (S0..S6). Se era già più avanti (es. ri-iscrizione), preserva.
+          status: isPreIscrizione(found.status) ? STATUS_S7 : found.status,
+          iscrizioneComp: true,
+          iscrizioneAt: new Date(),
+          platStatus: 'INATTIVO',
+        };
+        // Arricchimento conservativo: se la company è arrivata via referral,
+        // marca la fonte come REFERRAL. Altrimenti NON tocchiamo `fonte` per
+        // preservare lo storico del lead (es. CSV_INIZIALE).
+        if (company.referenteId) {
+          data.fonte = CrmFonteAcquisizione.REFERRAL;
+        }
         await prisma.crmContact.update({
           where: { id: found.id },
-          data: {
-            companyId,
-            // Auto-promote a S7 solo se il contatto era pre-iscrizione
-            // (S0..S6). Se era già più avanti (es. ri-iscrizione), preserva.
-            status: isPreIscrizione(found.status) ? STATUS_S7 : found.status,
-            iscrizioneComp: true,
-            iscrizioneAt: new Date(),
-            platStatus: 'INATTIVO',
-          },
+          data,
         });
         return { matched: true, contactId: found.id, via: step.via };
       }

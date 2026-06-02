@@ -4,6 +4,7 @@ import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
 import { SiteChatbot } from '@/components/site-chatbot';
 import { SiteFooter } from '@/components/site-footer';
+import { UtmCapture } from '@/components/utm-capture';
 import { isGatedHost } from '@/lib/landing-gate';
 import type { Metadata } from 'next';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
@@ -47,6 +48,7 @@ export default async function HomePage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-white">
+      <UtmCapture />
       <SiteHeader />
       <SiteChatbot posizione="Homepage" />
       <JsonLd

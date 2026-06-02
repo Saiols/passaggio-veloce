@@ -9,8 +9,9 @@ import { signIn, signOut } from '@/auth';
 import { env } from '@/env';
 import { hashPassword } from '@/lib/auth/password';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
-import { headers } from 'next/headers';
+import { headers, cookies } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
+import { parseUtmCookie } from '@/lib/crm/utm';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
 import { anonymizeIp } from '@/lib/net/ip';
 import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
@@ -245,6 +246,11 @@ export async function registerAction(
     hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? null;
   const signupIp = anonymizeIp(signupIpRaw);
 
+  // Attribuzione marketing: leggi il cookie pv_utm (first-touch catturato alla
+  // landing) e persisti i parametri UTM sulla Company. Parsing difensivo.
+  const utmRaw = (await cookies()).get('pv_utm')?.value;
+  const utm = parseUtmCookie(utmRaw);
+
   // Pre-generiamo gli id così lo scope storage coincide col companyId e i
   // Documento possono referenziare l'uploader (User) nella stessa transaction.
   const companyId = randomUUID();
@@ -303,6 +309,10 @@ export async function registerAction(
           referralCode,
           referenteId,
           signupIp,
+          utmSource: utm.source ?? null,
+          utmMedium: utm.medium ?? null,
+          utmCampaign: utm.campaign ?? null,
+          utmContent: utm.content ?? null,
           visuraCameraleData: new Date(visuraData),
         },
       });

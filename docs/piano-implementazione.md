@@ -37,7 +37,7 @@
 - [x] Definizione fallback se nessuna delle 5 agenzie accetta la pratica (vedi §0.5)
 - [ ] Redazione T&C con clausola limitazione responsabilità + autorizzazione SEPA
 - [ ] Informativa privacy GDPR (dati sensibili CI/CF/visura)
-- [ ] Policy data retention documenti caricati
+- [x] Policy data retention documenti caricati — `lib/documenti/retention.ts` (hard-delete 90gg, purge bozze 30gg) + job purge + Vercel cron daily 03:30
 - [ ] Contratto tipo agenzia (obbligo +100 EUR, divieto sovraccarico)
 - [ ] Contratto tipo dealer/broker (wallet, payout, fatturazione)
 
@@ -197,7 +197,7 @@
 - [x] Approvazione automatica account (stato `PENDING_EMAIL_VERIFICATION` → `ACTIVE`)
 - [x] Selezione ruolo (dealer / agenzia) in fase di registrazione
 - [x] Step aggiuntivo per agenzia: inserimento orari di apertura — pagina `/orari` con fasce settimanali salvate su `OrariApertura`
-- [ ] **UTM capture**: salvataggio `utm_contact` / `utm_source` da landing + `/register` → campo `User.crmContactId` (per matching CRM, vedi `crm-architettura.md` §10.3)
+- [x] **UTM capture**: cookie first-touch `pv_utm` (utm_source/medium/campaign/content) catturato in landing, persistito alla registrazione sui nuovi campi `Company.utmSource/utmMedium/utmCampaign/utmContent`. Enrichment CRM conservativo (`tryMatchCrmContact` setta `CrmContact.fonte=REFERRAL` solo se `company.referenteId` presente, preservando la fonte storica del lead). Il param referral `ref` era già gestito separatamente.
 - [ ] **Webhook `user.signup.started`** emesso all'apertura del wizard Step 1 (evento pixel CRM §3.4)
 - [ ] **Webhook `user.signup.completed`** emesso al termine del wizard (Caso A/B §4 doc CRM)
 - [ ] Outbox `CrmOutboundEvent` + worker retry con backoff (vedi `crm-architettura.md` §10.4)
@@ -206,7 +206,7 @@
 - [x] Login con Auth.js v5 (Credentials provider, JWT strategy)
 - [x] Password policy (min 10, maiusc/minusc/numero) + hashing bcrypt 12 rounds
 - [~] Reset password — pagina placeholder, flusso reale in Fase 6
-- [ ] 2FA opzionale (email/OTP)
+- [x] 2FA opzionale — TOTP (authenticator app) + backup codes, ENFORCED al sign-in (non email/OTP): `authorize` verifica TOTP o backup code, `loginAction` pre-check `needTotp` per il secondo step
 - [ ] Rate limiting login
 - [ ] Audit log accessi (campo `lastLoginAt` già presente)
 
@@ -226,8 +226,8 @@
 - [x] Provider abstraction `StorageProvider` con impl locale (`./uploads/`) swap-ready a S3
 - [ ] Anteprima documenti (richiede route serve file + auth check)
 - [ ] Encryption at rest (S3 SSE quando swap)
-- [ ] Download singolo + download ZIP pratica completa
-- [ ] Soft delete + retention policy
+- [x] Download singolo + download ZIP pratica completa — download singolo già disponibile; ZIP completato via `buildPraticaZip` (jszip) + endpoint `app/api/pratiche/[id]/zip/route.ts` (auth ownership, nodejs runtime, force-dynamic)
+- [x] Soft delete + retention policy — `lib/documenti/retention.ts` + job `purge-deleted-documenti` + Vercel cron daily 03:30 (hard-delete 90gg, purge bozze 30gg)
 
 ### 3.2 OCR libretto di circolazione
 - [x] Provider abstraction `OcrProvider` con `MockOcrProvider` (dati plausibili deterministici su hash buffer)
@@ -294,13 +294,13 @@
 - [x] Lista pratiche in arrivo (`/inbox` con PENDING + storico ultime decisioni)
 - [x] Pulsante Accetta / Rifiuta (transazionale, con motivazione rifiuto opzionale)
 - [ ] Messaggio "Dossier completo e verificato da TF" (aspetta gating IA completo)
-- [ ] Download singolo + ZIP pratica (pulsante placeholder presente)
+- [x] Download singolo + ZIP pratica — ZIP completato: il pulsante "Scarica ZIP" su `/pratiche/[id]` (prima placeholder) ora chiama l'endpoint reale `app/api/pratiche/[id]/zip/route.ts`
 - [x] Generazione codice pratica (`PV-YYYY-NNNNN`)
 - [ ] Campo codice pratica interno agenzia + note (campo DB presente, UI da fare)
-- [ ] Countdown 20 giorni visibile (autoAddebitoAt salvato, UI countdown da fare)
+- [x] Countdown 20 giorni visibile — `lib/pratiche/countdown.ts` (`computeGiorniResidui` + `countdownLevel`), countdown ora mostrato in UI dashboard agenzia
 - [x] Pulsante "Firma avvenuta" (Step 3) — transazionale: pratica FIRMATA + credito wallet broker + FeeAddebito SCHEDULED
 - [x] Storico pratiche completate (`/pratiche` filtrabile per stato)
-- [ ] Riepilogo fee mensili e auto-addebiti (dati in DB, dashboard da comporre)
+- [x] Riepilogo fee mensili e auto-addebiti — `lib/fee/recap.ts` (`groupFeeByMonth`), nuova pagina `/addebiti` + voce nav AGENZIA, sezione "Prossimi addebiti" sulla dashboard agenzia
 
 ---
 
@@ -387,7 +387,7 @@
 - [ ] Scheduler cron solleciti (ogni 5gg)
 - [ ] Scheduler cron auto-addebiti (giorno 20)
 - [ ] Scheduler cron payout (soglia 1000)
-- [ ] Unsubscribe / preferenze notifiche (solo per quelle non obbligatorie)
+- [x] Unsubscribe / preferenze notifiche (solo per quelle non obbligatorie) — `lib/notifiche/preferences.ts` (OPTIONAL_TIPI N3/N7/N25/N31, `shouldSend`), campi `User.notifPrefs` + `User.unsubscribeToken`, pagina pubblica `/unsubscribe` (token), pagina `/profilo/notifiche`, NotificaStato SKIPPED + footer unsubscribe nelle email. Nuova notifica N31 (valuta agenzia al dealer post-firma).
 
 ---
 
@@ -571,7 +571,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 ## FASE 11 - QA, Compliance, Lancio
 
 ### 11.1 Testing
-- [ ] Unit test core (gating documentale, wallet, algoritmo distribuzione)
+- [~] Unit test core (gating documentale, wallet, algoritmo distribuzione) — coverage chiusa per i nuovi helper puri (gating hard-block, retention, countdown, fee recap, verifyTwoFactor). E2E Playwright: smoke aggiornato + login 2FA (happy path + codice errato), eseguiti serialmente (workers=1) per il rate-limiter login. Non aggiunti E2E full-UI registrazione→firma né hard-block (coperti a livello unit).
 - [ ] Integration test flussi end-to-end
 - [ ] Test race condition invio multiplo
 - [ ] Test auto-addebito giorno 20
@@ -766,20 +766,20 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ---
 
-## Stato MVP al 2026-05-06
+## Stato MVP al 2026-06-03
 
-**Progresso complessivo (effort-weighted): ~92%** · **Production:** https://passaggio-veloce-piattaforma-cm8unpjkg-saiols-projects.vercel.app/
+**Progresso complessivo (effort-weighted): ~95%** · **Production:** https://passaggio-veloce-piattaforma-cm8unpjkg-saiols-projects.vercel.app/
 
 | Fase | % | Note |
 |---|---|---|
 | 0 Pre-sviluppo | ~30% | Stack scelto, naming, CTO. Resto su decisioni business/legali |
 | 1 Fondamenta | ~85% | Monorepo, CI, DB Prisma, Sentry, Docker, seed, **deploy Vercel attivo + Vercel Cron schedule (A2)**. Manca staging dedicato + backup automatici Neon |
-| 2 Auth | ~92% | Login, wizard split dealer/agenzia, invito utenti team, reset password, **2FA TOTP setup pronto + rate-limit login attivo (A9)**. Manca solo email reale (Resend) e check 2FA al sign-in (backlog) |
+| 2 Auth | ~96% | Login, wizard split dealer/agenzia, invito utenti team, reset password, **2FA TOTP ora ENFORCED al sign-in (TOTP + backup code), non più solo setup (A9)** + rate-limit login attivo. Manca solo email reale (Resend) |
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
-| 3 Documenti/OCR/Pratiche | ~80% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**, **OCR Mindee provider integrato (Fase 1 sprint OCR 2026-05) — pronto per swap su prod test appena env vars disponibili**. Document AI custom-trained in attesa di raccolta libretti reali dal beta (Fase 2 sprint OCR). |
+| 3 Documenti/OCR/Pratiche | ~88% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**, **hard-block pre-invio su doc FAILED + fallback OCR manuale + download ZIP pratica + retention/purge cron**, **OCR Mindee provider integrato (Fase 1 sprint OCR 2026-05) — pronto per swap su prod test appena env vars disponibili**. Document AI custom-trained in attesa di raccolta libretti reali dal beta (Fase 2 sprint OCR). |
 | 4 Distribuzione + agenzia | 100% | Engine 3-round, ore lavorative, ranking con **anti-abuso decay rifiuti + auto-suspend 5 timeout (A3)**, **110 province italiane (A3)**, cron automatico (A2). Tutto pronto |
 | 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1). Modello fatturazione delegata in spec — vedi `sistema-fatturazione.md` (5 bundle FT-A/B/C/D/E) |
-| 6 Notifiche | ~95% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6). Cron Vercel automatico (A2). Manca solo unsubscribe granulare |
+| 6 Notifiche | ~98% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6) + N31 valuta agenzia post-firma. Cron Vercel automatico (A2). **Unsubscribe granulare + preferenze opt-out ora implementati** |
 | 7 Valutazioni/Ranking | 100% | Form 5⭐, rating in distribuzione, sospensione auto, **unsuspend UI con nota motivazione + banner valuta dashboard dealer (A7)** |
 | 8 Listini / Osservatorio | 100% | **Modulo intero in prod (A1)**: form/upload listino agenzia, engine osservatorio per provincia, benchmark "tu vs media zona", dashboard admin |
 | 9 Admin panel | ~95% | Tutto in prod incluso **audit log accessi (A5)**. Manca solo configurazione parametri runtime (DB-driven, backlog) |
@@ -873,14 +873,14 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - `.gitignore` esteso (playwright-report, test-results).
 - Backlog: copy legali definitivi (B10/B11), test E2E avanzati (registrazione + wizard pratica + firma — richiedono fixtures e teardown DB).
 
-**A9. ✅ DONE — 2FA TOTP setup + rate limit login**
+**A9. ✅ DONE — 2FA TOTP setup + rate limit login + ENFORCEMENT al sign-in**
 - Schema: `User.twoFactorEnabled`, `twoFactorSecret`, `twoFactorBackupCodes` (JSON, hashed bcrypt)
 - `lib/auth/totp.ts` con `otplib` v13: generateTotpSecret, verifyTotpCode (epochTolerance ±30s), generateBackupCodes (10× 8-char), hashBackupCodes, verifyBackupCode
 - Pagina `/profilo/sicurezza`: setup wizard con QR code (qrcode lib), conferma con codice TOTP, mostra backup codes UNA VOLTA, disable con password
 - Card "Sicurezza account" su /profilo
 - `lib/auth/rate-limit.ts`: sliding window in-memory (Map), 5 tentativi / 15 min poi block 15 min, swap-ready a Redis. 4 unit test verdi
 - Cablato in `loginAction`: chiave `login:{ip-anonimizzato}:{email}`, reset al login OK
-- Backlog: integrazione check 2FA al sign-in (oggi setup pronto + secret salvato, ma il signIn callback non interroga il codice TOTP — serve custom credentials provider). Punto chiaro nel commit.
+- ✅ Check 2FA al sign-in ora ENFORCED: `authorize` (auth.ts) è il verificatore autoritativo (TOTP via `otplib` OPPURE backup code, con consumo+persistenza del backup code usato), `loginAction` fa un pre-check che ritorna `needTotp` per mostrare il campo 2FA come secondo step, login form controllato con campo TOTP condizionale. Nuovo helper `verifyTwoFactor` + test, query condivisa `activeUserCredentialsQuery`.
 
 **A10. ✅ DONE — [2026-05-24] Landing SEO/AEO fondamenta tecniche**
 - `lang="it-IT"` su `<html>`, metadata completi Next.js (title, description, canonical, OG, Twitter Card) su layout + ogni pagina pubblica

@@ -77,7 +77,7 @@ export default async function HomePage() {
               <span className="text-pv-navy-700">veloci e sicuri</span>.
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-pv-slate-700 sm:text-base">
-              <strong>Passaggio Veloce</strong> è il broker digitale italiano che connette
+              <strong>Passaggio Veloce</strong>{' '}è il broker digitale italiano che connette
               concessionarie auto e agenzie pratiche in un&apos;unica piattaforma: gestisci pratiche,
               documenti e pagamenti senza carta, in conformità ACI, GDPR e SDI.
             </p>

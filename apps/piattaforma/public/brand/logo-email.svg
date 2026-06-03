@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 64" role="img" aria-label="Passaggio Veloce">
+  <g>
+    <path d="M14 8 H38 L52 22 V58 H14 Z" fill="#ffffff"/>
+    <rect x="21" y="27" width="22" height="2" rx="1" fill="#ff7a00" opacity=".9"/>
+    <rect x="21" y="33" width="26" height="2" rx="1" fill="#ff7a00" opacity=".9"/>
+    <rect x="21" y="39" width="16" height="2" rx="1" fill="#ff7a00" opacity=".9"/>
+    <path d="M37 13 L26 33 L34 33 L29 51 L46 29 L38 29 Z" fill="#ff7a00" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(68 0) skewX(-6)">
+    <text y="44" font-family="Geist, Inter, 'Helvetica Neue', Arial, sans-serif" font-style="italic" font-weight="900" font-size="30" letter-spacing="-0.5">
+      <tspan fill="#ffffff">Passaggio</tspan><tspan fill="#ff7a00">Veloce</tspan>
+    </text>
+  </g>
+</svg>

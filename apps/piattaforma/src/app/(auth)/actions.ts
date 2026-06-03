@@ -401,9 +401,29 @@ export async function registerAction(
       });
     }
 
-    // TODO Fase 6: inviare email di verifica via Resend con link
-    // /verify-email?token=verificationToken
-    // Per ora ritorniamo il token cosi e' visibile in dev.
+    // Email di conferma registrazione (best-effort: un errore non blocca la registrazione).
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+      const { getEmail } = await import('@/lib/providers/email');
+      const { tplRegistrazioneConferma } = await import('@/lib/auth/email-templates');
+      const mail = tplRegistrazioneConferma({
+        nome: account.nome,
+        ragioneSociale: company.ragioneSociale,
+        tipo: company.type,
+        verifyUrl: `${appUrl}/verify-email?token=${verificationToken}`,
+        loginUrl: `${appUrl}/login`,
+        needsVerification: !env.DEMO_MODE,
+      });
+      await getEmail().send({
+        to: emailLower,
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        tag: 'registrazione',
+      });
+    } catch (e) {
+      console.warn('[registrazione] invio email conferma fallito', (e as Error).message);
+    }
 
     return { ok: true, emailVerificationToken: verificationToken };
   } catch (error) {

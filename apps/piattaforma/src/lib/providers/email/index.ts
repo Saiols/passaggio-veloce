@@ -2,6 +2,7 @@ import 'server-only';
 import path from 'node:path';
 import { env } from '@/env';
 import { ConsoleEmailProvider } from './console';
+import { ResendEmailProvider } from './resend';
 import type { EmailProvider } from './types';
 
 export * from './types';
@@ -18,8 +19,13 @@ export function getEmail(): EmailProvider {
       instance = new ConsoleEmailProvider(dumpDir);
       break;
     }
-    case 'resend':
-      throw new Error('Resend email provider not yet implemented');
+    case 'resend': {
+      if (!env.RESEND_API_KEY) {
+        throw new Error('RESEND_API_KEY mancante con EMAIL_PROVIDER=resend');
+      }
+      instance = new ResendEmailProvider(env.RESEND_API_KEY, env.EMAIL_FROM);
+      break;
+    }
     default:
       throw new Error(`Unknown email provider: ${env.EMAIL_PROVIDER}`);
   }

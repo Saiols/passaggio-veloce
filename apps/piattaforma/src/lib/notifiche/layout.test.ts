@@ -51,3 +51,17 @@ describe('unsubscribeFooterLine', () => {
     expect(l).toContain('Preferenze');
   });
 });
+
+describe('meccanismo token PV_UNSUB nel footer', () => {
+  it('il token unsubscribe viene rimpiazzato dentro il footer', () => {
+    const base = emailLayout('<p>x</p>');
+    // Percorso opzionale: il token viene sostituito con il footer unsubscribe
+    const withUnsub = base.replace('<!--PV_UNSUB-->', unsubscribeFooterLine('https://x/u', 'https://x/p'));
+    expect(withUnsub).not.toContain('<!--PV_UNSUB-->');
+    expect(withUnsub).toContain('Disiscriviti');
+    // Percorso non-opzionale: il token viene rimosso (strip)
+    const stripped = base.replace('<!--PV_UNSUB-->', '');
+    expect(stripped).not.toContain('<!--PV_UNSUB-->');
+    expect(stripped).not.toContain('Disiscriviti');
+  });
+});

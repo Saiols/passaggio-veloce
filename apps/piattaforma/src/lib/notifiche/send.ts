@@ -3,6 +3,7 @@ import { prisma, Prisma } from '@pv/db';
 import { env } from '@/env';
 import { getEmail } from '@/lib/providers/email';
 import { isOptionalTipo, shouldSend } from './preferences';
+import { unsubscribeFooterLine } from './layout';
 import {
   tplN10AdminEscalation,
   tplN11BrokerEscalation,
@@ -244,9 +245,13 @@ export async function sendNotification(input: SendInput): Promise<void> {
       });
     }
     const url = `${env.NEXT_PUBLIC_APP_URL}/unsubscribe?token=${token}`;
-    html = html + `<p style="margin:16px 0 0;font-size:11px;color:#94a3b8;text-align:center">Non vuoi più ricevere queste email? <a href="${url}" style="color:#94a3b8">Disattiva</a></p>`;
-    text = text + `\n\nPer non ricevere più queste email: ${url}`;
+    // Inietta il link disiscrizione + preferenze nel footer sostituendo il token segnaposto
+    const prefUrl = `${env.NEXT_PUBLIC_APP_URL}/profilo/notifiche`;
+    html = html.replace('<!--PV_UNSUB-->', unsubscribeFooterLine(url, prefUrl));
+    text = text + `\n\nPer non ricevere più queste email: ${url}\nGestisci le preferenze: ${prefUrl}`;
   }
+  // Rimuove il token segnaposto per le notifiche non-opzionali (o se già sostituito, è un no-op)
+  html = html.replace('<!--PV_UNSUB-->', '');
 
   const record = await prisma.notificaInviata.create({
     data: {

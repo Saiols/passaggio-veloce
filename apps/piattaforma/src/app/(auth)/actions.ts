@@ -515,17 +515,13 @@ export async function requestPasswordResetAction(
   const { getEmail } = await import('@/lib/providers/email');
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const link = `${appUrl}/reset-password?token=${token}`;
+  const { tplResetPassword } = await import('@/lib/auth/email-templates');
+  const mail = tplResetPassword({ resetUrl: link });
   await getEmail().send({
     to: emailLower,
-    subject: 'Passaggio Veloce — Reimposta la tua password',
-    html: `
-      <p>Ciao,</p>
-      <p>Hai richiesto di reimpostare la password del tuo account Passaggio Veloce.</p>
-      <p>Clicca qui per impostare una nuova password (link valido 2 ore):</p>
-      <p><a href="${link}">${link}</a></p>
-      <p>Se non sei stato tu, ignora questa email.</p>
-    `,
-    text: `Reimposta password: ${link}`,
+    subject: mail.subject,
+    html: mail.html,
+    text: mail.text,
     tag: 'password-reset',
   });
 

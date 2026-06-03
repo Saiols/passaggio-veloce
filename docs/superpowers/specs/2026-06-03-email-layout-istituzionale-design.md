@@ -34,7 +34,7 @@ Rifare **header e footer condivisi** delle email transazionali → tutti i ~28 t
 
 ## Logo email
 
-- Generare `apps/piattaforma/public/brand/logo-email.png` — versione **due-toni**: documento bianco + **saetta arancio `#ff7a00`** + wordmark bianco (NON il mono tutto bianco). Sorgente: nuovo `logo-email.svg` (white doc + orange bolt + white wordmark) rasterizzato a PNG **@2x** (es. altezza reale 56–64px, mostrato a `height:28px`).
+- Generare `apps/piattaforma/public/brand/logo-email.png` — versione **logo standard adattata al fondo navy**: contorno documento bianco + **linee documento arancio `#ff7a00`** + **saetta arancio** + wordmark **"Passaggio" bianco / "Veloce" arancio** (NON il mono tutto bianco). Sorgente: nuovo `logo-email.svg` rasterizzato a PNG **@2x** (es. altezza reale 56–64px, mostrato a `height:28px`).
 - Riferito via URL **assoluto** basato su `BRAND.url`: `https://passaggioveloce.it/brand/logo-email.png`.
 - `alt="Passaggio Veloce"` come fallback se le immagini sono disattivate.
 

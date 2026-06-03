@@ -6,14 +6,38 @@ const prisma = new PrismaClient();
 // Password dev: "DevPass123!" (rispetta policy: min 10, maiusc/minusc/numero)
 const DEV_PASSWORD = 'DevPass123!';
 
+/**
+ * Upsert idempotente di uno User per email.
+ *
+ * Lo schema usa `@@unique([companyId, email])` (più un partial index per gli
+ * admin platform con companyId NULL), quindi `prisma.user.upsert({ where: { email } })`
+ * non è valido: `email` da sola non è una chiave unica per Prisma. Questo helper
+ * replica la semantica originale (find-by-email → update | create) restando
+ * compatibile con la chiave composta.
+ */
+async function upsertUserByEmail<
+  C extends Record<string, unknown>,
+  U extends Record<string, unknown>,
+>(email: string, data: { create: C; update: U }) {
+  const existing = await prisma.user.findFirst({ where: { email } });
+  if (existing) {
+    return prisma.user.update({
+      where: { id: existing.id },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      data: data.update as any,
+    });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return prisma.user.create({ data: data.create as any });
+}
+
 async function main() {
   console.log('🌱 Seed start');
   const passwordHash = await hash(DEV_PASSWORD, 12);
   const now = new Date();
 
   // Admin piattaforma
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@passaggioveloce.it' },
+  const admin = await upsertUserByEmail('admin@passaggioveloce.it', {
     update: {},
     create: {
       email: 'admin@passaggioveloce.it',
@@ -29,8 +53,7 @@ async function main() {
 
   // Assistente piattaforma (F-03 / D-02): vede pratiche, anagrafiche, wallet,
   // catalogo, escalation. Non vede dashboard finanziaria aggregata.
-  const assistente = await prisma.user.upsert({
-    where: { email: 'assistente@passaggioveloce.it' },
+  const assistente = await upsertUserByEmail('assistente@passaggioveloce.it', {
     update: {},
     create: {
       email: 'assistente@passaggioveloce.it',
@@ -82,6 +105,45 @@ async function main() {
     include: { users: true },
   });
   console.log(`  · dealer: ${dealer1.ragioneSociale} (${dealer1.users[0]?.email})`);
+
+  // ─────────────────────────────────────────────────────────────────────
+  // Utente 2FA deterministico per il test E2E del login a due fattori.
+  // ATTENZIONE: secret TOTP e backup codes sono SOLO per i test locali/E2E,
+  // non vanno mai usati in produzione. Rispecchia dealer1 (ADMIN_AZIENDA
+  // ACTIVE) così che, superato il 2FA, l'utente atterri su /dashboard.
+  // È agganciato alla stessa company di dealer1 (una company può avere più
+  // utenti). Il secret è la stringa base32 grezza, come la salva l'app
+  // (generateTotpSecret ritorna `secret` e viene memorizzato così com'è).
+  // I backup codes "AAAA-BBBB" e "CCCC-DDDD" sono hashati con bcrypt cost 12
+  // — stesso helper/costo di hashBackupCodes — normalizzati a MAIUSCOLO
+  // perché verifyBackupCode confronta sempre l'input in upper-case.
+  const backupCodesPlain = ['AAAA-BBBB', 'CCCC-DDDD'];
+  const twoFactorBackupCodes = await Promise.all(
+    backupCodesPlain.map((c) => hash(c.toUpperCase(), 12)),
+  );
+  const dealer2fa = await upsertUserByEmail('dealer2fa@passaggioveloce.it', {
+    update: {
+      passwordHash,
+      twoFactorEnabled: true,
+      twoFactorSecret: 'KZXW6YTBOI7EQ5LFMRUGS3THNZUWK43F',
+      twoFactorBackupCodes,
+      companyId: dealer1.id,
+    },
+    create: {
+      email: 'dealer2fa@passaggioveloce.it',
+      passwordHash,
+      nome: 'Daniela',
+      cognome: 'Fattori',
+      role: 'ADMIN_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+      companyId: dealer1.id,
+      twoFactorEnabled: true,
+      twoFactorSecret: 'KZXW6YTBOI7EQ5LFMRUGS3THNZUWK43F',
+      twoFactorBackupCodes,
+    },
+  });
+  console.log(`  · dealer 2FA (E2E): ${dealer2fa.email} [2FA ON]`);
 
   // Dealer 2
   const dealer2 = await prisma.company.upsert({
@@ -456,8 +518,7 @@ async function main() {
   const demoPasswordHash = await hash(DEMO_PASSWORD, 12);
 
   // Demo Admin (no company)
-  await prisma.user.upsert({
-    where: { email: 'admin@demo.passaggioveloce.it' },
+  await upsertUserByEmail('admin@demo.passaggioveloce.it', {
     create: {
       email: 'admin@demo.passaggioveloce.it',
       passwordHash: demoPasswordHash,
@@ -492,8 +553,7 @@ async function main() {
     update: {},
   });
 
-  await prisma.user.upsert({
-    where: { email: 'dealer@demo.passaggioveloce.it' },
+  await upsertUserByEmail('dealer@demo.passaggioveloce.it', {
     create: {
       email: 'dealer@demo.passaggioveloce.it',
       passwordHash: demoPasswordHash,
@@ -507,8 +567,7 @@ async function main() {
     update: { passwordHash: demoPasswordHash, companyId: demoDealerCompany.id },
   });
 
-  await prisma.user.upsert({
-    where: { email: 'dealer-junior@demo.passaggioveloce.it' },
+  await upsertUserByEmail('dealer-junior@demo.passaggioveloce.it', {
     create: {
       email: 'dealer-junior@demo.passaggioveloce.it',
       passwordHash: demoPasswordHash,
@@ -543,8 +602,7 @@ async function main() {
     update: {},
   });
 
-  await prisma.user.upsert({
-    where: { email: 'agenzia@demo.passaggioveloce.it' },
+  await upsertUserByEmail('agenzia@demo.passaggioveloce.it', {
     create: {
       email: 'agenzia@demo.passaggioveloce.it',
       passwordHash: demoPasswordHash,
@@ -640,8 +698,7 @@ async function main() {
       create: companyData,
     });
 
-    await prisma.user.upsert({
-      where: { email: args.userEmail },
+    await upsertUserByEmail(args.userEmail, {
       create: {
         email: args.userEmail,
         passwordHash: args.passwordHash,

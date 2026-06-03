@@ -67,16 +67,16 @@ export async function createInvitationAction(email: string): Promise<InviteResul
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const link = `${appUrl}/invito/${token}`;
 
+  const { tplInvitoTeam } = await import('@/lib/auth/email-templates');
+  const mail = tplInvitoTeam({
+    ragioneSociale: company?.ragioneSociale ?? 'Passaggio Veloce',
+    inviteUrl: link,
+  });
   await getEmail().send({
     to: emailLower,
-    subject: `Sei stato invitato in ${company?.ragioneSociale ?? 'Passaggio Veloce'}`,
-    html: `
-      <p>Ciao,</p>
-      <p>Sei stato invitato a unirti a <strong>${company?.ragioneSociale ?? "un'azienda"}</strong> su Passaggio Veloce.</p>
-      <p>Clicca qui per impostare la tua password e accedere (link valido 7 giorni):</p>
-      <p><a href="${link}">${link}</a></p>
-    `,
-    text: `Invito Passaggio Veloce: ${link}`,
+    subject: mail.subject,
+    html: mail.html,
+    text: mail.text,
     tag: 'invitation',
   });
 

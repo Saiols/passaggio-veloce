@@ -12,7 +12,10 @@ import { test, expect } from '@playwright/test';
 
 test('home pubblica con CTA registrazione', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveTitle(/Passaggio Veloce/);
+  // La home è nello stesso route segment del root layout, quindi il template
+  // `%s · Passaggio Veloce` NON si applica al suo title (comportamento Next.js):
+  // il <title> è la stringa descrittiva impostata in page.tsx.
+  await expect(page).toHaveTitle(/Broker digitale per passaggi di proprietà auto/i);
   await expect(
     page.getByRole('link', { name: /Registra la tua azienda/i }).first(),
   ).toBeVisible();
@@ -43,7 +46,11 @@ test('login admin con credenziali seed', async ({ page }) => {
   await page.getByLabel('Password').fill('DevPass123!');
   await page.getByRole('button', { name: 'Accedi' }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 });
-  await expect(page.getByText('Admin Piattaforma')).toBeVisible();
+  // Heading unambiguo della dashboard admin (evita il doppio match su
+  // "Admin Piattaforma" nome utente vs "Admin piattaforma" eyebrow ruolo).
+  await expect(
+    page.getByRole('heading', { name: 'Overview', level: 1 }),
+  ).toBeVisible();
 });
 
 test('team modale Aggiungi utente apre, switch tab, chiude con Esc', async ({

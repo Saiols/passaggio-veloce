@@ -10,7 +10,12 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
-  fullyParallel: true,
+  // Esecuzione SERIALE: il login applica un rate limiter in-memory per IP+email
+  // (5 tentativi / 15 min) e il dev server è single-process. Login concorrenti
+  // dallo stesso IP farebbero scattare il blocco → flakiness. Un solo worker
+  // mantiene i test deterministici (suite smoke piccola, costo trascurabile).
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',

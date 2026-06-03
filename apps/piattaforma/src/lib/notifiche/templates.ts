@@ -7,6 +7,7 @@
  */
 
 import { formatCurrencyCent, formatDate } from '@/lib/format';
+import { emailLayout, ctaButton } from './layout';
 
 export type N1BrokerInvioPayload = {
   codicePratica: string;
@@ -169,26 +170,10 @@ export type N12AffiliazioneCommissionePayload = {
 
 export type NotificaContent = { subject: string; html: string; text: string };
 
-const header = `<div style="background:#0a2540;padding:14px 20px;border-radius:12px 12px 0 0;color:#fff;display:flex;align-items:center;gap:10px">
-  <svg width="28" height="28" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;display:block" aria-hidden="true">
-    <path d="M14 8 H38 L52 22 V58 H14 Z" fill="#ffffff"/>
-    <path d="M37 13 L26 33 L34 33 L29 51 L46 29 L38 29 Z" fill="#ff7a00" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
-  </svg>
-  <strong style="font-size:16px;letter-spacing:-0.01em">Passaggio Veloce</strong>
-</div>`;
-
-const footer = `<p style="margin:24px 0 0;font-size:11px;color:#64748b;text-align:center">
-  Passaggio Veloce &middot; broker digitale per i passaggi di proprietà veicoli
-</p>`;
-
+// Wrapper unificato: delega al layout istituzionale condiviso.
+// Tutti i ~28 template ottengono automaticamente il nuovo look senza modifiche.
 function wrap(body: string): string {
-  return `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto">
-    ${header}
-    <div style="background:#fff;border:1px solid #e2e8f0;border-top:0;padding:20px;border-radius:0 0 12px 12px">
-      ${body}
-    </div>
-    ${footer}
-  </div>`;
+  return emailLayout(body);
 }
 
 export function tplN1BrokerInvio(p: N1BrokerInvioPayload): NotificaContent {
@@ -876,11 +861,7 @@ export function tplN31ValutaAgenzia(p: N31ValutaAgenziaPayload): NotificaContent
       la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
       completata da <strong>${p.agenziaNome}</strong>. La tua valutazione aiuta gli altri broker.
     </p>
-    <p style="margin:0 0 4px">
-      <a href="${p.praticaUrl}" style="display:inline-block;background:#0054a6;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600">
-        Valuta l'agenzia →
-      </a>
-    </p>
+    ${ctaButton(p.praticaUrl, "Valuta l'agenzia →")}
   `);
   return { subject, html, text };
 }

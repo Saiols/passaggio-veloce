@@ -28,6 +28,11 @@ export const BRAND = {
   themeColor: '#0b1e3a',
   // Popolare quando i social aziendali sono attivi.
   sameAs: [] as readonly string[],
+  // Dati legali/contatti per footer email e altri usi.
+  piva: '14688390963',
+  sede: 'Via delle Querce 5 — 20057 Assago (MI)',
+  supportEmail: 'assistenza@passaggioveloce.it',
+  tel: '+39 346 287 7310',
 } as const;
 
 export function siteUrl(path?: string): string {

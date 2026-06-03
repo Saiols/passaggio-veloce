@@ -31,4 +31,12 @@ describe('BRAND', () => {
     expect(siteUrl('privacy')).toBe('https://passaggioveloce.it/privacy');
     expect(siteUrl()).toBe('https://passaggioveloce.it');
   });
+
+  it('espone i dati legali/contatti per il footer email', () => {
+    expect(BRAND.legalName).toBe('Passaggio Veloce SRL');
+    expect(BRAND.piva).toBe('14688390963');
+    expect(BRAND.sede).toBe('Via delle Querce 5 — 20057 Assago (MI)');
+    expect(BRAND.supportEmail).toBe('assistenza@passaggioveloce.it');
+    expect(BRAND.tel).toBe('+39 346 287 7310');
+  });
 });

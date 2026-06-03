@@ -8,6 +8,7 @@
 
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { emailLayout, ctaButton } from './layout';
+import { escapeHtml } from '@/lib/escape-html';
 
 export type N1BrokerInvioPayload = {
   codicePratica: string;
@@ -472,15 +473,6 @@ export function tplN15AccountRiattivato(
     ${motivoHtml}
   `);
   return { subject, html, text };
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 export function tplN16AccountEliminato(

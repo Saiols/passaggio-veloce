@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { escapeHtml } from '@/lib/escape-html';
 import type { EmailProvider, EmailSendInput, EmailSendResult } from './types';
 
 export class ConsoleEmailProvider implements EmailProvider {
@@ -67,12 +68,4 @@ function wrapHtml(input: EmailSendInput): string {
     ${input.html}
   </body>
 </html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

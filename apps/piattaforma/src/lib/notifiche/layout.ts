@@ -1,4 +1,5 @@
 import { BRAND } from '@/lib/seo/brand';
+import { escapeHtml } from '@/lib/escape-html';
 
 const LOGO_URL = `${BRAND.url}/brand/logo-email.png`;
 const NAVY = '#0a2540';
@@ -6,19 +7,11 @@ const ORANGE = '#ff7a00';
 const BORDER = '#e2e8f0';
 const hostLabel = BRAND.url.replace(/^https?:\/\//, '');
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 export function ctaButton(href: string, label: string): string {
+  // Padding sul <td> (non sull'<a>) così Outlook desktop rispetta l'area cliccabile.
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-    <td style="border-radius:8px;background:${ORANGE}">
-      <a href="${escapeHtml(href)}" style="display:inline-block;padding:12px 22px;font-size:14px;font-weight:700;color:#1a1a1a;text-decoration:none;border-radius:8px">${escapeHtml(label)}</a>
+    <td style="border-radius:8px;background:${ORANGE};padding:12px 22px">
+      <a href="${escapeHtml(href)}" style="display:inline-block;font-size:14px;font-weight:700;color:#1a1a1a;text-decoration:none">${escapeHtml(label)}</a>
     </td>
   </tr></table>`;
 }

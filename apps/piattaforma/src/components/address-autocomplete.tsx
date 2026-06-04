@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { Input } from '@/components/ui';
 
 export type AddressParts = {
   /** Via/piazza (route) */
@@ -41,7 +42,6 @@ function parseComponents(
     else if (t.includes('administrative_area_level_2'))
       out.provincia = (c.shortText ?? '').toUpperCase();
   }
-  // Fallback comune se manca "locality" (alcuni comuni usano postal_town / livello 3)
   if (!out.citta) {
     for (const c of components ?? []) {
       if (c.types.includes('postal_town') || c.types.includes('administrative_area_level_3')) {
@@ -54,10 +54,10 @@ function parseComponents(
 }
 
 /**
- * Campo di ricerca indirizzo con Google Places Autocomplete (Places API New),
- * ristretto all'Italia. Alla selezione compila i campi indirizzo via `onSelect`.
- * Se la chiave API non è configurata, non renderizza nulla (i campi manuali
- * restano comunque utilizzabili).
+ * Ricerca indirizzo con Google Places (Places API New, Data API) e UI custom:
+ * usa il nostro <Input> (icona ricerca a sinistra + X per pulire a destra) e un
+ * dropdown stilizzato col design system. Alla selezione compila i campi via
+ * `onSelect`. Se la chiave API non è configurata non renderizza nulla.
  */
 export function AddressAutocomplete({
   onSelect,
@@ -66,52 +66,158 @@ export function AddressAutocomplete({
   onSelect: (parts: AddressParts) => void;
   label?: string;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  // Ref sempre aggiornata, così l'elemento Google viene creato una sola volta.
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<google.maps.places.PlacePrediction[]>([]);
+  const [open, setOpen] = useState(false);
+
   const onSelectRef = useRef(onSelect);
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
+  const placesRef = useRef<google.maps.PlacesLibrary | null>(null);
+  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Carica la libreria places una volta.
   useEffect(() => {
-    const places = loadPlaces();
-    if (!places) return;
-    let element: google.maps.places.PlaceAutocompleteElement | null = null;
-    let cancelled = false;
-
-    void places
-      .then((lib) => {
-        if (cancelled || !containerRef.current) return;
-        element = new lib.PlaceAutocompleteElement({ includedRegionCodes: ['it'] });
-        element.style.width = '100%';
-        containerRef.current.appendChild(element);
-        element.addEventListener('gmp-select', (event: Event) => {
-          const { placePrediction } = event as unknown as {
-            placePrediction: google.maps.places.PlacePrediction;
-          };
-          void (async () => {
-            const place = placePrediction.toPlace();
-            await place.fetchFields({ fields: ['addressComponents'] });
-            onSelectRef.current(parseComponents(place.addressComponents ?? undefined));
-          })();
-        });
-      })
-      .catch(() => {
-        /* chiave non valida / API non abilitata: degrada silenziosamente */
-      });
-
+    const p = loadPlaces();
+    if (!p) return;
+    let active = true;
+    void p.then((lib) => {
+      if (active) placesRef.current = lib;
+    }).catch(() => {});
     return () => {
-      cancelled = true;
-      if (element?.parentNode) element.parentNode.removeChild(element);
+      active = false;
     };
   }, []);
+
+  // Fetch suggerimenti (debounced). Lo setState è nel callback async del timeout,
+  // non sincrono nel corpo dell'effect.
+  useEffect(() => {
+    const id = window.setTimeout(async () => {
+      const q = query.trim();
+      const lib = placesRef.current;
+      if (q.length < 3 || !lib) {
+        setSuggestions([]);
+        setOpen(false);
+        return;
+      }
+      if (!sessionTokenRef.current) {
+        sessionTokenRef.current = new lib.AutocompleteSessionToken();
+      }
+      try {
+        const { suggestions: res } = await lib.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+          input: q,
+          includedRegionCodes: ['it'],
+          sessionToken: sessionTokenRef.current,
+        });
+        const preds = res
+          .map((s) => s.placePrediction)
+          .filter((p): p is google.maps.places.PlacePrediction => p !== null);
+        setSuggestions(preds);
+        setOpen(preds.length > 0);
+      } catch {
+        setSuggestions([]);
+        setOpen(false);
+      }
+    }, 300);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  // Chiudi il dropdown al click fuori.
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const handleSelect = async (pred: google.maps.places.PlacePrediction) => {
+    setQuery(pred.text?.toString() ?? '');
+    setSuggestions([]);
+    setOpen(false);
+    try {
+      const place = pred.toPlace();
+      await place.fetchFields({ fields: ['addressComponents'] });
+      onSelectRef.current(parseComponents(place.addressComponents ?? undefined));
+    } catch {
+      /* ignora: l'utente può compilare i campi a mano */
+    }
+    // La sessione si conclude alla selezione: nuovo token per la prossima ricerca.
+    sessionTokenRef.current = null;
+  };
+
+  const clear = () => {
+    setQuery('');
+    setSuggestions([]);
+    setOpen(false);
+  };
 
   if (!API_KEY) return null;
 
   return (
     <div className="space-y-1.5">
       <label className="block text-[13px] font-semibold text-pv-slate-700">{label}</label>
-      <div ref={containerRef} className="pv-places" />
+      <div ref={wrapperRef} className="relative">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-pv-slate-500">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+            <path d="m20 20-3-3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        </span>
+        <Input
+          type="text"
+          autoComplete="off"
+          placeholder="Via, civico, città…"
+          className="pl-10 pr-9"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => suggestions.length > 0 && setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false);
+          }}
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={clear}
+            aria-label="Cancella ricerca"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-pv-slate-500 hover:text-pv-slate-700"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M6 6l12 12M18 6 6 18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
+
+        {open && suggestions.length > 0 && (
+          <ul className="absolute z-20 mt-1.5 max-h-72 w-full overflow-auto rounded-[10px] border border-pv-slate-200 bg-white py-1 shadow-lg">
+            {suggestions.map((p) => (
+              <li key={p.placeId}>
+                <button
+                  type="button"
+                  onClick={() => void handleSelect(p)}
+                  className="flex w-full flex-col items-start gap-0.5 px-3.5 py-2 text-left hover:bg-pv-navy-100"
+                >
+                  <span className="text-[13.5px] font-medium text-pv-slate-900">
+                    {p.mainText?.text ?? p.text?.toString() ?? ''}
+                  </span>
+                  {p.secondaryText?.text && (
+                    <span className="text-[12px] text-pv-slate-500">{p.secondaryText.text}</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <p className="text-[12px] text-pv-slate-500">
         Inizia a digitare e seleziona dall&apos;elenco: compiliamo noi i campi sotto.
       </p>

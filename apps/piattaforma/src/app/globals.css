@@ -156,28 +156,3 @@ summary {
 .pv-modal-panel {
   animation: pv-modal-scale-in 140ms ease-out;
 }
-
-/* Google PlaceAutocompleteElement: allinea l'input interno (shadow DOM, via
-   ::part) allo stile dei nostri <Input> (filled-soft + focus ring). */
-.pv-places gmp-place-autocomplete {
-  width: 100%;
-}
-.pv-places gmp-place-autocomplete::part(input) {
-  width: 100%;
-  box-sizing: border-box;
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--pv-slate-900);
-  background: var(--pv-navy-100);
-  border: 1.5px solid transparent;
-  box-shadow: none;
-  transition: background 0.15s ease-out, border-color 0.15s ease-out, box-shadow 0.15s ease-out;
-}
-.pv-places gmp-place-autocomplete::part(input):focus {
-  background: #fff;
-  border-color: var(--pv-navy-600);
-  box-shadow: var(--pv-ring-focus);
-  outline: none;
-}

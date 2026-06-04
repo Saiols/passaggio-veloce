@@ -24,6 +24,8 @@ import {
   validateRegistrationDocuments,
   type RegistrationDocInput,
 } from '@/lib/auth/document-validation';
+import { evaluatePromoCode, normalizePromoCode, type PromoCheckResult } from '@/lib/promo/evaluate';
+import { redeemPromoCode, type PromoRedeemResult } from '@/lib/promo/redeem';
 
 // ============================================================
 // LOGIN
@@ -128,7 +130,11 @@ const REGISTRATION_DOC_SLOTS = [
 ] as const;
 
 export type RegisterActionResult =
-  | { ok: true; emailVerificationToken: string }
+  | {
+      ok: true;
+      emailVerificationToken: string;
+      promo?: { applied: true; amountCent: number } | { applied: false };
+    }
   | { ok: false; error: string; field?: string };
 
 // FASE 13 affiliazione: codice referral 8 char alfanumerico minuscolo,
@@ -167,6 +173,12 @@ export async function registerAction(
     typeof (payloadObj as { referralCode?: unknown }).referralCode === 'string'
       ? (payloadObj as { referralCode: string }).referralCode
       : undefined;
+
+  // Leggi il codice promozionale dal payload (facoltativo, silente se assente).
+  const promoCodeFromPayload =
+    typeof (payloadObj as { promoCode?: unknown }).promoCode === 'string'
+      ? (payloadObj as { promoCode: string }).promoCode
+      : '';
 
   // 2. Estrai i 4 file obbligatori dal FormData.
   const docFiles: { tipo: (typeof REGISTRATION_DOC_SLOTS)[number]; file: File }[] = [];
@@ -271,6 +283,8 @@ export async function registerAction(
     }),
   );
 
+  // Holder per l'esito del riscatto promozionale (aggiornato dentro la transazione).
+  let promoResult: PromoRedeemResult = { applied: false };
   let createdCompanyId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
@@ -359,6 +373,11 @@ export async function registerAction(
       }
 
       createdCompanyId = companyId;
+
+      // Riscatto codice promozionale best-effort: se non valido non interrompe la registrazione.
+      if (promoCodeFromPayload) {
+        promoResult = await redeemPromoCode(tx, promoCodeFromPayload, createdCompany.id);
+      }
     });
 
     // CRM-G: match best-effort post-iscrizione (Caso A: contatto lead
@@ -424,7 +443,11 @@ export async function registerAction(
       console.warn('[registrazione] invio email conferma fallito', (e as Error).message);
     }
 
-    return { ok: true, emailVerificationToken: verificationToken };
+    return {
+      ok: true,
+      emailVerificationToken: verificationToken,
+      promo: promoCodeFromPayload ? promoResult : undefined,
+    };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return { ok: false, error: 'Dato gia esistente' };
@@ -576,4 +599,19 @@ export async function confirmPasswordResetAction(
   });
 
   return { ok: true };
+}
+
+// ============================================================
+// CODICI PROMOZIONALI
+// ============================================================
+export async function checkPromoCodeAction(codeRaw: string): Promise<PromoCheckResult> {
+  const code = normalizePromoCode(codeRaw ?? '');
+  if (!code) return { stato: 'inesistente' };
+  const promo = await prisma.promoCode.findUnique({
+    where: { code },
+    select: { id: true, amountCent: true, expiresAt: true, active: true, maxRedemptions: true },
+  });
+  if (!promo) return { stato: 'inesistente' };
+  const count = await prisma.promoCodeRedemption.count({ where: { promoCodeId: promo.id } });
+  return evaluatePromoCode(promo, count);
 }

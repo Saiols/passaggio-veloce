@@ -163,10 +163,6 @@ export async function registerAction(
     };
   }
 
-  const visuraData =
-    typeof (payloadObj as { visuraData?: unknown }).visuraData === 'string'
-      ? (payloadObj as { visuraData: string }).visuraData
-      : '';
   const refCodeFromPayload =
     typeof (payloadObj as { referralCode?: unknown }).referralCode === 'string'
       ? (payloadObj as { referralCode: string }).referralCode
@@ -185,14 +181,15 @@ export async function registerAction(
     docFiles.push({ tipo: slot, file: f });
   }
 
-  // 3. Validazione documenti (gating rule-based + visura ≤ 6 mesi). Bloccante.
+  // 3. Validazione documenti (gating rule-based). Bloccante. La data emissione
+  // visura non è più richiesta a mano: sarà estratta/validata dall'OCR.
   const docInputs: RegistrationDocInput[] = docFiles.map(({ tipo, file }) => ({
     tipo,
     mimeType: file.type,
     sizeBytes: file.size,
     originalFilename: file.name,
   }));
-  const docCheck = validateRegistrationDocuments(docInputs, visuraData);
+  const docCheck = validateRegistrationDocuments(docInputs);
   if (!docCheck.ok) {
     return { ok: false, error: docCheck.error };
   }
@@ -314,7 +311,8 @@ export async function registerAction(
           utmMedium: utm.medium ?? null,
           utmCampaign: utm.campaign ?? null,
           utmContent: utm.content ?? null,
-          visuraCameraleData: new Date(visuraData),
+          // Popolata in seguito dall'OCR sulla visura (data emissione estratta).
+          visuraCameraleData: null,
         },
       });
 

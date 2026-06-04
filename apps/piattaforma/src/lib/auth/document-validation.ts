@@ -68,15 +68,17 @@ export function validateVisuraData(
 }
 
 /**
- * Valida i documenti KYC della registrazione: tutti presenti, ciascuno passa
- * il gating rule-based (MIME/dimensione/naming), visura entro 6 mesi.
- * A differenza delle pratiche (dove un FAILED viene comunque salvato), qui i
- * documenti sono obbligatori: il primo errore blocca la registrazione.
+ * Valida i documenti KYC della registrazione: tutti presenti e ciascuno passa
+ * il gating rule-based (MIME/dimensione/naming). A differenza delle pratiche
+ * (dove un FAILED viene comunque salvato), qui i documenti sono obbligatori:
+ * il primo errore blocca la registrazione.
+ *
+ * NB: la data di emissione visura non è più richiesta a mano; verrà estratta e
+ * validata (entro 5 mesi) dall'OCR sulla visura camerale. `validateVisuraData`
+ * resta come utility riusabile da quel controllo.
  */
 export function validateRegistrationDocuments(
   docs: RegistrationDocInput[],
-  visuraData: string,
-  now: Date = new Date(),
 ): DocValidationResult {
   for (const tipo of REQUIRED_DOC_TIPI) {
     if (!docs.some((d) => d.tipo === tipo)) {
@@ -89,5 +91,5 @@ export function validateRegistrationDocuments(
       return { ok: false, error: r.reason };
     }
   }
-  return validateVisuraData(visuraData, now);
+  return { ok: true };
 }

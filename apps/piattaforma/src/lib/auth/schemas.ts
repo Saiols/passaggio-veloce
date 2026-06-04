@@ -56,15 +56,8 @@ export const registerStep2CompanySchema = z.object({
 });
 
 // Step 3 (documenti KYC): i file (CI fronte/retro, CF, visura) sono gestiti
-// fuori da Zod (FormData) perché File non è serializzabile/validabile qui.
-// Lo schema valida solo la data di emissione della visura camerale.
-export const registerStep3DocumentsSchema = z.object({
-  visuraData: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data di emissione della visura obbligatoria'),
-});
-
-export type RegisterStep3DocumentsInput = z.infer<typeof registerStep3DocumentsSchema>;
+// fuori da Zod (FormData). La data emissione visura non è più richiesta a mano:
+// sarà estratta/validata dall'OCR sulla visura camerale.
 
 export const registerStep4PaymentSchema = z.object({
   iban: ibanItSchema,

@@ -67,7 +67,6 @@ const validPayload = {
     provincia: 'RM',
   },
   payment: { iban: 'IT60X0542811101000000123456', sepaMandateAccepted: true, termsAccepted: true },
-  visuraData: '2026-05-01',
 };
 
 function makeFile(): File {
@@ -97,13 +96,6 @@ describe('registerAction (early returns)', () => {
     const r = await registerAction(fdWith(validPayload, { omit: 'CODICE_FISCALE' }));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('tutti i documenti');
-    expect(txMock).not.toHaveBeenCalled();
-  });
-
-  it('fallisce se la visura è scaduta (> 6 mesi)', async () => {
-    const r = await registerAction(fdWith({ ...validPayload, visuraData: '2020-01-01' }));
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain('6 mesi');
     expect(txMock).not.toHaveBeenCalled();
   });
 });

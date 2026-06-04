@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition, type FormEvent } from 'react';
+import { useState, useMemo, useEffect, useTransition, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,7 +26,6 @@ type DocumentsData = {
   ciRetro: File;
   codiceFiscale: File;
   visuraCamerale: File;
-  visuraData: string; // ISO yyyy-mm-dd
 };
 
 type WizardData = {
@@ -99,7 +98,6 @@ export function RegisterWizard({
           company: data.company,
           payment: values,
           referralCode,
-          visuraData: docs.visuraData,
         }),
       );
       fd.set('CI_FRONTE', docs.ciFronte);
@@ -396,7 +394,7 @@ function CompanyStep({
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/jpg';
 
-function DocFileInput({
+function DocCard({
   label,
   file,
   onChange,
@@ -406,21 +404,89 @@ function DocFileInput({
   onChange: (f: File | null) => void;
 }) {
   const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+  const previewUrl = useMemo(
+    () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
+    [file],
+  );
+
+  // Revoca l'object URL quando cambia/si smonta (no setState nell'effect).
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const isPdf = file?.type === 'application/pdf';
+
   return (
-    <Field label={label} required htmlFor={inputId}>
+    <div
+      className={`rounded-xl border p-4 transition ${
+        file ? 'border-pv-green-500/40 bg-pv-green-50' : 'border-pv-slate-200 bg-white'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-semibold text-pv-navy-900">{label}</span>
+        {file ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-pv-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-pv-green-500">
+            ✓ Caricato
+          </span>
+        ) : (
+          <span className="rounded-full bg-pv-slate-100 px-2 py-0.5 text-[11px] font-semibold text-pv-slate-500">
+            Da caricare
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-pv-slate-200 bg-pv-slate-50">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt={`Anteprima ${label}`} className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-[11px] font-bold text-pv-slate-400">{isPdf ? 'PDF' : 'DOC'}</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          {file ? (
+            <>
+              <p className="truncate text-[12px] text-pv-slate-700" title={file.name}>
+                {file.name}
+              </p>
+              <p className="text-[11px] text-pv-slate-500">
+                {(file.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </>
+          ) : (
+            <p className="text-[12px] text-pv-slate-500">PDF, JPG o PNG · max 10 MB</p>
+          )}
+          <div className="mt-1.5 flex gap-3">
+            <label
+              htmlFor={inputId}
+              className="cursor-pointer text-[12px] font-semibold text-pv-navy-600 hover:underline"
+            >
+              {file ? 'Sostituisci' : 'Carica file'}
+            </label>
+            {file && (
+              <button
+                type="button"
+                onClick={() => onChange(null)}
+                className="text-[12px] font-semibold text-pv-red-500 hover:underline"
+              >
+                Rimuovi
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <input
         id={inputId}
         type="file"
         accept={ACCEPT}
+        className="sr-only"
         onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-        className="block w-full text-sm text-pv-slate-700 file:mr-4 file:rounded-md file:border-0 file:bg-pv-navy-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-pv-navy-700"
       />
-      {file && (
-        <p className="mt-1 text-xs text-pv-slate-500">
-          {file.name} — {(file.size / 1024 / 1024).toFixed(2)} MB
-        </p>
-      )}
-    </Field>
+    </div>
   );
 }
 
@@ -441,23 +507,19 @@ function DocumentsStep({
   const [visuraCamerale, setVisuraCamerale] = useState<File | null>(
     defaultValues?.visuraCamerale ?? null,
   );
-  const [visuraData, setVisuraData] = useState<string>(defaultValues?.visuraData ?? '');
   const [error, setError] = useState<string | null>(null);
 
   const validation = useMemo(() => {
-    if (!(ciFronte && ciRetro && codiceFiscale && visuraCamerale) || !visuraData) {
-      return { ok: false as const, error: 'Carica tutti i documenti e indica la data della visura' };
+    if (!(ciFronte && ciRetro && codiceFiscale && visuraCamerale)) {
+      return { ok: false as const, error: 'Carica tutti i documenti richiesti' };
     }
-    return validateRegistrationDocuments(
-      [
-        { tipo: 'CI_FRONTE', mimeType: ciFronte.type, sizeBytes: ciFronte.size, originalFilename: ciFronte.name },
-        { tipo: 'CI_RETRO', mimeType: ciRetro.type, sizeBytes: ciRetro.size, originalFilename: ciRetro.name },
-        { tipo: 'CODICE_FISCALE', mimeType: codiceFiscale.type, sizeBytes: codiceFiscale.size, originalFilename: codiceFiscale.name },
-        { tipo: 'VISURA_CAMERALE', mimeType: visuraCamerale.type, sizeBytes: visuraCamerale.size, originalFilename: visuraCamerale.name },
-      ],
-      visuraData,
-    );
-  }, [ciFronte, ciRetro, codiceFiscale, visuraCamerale, visuraData]);
+    return validateRegistrationDocuments([
+      { tipo: 'CI_FRONTE', mimeType: ciFronte.type, sizeBytes: ciFronte.size, originalFilename: ciFronte.name },
+      { tipo: 'CI_RETRO', mimeType: ciRetro.type, sizeBytes: ciRetro.size, originalFilename: ciRetro.name },
+      { tipo: 'CODICE_FISCALE', mimeType: codiceFiscale.type, sizeBytes: codiceFiscale.size, originalFilename: codiceFiscale.name },
+      { tipo: 'VISURA_CAMERALE', mimeType: visuraCamerale.type, sizeBytes: visuraCamerale.size, originalFilename: visuraCamerale.name },
+    ]);
+  }, [ciFronte, ciRetro, codiceFiscale, visuraCamerale]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -471,7 +533,6 @@ function DocumentsStep({
       ciRetro: ciRetro!,
       codiceFiscale: codiceFiscale!,
       visuraCamerale: visuraCamerale!,
-      visuraData,
     });
   };
 
@@ -482,22 +543,16 @@ function DocumentsStep({
         ammessi: PDF, JPG, PNG (max 10 MB per file).
       </Alert>
 
-      <DocFileInput label="Carta d'identità — Fronte" file={ciFronte} onChange={setCiFronte} />
-      <DocFileInput label="Carta d'identità — Retro" file={ciRetro} onChange={setCiRetro} />
-      <DocFileInput
-        label="Codice Fiscale / Tessera Sanitaria"
-        file={codiceFiscale}
-        onChange={setCodiceFiscale}
-      />
-      <DocFileInput label="Visura Camerale" file={visuraCamerale} onChange={setVisuraCamerale} />
-
-      <Field label="Data emissione visura" required>
-        <Input
-          type="date"
-          value={visuraData}
-          onChange={(e) => setVisuraData(e.target.value)}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <DocCard label="Carta d'identità — Fronte" file={ciFronte} onChange={setCiFronte} />
+        <DocCard label="Carta d'identità — Retro" file={ciRetro} onChange={setCiRetro} />
+        <DocCard
+          label="Codice Fiscale / Tessera Sanitaria"
+          file={codiceFiscale}
+          onChange={setCodiceFiscale}
         />
-      </Field>
+        <DocCard label="Visura Camerale" file={visuraCamerale} onChange={setVisuraCamerale} />
+      </div>
 
       {error && <Alert variant="error">{error}</Alert>}
 

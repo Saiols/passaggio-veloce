@@ -58,15 +58,13 @@ describe('validateVisuraData', () => {
 });
 
 describe('validateRegistrationDocuments', () => {
-  it('passa con 4 documenti validi e visura recente', () => {
-    expect(validateRegistrationDocuments(allDocs(), '2026-05-01', NOW)).toEqual({
-      ok: true,
-    });
+  it('passa con i 4 documenti validi', () => {
+    expect(validateRegistrationDocuments(allDocs())).toEqual({ ok: true });
   });
 
   it('fallisce se manca un documento richiesto', () => {
     const docs = allDocs().filter((d) => d.tipo !== 'CODICE_FISCALE');
-    const r = validateRegistrationDocuments(docs, '2026-05-01', NOW);
+    const r = validateRegistrationDocuments(docs);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('tutti i documenti');
   });
@@ -74,14 +72,8 @@ describe('validateRegistrationDocuments', () => {
   it('fallisce se un documento ha MIME non supportato', () => {
     const docs = allDocs();
     docs[0] = { ...docs[0]!, mimeType: 'application/zip' };
-    const r = validateRegistrationDocuments(docs, '2026-05-01', NOW);
+    const r = validateRegistrationDocuments(docs);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('Formato');
-  });
-
-  it('fallisce se la visura è scaduta', () => {
-    const r = validateRegistrationDocuments(allDocs(), '2025-01-01', NOW);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toContain('6 mesi');
   });
 });

@@ -373,12 +373,21 @@ export async function registerAction(
       }
 
       createdCompanyId = companyId;
-
-      // Riscatto codice promozionale best-effort: se non valido non interrompe la registrazione.
-      if (promoCodeFromPayload) {
-        promoResult = await redeemPromoCode(tx, promoCodeFromPayload, createdCompany.id);
-      }
     });
+
+    // Riscatto codice promozionale best-effort POST-commit: gira in una
+    // transazione separata, cosi' un errore (anche imprevisto) non puo' mai
+    // annullare una registrazione gia' committata. Codici non validi tornano
+    // semplicemente { applied: false } senza sollevare eccezioni.
+    if (promoCodeFromPayload && createdCompanyId) {
+      try {
+        promoResult = await prisma.$transaction((tx) =>
+          redeemPromoCode(tx, promoCodeFromPayload, companyId),
+        );
+      } catch (e) {
+        console.warn('[registrazione] riscatto promo fallito', (e as Error).message);
+      }
+    }
 
     // CRM-G: match best-effort post-iscrizione (Caso A: contatto lead
     // pre-esistente → aggancia + auto-promote a S7). Non deve bloccare

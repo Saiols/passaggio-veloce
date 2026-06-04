@@ -5,8 +5,10 @@ import { normalizePromoCode, evaluatePromoCode } from './evaluate';
 export type PromoRedeemResult = { applied: true; amountCent: number } | { applied: false };
 
 /**
- * Riscatta un codice promozionale DENTRO una transazione di registrazione.
- * Best-effort: se il codice non è valido ritorna { applied: false } senza errori.
+ * Riscatta un codice promozionale dentro una transazione (passata dal chiamante).
+ * Va invocata POST-commit della registrazione, in una transazione dedicata, cosi'
+ * un eventuale errore non puo' annullare la registrazione gia' andata a buon fine.
+ * Best-effort applicativo: se il codice non è valido ritorna { applied: false }.
  */
 export async function redeemPromoCode(
   tx: Prisma.TransactionClient,

@@ -23,6 +23,9 @@ importers:
       '@auth/prisma-adapter':
         specifier: ^2.11.1
         version: 2.11.1(@prisma/client@5.22.0(prisma@5.22.0))
+      '@googlemaps/js-api-loader':
+        specifier: ^2.1.0
+        version: 2.1.0
       '@hookform/resolvers':
         specifier: ^5.2.2
         version: 5.2.2(react-hook-form@7.72.1(react@19.2.4))
@@ -99,6 +102,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.2.2
+      '@types/google.maps':
+        specifier: ^3.65.0
+        version: 3.65.0
       '@types/node':
         specifier: ^20
         version: 20.19.39
@@ -504,6 +510,9 @@ packages:
     resolution: {integrity: sha512-3TASCATfw+ctICSb4ymrv7iCm0qJ0N9CarB+CZ7zIJ7KqNbwI5JjyDL1/sxoC0ccTO1Zyd1iQ+oqncPg5FJXaA==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
+
+  '@googlemaps/js-api-loader@2.1.0':
+    resolution: {integrity: sha512-aZii781WEfncmJAFk1UPv6bdwT1mgRZzY8IWmpmx9mGAMCt97JZrXpn95LTsYinj7E4tC+LJv3FE8k2xRAsYgg==}
 
   '@hookform/resolvers@5.2.2':
     resolution: {integrity: sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA==}
@@ -1661,6 +1670,9 @@ packages:
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
+
+  '@types/google.maps@3.65.0':
+    resolution: {integrity: sha512-u4SHiRC3m27lPa4vDBxh2AI7mDcHcheX6GSHn1Mwi0Gap8/uhM2kFppiFTnWASXLHZO+1ahHciLeEIV+Sjqk/A==}
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
@@ -4296,6 +4308,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@googlemaps/js-api-loader@2.1.0':
+    dependencies:
+      '@types/google.maps': 3.65.0
+
   '@hookform/resolvers@5.2.2(react-hook-form@7.72.1(react@19.2.4))':
     dependencies:
       '@standard-schema/utils': 0.3.0
@@ -5318,6 +5334,8 @@ snapshots:
       '@types/json-schema': 7.0.15
 
   '@types/estree@1.0.8': {}
+
+  '@types/google.maps@3.65.0': {}
 
   '@types/json-schema@7.0.15': {}
 

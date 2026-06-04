@@ -299,6 +299,7 @@ export async function registerAction(
           email: company.email,
           telefono: company.telefono || null,
           indirizzo: company.indirizzo,
+          civico: company.civico,
           citta: company.citta,
           cap: company.cap,
           provincia: company.provincia.toUpperCase(),

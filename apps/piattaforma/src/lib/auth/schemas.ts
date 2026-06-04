@@ -49,6 +49,7 @@ export const registerStep2CompanySchema = z.object({
   email: z.string().email('Email aziendale non valida'),
   telefono: z.string().trim().min(8, 'Numero di telefono obbligatorio'),
   indirizzo: z.string().min(2, 'Indirizzo obbligatorio'),
+  civico: z.string().trim().min(1, 'Civico obbligatorio'),
   citta: z.string().min(2, 'Città obbligatoria'),
   cap: capSchema,
   provincia: z.string().length(2, 'Provincia (2 lettere)'),

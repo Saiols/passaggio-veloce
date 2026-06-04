@@ -12,6 +12,7 @@ import {
   registerStep4PaymentSchema,
 } from '@/lib/auth/schemas';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
+import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { WizardProgress } from '@/components/wizard-progress';
 import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
 import { registerAction } from '../actions';
@@ -293,6 +294,7 @@ function CompanyStep({
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isValid },
   } = useForm<CompanyData>({
     resolver: zodResolver(registerStep2CompanySchema),
@@ -301,6 +303,15 @@ function CompanyStep({
       : defaultValues,
     mode: 'onChange',
   });
+
+  const applyAddress = (p: AddressParts) => {
+    const opts = { shouldValidate: true, shouldDirty: true } as const;
+    setValue('indirizzo', p.indirizzo, opts);
+    setValue('civico', p.civico, opts);
+    setValue('citta', p.citta, opts);
+    setValue('cap', p.cap, opts);
+    setValue('provincia', p.provincia, opts);
+  };
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-4">
@@ -344,9 +355,16 @@ function CompanyStep({
         </Field>
       </div>
 
-      <Field label="Indirizzo" required error={errors.indirizzo?.message}>
-        <Input invalid={!!errors.indirizzo} {...register('indirizzo')} />
-      </Field>
+      <AddressAutocomplete onSelect={applyAddress} />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_140px]">
+        <Field label="Indirizzo (via/piazza)" required error={errors.indirizzo?.message}>
+          <Input invalid={!!errors.indirizzo} {...register('indirizzo')} />
+        </Field>
+        <Field label="Civico" required error={errors.civico?.message}>
+          <Input invalid={!!errors.civico} {...register('civico')} />
+        </Field>
+      </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Field label="Città" required error={errors.citta?.message}>

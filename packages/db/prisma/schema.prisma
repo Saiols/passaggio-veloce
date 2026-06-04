@@ -285,6 +285,7 @@ model Company {
   telefono       String?
 
   indirizzo String
+  civico    String?
   citta     String
   cap       String
   provincia String

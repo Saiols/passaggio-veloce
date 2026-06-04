@@ -7,6 +7,8 @@ vi.mock('@pv/db', () => ({
     company: {},
     user: { findMany: vi.fn(), update: vi.fn() },
     verificationToken: {},
+    promoCode: { findUnique: vi.fn() },
+    promoCodeRedemption: { count: vi.fn() },
   },
   Prisma: { PrismaClientKnownRequestError: class {} },
 }));
@@ -35,7 +37,7 @@ import bcrypt from 'bcryptjs';
 import { AuthError } from 'next-auth';
 import { prisma } from '@pv/db';
 import { signIn } from '@/auth';
-import { loginAction, registerAction } from './actions';
+import { loginAction, registerAction, checkPromoCodeAction } from './actions';
 
 const findManyMock = vi.mocked(prisma.user.findMany);
 const compareMock = vi.mocked(bcrypt.compare);
@@ -178,5 +180,19 @@ describe('loginAction', () => {
 
     expect(r).toEqual({ error: 'Credenziali non valide' });
     expect(r.needTotp).toBeUndefined();
+  });
+});
+
+describe('checkPromoCodeAction', () => {
+  it('codice inesistente', async () => {
+    vi.mocked(prisma.promoCode.findUnique).mockResolvedValue(null as never);
+    const r = await checkPromoCodeAction('NOPE');
+    expect(r).toEqual({ stato: 'inesistente' });
+  });
+  it('codice valido ritorna importo', async () => {
+    vi.mocked(prisma.promoCode.findUnique).mockResolvedValue({ id: 'p1', amountCent: 5000, expiresAt: null, active: true, maxRedemptions: null } as never);
+    vi.mocked(prisma.promoCodeRedemption.count).mockResolvedValue(0 as never);
+    const r = await checkPromoCodeAction(' benv ');
+    expect(r).toEqual({ stato: 'valido', amountCent: 5000 });
   });
 });

@@ -15,7 +15,9 @@ import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { WizardProgress } from '@/components/wizard-progress';
 import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
-import { registerAction } from '../actions';
+import { registerAction, checkPromoCodeAction } from '../actions';
+import type { PromoCheckResult } from '@/lib/promo/evaluate';
+import { formatCurrencyCent } from '@/lib/format';
 
 type AccountData = z.infer<typeof registerStep1AccountSchema>;
 type CompanyData = z.infer<typeof registerStep2CompanySchema>;
@@ -62,6 +64,9 @@ export function RegisterWizard({
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [promoOutcome, setPromoOutcome] = useState<
+    { applied: true; amountCent: number } | { applied: false } | null
+  >(null);
   const [isPending, startTransition] = useTransition();
 
   const handleAccount = (values: AccountData) => {
@@ -79,7 +84,7 @@ export function RegisterWizard({
     setStep(4);
   };
 
-  const handlePayment = (values: PaymentData) => {
+  const handlePayment = (values: PaymentData, promoCode: string) => {
     setData((d) => ({ ...d, payment: values }));
     if (!data.account || !data.company || !data.documents) {
       setSubmitError('Dati mancanti, ricomincia il wizard');
@@ -98,6 +103,7 @@ export function RegisterWizard({
           company: data.company,
           payment: values,
           referralCode,
+          promoCode,
         }),
       );
       fd.set('CI_FRONTE', docs.ciFronte);
@@ -109,6 +115,7 @@ export function RegisterWizard({
 
       if (result.ok) {
         setToken(result.emailVerificationToken);
+        setPromoOutcome(result.promo ?? null);
       } else {
         setSubmitError(result.error);
       }
@@ -152,6 +159,16 @@ export function RegisterWizard({
                 </a>
                 .
               </p>
+            </div>
+          )}
+          {promoOutcome?.applied === true && (
+            <div className="mt-4 rounded-lg border border-pv-green-500 bg-pv-green-50 p-4 text-sm text-pv-navy-900">
+              🎁 Promozione applicata: <strong>{formatCurrencyCent(promoOutcome.amountCent)}</strong> accreditati sul tuo wallet.
+            </div>
+          )}
+          {promoOutcome && !promoOutcome.applied && (
+            <div className="mt-4 rounded-lg border border-pv-amber-500 bg-pv-amber-50 p-4 text-sm text-pv-navy-900">
+              Codice promozionale non valido: nessuna promozione attivata.
             </div>
           )}
           {submitError && <Alert variant="error">{submitError}</Alert>}
@@ -580,7 +597,7 @@ function PaymentStep({
 }: {
   defaultValues?: PaymentData;
   onBack: () => void;
-  onSubmit: (data: PaymentData) => void;
+  onSubmit: (data: PaymentData, promoCode: string) => void;
   isSubmitting: boolean;
 }) {
   const {
@@ -593,8 +610,31 @@ function PaymentStep({
     mode: 'onChange',
   });
 
+  const [promoCode, setPromoCode] = useState('');
+  const [promoState, setPromoState] = useState<PromoCheckResult | null>(null);
+  const [checkingPromo, setCheckingPromo] = useState(false);
+
+  const applyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setCheckingPromo(true);
+    try {
+      setPromoState(await checkPromoCodeAction(promoCode));
+    } finally {
+      setCheckingPromo(false);
+    }
+  };
+
+  const promoMessage = (): { text: string; ok: boolean } | null => {
+    if (!promoState) return null;
+    if (promoState.stato === 'valido')
+      return { ok: true, text: `Codice valido: ${formatCurrencyCent(promoState.amountCent)} verranno accreditati sul tuo wallet.` };
+    if (promoState.stato === 'scaduto') return { ok: false, text: 'Codice scaduto.' };
+    if (promoState.stato === 'esaurito') return { ok: false, text: 'Codice non più disponibile.' };
+    return { ok: false, text: 'Codice inesistente.' };
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit((v) => onSubmit(v, promoCode))} className="space-y-4">
       <Field label="IBAN" required error={errors.iban?.message}>
         <Input
           invalid={!!errors.iban}
@@ -607,6 +647,33 @@ function PaymentStep({
         Il mandato SEPA reale verrà attivato in Fase 5 tramite Stripe. Per ora salviamo solo
         l&apos;accettazione.
       </Alert>
+
+      <Field label="Codice promozionale (opzionale)">
+        <div className="flex gap-2">
+          <Input
+            value={promoCode}
+            onChange={(e) => {
+              setPromoCode(e.target.value);
+              setPromoState(null);
+            }}
+            placeholder="Es. BENVENUTO"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={applyPromo}
+            loading={checkingPromo}
+            className="shrink-0"
+          >
+            Applica
+          </Button>
+        </div>
+      </Field>
+      {promoMessage() && (
+        <p className={`text-[13px] font-medium ${promoMessage()!.ok ? 'text-pv-green-500' : 'text-pv-red-500'}`}>
+          {promoMessage()!.text}
+        </p>
+      )}
 
       <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
         <Checkbox {...register('sepaMandateAccepted')} className="mt-0.5" />

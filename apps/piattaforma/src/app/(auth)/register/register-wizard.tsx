@@ -326,7 +326,7 @@ function CompanyStep({
         <Field label="P.IVA" required error={errors.partitaIva?.message}>
           <Input invalid={!!errors.partitaIva} {...register('partitaIva')} />
         </Field>
-        <Field label="Codice SDI" hint="Opzionale" error={errors.codiceSdi?.message}>
+        <Field label="Codice SDI" required error={errors.codiceSdi?.message}>
           <Input invalid={!!errors.codiceSdi} {...register('codiceSdi')} />
         </Field>
       </div>
@@ -339,7 +339,7 @@ function CompanyStep({
         <Field label="Email aziendale" required error={errors.email?.message}>
           <Input type="email" invalid={!!errors.email} {...register('email')} />
         </Field>
-        <Field label="Telefono" hint="Opzionale" error={errors.telefono?.message}>
+        <Field label="Telefono" required error={errors.telefono?.message}>
           <Input invalid={!!errors.telefono} {...register('telefono')} />
         </Field>
       </div>

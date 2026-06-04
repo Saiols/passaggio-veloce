@@ -41,10 +41,13 @@ export const registerStep2CompanySchema = z.object({
   }),
   ragioneSociale: z.string().min(2, 'Ragione sociale obbligatoria'),
   partitaIva: partitaIvaSchema,
-  codiceSdi: z.string().optional(),
+  codiceSdi: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{7}$/, 'Codice SDI: 7 caratteri alfanumerici'),
   pec: pecSchema,
   email: z.string().email('Email aziendale non valida'),
-  telefono: z.string().optional(),
+  telefono: z.string().trim().min(8, 'Numero di telefono obbligatorio'),
   indirizzo: z.string().min(2, 'Indirizzo obbligatorio'),
   citta: z.string().min(2, 'Città obbligatoria'),
   cap: capSchema,

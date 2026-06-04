@@ -67,6 +67,24 @@ export function validateVisuraData(
   return { ok: true };
 }
 
+/** Valida una data emissione visura: non futura e non oltre `maxAgeMonths` mesi.
+ * Confronto a granularità giorno (UTC). */
+export function isVisuraDateValid(
+  visuraData: string,
+  maxAgeMonths: number,
+  now: Date = new Date(),
+): DocValidationResult {
+  const d = new Date(visuraData);
+  if (Number.isNaN(d.getTime())) return { ok: false, error: 'Data della visura non valida' };
+  const visuraDay = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const nowDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  if (visuraDay > nowDay) return { ok: false, error: 'La data della visura non può essere futura' };
+  if (visuraDay < subtractMonthsUtcDay(now, maxAgeMonths)) {
+    return { ok: false, error: `La visura camerale deve essere emessa da non più di ${maxAgeMonths} mesi` };
+  }
+  return { ok: true };
+}
+
 /**
  * Valida i documenti KYC della registrazione: tutti presenti e ciascuno passa
  * il gating rule-based (MIME/dimensione/naming). A differenza delle pratiche

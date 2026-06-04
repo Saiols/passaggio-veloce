@@ -3,6 +3,7 @@ import type {
   LibrettoCircolazioneData,
   OcrExtractInput,
   OcrProvider,
+  OcrTextResult,
 } from './types';
 
 const SAMPLE_TARGHE = ['FA123GH', 'EJ456LM', 'GT789NO', 'FB234PQ', 'EZ567RS'];
@@ -46,6 +47,15 @@ export class MockOcrProvider implements OcrProvider {
       flagComodatoDuso: hash[7]! % 10 === 0, // ~10% dei casi
       confidenceScore: 0.82 + (hash[8]! % 15) / 100, // 0.82..0.96
       rawText: `[mock ocr ${input.mimeType} ${input.buffer.length}B]`,
+    };
+  }
+
+  async extractText(input: OcrExtractInput): Promise<OcrTextResult> {
+    const hash = createHash('sha256').update(input.buffer).digest('hex');
+    return {
+      text: `MOCK OCR TEXT\nhash=${hash}\nbytes=${input.buffer.length}`,
+      confidence: 0.9,
+      pages: 1,
     };
   }
 }

@@ -5,6 +5,7 @@ import {
   type LibrettoCircolazioneData,
   type OcrExtractInput,
   type OcrProvider,
+  type OcrTextResult,
   OcrFailedError,
 } from './types';
 
@@ -99,6 +100,10 @@ export class MindeeOcrProvider implements OcrProvider {
         `Mindee SDK error: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  async extractText(): Promise<OcrTextResult> {
+    throw new OcrFailedError('extractText non supportato dal provider Mindee');
   }
 }
 

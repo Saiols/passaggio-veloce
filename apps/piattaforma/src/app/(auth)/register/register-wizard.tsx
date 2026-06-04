@@ -36,7 +36,7 @@ type WizardData = {
 };
 
 const STEPS = [
-  { id: 1, label: 'Account', title: 'Crea il tuo account', hint: 'Dati personali e credenziali di accesso alla piattaforma.' },
+  { id: 1, label: 'Account', title: 'Crea il tuo account', hint: 'Inserisci i dati del titolare o del responsabile dell\'account. Questi dati identificano la persona fisica che gestisce il profilo sulla piattaforma.' },
   { id: 2, label: 'Azienda', title: 'Dati azienda', hint: 'Ragione sociale, partita IVA, sede legale e contatti.' },
   { id: 3, label: 'Documenti', title: 'Documenti richiesti', hint: 'CI, codice fiscale e visura camerale per la verifica KYC.' },
   { id: 4, label: 'Pagamento', title: 'Pagamento e condizioni', hint: 'IBAN per il mandato SEPA e accettazione dei Termini.' },
@@ -191,6 +191,13 @@ export function RegisterWizard({
 // STEP 1 - ACCOUNT
 // ============================================================
 
+/** Normalizza un valore data (Date | string) nel formato yyyy-mm-dd per <input type="date">. */
+function toDateInputValue(value: unknown): string {
+  if (!value) return '';
+  const d = value instanceof Date ? value : new Date(value as string);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
 function AccountStep({
   defaultValues,
   onNext,
@@ -198,13 +205,19 @@ function AccountStep({
   defaultValues?: AccountData;
   onNext: (data: AccountData) => void;
 }) {
+  // `dataNascita` è coerced a Date dallo schema; l'input type="date" vuole una
+  // stringa yyyy-mm-dd, altrimenti al "Indietro" il campo resta vuoto.
+  const formDefaults = defaultValues
+    ? ({ ...defaultValues, dataNascita: toDateInputValue(defaultValues.dataNascita) } as unknown as AccountData)
+    : undefined;
+
   const {
     register,
     handleSubmit,
     formState: { errors, isValid },
   } = useForm<AccountData>({
     resolver: zodResolver(registerStep1AccountSchema),
-    defaultValues,
+    defaultValues: formDefaults,
     mode: 'onChange',
   });
 
@@ -234,10 +247,10 @@ function AccountStep({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Nome" required error={errors.nome?.message}>
+        <Field label="Nome referente account — titolare, amministratore o delegato" required error={errors.nome?.message}>
           <Input invalid={!!errors.nome} {...register('nome')} />
         </Field>
-        <Field label="Cognome" required error={errors.cognome?.message}>
+        <Field label="Cognome referente account — titolare, amministratore o delegato" required error={errors.cognome?.message}>
           <Input invalid={!!errors.cognome} {...register('cognome')} />
         </Field>
       </div>

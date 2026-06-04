@@ -611,8 +611,8 @@ function PaymentStep({
       <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
         <Checkbox {...register('sepaMandateAccepted')} className="mt-0.5" />
         <span>
-          Autorizzo l&apos;addebito automatico SEPA per i pagamenti delle pratiche e per gli
-          auto-addebiti previsti dai Termini.
+          Autorizzo Passaggio Veloce a effettuare accrediti automatici sul conto indicato per
+          l’erogazione dei compensi maturati sulla piattaforma.
           <span className="ml-1 text-pv-orange-500" aria-hidden="true">
             •
           </span>

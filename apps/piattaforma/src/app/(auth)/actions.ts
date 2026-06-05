@@ -26,6 +26,7 @@ import {
 } from '@/lib/auth/document-validation';
 import { evaluatePromoCode, normalizePromoCode, type PromoCheckResult } from '@/lib/promo/evaluate';
 import { redeemPromoCode, type PromoRedeemResult } from '@/lib/promo/redeem';
+import { verifyRegistrationKyc } from '@/lib/kyc/verify';
 
 // ============================================================
 // LOGIN
@@ -135,7 +136,7 @@ export type RegisterActionResult =
       emailVerificationToken: string;
       promo?: { applied: true; amountCent: number } | { applied: false };
     }
-  | { ok: false; error: string; field?: string };
+  | { ok: false; error: string; field?: string; kycFailures?: import('@/lib/kyc/verify').KycFailure[] };
 
 // FASE 13 affiliazione: codice referral 8 char alfanumerico minuscolo,
 // generato on-register. Unique constraint sullo schema; in caso di collisione
@@ -207,6 +208,44 @@ export async function registerAction(
   }
 
   const { account, company, payment } = parsed.data;
+
+  // Buffer dei file (riusati per OCR del gate KYC e poi per lo storage).
+  const docBuffers = await Promise.all(
+    docFiles.map(async ({ tipo, file }) => ({
+      tipo, file, buffer: Buffer.from(await file.arrayBuffer()),
+    })),
+  );
+  const bufByTipo = (t: (typeof REGISTRATION_DOC_SLOTS)[number]) =>
+    docBuffers.find((d) => d.tipo === t)!;
+
+  // GATE KYC (sincrono, bloccante). In DEMO_MODE è bypassato (banner "OCR simulati").
+  if (!env.DEMO_MODE) {
+    const allowedAteco = await prisma.atecoAllowedCode.findMany({
+      where: { companyType: company.type, active: true },
+      select: { companyType: true, code: true, active: true },
+    });
+    const toInput = (t: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
+      const d = bufByTipo(t);
+      return { buffer: d.buffer, mimeType: d.file.type, originalFilename: d.file.name };
+    };
+    const kyc = await verifyRegistrationKyc({
+      files: {
+        ciFronte: toInput('CI_FRONTE'),
+        codiceFiscale: toInput('CODICE_FISCALE'),
+        visura: toInput('VISURA_CAMERALE'),
+      },
+      company: {
+        ragioneSociale: company.ragioneSociale,
+        partitaIva: company.partitaIva,
+        type: company.type,
+      },
+      allowedAteco,
+    });
+    if (!kyc.passed) {
+      return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
+    }
+  }
+
   const refCodeInput = refCodeFromPayload?.trim().toLowerCase();
 
   // Lookup referente (silente: se codice invalido, registrazione procede senza)
@@ -271,8 +310,7 @@ export async function registerAction(
   // restano al massimo file orfani su storage (raro, ripulibili).
   const storage = getStorage();
   const storedDocs = await Promise.all(
-    docFiles.map(async ({ tipo, file }) => {
-      const buffer = Buffer.from(await file.arrayBuffer());
+    docBuffers.map(async ({ tipo, file, buffer }) => {
       const put = await storage.put({
         scope: `company/${companyId}`,
         buffer,

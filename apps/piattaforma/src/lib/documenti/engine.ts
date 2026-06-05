@@ -51,11 +51,11 @@ export type DocumentoRichiesto = {
   tipo: DocumentoTipoEngine;
   parte: ParteDocumento;
   motivo: string;
+  veicoloOrdine?: number;
 };
 
 export type SchemaDocumentaleInput = {
-  preImm2015: boolean;
-  flagComodatoDuso: boolean;
+  veicoli: { ordine: number; preImm2015: boolean; flagComodatoDuso: boolean }[];
 
   venditoreTipoSoggetto: TipoSoggetto | null;
   venditoreVisuraData: Date | null;
@@ -189,7 +189,7 @@ export function calcolaDocumentiRichiesti(
   }
 
   // 1. BLOCCHI immediati
-  if (input.flagComodatoDuso) {
+  if (input.veicoli.some((v) => v.flagComodatoDuso)) {
     return {
       kind: 'BLOCCO',
       motivo: 'Comodato d\'uso attivo sul veicolo',
@@ -232,7 +232,8 @@ export function calcolaDocumentiRichiesti(
     };
   }
   if (
-    input.acquirenteTipoSoggetto === 'AZIENDA' &&
+    (input.acquirenteTipoSoggetto === 'AZIENDA' ||
+      input.acquirenteTipoSoggetto === 'OPERATORE_AUTO') &&
     !visuraFresca(input.acquirenteVisuraData, now)
   ) {
     return {
@@ -246,20 +247,18 @@ export function calcolaDocumentiRichiesti(
   // 2. Costruzione lista documenti richiesti
   const out: DocumentoRichiesto[] = [];
 
-  // Sempre: libretto di circolazione
-  out.push({
-    tipo: 'LIBRETTO_CIRCOLAZIONE',
-    parte: 'VEICOLO',
-    motivo: 'Libretto di circolazione (sempre obbligatorio)',
-  });
-
-  // Pre-2015: + Certificato di Proprietà
-  if (input.preImm2015) {
+  // Per ogni veicolo: libretto (sempre) + CdP se pre-2015
+  for (const v of input.veicoli) {
     out.push({
-      tipo: 'CERTIFICATO_PROPRIETA',
-      parte: 'VEICOLO',
-      motivo: 'Veicolo immatricolato pre-2015: serve CdP',
+      tipo: 'LIBRETTO_CIRCOLAZIONE', parte: 'VEICOLO', veicoloOrdine: v.ordine,
+      motivo: `Libretto di circolazione veicolo ${v.ordine} (sempre obbligatorio)`,
     });
+    if (v.preImm2015) {
+      out.push({
+        tipo: 'CERTIFICATO_PROPRIETA', parte: 'VEICOLO', veicoloOrdine: v.ordine,
+        motivo: `Veicolo ${v.ordine} immatricolato pre-2015: serve CdP`,
+      });
+    }
   }
 
   // Documenti venditore

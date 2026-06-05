@@ -10,8 +10,7 @@ function baseInput(
   overrides: Partial<SchemaDocumentaleInput> = {},
 ): SchemaDocumentaleInput {
   return {
-    preImm2015: false,
-    flagComodatoDuso: false,
+    veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: false }],
     venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE',
     venditoreVisuraData: null,
     venditorePermessoData: null,
@@ -42,7 +41,9 @@ describe('calcolaDocumentiRichiesti — casi base', () => {
   });
 
   it('pre-2015 aggiunge CERTIFICATO_PROPRIETA al veicolo', () => {
-    const r = calcolaDocumentiRichiesti(baseInput({ preImm2015: true }));
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ veicoli: [{ ordine: 1, preImm2015: true, flagComodatoDuso: false }] }),
+    );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
     const veicolo = r.documentiRichiesti.filter((d) => d.parte === 'VEICOLO');
@@ -236,7 +237,7 @@ describe('calcolaDocumentiRichiesti — flag speciali', () => {
 describe('calcolaDocumentiRichiesti — comodato / blocchi', () => {
   it('comodato attivo → BLOCCO', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ flagComodatoDuso: true }),
+      baseInput({ veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: true }] }),
     );
     expect(r.kind).toBe('BLOCCO');
     if (r.kind !== 'BLOCCO') return;
@@ -269,7 +270,7 @@ describe('calcolaDocumentiRichiesti — combinazioni complesse', () => {
     fresca.setMonth(fresca.getMonth() - 1);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        preImm2015: true,
+        veicoli: [{ ordine: 1, preImm2015: true, flagComodatoDuso: false }],
         venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA',
         flagProcura: true,
         flagSuccessione: true,
@@ -338,5 +339,53 @@ describe('calcolaDocumentiRichiesti — soglia visura 6 mesi', () => {
       }),
     );
     expect(r.kind).toBe('OK');
+  });
+});
+
+describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
+  it('due veicoli: libretto per ciascuno + CdP solo sul pre-2015', () => {
+    const r = calcolaDocumentiRichiesti({
+      veicoli: [
+        { ordine: 1, preImm2015: false, flagComodatoDuso: false },
+        { ordine: 2, preImm2015: true, flagComodatoDuso: false },
+      ],
+      venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
+      flagProcura: false, flagSuccessione: false,
+      acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE', acquirenteVisuraData: null, acquirentePermessoData: null,
+      flagMinore: false,
+    });
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const libretti = r.documentiRichiesti.filter((d) => d.tipo === 'LIBRETTO_CIRCOLAZIONE');
+      expect(libretti.map((d) => d.veicoloOrdine)).toEqual([1, 2]);
+      const cdp = r.documentiRichiesti.filter((d) => d.tipo === 'CERTIFICATO_PROPRIETA');
+      expect(cdp).toHaveLength(1);
+      expect(cdp[0]!.veicoloOrdine).toBe(2);
+    }
+  });
+
+  it('acquirente OPERATORE_AUTO (minivoltura): blocco se visura non fresca', () => {
+    const r = calcolaDocumentiRichiesti({
+      veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: false }],
+      venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
+      flagProcura: false, flagSuccessione: false,
+      acquirenteTipoSoggetto: 'OPERATORE_AUTO', acquirenteVisuraData: null, acquirentePermessoData: null,
+      flagMinore: false,
+    });
+    expect(r.kind).toBe('BLOCCO');
+  });
+
+  it('comodato attivo su un veicolo qualsiasi: blocco', () => {
+    const r = calcolaDocumentiRichiesti({
+      veicoli: [
+        { ordine: 1, preImm2015: false, flagComodatoDuso: false },
+        { ordine: 2, preImm2015: false, flagComodatoDuso: true },
+      ],
+      venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
+      flagProcura: false, flagSuccessione: false,
+      acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE', acquirenteVisuraData: null, acquirentePermessoData: null,
+      flagMinore: false,
+    });
+    expect(r.kind).toBe('BLOCCO');
   });
 });

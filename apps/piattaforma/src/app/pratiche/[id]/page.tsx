@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
-import { prisma } from '@pv/db';
+import { prisma, type PraticaTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
@@ -56,6 +56,7 @@ export default async function PraticaDetailPage({
         orderBy: { createdAt: 'asc' },
       },
       valutazione: true,
+      veicoli: { orderBy: { ordine: 'asc' } },
     },
   });
 
@@ -120,7 +121,13 @@ export default async function PraticaDetailPage({
               {pratica.codicePratica ?? 'BOZZA'}
             </p>
             <h1 className="mt-1 flex flex-wrap items-center gap-3 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-              <span>{pratica.targa ?? 'Pratica senza targa'}</span>
+              <span>
+                {pratica.veicoli[0]?.targa
+                  ? pratica.veicoli.length > 1
+                    ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
+                    : pratica.veicoli[0].targa
+                  : 'Pratica senza targa'}
+              </span>
               <StatusChip
                 stato={pratica.stato as PraticaStato}
                 viewerRole={
@@ -134,7 +141,7 @@ export default async function PraticaDetailPage({
               />
             </h1>
             <p className="mt-1 text-[14px] text-pv-slate-500">
-              {labelTipo(pratica.tipo)} · {pratica.comune ?? '—'}
+              {labelTipo(pratica.tipo, pratica.numeroVeicoli)} · {pratica.comune ?? '—'}
               {pratica.provincia ? ` (${pratica.provincia})` : ''}
             </p>
           </div>
@@ -261,18 +268,37 @@ export default async function PraticaDetailPage({
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
             <Card>
-              <h2 className="text-[15px] font-bold text-pv-navy-800">Dati veicolo</h2>
-              <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-2">
-                <InfoRow label="Targa" value={pratica.targa} />
-                <InfoRow label="Telaio" value={pratica.telaio} mono />
-                <InfoRow label="Proprietario attuale" value={pratica.proprietarioAttuale} />
-                <InfoRow label="Immatricolazione" value={formatDate(pratica.dataImmatricolazione)} />
-                {pratica.tipo === 'MINIVOLTURE_MULTIPLE' && (
-                  <InfoRow label="Numero veicoli" value={String(pratica.numeroVeicoli)} />
-                )}
-                <InfoRow label="Pre-2015" value={pratica.preImm2015 ? 'Sì' : 'No'} />
-                <InfoRow label="Comodato d'uso" value={pratica.flagComodatoDuso ? 'Sì' : 'No'} />
-              </dl>
+              <h2 className="text-[15px] font-bold text-pv-navy-800">
+                {pratica.veicoli.length > 1 ? `Veicoli (${pratica.veicoli.length})` : 'Dati veicolo'}
+              </h2>
+              {pratica.veicoli.length === 0 ? (
+                <p className="mt-3 text-[13px] text-pv-slate-500">Nessun veicolo</p>
+              ) : (
+                <div className="mt-4 space-y-5">
+                  {pratica.veicoli.map((v) => (
+                    <div key={v.id}>
+                      {pratica.veicoli.length > 1 && (
+                        <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                          Veicolo {v.ordine}
+                        </p>
+                      )}
+                      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-2">
+                        <InfoRow label="Targa" value={v.targa} />
+                        <InfoRow label="Telaio" value={v.telaio} mono />
+                        <InfoRow label="Proprietario attuale" value={v.proprietarioAttuale} />
+                        <InfoRow label="Immatricolazione" value={formatDate(v.dataImmatricolazione)} />
+                        <InfoRow label="Pre-2015" value={v.preImm2015 ? 'Sì' : 'No'} />
+                        <InfoRow label="Comodato d'uso" value={v.flagComodatoDuso ? 'Sì' : 'No'} />
+                      </dl>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {pratica.veicoli.length > 1 && (
+                <p className="mt-3 text-[11px] text-pv-slate-500">
+                  Totale veicoli: {pratica.numeroVeicoli}
+                </p>
+              )}
             </Card>
 
             <Card>
@@ -532,10 +558,9 @@ function Flag({ children }: { children: React.ReactNode }) {
   );
 }
 
-function labelTipo(t: string): string {
-  if (t === 'PASSAGGIO_PRIVATO') return 'Passaggio di proprietà privato';
-  if (t === 'MINIVOLTURE_MULTIPLE') return 'Minivolture multiple';
-  return t;
+function labelTipo(tipo: PraticaTipo, numeroVeicoli: number): string {
+  const base = tipo === 'SEMPLICE' ? 'Passaggio di proprietà semplice' : 'Minivoltura';
+  return numeroVeicoli > 1 ? `${base} (multiplo, ${numeroVeicoli} veicoli)` : base;
 }
 
 function labelDocumento(t: string): string {

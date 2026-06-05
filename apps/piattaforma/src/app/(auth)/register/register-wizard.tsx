@@ -15,7 +15,7 @@ import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { WizardProgress } from '@/components/wizard-progress';
 import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
-import { registerAction, checkPromoCodeAction } from '../actions';
+import { registerAction, checkPromoCodeAction, verifyRegistrationDocumentsAction } from '../actions';
 import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
 
@@ -76,6 +76,7 @@ export function RegisterWizard({
     { applied: true; amountCent: number } | { applied: false } | null
   >(null);
   const [isPending, startTransition] = useTransition();
+  const [isVerifyingDocs, startVerifyDocs] = useTransition();
 
   const handleAccount = (values: AccountData) => {
     setData((d) => ({ ...d, account: values }));
@@ -87,9 +88,34 @@ export function RegisterWizard({
     setStep(3);
   };
 
+  // Gate KYC anticipato: la verifica OCR gira QUI (Documenti → Pagamento), così
+  // l'utente è bloccato/sbloccato subito invece che dopo aver compilato il pagamento.
   const handleDocuments = (values: DocumentsData) => {
-    setData((d) => ({ ...d, documents: values }));
-    setStep(4);
+    if (!data.company) {
+      setSubmitError('Completa prima i dati azienda');
+      setStep(2);
+      return;
+    }
+    setKycErrors([]);
+    setSubmitError(null);
+    startVerifyDocs(async () => {
+      const fd = new FormData();
+      fd.set('company', JSON.stringify(data.company));
+      fd.set('CI_FRONTE', values.ciFronte);
+      fd.set('CI_RETRO', values.ciRetro);
+      fd.set('CODICE_FISCALE', values.codiceFiscale);
+      fd.set('VISURA_CAMERALE', values.visuraCamerale);
+
+      const res = await verifyRegistrationDocumentsAction(fd);
+      if (res.ok) {
+        setData((d) => ({ ...d, documents: values }));
+        setStep(4);
+      } else if (res.kycFailures && res.kycFailures.length > 0) {
+        setKycErrors(res.kycFailures);
+      } else {
+        setSubmitError(res.error);
+      }
+    });
   };
 
   const handlePayment = (values: PaymentData, promoCode: string) => {
@@ -203,6 +229,7 @@ export function RegisterWizard({
               onClearKycErrors={() => setKycErrors([])}
               onBack={() => setStep(2)}
               onNext={handleDocuments}
+              isVerifying={isVerifyingDocs}
             />
           )}
           {step === 4 && (
@@ -536,12 +563,14 @@ function DocumentsStep({
   onClearKycErrors,
   onBack,
   onNext,
+  isVerifying,
 }: {
   defaultValues?: DocumentsData;
   kycErrors: KycFailureUi[];
   onClearKycErrors: () => void;
   onBack: () => void;
   onNext: (data: DocumentsData) => void;
+  isVerifying: boolean;
 }) {
   const [ciFronte, setCiFronte] = useState<File | null>(defaultValues?.ciFronte ?? null);
   const [ciRetro, setCiRetro] = useState<File | null>(defaultValues?.ciRetro ?? null);
@@ -638,10 +667,16 @@ function DocumentsStep({
       {error && <Alert variant="error">{error}</Alert>}
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row">
-        <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto">
+        <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto" disabled={isVerifying}>
           Indietro
         </Button>
-        <Button type="submit" disabled={!validation.ok} className="sm:flex-1">
+        <Button
+          type="submit"
+          disabled={!validation.ok || isVerifying}
+          loading={isVerifying}
+          loadingLabel="Verifica documenti in corso…"
+          className="sm:flex-1"
+        >
           Avanti
         </Button>
       </div>

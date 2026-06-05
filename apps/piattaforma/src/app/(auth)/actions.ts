@@ -538,6 +538,97 @@ export async function registerAction(
 }
 
 // ============================================================
+// VERIFY DOCUMENTI (gate KYC anticipato allo step Documenti)
+// ============================================================
+
+export type VerifyDocsResult =
+  | { ok: true }
+  | { ok: false; error: string; kycFailures?: import('@/lib/kyc/verify').KycFailure[] };
+
+/**
+ * Esegue SOLO la verifica OCR/KYC dei documenti (nessuna creazione di account),
+ * così il wizard può bloccare/sbloccare già al passaggio Documenti → Pagamento.
+ * NON sostituisce il gate in `registerAction`, che resta autoritativo al submit
+ * (non bypassabile via API) e persiste i dati estratti.
+ */
+export async function verifyRegistrationDocumentsAction(
+  formData: FormData,
+): Promise<VerifyDocsResult> {
+  // Dati azienda necessari al cross-check (denominazione/P.IVA) e al tipo per
+  // l'allowlist ATECO. Arrivano dallo step 2 già compilato.
+  let company: { type: 'DEALER' | 'AGENZIA'; ragioneSociale: string; partitaIva: string };
+  try {
+    const raw = formData.get('company');
+    const p = JSON.parse(typeof raw === 'string' ? raw : '{}');
+    company = { type: p.type, ragioneSociale: p.ragioneSociale, partitaIva: p.partitaIva };
+  } catch {
+    return { ok: false, error: 'Completa prima i dati azienda' };
+  }
+  if (!company.type || !company.ragioneSociale || !company.partitaIva) {
+    return { ok: false, error: 'Completa prima i dati azienda' };
+  }
+
+  // Estrai e valida i 4 file (presenza/dimensione/mime), come nel submit.
+  const docFiles: { tipo: (typeof REGISTRATION_DOC_SLOTS)[number]; file: File }[] = [];
+  for (const slot of REGISTRATION_DOC_SLOTS) {
+    const f = formData.get(slot);
+    if (!(f instanceof File) || f.size === 0) {
+      return { ok: false, error: 'Carica tutti i documenti richiesti' };
+    }
+    if (f.size > MAX_DOC_BYTES) {
+      return { ok: false, error: 'Un documento supera il limite di 10 MB' };
+    }
+    docFiles.push({ tipo: slot, file: f });
+  }
+  const docCheck = validateRegistrationDocuments(
+    docFiles.map(({ tipo, file }) => ({
+      tipo,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      originalFilename: file.name,
+    })),
+  );
+  if (!docCheck.ok) return { ok: false, error: docCheck.error };
+
+  // In DEMO_MODE l'OCR è simulato/bypassato (coerente col gate del submit).
+  if (env.DEMO_MODE) return { ok: true };
+
+  const allowedAteco = await prisma.atecoAllowedCode.findMany({
+    where: { companyType: company.type, active: true },
+    select: { companyType: true, code: true, active: true },
+  });
+  const toInput = async (tipo: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
+    const d = docFiles.find((x) => x.tipo === tipo)!;
+    return {
+      buffer: Buffer.from(await d.file.arrayBuffer()),
+      mimeType: d.file.type,
+      originalFilename: d.file.name,
+    };
+  };
+  try {
+    const kyc = await verifyRegistrationKyc({
+      files: {
+        ciFronte: await toInput('CI_FRONTE'),
+        codiceFiscale: await toInput('CODICE_FISCALE'),
+        visura: await toInput('VISURA_CAMERALE'),
+      },
+      company,
+      allowedAteco,
+    });
+    if (!kyc.passed) {
+      return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[kyc] verifica documenti (step) fallita', (e as Error).message);
+    return {
+      ok: false,
+      error: 'Non siamo riusciti a verificare i documenti in questo momento. Riprova tra qualche minuto.',
+    };
+  }
+}
+
+// ============================================================
 // VERIFY EMAIL
 // ============================================================
 

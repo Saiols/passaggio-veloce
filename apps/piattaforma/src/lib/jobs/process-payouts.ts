@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { getPayment } from '@/lib/providers/payment';
+import { isPaymentLive } from './payment-live';
 
 const BATCH_SIZE = 20;
 
@@ -19,6 +20,11 @@ const payoutWithWallet = Prisma.validator<Prisma.PayoutDefaultArgs>()({
 type PayoutWithWallet = Prisma.PayoutGetPayload<typeof payoutWithWallet>;
 
 export async function processPayouts(): Promise<ProcessPayoutsResult> {
+  if (!isPaymentLive()) {
+    console.warn('[payment] processPayouts sospeso: provider mock, in attesa di Stripe');
+    return { processed: 0, succeeded: 0, failed: 0 };
+  }
+
   const payouts: PayoutWithWallet[] = await prisma.payout.findMany({
     where: { stato: 'RICHIESTO' },
     take: BATCH_SIZE,

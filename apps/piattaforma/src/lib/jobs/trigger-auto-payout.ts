@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma } from '@pv/db';
+import { isPaymentLive } from './payment-live';
 
 export type TriggerAutoPayoutResult = { created: number };
 
@@ -10,6 +11,11 @@ export type TriggerAutoPayoutResult = { created: number };
  * regola: e' una query bottleneck periodica, non hot path.
  */
 export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
+  if (!isPaymentLive()) {
+    console.warn('[payment] triggerAutoPayout sospeso: provider mock, in attesa di Stripe');
+    return { created: 0 };
+  }
+
   const wallets = await prisma.wallet.findMany({
     select: {
       id: true,

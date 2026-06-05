@@ -144,17 +144,44 @@ const formBool = z.preprocess(
   z.boolean(),
 );
 
-const submitSchema = z.object({
-  tipo: z.enum(['PASSAGGIO_PRIVATO', 'MINIVOLTURE_MULTIPLE']),
-  numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),
-
-  // Dati veicolo (OCR + correzioni)
+/**
+ * Dati di un singolo veicolo (libretto estratto via OCR + correzioni broker).
+ * Arriva dal wizard come elemento dell'array `veicoli` (JSON in FormData); il
+ * file libretto corrispondente arriva nello slot `LIBRETTO_<ordine>`.
+ */
+const veicoloSchema = z.object({
   targa: z.string().trim().min(5).max(10),
   telaio: z.string().trim().min(11).max(17),
   proprietarioAttuale: z.string().trim().min(1).max(120),
-  dataImmatricolazione: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  preImm2015: formBool.default(false),
-  flagComodatoDuso: formBool.default(false),
+  dataImmatricolazione: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .nullable(),
+  preImm2015: z.boolean().default(false),
+  flagComodatoDuso: z.boolean().default(false),
+  // Snapshot OCR opzionale (così com'è arrivato dall'estrazione, pre-correzione).
+  ocrData: z.record(z.string(), z.unknown()).optional().nullable(),
+});
+
+export type VeicoloInputData = z.infer<typeof veicoloSchema>;
+
+const submitSchema = z.object({
+  tipo: z.enum(['SEMPLICE', 'MINIVOLTURA']),
+  numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),
+
+  // Lista veicoli (JSON stringificato in FormData). 1..n elementi.
+  veicoli: z
+    .string()
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s) as unknown;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'veicoli non è JSON valido' });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(veicoloSchema).min(1).max(50)),
 
   // Venditore
   venditoreIsPG: formBool.default(false),
@@ -243,22 +270,26 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     redirect(`/pratiche/nuova?error=${encodeURIComponent(msg)}`);
   }
   const d = parsed.data;
+  const veicoli = d.veicoli;
 
-  // Libretto file (required)
-  const libretto = formData.get('libretto');
-  if (!(libretto instanceof File) || libretto.size === 0) {
-    redirect('/pratiche/nuova?error=Libretto%20mancante');
-  }
-  if ((libretto as File).size > MAX_LIBRETTO_BYTES) {
-    redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+  // Coerenza numeroVeicoli ↔ numero di veicoli inviati.
+  if (veicoli.length !== d.numeroVeicoli) {
+    redirect(
+      '/pratiche/nuova?error=Numero%20veicoli%20incoerente%20con%20i%20dati%20inviati',
+    );
   }
 
-  // Validation business rule sul numeroVeicoli
-  if (d.tipo === 'PASSAGGIO_PRIVATO' && d.numeroVeicoli !== 1) {
-    redirect('/pratiche/nuova?error=Passaggio%20privato%20richiede%201%20veicolo');
-  }
-  if (d.tipo === 'MINIVOLTURE_MULTIPLE' && d.numeroVeicoli < 2) {
-    redirect('/pratiche/nuova?error=Minivolture%20multiple%20richiedono%20almeno%202%20veicoli');
+  // Libretto file per ciascun veicolo: slot LIBRETTO_1..LIBRETTO_<n> (in ordine).
+  const librettoFiles: File[] = [];
+  for (let i = 1; i <= veicoli.length; i++) {
+    const f = formData.get(`LIBRETTO_${i}`);
+    if (!(f instanceof File) || f.size === 0) {
+      redirect(`/pratiche/nuova?error=Libretto%20veicolo%20${i}%20mancante`);
+    }
+    if ((f as File).size > MAX_LIBRETTO_BYTES) {
+      redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+    }
+    librettoFiles.push(f as File);
   }
 
   // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
@@ -274,8 +305,11 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   // o BLOCCO, redirect con motivo. Server-side è la fonte autoritativa, il
   // wizard usa lo stesso engine per UI in tempo reale.
   const esitoSchema = calcolaDocumentiRichiesti({
-    preImm2015: d.preImm2015 ?? false,
-    flagComodatoDuso: d.flagComodatoDuso ?? false,
+    veicoli: veicoli.map((v, i) => ({
+      ordine: i + 1,
+      preImm2015: v.preImm2015,
+      flagComodatoDuso: v.flagComodatoDuso,
+    })),
     venditoreTipoSoggetto: d.venditoreTipoSoggetto ?? null,
     venditoreVisuraData: d.venditoreVisuraData
       ? new Date(d.venditoreVisuraData)
@@ -347,20 +381,32 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   const codicePratica = await nextCodicePratica();
   const now = new Date();
 
-  // Crea la pratica in BOZZA — l'apertura del round 1 avviene subito dopo
-  // tramite l'engine di distribuzione (gestisce selezione agenzie + countdown).
-  const pratica = await prisma.pratica.create({
+  // Upload dei libretti su storage PRIMA della transazione DB (filesystem/R2,
+  // fuori dal contesto transazionale di Prisma). Uno per veicolo, in ordine.
+  const storage = getStorage();
+  const ocrManuale = formData.get('ocrManuale') === 'true';
+  const librettoUploads = await Promise.all(
+    librettoFiles.map(async (file) => {
+      const buffer = await bufferFromFile(file);
+      return storage.put({
+        scope: `pratica/new`,
+        buffer,
+        originalFilename: file.name,
+        mimeType: file.type,
+      });
+    }),
+  );
+
+  // Crea la pratica in BOZZA + i veicoli + i libretti in un'unica transazione.
+  // L'apertura del round 1 avviene subito dopo tramite l'engine di
+  // distribuzione (gestisce selezione agenzie + countdown).
+  const pratica = await prisma.$transaction(async (tx) => {
+    const created = await tx.pratica.create({
     data: {
       codicePratica,
       tipo: d.tipo,
       numeroVeicoli: d.numeroVeicoli,
       stato: 'BOZZA',
-      targa: d.targa.toUpperCase(),
-      telaio: d.telaio.toUpperCase(),
-      proprietarioAttuale: d.proprietarioAttuale,
-      dataImmatricolazione: new Date(d.dataImmatricolazione),
-      preImm2015: d.preImm2015 ?? false,
-      flagComodatoDuso: d.flagComodatoDuso ?? false,
 
       venditoreIsPersonaGiuridica: d.venditoreIsPG,
       venditoreNome: d.venditoreIsPG ? null : d.venditoreNome,
@@ -381,7 +427,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       acquirenteEmail: d.acquirenteEmail?.toLowerCase() || null,
 
       flagCointestazione: d.flagCointestazione,
-      flagMinivoltura: d.flagMinivoltura,
+      flagMinivoltura: d.tipo === 'MINIVOLTURA',
       flagProcura: d.flagProcura,
 
       comune: d.comune,
@@ -411,6 +457,61 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
 
       submittedAt: now,
     },
+  });
+
+    // Un Veicolo per elemento (ordine 1..n) + il libretto collegato.
+    for (let i = 0; i < veicoli.length; i++) {
+      const v = veicoli[i]!;
+      const upload = librettoUploads[i]!;
+      const veicolo = await tx.veicolo.create({
+        data: {
+          praticaId: created.id,
+          ordine: i + 1,
+          targa: v.targa.toUpperCase(),
+          telaio: v.telaio.toUpperCase(),
+          proprietarioAttuale: v.proprietarioAttuale,
+          dataImmatricolazione: v.dataImmatricolazione
+            ? new Date(v.dataImmatricolazione)
+            : null,
+          preImm2015: v.preImm2015,
+          flagComodatoDuso: v.flagComodatoDuso,
+          ocrData: (v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined,
+          ocrProvider: env.OCR_PROVIDER,
+          ocrAt: now,
+        },
+      });
+
+      const ocrSnapshot: Prisma.InputJsonValue = {
+        targa: v.targa,
+        telaio: v.telaio,
+        proprietarioAttuale: v.proprietarioAttuale,
+        dataImmatricolazione: v.dataImmatricolazione ?? null,
+        preImm2015: v.preImm2015,
+        flagComodatoDuso: v.flagComodatoDuso,
+        ocrManuale,
+      };
+
+      await tx.documento.create({
+        data: {
+          tipo: 'LIBRETTO_CIRCOLAZIONE',
+          praticaId: created.id,
+          veicoloId: veicolo.id,
+          storageKey: upload.storageKey,
+          storageProvider: upload.storageProvider,
+          mimeType: upload.mimeType,
+          sizeBytes: upload.sizeBytes,
+          originalFilename: upload.originalFilename,
+          uploadedById: userId,
+          ocrStato: ocrManuale ? 'FAILED' : 'SUCCESS',
+          ocrProvider: env.OCR_PROVIDER,
+          ocrData: ocrSnapshot,
+          ocrAt: now,
+          gatingStato: 'PASSED',
+        },
+      });
+    }
+
+    return created;
   });
 
   // Sistema Penali Broker (SP-A): log immutabile dell'accettazione popup.
@@ -443,7 +544,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       target: { email: me.email ?? '', userId: me.id ?? null, companyId: brokerId },
       payload: {
         codicePratica,
-        targa: d.targa,
+        targa: veicoli[0]!.targa,
         comune: d.comune,
         provincia: d.provincia,
         numeroAgenzie: round1.assegnazioni,
@@ -451,46 +552,6 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       },
     }).catch(() => undefined);
   }
-
-  // Upload libretto su storage (fuori dalla transaction — filesystem)
-  const storage = getStorage();
-  const buffer = await bufferFromFile(libretto as File);
-  const put = await storage.put({
-    scope: `pratica/${pratica.id}`,
-    buffer,
-    originalFilename: (libretto as File).name,
-    mimeType: (libretto as File).type,
-  });
-
-  // Salvo record documento + mock OCR result snapshot
-  const ocrManuale = formData.get('ocrManuale') === 'true';
-  const ocrSnapshot: Prisma.InputJsonValue = {
-    targa: d.targa,
-    telaio: d.telaio,
-    proprietarioAttuale: d.proprietarioAttuale,
-    dataImmatricolazione: d.dataImmatricolazione,
-    preImm2015: d.preImm2015,
-    flagComodatoDuso: d.flagComodatoDuso,
-    ocrManuale,
-  };
-
-  await prisma.documento.create({
-    data: {
-      tipo: 'LIBRETTO_CIRCOLAZIONE',
-      praticaId: pratica.id,
-      storageKey: put.storageKey,
-      storageProvider: put.storageProvider,
-      mimeType: put.mimeType,
-      sizeBytes: put.sizeBytes,
-      originalFilename: put.originalFilename,
-      uploadedById: userId,
-      ocrStato: ocrManuale ? 'FAILED' : 'SUCCESS',
-      ocrProvider: env.OCR_PROVIDER,
-      ocrData: ocrSnapshot,
-      ocrAt: now,
-      gatingStato: 'PASSED',
-    },
-  });
 
   // Documenti aggiuntivi per parte (D-06): CI, CF, procura, visura, permesso.
   // Tutti opzionali. Salviamo file su storage + record Documento con owner.

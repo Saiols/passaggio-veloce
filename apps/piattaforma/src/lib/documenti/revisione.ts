@@ -87,7 +87,7 @@ export async function richiediRevisioneManualeAction(
     // ancora). L'admin contatta il broker direttamente.
     const created = await prisma.pratica.create({
       data: {
-        tipo: 'PASSAGGIO_PRIVATO',
+        tipo: 'SEMPLICE',
         stato: 'BOZZA',
         brokerId,
         richiedeRevisioneManuale: true,

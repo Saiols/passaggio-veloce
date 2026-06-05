@@ -3,48 +3,87 @@ import type { OcrExtractInput } from '@/lib/providers/ocr';
 
 export type VisuraData = {
   dataEmissione?: string; // ISO yyyy-mm-dd
-  ateco?: string;
+  ateco?: string; // codice primario (per messaggi/display)
+  atecoCodes?: string[]; // TUTTI i codici ATECO trovati (una visura ne riporta più d'uno)
   denominazione?: string;
   partitaIva?: string;
   amministratore?: { nome?: string; cognome?: string; codiceFiscale?: string };
   rawText: string;
 };
 
-const CF_RE = /\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/;
+const CF_INNER = "[A-Z]{6}\\d{2}[A-Z]\\d{2}[A-Z]\\d{3}[A-Z]";
 const PIVA_RE = /\b(\d{11})\b/;
-const ATECO_RE = /\b(\d{2}\.\d{1,2}(?:\.\d{1,2})?)\b/;
-const DATE_RE = /\b(\d{2})\/(\d{2})\/(\d{4})\b/;
+// Codice ATECO/NACE: 2 parti (47.81) o 3 parti (47.81.10). NB: le date usano "/",
+// quindi "\d{2}\.\d{2}" non intercetta date.
+const ATECO_RE = /\b(\d{2}\.\d{2}(?:\.\d{1,2})?)\b/g;
 
-/** Parsing best-effort del testo di una visura camerale. Puro/testabile. */
+/**
+ * Parsing best-effort del testo di una visura camerale InfoCamere/CCIAA.
+ * Puro/testabile. Calibrato sul layout reale del Registro Imprese.
+ */
 export function parseVisuraText(text: string): VisuraData {
   const out: VisuraData = { rawText: text };
   const upper = text.toUpperCase();
 
-  const denom = /DENOMINAZIONE[:\s]+([^\n]+)/i.exec(text);
+  // Denominazione: "Denominazione: X" fino al campo successivo. Non determinante
+  // (il match azienda usa soprattutto la P.IVA), ma utile come fallback.
+  const denom = /Denominazione:\s*([^\n]{2,80}?)\s+(?:Data atto|Codice fiscale|Codice Fiscale|Visura)/i.exec(text);
   if (denom) out.denominazione = denom[1]!.trim();
 
   const piva = PIVA_RE.exec(upper);
   if (piva) out.partitaIva = piva[1];
 
-  const ateco = ATECO_RE.exec(upper.includes('ATECO') ? upper.slice(upper.indexOf('ATECO')) : upper);
-  if (ateco) out.ateco = ateco[1];
+  // ATECO: raccogli TUTTI i codici (la visura riporta sia l'ATECO 2025 sia
+  // l'ATECORI 2007-2022, es. 47.81.10 e 45.11.01). Il gate accetta se ALMENO uno
+  // è ammesso.
+  const codes = [...upper.matchAll(ATECO_RE)].map((m) => m[1]!);
+  out.atecoCodes = [...new Set(codes)];
+  out.ateco = out.atecoCodes[0];
 
-  const date = DATE_RE.exec(upper.includes('ESTRATT') ? upper.slice(upper.indexOf('ESTRATT')) : upper);
+  // Data emissione: la frase ufficiale InfoCamere. NON usare un generico "estratt"
+  // perché il disclaimer in cima ("viene esposto un estratto delle informazioni")
+  // farebbe pescare la prima data utile (es. data costituzione).
+  const date = /estratto dal Registro Imprese in data\s+(\d{2})\/(\d{2})\/(\d{4})/i.exec(text);
   if (date) out.dataEmissione = `${date[3]}-${date[2]}-${date[1]}`;
 
-  const cf = CF_RE.exec(upper);
-  // riga amministratore: "COGNOME NOME - C.F. XXX" vicino al CF
-  const adminLine = /([A-ZÀ-Ù'']+)\s+([A-ZÀ-Ù'']+)\s*[-–]\s*C\.?F\.?\s*([A-Z0-9]{16})/i.exec(text);
-  if (adminLine) {
-    out.amministratore = {
-      cognome: adminLine[1]!.toUpperCase(),
-      nome: adminLine[2]!.toUpperCase(),
-      codiceFiscale: adminLine[3]!.toUpperCase(),
-    };
-  } else if (cf) {
-    out.amministratore = { codiceFiscale: cf[1] };
-  }
+  out.amministratore = parseAmministratore(text);
   return out;
+}
+
+/**
+ * Estrae l'amministratore/rappresentante dalla sezione "Amministratori" della
+ * visura (InfoCamere): la carica è seguita dal nome (COGNOME NOME) e, poco dopo,
+ * da "Codice fiscale: XXX". Si lavora su una finestra che parte dalla sezione
+ * amministratori, così il primo CF della finestra è quello dell'amministratore
+ * (i CF dei soci stanno in una sezione precedente).
+ */
+function parseAmministratore(text: string): VisuraData['amministratore'] {
+  const startIdx = (() => {
+    const a = text.search(/Elenco amministratori/i);
+    if (a >= 0) return a;
+    const b = text.search(/\bAmministratori\b/);
+    return b >= 0 ? b : 0;
+  })();
+  const region = text.slice(startIdx, startIdx + 1500);
+
+  // Carica (case-sensitive: nelle visure è "Amministratore Unico" maiuscolo) seguita
+  // dal nome in MAIUSCOLO, fino a "Rappresentante"/"Nato"/"Codice fiscale".
+  const caricaRe =
+    /(?:Amministratore Unico|Amministratore Delegato|Consigliere Delegato|Amministratore|Presidente del Consiglio[^\n]{0,40}|Presidente|Liquidatore|Socio Amministratore)\s+([A-ZÀ-Ù'’]{2,}(?:\s+[A-ZÀ-Ù'’]{2,}){1,3}?)\s+(?:Rappresentante|Nato|Nata|Codice fiscale)/;
+  const m = caricaRe.exec(region);
+  let nome: string | undefined;
+  let cognome: string | undefined;
+  if (m) {
+    const tokens = m[1]!.trim().split(/\s+/);
+    cognome = tokens[0]; // InfoCamere: COGNOME NOME
+    nome = tokens.slice(1).join(' ') || undefined;
+  }
+
+  const cfm = new RegExp(`Codice fiscale:?\\s*(${CF_INNER})`, 'i').exec(region);
+  const codiceFiscale = cfm ? cfm[1]!.toUpperCase() : undefined;
+
+  if (!nome && !cognome && !codiceFiscale) return undefined;
+  return { nome, cognome, codiceFiscale };
 }
 
 /** Estrae i dati visura da un PDF. Usa unpdf (testo); se il PDF non ha testo

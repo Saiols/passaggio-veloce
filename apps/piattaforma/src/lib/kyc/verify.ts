@@ -60,7 +60,8 @@ export async function verifyRegistrationKyc(
   const failures: KycFailure[] = [];
 
   // Illeggibilità (campi chiave mancanti) — distinta dal mismatch.
-  if (!visura.dataEmissione || !visura.ateco || (!visura.partitaIva && !visura.denominazione)) {
+  const atecoCodes = visura.atecoCodes ?? (visura.ateco ? [visura.ateco] : []);
+  if (!visura.dataEmissione || atecoCodes.length === 0 || (!visura.partitaIva && !visura.denominazione)) {
     failures.push({ rule: 'ILLEGGIBILE', doc: 'VISURA', message: 'Non siamo riusciti a leggere la visura: carica il PDF originale (non una scansione).' });
   }
   const adminNameReadable = !!(visura.amministratore?.nome && visura.amministratore?.cognome);
@@ -84,8 +85,9 @@ export async function verifyRegistrationKyc(
     const age = isVisuraDateValid(visura.dataEmissione, VISURA_MAX_AGE_MONTHS, now);
     if (!age.ok) failures.push({ rule: 'VISURA_SCADUTA', doc: 'VISURA', message: age.error });
   }
-  if (visura.ateco && !isAtecoAllowed(visura.ateco, args.company.type, args.allowedAteco)) {
-    failures.push({ rule: 'ATECO_NON_IDONEO', doc: 'VISURA', message: `Il codice ATECO ${visura.ateco} non rientra tra le attività ammesse per la registrazione.` });
+  if (atecoCodes.length > 0 &&
+      !atecoCodes.some((c) => isAtecoAllowed(c, args.company.type, args.allowedAteco))) {
+    failures.push({ rule: 'ATECO_NON_IDONEO', doc: 'VISURA', message: `Il codice ATECO (${atecoCodes.join(', ')}) non rientra tra le attività ammesse per la registrazione.` });
   }
   if ((visura.partitaIva || visura.denominazione) &&
       !companyMatches(visura, { denominazione: args.company.ragioneSociale, partitaIva: args.company.partitaIva })) {

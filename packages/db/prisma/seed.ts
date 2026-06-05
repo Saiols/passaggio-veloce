@@ -2024,10 +2024,11 @@ async function main() {
   // ATECO ammessi di default (gruppo 45 = commercio autoveicoli per i dealer;
   // 82.11/82.99 provvisori per le agenzie — DA CONFERMARE col commercialista).
   const atecoDefaults: Array<{ companyType: 'DEALER' | 'AGENZIA'; code: string; label: string }> = [
-    { companyType: 'DEALER', code: '4511', label: 'Commercio autoveicoli' },
-    { companyType: 'DEALER', code: '4519', label: 'Commercio altri autoveicoli' },
-    { companyType: 'DEALER', code: '453', label: 'Commercio parti e accessori' },
-    { companyType: 'DEALER', code: '454', label: 'Commercio motocicli' },
+    { companyType: 'DEALER', code: '4511', label: 'Commercio autoveicoli (ATECORI 2007)' },
+    { companyType: 'DEALER', code: '4519', label: 'Commercio altri autoveicoli (ATECORI 2007)' },
+    { companyType: 'DEALER', code: '453', label: 'Commercio parti e accessori auto' },
+    { companyType: 'DEALER', code: '454', label: 'Commercio/riparazione motocicli' },
+    { companyType: 'DEALER', code: '4781', label: 'Commercio al dettaglio autoveicoli (ATECO 2025)' },
     { companyType: 'AGENZIA', code: '8211', label: 'Servizi integrati di supporto (DA CONFERMARE)' },
     { companyType: 'AGENZIA', code: '8299', label: 'Altri servizi di supporto alle imprese (DA CONFERMARE)' },
   ];

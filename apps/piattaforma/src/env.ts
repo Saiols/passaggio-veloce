@@ -31,7 +31,7 @@ export const env = createEnv({
     GOOGLE_DOCUMENTAI_PROCESSOR_ID: z.string().optional(),
     GOOGLE_DOCUMENTAI_CREDENTIALS_JSON: z.string().optional(),
 
-    REGISTRO_IMPRESE_PROVIDER: z.enum(['mock', 'openapi', 'infocamere']).default('mock'),
+    REGISTRO_IMPRESE_PROVIDER: z.enum(['mock', 'noop', 'openapi', 'infocamere']).default('mock'),
     REGISTRO_IMPRESE_API_KEY: z.string().optional(),
 
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),

@@ -1,6 +1,7 @@
 import 'server-only';
 import { env } from '@/env';
 import { MockRegistroImpreseProvider } from './mock';
+import { NoopRegistroImpreseProvider } from './noop';
 import type { RegistroImpreseProvider } from './types';
 
 export * from './types';
@@ -12,6 +13,9 @@ export function getRegistroImprese(): RegistroImpreseProvider {
   switch (env.REGISTRO_IMPRESE_PROVIDER) {
     case 'mock':
       instance = new MockRegistroImpreseProvider();
+      break;
+    case 'noop':
+      instance = new NoopRegistroImpreseProvider();
       break;
     case 'openapi':
       throw new Error(

@@ -71,6 +71,10 @@ export function RegisterWizard({
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [kycErrors, setKycErrors] = useState<KycFailureUi[]>([]);
+  // Cache verifica documenti: evita di ri-chiamare l'OCR su Back→Avanti senza
+  // modifiche. `kycToken` viene passato al submit per non ri-fare l'OCR lì.
+  const [kycToken, setKycToken] = useState<string | null>(null);
+  const [docsVerified, setDocsVerified] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [promoOutcome, setPromoOutcome] = useState<
     { applied: true; amountCent: number } | { applied: false } | null
@@ -85,7 +89,18 @@ export function RegisterWizard({
 
   const handleCompany = (values: CompanyData) => {
     setData((d) => ({ ...d, company: values }));
+    // I dati azienda incidono sul cross-check visura: invalida la verifica.
+    setDocsVerified(false);
+    setKycToken(null);
+    setKycErrors([]);
     setStep(3);
+  };
+
+  // I documenti sono cambiati: la verifica precedente non vale più.
+  const invalidateDocsVerification = () => {
+    setKycErrors([]);
+    setDocsVerified(false);
+    setKycToken(null);
   };
 
   // Gate KYC anticipato: la verifica OCR gira QUI (Documenti → Pagamento), così
@@ -94,6 +109,12 @@ export function RegisterWizard({
     if (!data.company) {
       setSubmitError('Completa prima i dati azienda');
       setStep(2);
+      return;
+    }
+    // Già verificati questi documenti (azienda invariata): salta la richiesta.
+    if (docsVerified && kycToken) {
+      setData((d) => ({ ...d, documents: values }));
+      setStep(4);
       return;
     }
     setKycErrors([]);
@@ -109,9 +130,13 @@ export function RegisterWizard({
       const res = await verifyRegistrationDocumentsAction(fd);
       if (res.ok) {
         setData((d) => ({ ...d, documents: values }));
+        setKycToken(res.token ?? null);
+        setDocsVerified(true);
         setStep(4);
       } else if (res.kycFailures && res.kycFailures.length > 0) {
         setKycErrors(res.kycFailures);
+        setDocsVerified(false);
+        setKycToken(null);
       } else {
         setSubmitError(res.error);
       }
@@ -139,6 +164,7 @@ export function RegisterWizard({
           payment: values,
           referralCode,
           promoCode,
+          kycToken,
         }),
       );
       fd.set('CI_FRONTE', docs.ciFronte);
@@ -226,7 +252,7 @@ export function RegisterWizard({
             <DocumentsStep
               defaultValues={data.documents}
               kycErrors={kycErrors}
-              onClearKycErrors={() => setKycErrors([])}
+              onDocsChanged={invalidateDocsVerification}
               onBack={() => setStep(2)}
               onNext={handleDocuments}
               isVerifying={isVerifyingDocs}
@@ -560,14 +586,14 @@ function DocCard({
 function DocumentsStep({
   defaultValues,
   kycErrors,
-  onClearKycErrors,
+  onDocsChanged,
   onBack,
   onNext,
   isVerifying,
 }: {
   defaultValues?: DocumentsData;
   kycErrors: KycFailureUi[];
-  onClearKycErrors: () => void;
+  onDocsChanged: () => void;
   onBack: () => void;
   onNext: (data: DocumentsData) => void;
   isVerifying: boolean;
@@ -609,10 +635,10 @@ function DocumentsStep({
     });
   };
 
-  // Quando l'utente cambia/sostituisce un documento dopo un blocco KYC, gli
-  // errori precedenti non sono più pertinenti: li azzeriamo.
+  // Quando l'utente cambia/sostituisce un documento, la verifica precedente non
+  // vale più: azzeriamo errori e stato "verificato" (così l'Avanti ri-verifica).
   const onDocChange = (setter: (f: File | null) => void) => (f: File | null) => {
-    onClearKycErrors();
+    onDocsChanged();
     setter(f);
   };
 

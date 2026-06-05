@@ -27,6 +27,7 @@ import {
 import { evaluatePromoCode, normalizePromoCode, type PromoCheckResult } from '@/lib/promo/evaluate';
 import { redeemPromoCode, type PromoRedeemResult } from '@/lib/promo/redeem';
 import { verifyRegistrationKyc } from '@/lib/kyc/verify';
+import { signKycToken, verifyKycToken, hashDocs } from '@/lib/kyc/token';
 
 // ============================================================
 // LOGIN
@@ -181,6 +182,13 @@ export async function registerAction(
       ? (payloadObj as { promoCode: string }).promoCode
       : '';
 
+  // Token KYC (facoltativo): emesso dallo step Documenti dopo l'OCR. Se valido e
+  // legato a questi file, evita di ri-eseguire l'OCR al submit.
+  const kycTokenFromPayload =
+    typeof (payloadObj as { kycToken?: unknown }).kycToken === 'string'
+      ? (payloadObj as { kycToken: string }).kycToken
+      : '';
+
   // 2. Estrai i 4 file obbligatori dal FormData.
   const docFiles: { tipo: (typeof REGISTRATION_DOC_SLOTS)[number]; file: File }[] = [];
   for (const slot of REGISTRATION_DOC_SLOTS) {
@@ -223,42 +231,59 @@ export async function registerAction(
   // (persistenza ocrData/visuraCameraleData). null in DEMO_MODE (gate skippato).
   let kycExtracted: Awaited<ReturnType<typeof verifyRegistrationKyc>> | null = null;
   if (!env.DEMO_MODE) {
-    const allowedAteco = await prisma.atecoAllowedCode.findMany({
-      where: { companyType: company.type, active: true },
-      select: { companyType: true, code: true, active: true },
-    });
     const toInput = (t: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
       const d = bufByTipo(t);
       return { buffer: d.buffer, mimeType: d.file.type, originalFilename: d.file.name };
     };
-    let kyc: Awaited<ReturnType<typeof verifyRegistrationKyc>>;
-    try {
-      kyc = await verifyRegistrationKyc({
-        files: {
-          ciFronte: toInput('CI_FRONTE'),
-          codiceFiscale: toInput('CODICE_FISCALE'),
-          visura: toInput('VISURA_CAMERALE'),
-        },
-        company: {
-          ragioneSociale: company.ragioneSociale,
-          partitaIva: company.partitaIva,
-          type: company.type,
-        },
-        allowedAteco,
+    // Token KYC: se il client ha già superato la verifica allo step Documenti e
+    // porta un token valido legato a QUESTI file, NON ri-eseguiamo l'OCR.
+    const docsHash = hashDocs([
+      bufByTipo('CI_FRONTE').buffer,
+      bufByTipo('CODICE_FISCALE').buffer,
+      bufByTipo('VISURA_CAMERALE').buffer,
+    ]);
+    const tokenCheck = kycTokenFromPayload
+      ? verifyKycToken(kycTokenFromPayload, docsHash, Date.now())
+      : ({ valid: false } as const);
+
+    if (tokenCheck.valid) {
+      kycExtracted = { passed: true, extracted: tokenCheck.extracted };
+    } else {
+      // Nessun token valido (es. chiamata API diretta o token scaduto): l'OCR è
+      // autoritativo qui, così il gate non è bypassabile.
+      const allowedAteco = await prisma.atecoAllowedCode.findMany({
+        where: { companyType: company.type, active: true },
+        select: { companyType: true, code: true, active: true },
       });
-    } catch (e) {
-      // Errore tecnico dell'OCR (timeout/quota/provider down): non deve
-      // diventare un 500 opaco — messaggio chiaro, nessun account creato.
-      console.error('[kyc] verifica documenti fallita', (e as Error).message);
-      return {
-        ok: false,
-        error: 'Non siamo riusciti a verificare i documenti in questo momento. Riprova tra qualche minuto.',
-      };
+      let kyc: Awaited<ReturnType<typeof verifyRegistrationKyc>>;
+      try {
+        kyc = await verifyRegistrationKyc({
+          files: {
+            ciFronte: toInput('CI_FRONTE'),
+            codiceFiscale: toInput('CODICE_FISCALE'),
+            visura: toInput('VISURA_CAMERALE'),
+          },
+          company: {
+            ragioneSociale: company.ragioneSociale,
+            partitaIva: company.partitaIva,
+            type: company.type,
+          },
+          allowedAteco,
+        });
+      } catch (e) {
+        // Errore tecnico dell'OCR (timeout/quota/provider down): non deve
+        // diventare un 500 opaco — messaggio chiaro, nessun account creato.
+        console.error('[kyc] verifica documenti fallita', (e as Error).message);
+        return {
+          ok: false,
+          error: 'Non siamo riusciti a verificare i documenti in questo momento. Riprova tra qualche minuto.',
+        };
+      }
+      if (!kyc.passed) {
+        return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
+      }
+      kycExtracted = kyc;
     }
-    if (!kyc.passed) {
-      return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
-    }
-    kycExtracted = kyc;
   }
 
   const refCodeInput = refCodeFromPayload?.trim().toLowerCase();
@@ -542,7 +567,7 @@ export async function registerAction(
 // ============================================================
 
 export type VerifyDocsResult =
-  | { ok: true }
+  | { ok: true; token?: string }
   | { ok: false; error: string; kycFailures?: import('@/lib/kyc/verify').KycFailure[] };
 
 /**
@@ -597,7 +622,7 @@ export async function verifyRegistrationDocumentsAction(
     where: { companyType: company.type, active: true },
     select: { companyType: true, code: true, active: true },
   });
-  const toInput = async (tipo: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
+  const inputFor = async (tipo: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
     const d = docFiles.find((x) => x.tipo === tipo)!;
     return {
       buffer: Buffer.from(await d.file.arrayBuffer()),
@@ -606,19 +631,20 @@ export async function verifyRegistrationDocumentsAction(
     };
   };
   try {
+    const ci = await inputFor('CI_FRONTE');
+    const cf = await inputFor('CODICE_FISCALE');
+    const vis = await inputFor('VISURA_CAMERALE');
     const kyc = await verifyRegistrationKyc({
-      files: {
-        ciFronte: await toInput('CI_FRONTE'),
-        codiceFiscale: await toInput('CODICE_FISCALE'),
-        visura: await toInput('VISURA_CAMERALE'),
-      },
+      files: { ciFronte: ci, codiceFiscale: cf, visura: vis },
       company,
       allowedAteco,
     });
     if (!kyc.passed) {
       return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
     }
-    return { ok: true };
+    // Token firmato legato a QUESTI file: il submit lo usa per non ri-fare l'OCR.
+    const token = signKycToken(hashDocs([ci.buffer, cf.buffer, vis.buffer]), kyc.extracted, Date.now());
+    return { ok: true, token };
   } catch (e) {
     console.error('[kyc] verifica documenti (step) fallita', (e as Error).message);
     return {

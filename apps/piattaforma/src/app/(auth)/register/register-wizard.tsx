@@ -30,6 +30,13 @@ type DocumentsData = {
   visuraCamerale: File;
 };
 
+/**
+ * Esito di blocco KYC per singolo documento (mirror del tipo server-side
+ * `KycFailure` in @/lib/kyc/verify, che però è `server-only`: qui ne teniamo
+ * la forma minimale usata in UI per evitare l'import del modulo server).
+ */
+type KycFailureUi = { doc?: 'CI' | 'CF' | 'VISURA'; message: string };
+
 type WizardData = {
   account?: AccountData;
   company?: CompanyData;
@@ -63,6 +70,7 @@ export function RegisterWizard({
       : {},
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [kycErrors, setKycErrors] = useState<KycFailureUi[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [promoOutcome, setPromoOutcome] = useState<
     { applied: true; amountCent: number } | { applied: false } | null
@@ -93,6 +101,7 @@ export function RegisterWizard({
     }
 
     setSubmitError(null);
+    setKycErrors([]);
     const docs = data.documents;
     startTransition(async () => {
       const fd = new FormData();
@@ -116,6 +125,11 @@ export function RegisterWizard({
       if (result.ok) {
         setToken(result.emailVerificationToken);
         setPromoOutcome(result.promo ?? null);
+      } else if (result.kycFailures && result.kycFailures.length > 0) {
+        // Gate KYC non superato: torna allo step Documenti e mostra i motivi
+        // di blocco per documento, così l'utente sa esattamente cosa correggere.
+        setKycErrors(result.kycFailures);
+        setStep(3);
       } else {
         setSubmitError(result.error);
       }
@@ -185,6 +199,8 @@ export function RegisterWizard({
           {step === 3 && (
             <DocumentsStep
               defaultValues={data.documents}
+              kycErrors={kycErrors}
+              onClearKycErrors={() => setKycErrors([])}
               onBack={() => setStep(2)}
               onNext={handleDocuments}
             />
@@ -415,10 +431,13 @@ function DocCard({
   label,
   file,
   onChange,
+  invalid = false,
 }: {
   label: string;
   file: File | null;
   onChange: (f: File | null) => void;
+  /** Evidenzia la card quando il gate KYC ha segnalato un problema su questo documento. */
+  invalid?: boolean;
 }) {
   const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   const previewUrl = useMemo(
@@ -438,7 +457,11 @@ function DocCard({
   return (
     <div
       className={`rounded-xl border p-4 transition ${
-        file ? 'border-pv-green-500/40 bg-pv-green-50' : 'border-pv-slate-200 bg-white'
+        invalid
+          ? 'border-pv-red-500 bg-pv-red-50'
+          : file
+            ? 'border-pv-green-500/40 bg-pv-green-50'
+            : 'border-pv-slate-200 bg-white'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -509,10 +532,14 @@ function DocCard({
 
 function DocumentsStep({
   defaultValues,
+  kycErrors,
+  onClearKycErrors,
   onBack,
   onNext,
 }: {
   defaultValues?: DocumentsData;
+  kycErrors: KycFailureUi[];
+  onClearKycErrors: () => void;
   onBack: () => void;
   onNext: (data: DocumentsData) => void;
 }) {
@@ -553,22 +580,59 @@ function DocumentsStep({
     });
   };
 
+  // Quando l'utente cambia/sostituisce un documento dopo un blocco KYC, gli
+  // errori precedenti non sono più pertinenti: li azzeriamo.
+  const onDocChange = (setter: (f: File | null) => void) => (f: File | null) => {
+    onClearKycErrors();
+    setter(f);
+  };
+
+  // Documenti coinvolti nel blocco KYC, per evidenziare le rispettive card
+  // (CI → carta d'identità fronte/retro, CF → tessera, VISURA → visura).
+  const failedDocs = new Set(kycErrors.map((f) => f.doc).filter(Boolean));
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {kycErrors.length > 0 && (
+        <Alert variant="error" title="Verifica documenti non superata">
+          <ul className="list-disc space-y-1 pl-5">
+            {kycErrors.map((f, i) => (
+              <li key={i}>{f.message}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+
       <Alert variant="info">
         Carica i documenti KYC dell&apos;amministratore e dell&apos;azienda. Formati
         ammessi: PDF, JPG, PNG (max 10 MB per file).
       </Alert>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DocCard label="Carta d'identità — Fronte" file={ciFronte} onChange={setCiFronte} />
-        <DocCard label="Carta d'identità — Retro" file={ciRetro} onChange={setCiRetro} />
+        <DocCard
+          label="Carta d'identità — Fronte"
+          file={ciFronte}
+          onChange={onDocChange(setCiFronte)}
+          invalid={failedDocs.has('CI')}
+        />
+        <DocCard
+          label="Carta d'identità — Retro"
+          file={ciRetro}
+          onChange={onDocChange(setCiRetro)}
+          invalid={failedDocs.has('CI')}
+        />
         <DocCard
           label="Codice Fiscale / Tessera Sanitaria"
           file={codiceFiscale}
-          onChange={setCodiceFiscale}
+          onChange={onDocChange(setCodiceFiscale)}
+          invalid={failedDocs.has('CF')}
         />
-        <DocCard label="Visura Camerale" file={visuraCamerale} onChange={setVisuraCamerale} />
+        <DocCard
+          label="Visura Camerale"
+          file={visuraCamerale}
+          onChange={onDocChange(setVisuraCamerale)}
+          invalid={failedDocs.has('VISURA')}
+        />
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}
@@ -713,7 +777,7 @@ function PaymentStep({
           type="submit"
           disabled={!isValid}
           loading={isSubmitting}
-          loadingLabel="Registrazione…"
+          loadingLabel="Verifica documenti in corso…"
           className="sm:flex-1"
         >
           Completa registrazione

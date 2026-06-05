@@ -37,6 +37,9 @@ export class GoogleDocumentAiProvider implements OcrProvider {
     this.client = new DocumentProcessorServiceClient({
       credentials,
       apiEndpoint: `${opts.location}-documentai.googleapis.com`,
+      // Su runtime serverless (Vercel) il trasporto gRPC di default può fallire;
+      // `fallback: true` forza REST/HTTP, più affidabile in questi ambienti.
+      fallback: true,
     });
     this.processorName = `projects/${opts.projectId}/locations/${opts.location}/processors/${opts.processorId}`;
   }

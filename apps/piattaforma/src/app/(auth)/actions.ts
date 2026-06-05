@@ -231,19 +231,30 @@ export async function registerAction(
       const d = bufByTipo(t);
       return { buffer: d.buffer, mimeType: d.file.type, originalFilename: d.file.name };
     };
-    const kyc = await verifyRegistrationKyc({
-      files: {
-        ciFronte: toInput('CI_FRONTE'),
-        codiceFiscale: toInput('CODICE_FISCALE'),
-        visura: toInput('VISURA_CAMERALE'),
-      },
-      company: {
-        ragioneSociale: company.ragioneSociale,
-        partitaIva: company.partitaIva,
-        type: company.type,
-      },
-      allowedAteco,
-    });
+    let kyc: Awaited<ReturnType<typeof verifyRegistrationKyc>>;
+    try {
+      kyc = await verifyRegistrationKyc({
+        files: {
+          ciFronte: toInput('CI_FRONTE'),
+          codiceFiscale: toInput('CODICE_FISCALE'),
+          visura: toInput('VISURA_CAMERALE'),
+        },
+        company: {
+          ragioneSociale: company.ragioneSociale,
+          partitaIva: company.partitaIva,
+          type: company.type,
+        },
+        allowedAteco,
+      });
+    } catch (e) {
+      // Errore tecnico dell'OCR (timeout/quota/provider down): non deve
+      // diventare un 500 opaco — messaggio chiaro, nessun account creato.
+      console.error('[kyc] verifica documenti fallita', (e as Error).message);
+      return {
+        ok: false,
+        error: 'Non siamo riusciti a verificare i documenti in questo momento. Riprova tra qualche minuto.',
+      };
+    }
     if (!kyc.passed) {
       return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
     }

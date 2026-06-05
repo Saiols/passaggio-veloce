@@ -294,7 +294,7 @@ async function main() {
 
   type PraticaSeed = {
     codicePratica: string;
-    tipo: 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
+    tipo: 'SEMPLICE' | 'MINIVOLTURA';
     stato:
       | 'BOZZA'
       | 'IN_ATTESA_ROUND_1'
@@ -308,6 +308,7 @@ async function main() {
     targa: string;
     telaio: string;
     proprietario: string;
+    numeroVeicoli?: number;
     feeAgenziaCent: number;
     creditoBrokerCent: number;
     submittedAgo: number;
@@ -319,7 +320,7 @@ async function main() {
   const praticheSeed: PraticaSeed[] = [
     {
       codicePratica: 'PV-2026-00001',
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'FIRMATA',
       brokerId: dealer1.id,
       agenziaAssegnataId: agenziaVE.id,
@@ -341,7 +342,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00002',
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'ACCETTATA',
       brokerId: dealer1.id,
       agenziaAssegnataId: agenziaPD.id,
@@ -361,8 +362,9 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00003',
-      tipo: 'MINIVOLTURE_MULTIPLE',
+      tipo: 'MINIVOLTURA',
       stato: 'IN_ATTESA_ROUND_1',
+      numeroVeicoli: 3,
       brokerId: dealer2.id,
       comune: 'Padova',
       provincia: 'PD',
@@ -380,7 +382,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00004',
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'IN_ESCALATION',
       brokerId: dealer2.id,
       comune: 'Treviso',
@@ -399,7 +401,7 @@ async function main() {
     },
     {
       codicePratica: 'PV-2026-00005',
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'FIRMATA',
       brokerId: dealer2.id,
       agenziaAssegnataId: agenziaTV.id,
@@ -418,7 +420,7 @@ async function main() {
     // BOZZA — broker la sta ancora compilando
     {
       codicePratica: 'PV-2026-DRAFT',
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'BOZZA',
       brokerId: dealer1.id,
       comune: 'Venezia',
@@ -443,15 +445,13 @@ async function main() {
     const accettataAt = p.accettataAgo ? daysAgo(p.accettataAgo) : null;
     const firmaAt = p.firmaAgo ? daysAgo(p.firmaAgo) : null;
 
+    const nVeicoli = p.tipo === 'MINIVOLTURA' ? (p.numeroVeicoli ?? 3) : 1;
     const pratica = await prisma.pratica.create({
       data: {
         codicePratica: p.stato === 'BOZZA' ? null : p.codicePratica,
         tipo: p.tipo,
         stato: p.stato,
-        targa: p.targa,
-        telaio: p.telaio,
-        proprietarioAttuale: p.proprietario,
-        dataImmatricolazione: new Date('2019-06-15'),
+        numeroVeicoli: nVeicoli,
         comune: p.comune,
         provincia: p.provincia,
         brokerId: p.brokerId,
@@ -470,6 +470,24 @@ async function main() {
         acquirenteCF: 'NVPRPR85E10L736X',
       },
     });
+
+    // Crea Veicolo(s) collegati
+    for (let vi = 0; vi < nVeicoli; vi++) {
+      const targaSuffix = nVeicoli > 1 ? `${vi + 1}` : '';
+      const telaioSuffix = nVeicoli > 1 ? String(vi + 1).padStart(2, '0') : '';
+      await prisma.veicolo.create({
+        data: {
+          praticaId: pratica.id,
+          ordine: vi + 1,
+          targa: vi === 0 ? p.targa : `${p.targa.slice(0, -1)}${targaSuffix}`,
+          telaio: vi === 0 ? p.telaio : `${p.telaio.slice(0, -2)}${telaioSuffix}`,
+          proprietarioAttuale: p.proprietario,
+          dataImmatricolazione: new Date('2019-06-15'),
+          preImm2015: false,
+          flagComodatoDuso: false,
+        },
+      });
+    }
 
     // Assegnazioni
     for (const a of p.assegnazioni) {
@@ -958,27 +976,36 @@ async function main() {
     const codice = generateCodicePratica(2026, seq);
     const broker = dealers[i % dealers.length];
     const luogo = getLuogo(i);
-    // BOZZA non ha codicePratica (nullable)
-    const exists = await prisma.pratica.findFirst({
+    // BOZZA non ha codicePratica (nullable): cerca per broker+stato+indice
+    const bozzaExists = await prisma.pratica.findFirst({
       where: {
-        targa: generateTarga(seq),
         stato: 'BOZZA',
         brokerId: broker.id,
+        veicoli: { some: { targa: generateTarga(seq) } },
       },
     });
-    if (!exists) {
-      await prisma.pratica.create({
+    if (!bozzaExists) {
+      const bozzaPratica = await prisma.pratica.create({
         data: {
-          tipo: 'PASSAGGIO_PRIVATO',
+          tipo: 'SEMPLICE',
           stato: 'BOZZA',
           brokerId: broker.id,
           comune: luogo.comune,
           provincia: luogo.provincia,
+          numeroVeicoli: 1,
+          feeAgenziaCent: 0,
+          creditoBrokerCent: 0,
+        },
+      });
+      await prisma.veicolo.create({
+        data: {
+          praticaId: bozzaPratica.id,
+          ordine: 1,
           targa: generateTarga(seq),
           telaio: generateTelaio(seq),
           dataImmatricolazione: new Date('2017-03-10'),
-          feeAgenziaCent: 0,
-          creditoBrokerCent: 0,
+          preImm2015: false,
+          flagComodatoDuso: false,
         },
       });
       console.log(`  · pratica BOZZA #${seq} [BOZZA]`);
@@ -998,16 +1025,15 @@ async function main() {
     const luogo = getLuogo(i);
     const submittedAt = msAgo((i + 1) * DAY_MS);
 
+    const tipoR1 = i % 2 === 0 ? 'SEMPLICE' : 'MINIVOLTURA';
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: i % 2 === 0 ? 'PASSAGGIO_PRIVATO' : 'MINIVOLTURE_MULTIPLE',
+      tipo: tipoR1,
       stato: 'IN_ATTESA_ROUND_1',
       brokerId: broker.id,
       comune: luogo.comune,
       provincia: luogo.provincia,
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2018-05-20'),
+      numeroVeicoli: tipoR1 === 'MINIVOLTURA' ? 2 : 1,
       feeAgenziaCent: 9500,
       creditoBrokerCent: 1800,
       submittedAt,
@@ -1019,6 +1045,26 @@ async function main() {
       acquirenteCognome: `Demo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicoli per pratica R1
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
+      if (!vExist) {
+        const nv = tipoR1 === 'MINIVOLTURA' ? 2 : 1;
+        for (let vi = 0; vi < nv; vi++) {
+          await prisma.veicolo.create({
+            data: {
+              praticaId: pratica.id,
+              ordine: vi + 1,
+              targa: vi === 0 ? generateTarga(seq) : `${generateTarga(seq).slice(0, -1)}${vi + 1}`,
+              telaio: vi === 0 ? generateTelaio(seq) : `${generateTelaio(seq).slice(0, -2)}${String(vi + 1).padStart(2, '0')}`,
+              dataImmatricolazione: new Date('2018-05-20'),
+              preImm2015: false,
+              flagComodatoDuso: false,
+            },
+          });
+        }
+      }
+    }
 
     // Crea assegnazioni PENDING per le prime 5 agenzie (o quante ne abbiamo)
     const agenzieRound = agenzie.slice(0, Math.min(5, agenzie.length));
@@ -1054,14 +1100,12 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'IN_ATTESA_ROUND_2',
       brokerId: broker.id,
       comune: luogo.comune,
       provincia: luogo.provincia,
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2016-11-08'),
+      numeroVeicoli: 1,
       feeAgenziaCent: 10000,
       creditoBrokerCent: 2000,
       submittedAt,
@@ -1074,6 +1118,23 @@ async function main() {
       acquirenteCognome: `R2Demo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicolo per pratica R2
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
+      if (!vExist) {
+        await prisma.veicolo.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            targa: generateTarga(seq),
+            telaio: generateTelaio(seq),
+            dataImmatricolazione: new Date('2016-11-08'),
+            preImm2015: false,
+            flagComodatoDuso: false,
+          },
+        });
+      }
+    }
 
     // Round 1: prime 3 agenzie TIMEOUT
     const agenzieR1 = agenzie.slice(0, Math.min(3, agenzie.length));
@@ -1129,14 +1190,12 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'IN_ATTESA_ROUND_3',
       brokerId: broker.id,
       comune: 'Vicenza',
       provincia: 'VI',
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2015-07-22'),
+      numeroVeicoli: 1,
       feeAgenziaCent: 11000,
       creditoBrokerCent: 2200,
       submittedAt,
@@ -1150,6 +1209,23 @@ async function main() {
       acquirenteCognome: `R3Demo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicolo per pratica R3
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
+      if (!vExist) {
+        await prisma.veicolo.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            targa: generateTarga(seq),
+            telaio: generateTelaio(seq),
+            dataImmatricolazione: new Date('2015-07-22'),
+            preImm2015: true,
+            flagComodatoDuso: false,
+          },
+        });
+      }
+    }
 
     // Round 1: agenzie 0-1 TIMEOUT
     for (let r = 0; r < Math.min(2, agenzie.length); r++) {
@@ -1223,17 +1299,16 @@ async function main() {
     const submittedAt = msAgo((i + 5) * DAY_MS);
     const accettataAt = msAgo((i + 3) * DAY_MS);
 
+    const tipoAcc = i % 2 === 0 ? 'SEMPLICE' : 'MINIVOLTURA';
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: i % 2 === 0 ? 'PASSAGGIO_PRIVATO' : 'MINIVOLTURE_MULTIPLE',
+      tipo: tipoAcc,
       stato: 'ACCETTATA',
       brokerId: broker.id,
       agenziaAssegnataId: agenzia.id,
       comune: luogo.comune,
       provincia: luogo.provincia,
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2019-01-14'),
+      numeroVeicoli: tipoAcc === 'MINIVOLTURA' ? 2 : 1,
       feeAgenziaCent: 11000,
       creditoBrokerCent: 2500,
       submittedAt,
@@ -1246,6 +1321,26 @@ async function main() {
       acquirenteCognome: `AccDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicoli per pratica ACCETTATA
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
+      if (!vExist) {
+        const nv = tipoAcc === 'MINIVOLTURA' ? 2 : 1;
+        for (let vi = 0; vi < nv; vi++) {
+          await prisma.veicolo.create({
+            data: {
+              praticaId: pratica.id,
+              ordine: vi + 1,
+              targa: vi === 0 ? generateTarga(seq) : `${generateTarga(seq).slice(0, -1)}${vi + 1}`,
+              telaio: vi === 0 ? generateTelaio(seq) : `${generateTelaio(seq).slice(0, -2)}${String(vi + 1).padStart(2, '0')}`,
+              dataImmatricolazione: new Date('2019-01-14'),
+              preImm2015: false,
+              flagComodatoDuso: false,
+            },
+          });
+        }
+      }
+    }
 
     // Assegnazione accettata
     const assExist = await prisma.praticaAssegnazione.findFirst({
@@ -1280,17 +1375,16 @@ async function main() {
     const submittedAt = msAgo((daysAgoNum + 2) * DAY_MS);
     const autoAddebitoAt = new Date(firmaAt.getTime() + 5 * 60_000);
 
+    const tipoFirma = i % 3 === 0 ? 'MINIVOLTURA' : 'SEMPLICE';
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: i % 3 === 0 ? 'MINIVOLTURE_MULTIPLE' : 'PASSAGGIO_PRIVATO',
+      tipo: tipoFirma,
       stato: 'FIRMATA',
       brokerId: broker.id,
       agenziaAssegnataId: agenzia.id,
       comune: luogo.comune,
       provincia: luogo.provincia,
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2020-04-11'),
+      numeroVeicoli: tipoFirma === 'MINIVOLTURA' ? 2 : 1,
       feeAgenziaCent: 6000,
       creditoBrokerCent: 2500,
       submittedAt,
@@ -1305,6 +1399,26 @@ async function main() {
       acquirenteCognome: `FirmaDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicoli per pratica FIRMATA
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
+      if (!vExist) {
+        const nv = tipoFirma === 'MINIVOLTURA' ? 2 : 1;
+        for (let vi = 0; vi < nv; vi++) {
+          await prisma.veicolo.create({
+            data: {
+              praticaId: pratica.id,
+              ordine: vi + 1,
+              targa: vi === 0 ? generateTarga(seq) : `${generateTarga(seq).slice(0, -1)}${vi + 1}`,
+              telaio: vi === 0 ? generateTelaio(seq) : `${generateTelaio(seq).slice(0, -2)}${String(vi + 1).padStart(2, '0')}`,
+              dataImmatricolazione: new Date('2020-04-11'),
+              preImm2015: false,
+              flagComodatoDuso: false,
+            },
+          });
+        }
+      }
+    }
 
     // Assegnazione accettata
     const assExist = await prisma.praticaAssegnazione.findFirst({
@@ -1360,14 +1474,12 @@ async function main() {
 
     const pratica = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'IN_ESCALATION',
       brokerId: broker.id,
       comune: luogo.comune,
       provincia: luogo.provincia,
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2014-09-03'),
+      numeroVeicoli: 1,
       feeAgenziaCent: 12000,
       creditoBrokerCent: 2500,
       submittedAt,
@@ -1382,6 +1494,23 @@ async function main() {
       acquirenteCognome: `EscDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicolo per pratica IN_ESCALATION
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
+      if (!vExist) {
+        await prisma.veicolo.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            targa: generateTarga(seq),
+            telaio: generateTelaio(seq),
+            dataImmatricolazione: new Date('2014-09-03'),
+            preImm2015: true,
+            flagComodatoDuso: false,
+          },
+        });
+      }
+    }
 
     // Round 1: agenzie 0-1 TIMEOUT
     for (let r = 0; r < Math.min(2, agenzie.length); r++) {
@@ -1455,16 +1584,14 @@ async function main() {
     const submittedAt = msAgo((i + 10) * DAY_MS);
     const annullataAt = msAgo((i + 5) * DAY_MS);
 
-    await upsertPratica(codice, {
+    const praticaAnn = await upsertPratica(codice, {
       codicePratica: codice,
-      tipo: 'PASSAGGIO_PRIVATO',
+      tipo: 'SEMPLICE',
       stato: 'ANNULLATA',
       brokerId: broker.id,
       comune: luogo.comune,
       provincia: luogo.provincia,
-      targa: generateTarga(seq),
-      telaio: generateTelaio(seq),
-      dataImmatricolazione: new Date('2016-02-28'),
+      numeroVeicoli: 1,
       feeAgenziaCent: 0,
       creditoBrokerCent: 0,
       submittedAt,
@@ -1477,6 +1604,23 @@ async function main() {
       acquirenteCognome: `AnnDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Veicolo per pratica ANNULLATA
+    {
+      const vExist = await prisma.veicolo.findFirst({ where: { praticaId: praticaAnn.id } });
+      if (!vExist) {
+        await prisma.veicolo.create({
+          data: {
+            praticaId: praticaAnn.id,
+            ordine: 1,
+            targa: generateTarga(seq),
+            telaio: generateTelaio(seq),
+            dataImmatricolazione: new Date('2016-02-28'),
+            preImm2015: false,
+            flagComodatoDuso: false,
+          },
+        });
+      }
+    }
   }
 
   // ============================================================
@@ -1709,18 +1853,17 @@ async function main() {
       const firmaAt = new Date(now.getTime() - (90 - i * 5) * 24 * 60 * 60 * 1000);
       const accettataAt = new Date(firmaAt.getTime() - 2 * 24 * 60 * 60 * 1000);
       const submittedAt = new Date(firmaAt.getTime() - 3 * 24 * 60 * 60 * 1000);
-      await prisma.pratica.create({
+      const valTipo = i % 3 === 0 ? 'MINIVOLTURA' : 'SEMPLICE';
+      const valPratica = await prisma.pratica.create({
         data: {
           codicePratica: codice,
-          tipo: i % 3 === 0 ? 'MINIVOLTURE_MULTIPLE' : 'PASSAGGIO_PRIVATO',
+          tipo: valTipo,
           stato: 'FIRMATA',
           brokerId: demoDealerForVal.id,
           agenziaAssegnataId: agenziaForVal.id,
           comune: 'Padova',
           provincia: 'PD',
-          targa: `VA${String(i + 1).padStart(3, '0')}LD`,
-          telaio: `WAUVALSEED${String(i + 1).padStart(7, '0')}`,
-          dataImmatricolazione: new Date('2020-01-01'),
+          numeroVeicoli: valTipo === 'MINIVOLTURA' ? 2 : 1,
           feeAgenziaCent: 6_000,
           creditoBrokerCent: 2_500,
           submittedAt,
@@ -1735,6 +1878,20 @@ async function main() {
           acquirenteCF: 'CQRDMO85E10L736X',
         },
       });
+      const nValV = valTipo === 'MINIVOLTURA' ? 2 : 1;
+      for (let vi = 0; vi < nValV; vi++) {
+        await prisma.veicolo.create({
+          data: {
+            praticaId: valPratica.id,
+            ordine: vi + 1,
+            targa: vi === 0 ? `VA${String(i + 1).padStart(3, '0')}LD` : `VA${String(i + 1).padStart(3, '0')}L${vi + 1}`,
+            telaio: vi === 0 ? `WAUVALSEED${String(i + 1).padStart(7, '0')}` : `WAUVALSEED${String(i + 1 + vi * 100).padStart(7, '0')}`,
+            dataImmatricolazione: new Date('2020-01-01'),
+            preImm2015: false,
+            flagComodatoDuso: false,
+          },
+        });
+      }
       valPraticaSeq++;
     }
     if (valPraticaSeq > 0) {
@@ -1760,18 +1917,17 @@ async function main() {
         const firmaAt = new Date(now.getTime() - (60 - i * 4) * 24 * 60 * 60 * 1000);
         const accettataAt = new Date(firmaAt.getTime() - 2 * 24 * 60 * 60 * 1000);
         const submittedAt = new Date(firmaAt.getTime() - 3 * 24 * 60 * 60 * 1000);
-        await prisma.pratica.create({
+        const extraTipo = i % 2 === 0 ? 'SEMPLICE' : 'MINIVOLTURA';
+        const extraPratica = await prisma.pratica.create({
           data: {
             codicePratica: codice,
-            tipo: i % 2 === 0 ? 'PASSAGGIO_PRIVATO' : 'MINIVOLTURE_MULTIPLE',
+            tipo: extraTipo,
             stato: 'FIRMATA',
             brokerId: demoDealerComp.id,
             agenziaAssegnataId: comp.id,
             comune: comp.citta,
             provincia: comp.provincia,
-            targa: `${codPrefix.slice(-2)}${String(i + 1).padStart(3, '0')}XX`,
-            telaio: `WAUSED${codPrefix.slice(-3)}${String(i + 1).padStart(8, '0')}`.slice(0, 17),
-            dataImmatricolazione: new Date('2019-09-15'),
+            numeroVeicoli: extraTipo === 'MINIVOLTURA' ? 2 : 1,
             feeAgenziaCent: 6_000,
             creditoBrokerCent: 2_500,
             submittedAt,
@@ -1786,6 +1942,24 @@ async function main() {
             acquirenteCF: 'CQRDMO85E10L736X',
           },
         });
+        const nExtraV = extraTipo === 'MINIVOLTURA' ? 2 : 1;
+        for (let vi = 0; vi < nExtraV; vi++) {
+          await prisma.veicolo.create({
+            data: {
+              praticaId: extraPratica.id,
+              ordine: vi + 1,
+              targa: vi === 0
+                ? `${codPrefix.slice(-2)}${String(i + 1).padStart(3, '0')}XX`
+                : `${codPrefix.slice(-2)}${String(i + 1).padStart(3, '0')}X${vi + 1}`,
+              telaio: vi === 0
+                ? `WAUSED${codPrefix.slice(-3)}${String(i + 1).padStart(8, '0')}`.slice(0, 17)
+                : `WAUSED${codPrefix.slice(-3)}${String(i + 1 + vi * 100).padStart(8, '0')}`.slice(0, 17),
+              dataImmatricolazione: new Date('2019-09-15'),
+              preImm2015: false,
+              flagComodatoDuso: false,
+            },
+          });
+        }
       }
     }
     console.log('  · pratiche FIRMATA extra create per agenzie demo (PD2/VET/TTV/VAP)');
@@ -1800,18 +1974,16 @@ async function main() {
       const firmaAt = new Date(now.getTime() - (120 - i * 7) * 24 * 60 * 60 * 1000);
       const accettataAt = new Date(firmaAt.getTime() - 2 * 24 * 60 * 60 * 1000);
       const submittedAt = new Date(firmaAt.getTime() - 3 * 24 * 60 * 60 * 1000);
-      await prisma.pratica.create({
+      const vrPratica = await prisma.pratica.create({
         data: {
           codicePratica: codice,
-          tipo: 'PASSAGGIO_PRIVATO',
+          tipo: 'SEMPLICE',
           stato: 'FIRMATA',
           brokerId: demoDealerComp.id,
           agenziaAssegnataId: veronaTrapassiComp.id,
           comune: 'Verona',
           provincia: 'VR',
-          targa: `VR${String(i + 1).padStart(3, '0')}SS`,
-          telaio: `WAUVROSED${String(i + 1).padStart(8, '0')}`,
-          dataImmatricolazione: new Date('2018-06-01'),
+          numeroVeicoli: 1,
           feeAgenziaCent: 6_000,
           creditoBrokerCent: 2_500,
           submittedAt,
@@ -1824,6 +1996,17 @@ async function main() {
           acquirenteNome: 'Acquirente',
           acquirenteCognome: `Vr${i + 1}`,
           acquirenteCF: 'CQRDMO85E10L736X',
+        },
+      });
+      await prisma.veicolo.create({
+        data: {
+          praticaId: vrPratica.id,
+          ordine: 1,
+          targa: `VR${String(i + 1).padStart(3, '0')}SS`,
+          telaio: `WAUVROSED${String(i + 1).padStart(8, '0')}`,
+          dataImmatricolazione: new Date('2018-06-01'),
+          preImm2015: false,
+          flagComodatoDuso: false,
         },
       });
     }

@@ -61,8 +61,8 @@ enum VerificationTokenType {
 // ============================================================
 
 enum PraticaTipo {
-  PASSAGGIO_PRIVATO
-  MINIVOLTURE_MULTIPLE
+  SEMPLICE
+  MINIVOLTURA
 }
 
 enum PraticaStato {
@@ -507,16 +507,8 @@ model Pratica {
   tipo  PraticaTipo
   stato PraticaStato @default(BOZZA)
 
-  // Numero veicoli: 1 per PASSAGGIO_PRIVATO, ≥ 2 per MINIVOLTURE_MULTIPLE.
+  // Numero veicoli: 1 per SEMPLICE, ≥ 2 per MINIVOLTURA.
   numeroVeicoli Int @default(1)
-
-  // Dati veicolo (da OCR libretto, correggibili manualmente)
-  targa                String?
-  telaio               String?
-  proprietarioAttuale  String?
-  dataImmatricolazione DateTime?
-  preImm2015           Boolean   @default(false)
-  flagComodatoDuso     Boolean   @default(false)
 
   // Dati venditore
   venditoreNome               String?
@@ -611,6 +603,7 @@ model Pratica {
   annullataAt           DateTime?
 
   // Relations
+  veicoli                 Veicolo[]
   documenti               Documento[]
   assegnazioni            PraticaAssegnazione[]
   transazioni             TransazioneWallet[]
@@ -704,6 +697,10 @@ model Documento {
   companyId String?  @db.Uuid
   company   Company? @relation("DocumentiCompany", fields: [companyId], references: [id], onDelete: Cascade)
 
+  // Veicolo specifico (es. libretto di circolazione di un veicolo della pratica)
+  veicoloId String?  @db.Uuid
+  veicolo   Veicolo? @relation("DocumentiVeicolo", fields: [veicoloId], references: [id], onDelete: SetNull)
+
   // Storage
   storageKey       String // path/key nel provider (locale o S3)
   storageProvider  String @default("local") // "local" | "s3" | "gcs"
@@ -733,9 +730,32 @@ model Documento {
 
   @@index([praticaId])
   @@index([companyId])
+  @@index([veicoloId])
   @@index([tipo])
   @@index([gatingStato])
   @@map("documenti")
+}
+
+model Veicolo {
+  id                   String    @id @default(uuid()) @db.Uuid
+  praticaId            String    @db.Uuid
+  pratica              Pratica   @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+  ordine               Int
+  targa                String?
+  telaio               String?
+  proprietarioAttuale  String?
+  dataImmatricolazione DateTime?
+  preImm2015           Boolean   @default(false)
+  flagComodatoDuso     Boolean   @default(false)
+  ocrData              Json?
+  ocrProvider          String?
+  ocrAt                DateTime?
+  documenti            Documento[] @relation("DocumentiVeicolo")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([praticaId])
+  @@map("veicoli")
 }
 
 // ============================================================

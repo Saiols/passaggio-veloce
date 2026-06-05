@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition, useRef, useMemo } from 'react';
+import { useState, useTransition, useMemo } from 'react';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
@@ -10,6 +10,7 @@ import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
+import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import { extractLibrettoAction, submitNuovaPraticaAction } from './actions';
 
 /**
@@ -26,14 +27,21 @@ function splitNomeCompleto(full: string): { nome: string; cognome: string } {
 }
 
 const STEPS = [
-  { id: 1, label: 'Tipo & libretto', title: 'Tipo pratica e libretto', hint: 'Scegli il tipo di pratica e carica il libretto di circolazione.' },
+  { id: 1, label: 'Tipo & veicoli', title: 'Tipo pratica e veicoli', hint: 'Scegli il tipo di pratica e carica i libretti di circolazione.' },
   { id: 2, label: 'Parti', title: 'Parti coinvolte', hint: 'Dati del venditore e dell\'acquirente + eventuali flag speciali.' },
   { id: 3, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
 ] as const;
 
-type Tipo = 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
+type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
 
-type Ocr = {
+/** Dati di un singolo veicolo nel wizard (file libretto + estrazione + correzioni). */
+type VeicoloInput = {
+  file: File | null;
+  fileName: string | null;
+  ocr?: LibrettoCircolazioneData;
+  extracting: boolean;
+  ocrError: string | null;
+  ocrManuale: boolean;
   targa: string;
   telaio: string;
   proprietarioAttuale: string;
@@ -42,8 +50,14 @@ type Ocr = {
   flagComodatoDuso: boolean;
 };
 
-function emptyOcr(): Ocr {
+function emptyVeicolo(): VeicoloInput {
   return {
+    file: null,
+    fileName: null,
+    ocr: undefined,
+    extracting: false,
+    ocrError: null,
+    ocrManuale: false,
     targa: '',
     telaio: '',
     proprietarioAttuale: '',
@@ -51,6 +65,15 @@ function emptyOcr(): Ocr {
     preImm2015: false,
     flagComodatoDuso: false,
   };
+}
+
+/** Ridimensiona l'array veicoli a `n` elementi (append vuoti / trim dalla coda). */
+function resizeVeicoli(prev: VeicoloInput[], n: number): VeicoloInput[] {
+  if (n === prev.length) return prev;
+  if (n < prev.length) return prev.slice(0, n);
+  const next = prev.slice();
+  while (next.length < n) next.push(emptyVeicolo());
+  return next;
 }
 
 // Tipi documento caricabili per parte (sottoinsieme di DocumentoTipo lato DB).
@@ -106,11 +129,17 @@ const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
   { value: 'PRIVATO_ITALIANO_CARTACEA', label: 'Privato italiano · CI cartacea' },
   { value: 'STRANIERO_EXTRA_UE', label: 'Straniero extra-UE' },
   { value: 'AZIENDA', label: 'Azienda / Società' },
-  { value: 'OPERATORE_AUTO', label: 'Operatore auto / Commerciante (mini voltura)' },
+  { value: 'OPERATORE_AUTO', label: 'Operatore auto / Commerciante' },
 ];
 
-const TIPI_SOGGETTO_ACQUIRENTE: { value: TipoSoggetto; label: string }[] =
+// Acquirente SEMPLICE: privato (no operatore auto). Acquirente MINIVOLTURA: il
+// compratore è un commerciante d'auto → solo OPERATORE_AUTO (con visura).
+const TIPI_SOGGETTO_ACQUIRENTE_SEMPLICE: { value: TipoSoggetto; label: string }[] =
   TIPI_SOGGETTO_VENDITORE.filter((t) => t.value !== 'OPERATORE_AUTO');
+
+const TIPI_SOGGETTO_ACQUIRENTE_MINIVOLTURA: { value: TipoSoggetto; label: string }[] = [
+  { value: 'OPERATORE_AUTO', label: 'Operatore auto / Commerciante' },
+];
 
 function labelDocTipo(t: DocTipo, isPG: boolean): string {
   if (t === 'CI_FRONTE')
@@ -136,21 +165,86 @@ const DOC_TIPI_GIURIDICA: readonly DocTipo[] = [
   'CI_RETRO',
 ];
 
+/** Card selezionabile per il tipo pratica (4 combinazioni tipo × multiplo). */
+const TIPO_CARDS: {
+  key: string;
+  tipo: Tipo;
+  multiplo: boolean;
+  label: string;
+  descrizione: string;
+}[] = [
+  {
+    key: 'SEMPLICE_SINGOLO',
+    tipo: 'SEMPLICE',
+    multiplo: false,
+    label: 'Passaggio di proprietà semplice',
+    descrizione: 'chi acquista è un privato',
+  },
+  {
+    key: 'SEMPLICE_MULTIPLO',
+    tipo: 'SEMPLICE',
+    multiplo: true,
+    label: 'Passaggio di proprietà semplice multiplo',
+    descrizione: 'chi acquista è un privato',
+  },
+  {
+    key: 'MINIVOLTURA_SINGOLA',
+    tipo: 'MINIVOLTURA',
+    multiplo: false,
+    label: 'Minivoltura singola',
+    descrizione: "chi acquista è un commerciante d'auto",
+  },
+  {
+    key: 'MINIVOLTURA_MULTIPLA',
+    tipo: 'MINIVOLTURA',
+    multiplo: true,
+    label: 'Minivoltura multipla',
+    descrizione: "chi acquista è un commerciante d'auto",
+  },
+];
+
 export function WizardNuovaPratica({ error }: { error?: string }) {
   const [step, setStep] = useState(1);
-  const [tipo, setTipo] = useState<Tipo>('PASSAGGIO_PRIVATO');
+  const [tipo, setTipo] = useState<Tipo>('SEMPLICE');
+  const [multiplo, setMultiplo] = useState(false);
   const [numeroVeicoli, setNumeroVeicoli] = useState<number>(1);
+  const [veicoli, setVeicoli] = useState<VeicoloInput[]>([emptyVeicolo()]);
 
-  const handleTipoChange = (next: Tipo) => {
-    setTipo(next);
-    setNumeroVeicoli(next === 'PASSAGGIO_PRIVATO' ? 1 : 2);
+  // Aggiorna numeroVeicoli + ridimensiona l'array veicoli insieme (evita un
+  // effect: il set è guidato dalle interazioni utente, non da uno stato esterno).
+  const changeNumeroVeicoli = (n: number) => {
+    const clamped = Math.min(50, Math.max(1, n));
+    setNumeroVeicoli(clamped);
+    setVeicoli((prev) => resizeVeicoli(prev, clamped));
   };
-  const librettoRef = useRef<File | null>(null);
-  const [librettoName, setLibrettoName] = useState<string | null>(null);
-  const [extracting, setExtracting] = useState(false);
-  const [ocrError, setOcrError] = useState<string | null>(null);
-  const [ocrManuale, setOcrManuale] = useState(false);
-  const [ocr, setOcr] = useState<Ocr | null>(null);
+
+  const handleCardSelect = (card: (typeof TIPO_CARDS)[number]) => {
+    setTipo(card.tipo);
+    setMultiplo(card.multiplo);
+    changeNumeroVeicoli(card.multiplo ? 2 : 1);
+    // Se il nuovo tipo non è MINIVOLTURA, l'acquirente deve poter scegliere un
+    // tipo soggetto valido per SEMPLICE; resettiamo se era OPERATORE_AUTO.
+    if (card.tipo !== 'MINIVOLTURA') {
+      setAcquirente((prev) =>
+        prev.tipoSoggetto === 'OPERATORE_AUTO'
+          ? { ...prev, tipoSoggetto: null, isPG: false, visuraData: '' }
+          : prev,
+      );
+    } else {
+      // MINIVOLTURA: l'acquirente è un operatore auto → preimposta.
+      setAcquirente((prev) =>
+        prev.tipoSoggetto === 'OPERATORE_AUTO'
+          ? prev
+          : { ...prev, tipoSoggetto: 'OPERATORE_AUTO', isPG: true },
+      );
+    }
+  };
+
+  const updateVeicolo = (idx: number, patch: Partial<VeicoloInput>) => {
+    setVeicoli((prev) =>
+      prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)),
+    );
+  };
 
   const [venditore, setVenditore] = useState<Parte>(emptyParte());
   const [acquirente, setAcquirente] = useState<Parte>(emptyParte());
@@ -164,19 +258,23 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
 
-  // Q-10: pre-fill nome venditore da proprietarioAttuale del libretto. Solo
-  // se l'utente non ha ancora toccato i campi nome+cognome venditore (PF).
-  useEffect(() => {
-    if (!ocr?.proprietarioAttuale) return;
+  const acquirenteTipiSoggetto =
+    tipo === 'MINIVOLTURA'
+      ? TIPI_SOGGETTO_ACQUIRENTE_MINIVOLTURA
+      : TIPI_SOGGETTO_ACQUIRENTE_SEMPLICE;
+
+  // Q-10: pre-fill nome venditore da proprietarioAttuale del primo veicolo.
+  // Solo se l'utente non ha ancora toccato i campi nome+cognome venditore (PF).
+  // Chiamato post-estrazione del veicolo 1 (no effect → evita cascading render).
+  const maybePrefillVenditore = (proprietario: string) => {
+    if (!proprietario) return;
     setVenditore((prev) => {
       if (prev.isPG || prev.nome.trim() || prev.cognome.trim()) return prev;
-      const { nome, cognome } = splitNomeCompleto(ocr.proprietarioAttuale);
+      const { nome, cognome } = splitNomeCompleto(proprietario);
       if (!nome && !cognome) return prev;
       return { ...prev, nome, cognome };
     });
-    // ocr è preso come deps ma il setter funzionale legge sempre lo state
-    // più fresco; il check prev.nome/cognome evita override se già modificato.
-  }, [ocr?.proprietarioAttuale]);
+  };
 
   const [submitting, startSubmit] = useTransition();
 
@@ -191,13 +289,14 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [showRevisione, setShowRevisione] = useState(false);
 
   // Schema Documentale v7 (SD-B): preview lista documenti richiesti calcolata
-  // tramite engine. Si aggiorna in real-time mentre il broker compila i campi
-  // di tipo soggetto / visura / permesso / flag speciali. Mostrato nel
-  // riepilogo finale per dare feedback chiaro su cosa serve caricare.
+  // tramite engine. Si aggiorna in real-time mentre il broker compila i campi.
   const esitoSchema = useMemo(() => {
     return calcolaDocumentiRichiesti({
-      preImm2015: ocr?.preImm2015 ?? false,
-      flagComodatoDuso: ocr?.flagComodatoDuso ?? false,
+      veicoli: veicoli.map((v, i) => ({
+        ordine: i + 1,
+        preImm2015: v.preImm2015,
+        flagComodatoDuso: v.flagComodatoDuso,
+      })),
       venditoreTipoSoggetto: venditore.tipoSoggetto,
       venditoreVisuraData: venditore.visuraData
         ? new Date(venditore.visuraData)
@@ -217,8 +316,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       flagMinore,
     });
   }, [
-    ocr?.preImm2015,
-    ocr?.flagComodatoDuso,
+    veicoli,
     venditore.tipoSoggetto,
     venditore.visuraData,
     venditore.permessoData,
@@ -230,20 +328,23 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     flagMinore,
   ]);
 
-  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const onFileSelected = async (idx: number, file: File | undefined) => {
     if (!file) return;
-    librettoRef.current = file;
-    setLibrettoName(file.name);
-    setOcrError(null);
-    setOcrManuale(false);
-    setExtracting(true);
+    updateVeicolo(idx, {
+      file,
+      fileName: file.name,
+      ocrError: null,
+      ocrManuale: false,
+      extracting: true,
+    });
     try {
       const fd = new FormData();
       fd.append('libretto', file);
       const res = await extractLibrettoAction(fd);
       if (res.ok) {
-        setOcr({
+        updateVeicolo(idx, {
+          extracting: false,
+          ocr: res.data,
           targa: res.data.targa ?? '',
           telaio: res.data.telaio ?? '',
           proprietarioAttuale: res.data.proprietarioAttuale ?? '',
@@ -251,29 +352,45 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           preImm2015: res.data.preImm2015,
           flagComodatoDuso: res.data.flagComodatoDuso,
         });
+        // Pre-fill venditore solo dal proprietario del primo veicolo.
+        if (idx === 0) maybePrefillVenditore(res.data.proprietarioAttuale ?? '');
       } else {
-        setOcrError(res.error);
+        updateVeicolo(idx, { extracting: false, ocrError: res.error });
       }
     } catch (err) {
-      setOcrError((err as Error).message);
-    } finally {
-      setExtracting(false);
+      updateVeicolo(idx, {
+        extracting: false,
+        ocrError: (err as Error).message,
+      });
     }
   };
 
   const handleFinalSubmit = () => {
-    if (!librettoRef.current || !ocr) return;
+    if (veicoli.some((v) => !v.file)) return;
     const fd = new FormData();
-    fd.append('libretto', librettoRef.current);
     fd.append('tipo', tipo);
     fd.append('numeroVeicoli', String(numeroVeicoli));
-    fd.append('targa', ocr.targa);
-    fd.append('telaio', ocr.telaio);
-    fd.append('proprietarioAttuale', ocr.proprietarioAttuale);
-    fd.append('dataImmatricolazione', ocr.dataImmatricolazione);
-    fd.append('preImm2015', ocr.preImm2015 ? 'true' : 'false');
-    fd.append('flagComodatoDuso', ocr.flagComodatoDuso ? 'true' : 'false');
-    fd.append('ocrManuale', ocrManuale ? 'true' : 'false');
+
+    // Lista veicoli (JSON) + file libretto come slot LIBRETTO_1..LIBRETTO_n.
+    const veicoliPayload = veicoli.map((v) => ({
+      targa: v.targa,
+      telaio: v.telaio,
+      proprietarioAttuale: v.proprietarioAttuale,
+      dataImmatricolazione: v.dataImmatricolazione || null,
+      preImm2015: v.preImm2015,
+      flagComodatoDuso: v.flagComodatoDuso,
+      ocrData: v.ocr ?? null,
+    }));
+    fd.append('veicoli', JSON.stringify(veicoliPayload));
+    veicoli.forEach((v, i) => {
+      if (v.file) fd.append(`LIBRETTO_${i + 1}`, v.file);
+    });
+
+    // ocrManuale: true se almeno un veicolo è stato compilato a mano.
+    fd.append(
+      'ocrManuale',
+      veicoli.some((v) => v.ocrManuale) ? 'true' : 'false',
+    );
 
     fd.append('venditoreIsPG', venditore.isPG ? 'true' : 'false');
     if (venditore.isPG) {
@@ -341,12 +458,20 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   };
 
   const current = STEPS.find((s) => s.id === step)!;
-  const canStep2 =
-    !!ocr &&
-    ocr.targa.length >= 5 &&
-    ocr.telaio.length >= 11 &&
-    ocr.proprietarioAttuale.length > 0 &&
-    /^\d{4}-\d{2}-\d{2}$/.test(ocr.dataImmatricolazione);
+
+  // Tutti i veicoli devono avere file + campi obbligatori (targa/telaio/
+  // proprietario/data) prima di proseguire.
+  const veicoliValidi =
+    veicoli.length === numeroVeicoli &&
+    veicoli.every(
+      (v) =>
+        !!v.file &&
+        v.targa.length >= 5 &&
+        v.telaio.length >= 11 &&
+        v.proprietarioAttuale.length > 0 &&
+        /^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione),
+    );
+  const canStep2 = veicoliValidi;
 
   const canStep3 = parteValida(venditore) && parteValida(acquirente);
 
@@ -380,41 +505,36 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         {step === 1 && (
           <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <Field label="Tipo pratica" required>
-                <Select
-                  value={tipo}
-                  onChange={(e) => handleTipoChange(e.target.value as Tipo)}
-                >
-                  <option value="PASSAGGIO_PRIVATO">Passaggio di proprietà privato</option>
-                  <option value="MINIVOLTURE_MULTIPLE">
-                    Minivolture multiple (commercianti)
-                  </option>
-                </Select>
-              </Field>
-
-              <div className="mt-4 rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 p-3 text-[12.5px] leading-relaxed text-pv-slate-700">
-                <p className="mb-1.5 font-bold uppercase tracking-wider text-[11px] text-pv-slate-500">
-                  Quando usare quale tipo
-                </p>
-                <ul className="space-y-1.5">
-                  <li>
-                    <span className="font-semibold text-pv-navy-800">
-                      Passaggio di proprietà privato
-                    </span>
-                    : un solo veicolo, da privato a privato. È il caso classico
-                    del cliente che vende l&apos;auto a un altro privato.
-                  </li>
-                  <li>
-                    <span className="font-semibold text-pv-navy-800">
-                      Minivolture multiple
-                    </span>
-                    : commercianti / concessionari che caricano più veicoli in
-                    un&apos;unica pratica. Richiede almeno 2 veicoli.
-                  </li>
-                </ul>
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                Tipo pratica
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {TIPO_CARDS.map((card) => {
+                  const selected = tipo === card.tipo && multiplo === card.multiplo;
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => handleCardSelect(card)}
+                      className={`rounded-[12px] border-[1.5px] p-4 text-left transition ${
+                        selected
+                          ? 'border-pv-navy-700 bg-pv-navy-50 shadow-[var(--pv-shadow-card)]'
+                          : 'border-pv-slate-200 bg-white hover:border-pv-navy-400'
+                      }`}
+                    >
+                      <span className="block text-[14px] font-bold text-pv-navy-900">
+                        {card.label}
+                      </span>
+                      <span className="mt-1 block text-[12.5px] text-pv-slate-600">
+                        {card.descrizione}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {tipo === 'MINIVOLTURE_MULTIPLE' && (
+              {multiplo && (
                 <div className="mt-4">
                   <Field label="Numero veicoli" required>
                     <Input
@@ -423,163 +543,40 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                       max={50}
                       value={numeroVeicoli}
                       onChange={(e) =>
-                        setNumeroVeicoli(Math.max(2, Number(e.target.value) || 2))
+                        changeNumeroVeicoli(Math.max(2, Number(e.target.value) || 2))
                       }
                     />
                   </Field>
                   <p className="mt-1 text-[12px] text-pv-slate-500">
-                    Le minivolture multiple richiedono almeno 2 veicoli.
+                    Le pratiche multiple richiedono da 2 a 50 veicoli.
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <Field label="Libretto di circolazione (PDF/JPG/PNG)" required>
-                <div className="flex flex-col gap-2 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
-                  <span className="truncate text-pv-slate-700">
-                    {librettoName ?? 'Seleziona file o scatta una foto del libretto'}
-                  </span>
-                  <div className="flex shrink-0 gap-2">
-                    {/* Desktop / file picker classico (PDF/JPG/PNG) */}
-                    <label className="cursor-pointer rounded-[8px] bg-pv-navy-700 px-3 py-1.5 font-semibold text-white hover:bg-pv-navy-800">
-                      {librettoName ? 'Cambia' : 'Sfoglia'}
-                      <input
-                        type="file"
-                        accept="application/pdf,image/jpeg,image/png"
-                        onChange={onFileSelected}
-                        className="sr-only"
-                      />
-                    </label>
-                    {/* Q-11: scansione mobile — capture forza la fotocamera
-                        sui browser mobile, su desktop fa fallback al picker. */}
-                    <label className="cursor-pointer rounded-[8px] border border-pv-navy-700 bg-white px-3 py-1.5 font-semibold text-pv-navy-700 hover:bg-pv-slate-50">
-                      Scansiona
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png"
-                        capture="environment"
-                        onChange={onFileSelected}
-                        className="sr-only"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </Field>
-
-              {extracting && (
-                <div
-                  className="mt-3 flex items-center gap-3 rounded-[12px] border border-pv-navy-200 bg-pv-navy-50 p-4"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <svg
-                    className="h-5 w-5 shrink-0 animate-spin text-pv-navy-700"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                    />
-                  </svg>
-                  <div className="flex-1">
-                    <p className="text-[14px] font-semibold text-pv-navy-900">
-                      Estrazione dati in corso…
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-pv-slate-600">
-                      L’OCR analizza il libretto: l’operazione può richiedere fino a 30-60 secondi.
-                      Non chiudere la pagina.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {ocrError && (
-                <div className="mt-3 space-y-3">
-                  <Alert variant="error">{ocrError}</Alert>
-                  {!ocr && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setOcr(emptyOcr());
-                        setOcrManuale(true);
-                        setOcrError(null);
-                      }}
-                    >
-                      Inserisci i dati manualmente
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {ocr && (
-                <div className="mt-4 rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4">
-                  <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                    Dati estratti — correggi se serve
-                  </p>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Field label="Targa" required>
-                      <Input
-                        value={ocr.targa}
-                        onChange={(e) => setOcr({ ...ocr, targa: e.target.value.toUpperCase() })}
-                      />
-                    </Field>
-                    <Field label="Telaio" required>
-                      <Input
-                        value={ocr.telaio}
-                        onChange={(e) => setOcr({ ...ocr, telaio: e.target.value.toUpperCase() })}
-                      />
-                    </Field>
-                    <Field label="Proprietario attuale" required className="sm:col-span-2">
-                      <Input
-                        value={ocr.proprietarioAttuale}
-                        onChange={(e) =>
-                          setOcr({ ...ocr, proprietarioAttuale: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field label="Data immatricolazione" required>
-                      <Input
-                        type="date"
-                        value={ocr.dataImmatricolazione}
-                        onChange={(e) =>
-                          setOcr({ ...ocr, dataImmatricolazione: e.target.value })
-                        }
-                      />
-                    </Field>
-                    <div className="flex flex-col gap-2 pt-6">
-                      <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                        <Checkbox
-                          checked={ocr.preImm2015}
-                          onChange={(e) => setOcr({ ...ocr, preImm2015: e.target.checked })}
-                        />
-                        Pre-2015 (richiede certificato di proprietà)
-                      </label>
-                      <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                        <Checkbox
-                          checked={ocr.flagComodatoDuso}
-                          onChange={(e) =>
-                            setOcr({ ...ocr, flagComodatoDuso: e.target.checked })
-                          }
-                        />
-                        Comodato d&apos;uso rilevato
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            {veicoli.map((v, idx) => (
+              <VeicoloSection
+                key={idx}
+                ordine={idx + 1}
+                veicolo={v}
+                multiplo={multiplo}
+                onFile={(file) => onFileSelected(idx, file)}
+                onChange={(patch) => updateVeicolo(idx, patch)}
+                onManuale={() =>
+                  updateVeicolo(idx, {
+                    ocr: undefined,
+                    ocrManuale: true,
+                    ocrError: null,
+                    targa: '',
+                    telaio: '',
+                    proprietarioAttuale: '',
+                    dataImmatricolazione: '',
+                    preImm2015: false,
+                    flagComodatoDuso: false,
+                  })
+                }
+              />
+            ))}
 
             <div className="flex justify-end">
               <Button disabled={!canStep2} onClick={() => setStep(2)}>
@@ -602,10 +599,16 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Acquirente</h2>
+              {tipo === 'MINIVOLTURA' && (
+                <p className="mb-3 text-[12px] text-pv-slate-500">
+                  Nelle minivolture l&apos;acquirente è un commerciante d&apos;auto
+                  (operatore auto), con visura camerale.
+                </p>
+              )}
               <ParteForm
                 parte={acquirente}
                 onChange={setAcquirente}
-                tipiSoggetto={TIPI_SOGGETTO_ACQUIRENTE}
+                tipiSoggetto={acquirenteTipiSoggetto}
               />
             </div>
 
@@ -687,11 +690,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Riepilogo</h2>
               <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
-                <RiepilogoRow label="Tipo" value={labelTipo(tipo)} />
-                <RiepilogoRow label="Libretto" value={librettoName ?? '—'} />
-                <RiepilogoRow label="Targa" value={ocr?.targa ?? '—'} />
-                <RiepilogoRow label="Telaio" value={ocr?.telaio ?? '—'} />
-                <RiepilogoRow label="Proprietario" value={ocr?.proprietarioAttuale ?? '—'} />
+                <RiepilogoRow label="Tipo" value={labelTipo(tipo, multiplo)} />
+                <RiepilogoRow label="Numero veicoli" value={String(numeroVeicoli)} />
                 <RiepilogoRow
                   label="Venditore"
                   value={parteNome(venditore)}
@@ -700,16 +700,26 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                   label="Acquirente"
                   value={parteNome(acquirente)}
                 />
-                {tipo === 'MINIVOLTURE_MULTIPLE' && (
-                  <RiepilogoRow label="Numero veicoli" value={String(numeroVeicoli)} />
-                )}
                 <RiepilogoRow label="Comune" value={comune || '—'} />
               </dl>
+              <div className="mt-3 space-y-2">
+                {veicoli.map((v, i) => (
+                  <div
+                    key={i}
+                    className="rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 p-3 text-[12.5px]"
+                  >
+                    <p className="font-bold text-pv-navy-800">Veicolo {i + 1}</p>
+                    <p className="mt-1 text-pv-slate-700">
+                      {v.targa || '—'} · {v.telaio || '—'} · {v.fileName ?? 'nessun libretto'}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Schema Documentale v7 (SD-B): preview documenti richiesti via
                 engine puro. Mostra blocchi/incompletezze in tempo reale e
-                lista doc obbligatori per il broker. */}
+                lista doc obbligatori per il broker, raggruppati per parte/veicolo. */}
             <SchemaDocumentalePreview esito={esitoSchema} />
 
             {/* SD-C: il broker può richiedere revisione manuale del team
@@ -769,6 +779,171 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         onClose={() => setShowRevisione(false)}
       />
     </>
+  );
+}
+
+/**
+ * Sezione veicolo ripetuta: upload libretto → estrazione OCR → campi
+ * editabili. Una istanza per veicolo (ordine 1..n).
+ */
+function VeicoloSection({
+  ordine,
+  veicolo,
+  multiplo,
+  onFile,
+  onChange,
+  onManuale,
+}: {
+  ordine: number;
+  veicolo: VeicoloInput;
+  multiplo: boolean;
+  onFile: (file: File | undefined) => void;
+  onChange: (patch: Partial<VeicoloInput>) => void;
+  onManuale: () => void;
+}) {
+  const hasOcr = !!veicolo.ocr || veicolo.ocrManuale;
+  return (
+    <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+      <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
+        {multiplo ? `Veicolo ${ordine}` : 'Veicolo'}
+      </h2>
+      <Field label="Libretto di circolazione (PDF/JPG/PNG)" required>
+        <div className="flex flex-col gap-2 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
+          <span className="truncate text-pv-slate-700">
+            {veicolo.fileName ?? 'Seleziona file o scatta una foto del libretto'}
+          </span>
+          <div className="flex shrink-0 gap-2">
+            {/* Desktop / file picker classico (PDF/JPG/PNG) */}
+            <label className="cursor-pointer rounded-[8px] bg-pv-navy-700 px-3 py-1.5 font-semibold text-white hover:bg-pv-navy-800">
+              {veicolo.fileName ? 'Cambia' : 'Sfoglia'}
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                onChange={(e) => onFile(e.target.files?.[0])}
+                className="sr-only"
+              />
+            </label>
+            {/* Q-11: scansione mobile — capture forza la fotocamera
+                sui browser mobile, su desktop fa fallback al picker. */}
+            <label className="cursor-pointer rounded-[8px] border border-pv-navy-700 bg-white px-3 py-1.5 font-semibold text-pv-navy-700 hover:bg-pv-slate-50">
+              Scansiona
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                capture="environment"
+                onChange={(e) => onFile(e.target.files?.[0])}
+                className="sr-only"
+              />
+            </label>
+          </div>
+        </div>
+      </Field>
+
+      {veicolo.extracting && (
+        <div
+          className="mt-3 flex items-center gap-3 rounded-[12px] border border-pv-navy-200 bg-pv-navy-50 p-4"
+          role="status"
+          aria-live="polite"
+        >
+          <svg
+            className="h-5 w-5 shrink-0 animate-spin text-pv-navy-700"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+            />
+          </svg>
+          <div className="flex-1">
+            <p className="text-[14px] font-semibold text-pv-navy-900">
+              Estrazione dati in corso…
+            </p>
+            <p className="mt-0.5 text-[12px] text-pv-slate-600">
+              L’OCR analizza il libretto: l’operazione può richiedere fino a 30-60 secondi.
+              Non chiudere la pagina.
+            </p>
+          </div>
+        </div>
+      )}
+      {veicolo.ocrError && (
+        <div className="mt-3 space-y-3">
+          <Alert variant="error">{veicolo.ocrError}</Alert>
+          {!veicolo.ocr && !veicolo.ocrManuale && (
+            <Button type="button" variant="secondary" onClick={onManuale}>
+              Inserisci i dati manualmente
+            </Button>
+          )}
+        </div>
+      )}
+
+      {hasOcr && (
+        <div className="mt-4 rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4">
+          <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+            Dati estratti — correggi se serve
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Targa" required>
+              <Input
+                value={veicolo.targa}
+                onChange={(e) => onChange({ targa: e.target.value.toUpperCase() })}
+              />
+            </Field>
+            <Field label="Telaio" required>
+              <Input
+                value={veicolo.telaio}
+                onChange={(e) => onChange({ telaio: e.target.value.toUpperCase() })}
+              />
+            </Field>
+            <Field label="Proprietario attuale" required className="sm:col-span-2">
+              <Input
+                value={veicolo.proprietarioAttuale}
+                onChange={(e) =>
+                  onChange({ proprietarioAttuale: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="Data immatricolazione" required>
+              <Input
+                type="date"
+                value={veicolo.dataImmatricolazione}
+                onChange={(e) =>
+                  onChange({ dataImmatricolazione: e.target.value })
+                }
+              />
+            </Field>
+            <div className="flex flex-col gap-2 pt-6">
+              <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
+                <Checkbox
+                  checked={veicolo.preImm2015}
+                  onChange={(e) => onChange({ preImm2015: e.target.checked })}
+                />
+                Pre-2015 (richiede certificato di proprietà)
+              </label>
+              <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
+                <Checkbox
+                  checked={veicolo.flagComodatoDuso}
+                  onChange={(e) =>
+                    onChange({ flagComodatoDuso: e.target.checked })
+                  }
+                />
+                Comodato d&apos;uso rilevato
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1026,9 +1201,13 @@ function parteNome(p: Parte): string {
   return `${p.nome} ${p.cognome}`.trim() || '—';
 }
 
-function labelTipo(t: Tipo): string {
-  if (t === 'PASSAGGIO_PRIVATO') return 'Passaggio di proprietà privato';
-  if (t === 'MINIVOLTURE_MULTIPLE') return 'Minivolture multiple';
+function labelTipo(t: Tipo, multiplo: boolean): string {
+  if (t === 'SEMPLICE')
+    return multiplo
+      ? 'Passaggio di proprietà semplice multiplo'
+      : 'Passaggio di proprietà semplice';
+  if (t === 'MINIVOLTURA')
+    return multiplo ? 'Minivoltura multipla' : 'Minivoltura singola';
   return t;
 }
 
@@ -1038,6 +1217,7 @@ function labelTipo(t: Tipo): string {
  * - kind=INPUT_INCOMPLETO → spiega cosa manca compilare (tipo soggetto)
  * - kind=BLOCCO → mostra motivo + soluzione (ostativo)
  * - kind=OK → lista checklist documenti obbligatori, raggruppati per parte
+ *   (i documenti veicolo sono raggruppati per veicoloOrdine).
  */
 function SchemaDocumentalePreview({
   esito,
@@ -1074,16 +1254,19 @@ function SchemaDocumentalePreview({
     );
   }
 
-  // Raggruppa per parte
+  // Raggruppa per parte; per i doc veicolo distingue per veicoloOrdine.
   const grouped = new Map<string, typeof esito.documentiRichiesti>();
   for (const d of esito.documentiRichiesti) {
-    const list = grouped.get(d.parte) ?? [];
+    const key =
+      d.parte === 'VEICOLO' && d.veicoloOrdine != null
+        ? `VEICOLO_${d.veicoloOrdine}`
+        : d.parte;
+    const list = grouped.get(key) ?? [];
     list.push(d);
-    grouped.set(d.parte, list);
+    grouped.set(key, list);
   }
 
   const labelParte: Record<string, string> = {
-    VEICOLO: 'Veicolo',
     VENDITORE: 'Venditore',
     ACQUIRENTE: 'Acquirente',
     PROCURATORE: 'Procuratore',
@@ -1091,6 +1274,12 @@ function SchemaDocumentalePreview({
     TUTORE: 'Tutore (compratore minorenne)',
     AMMINISTRATORE_VENDITORE: 'Amministratore (venditore)',
     AMMINISTRATORE_ACQUIRENTE: 'Amministratore (acquirente)',
+  };
+
+  const labelGroup = (key: string): string => {
+    if (key.startsWith('VEICOLO_')) return `Veicolo ${key.slice('VEICOLO_'.length)}`;
+    if (key === 'VEICOLO') return 'Veicolo';
+    return labelParte[key] ?? key;
   };
 
   return (
@@ -1106,7 +1295,7 @@ function SchemaDocumentalePreview({
         {Array.from(grouped.entries()).map(([parte, docs]) => (
           <div key={parte}>
             <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-              {labelParte[parte] ?? parte}
+              {labelGroup(parte)}
             </p>
             <ul className="mt-1 space-y-1 text-[13px] text-pv-slate-700">
               {docs.map((d, i) => (

@@ -17,9 +17,16 @@ export type OcrExtractInput = {
   originalFilename?: string;
 };
 
+export type OcrTextResult = {
+  text: string; // testo completo estratto
+  confidence: number; // 0..1
+  pages: number;
+};
+
 export interface OcrProvider {
   readonly name: OcrProviderName;
   extractLibretto(input: OcrExtractInput): Promise<LibrettoCircolazioneData>;
+  extractText(input: OcrExtractInput): Promise<OcrTextResult>;
 }
 
 export class OcrFailedError extends Error {

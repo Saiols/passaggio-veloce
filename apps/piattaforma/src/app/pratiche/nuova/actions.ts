@@ -85,7 +85,7 @@ export async function extractLibrettoAction(
   }
 
   const buffer = await bufferFromFile(file);
-  const ocr = getOcr();
+  const ocr = await getOcr();
   const input = {
     buffer,
     mimeType: file.type,

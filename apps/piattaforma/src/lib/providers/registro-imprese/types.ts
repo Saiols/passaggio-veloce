@@ -1,4 +1,4 @@
-export type RegistroImpreseProviderName = 'mock' | 'openapi' | 'infocamere';
+export type RegistroImpreseProviderName = 'mock' | 'noop' | 'openapi' | 'infocamere';
 
 export type StatoAttivita =
   | 'ATTIVA'

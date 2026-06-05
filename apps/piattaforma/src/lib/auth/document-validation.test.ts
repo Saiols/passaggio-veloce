@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   validateVisuraData,
   validateRegistrationDocuments,
+  isVisuraDateValid,
   type RegistrationDocInput,
 } from './document-validation';
 
@@ -54,6 +55,20 @@ describe('validateVisuraData', () => {
   it('non rifiuta per overflow di fine mese (31 ago - 6 mesi = 28 feb)', () => {
     const lateAug = new Date('2026-08-31T12:00:00Z');
     expect(validateVisuraData('2026-03-01', lateAug)).toEqual({ ok: true });
+  });
+});
+
+describe('isVisuraDateValid (parametrico)', () => {
+  const now = new Date('2026-06-04T12:00:00Z');
+  it('valida entro 5 mesi', () => {
+    expect(isVisuraDateValid('2026-02-01', 5, now)).toEqual({ ok: true });
+  });
+  it('blocca oltre 5 mesi', () => {
+    const r = isVisuraDateValid('2025-12-01', 5, now);
+    expect(r.ok).toBe(false);
+  });
+  it('blocca data futura', () => {
+    expect(isVisuraDateValid('2026-07-01', 5, now).ok).toBe(false);
   });
 });
 

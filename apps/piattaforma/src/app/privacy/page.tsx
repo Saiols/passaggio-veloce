@@ -26,7 +26,7 @@ export default function PrivacyPage() {
           url: siteUrl('/privacy'),
           name: 'Privacy Policy',
           description: 'Informativa privacy di Passaggio Veloce.',
-          lastModified: '2026-05-06',
+          lastModified: '2026-06-05',
         })}
       />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-[12px] text-pv-slate-500">
-          Ultimo aggiornamento: 2026-05-06
+          Ultimo aggiornamento: 2026-06-05
         </p>
 
         <Section title="Titolare del trattamento">
@@ -126,12 +126,52 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
+        <Section title="Fornitori terzi e responsabili del trattamento">
+          <p>
+            Per erogare il servizio ci avvaliamo di fornitori terzi che
+            trattano dati per nostro conto, con sede o trattamento
+            nell&apos;Unione Europea:
+          </p>
+          <ul className="list-disc pl-5">
+            <li>
+              <strong>Google Cloud – Document AI</strong>: lettura automatica
+              (OCR) dei documenti caricati in fase di registrazione (carta
+              d&apos;identità, tessera sanitaria/codice fiscale, visura
+              camerale) per la verifica dell&apos;identità e dei requisiti
+              (KYC). Regione di trattamento: Unione Europea.
+            </li>
+            <li>
+              <strong>Google Maps Platform</strong>: completamento e
+              validazione dell&apos;indirizzo aziendale in fase di
+              registrazione.
+            </li>
+            <li>
+              <strong>Resend</strong>: invio delle email transazionali
+              (conferme, notifiche, reset password). Trattamento
+              nell&apos;Unione Europea.
+            </li>
+            <li>
+              <strong>Vercel</strong>: hosting e distribuzione
+              dell&apos;applicazione.
+            </li>
+            <li>
+              <strong>Neon</strong>: database gestito (PostgreSQL), regione
+              Unione Europea.
+            </li>
+            <li>
+              <strong>Cloudflare R2</strong>: archiviazione dei documenti
+              caricati.
+            </li>
+          </ul>
+        </Section>
+
         <Section title="Trasferimenti internazionali">
           <p>
-            La maggior parte dei trattamenti avviene su server in UE (Vercel,
-            Neon — region eu-central). Alcuni servizi (es. Sentry per error
-            monitoring) potrebbero comportare trasferimenti extra-UE protetti
-            da clausole contrattuali standard.
+            La maggior parte dei trattamenti avviene su server in UE (si
+            veda la sezione &ldquo;Fornitori terzi&rdquo; per i dettagli per
+            singolo fornitore). Alcuni servizi ausiliari (es. Sentry per
+            error monitoring) potrebbero comportare trasferimenti extra-UE
+            protetti da clausole contrattuali standard.
           </p>
         </Section>
 

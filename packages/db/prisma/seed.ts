@@ -2021,6 +2021,25 @@ async function main() {
   }
   console.log(`  · FeeAddebito SCHEDULED creati: ${feeCreated}/3`);
 
+  // ATECO ammessi di default (gruppo 45 = commercio autoveicoli per i dealer;
+  // 82.11/82.99 provvisori per le agenzie — DA CONFERMARE col commercialista).
+  const atecoDefaults: Array<{ companyType: 'DEALER' | 'AGENZIA'; code: string; label: string }> = [
+    { companyType: 'DEALER', code: '4511', label: 'Commercio autoveicoli' },
+    { companyType: 'DEALER', code: '4519', label: 'Commercio altri autoveicoli' },
+    { companyType: 'DEALER', code: '453', label: 'Commercio parti e accessori' },
+    { companyType: 'DEALER', code: '454', label: 'Commercio motocicli' },
+    { companyType: 'AGENZIA', code: '8211', label: 'Servizi integrati di supporto (DA CONFERMARE)' },
+    { companyType: 'AGENZIA', code: '8299', label: 'Altri servizi di supporto alle imprese (DA CONFERMARE)' },
+  ];
+  for (const a of atecoDefaults) {
+    await prisma.atecoAllowedCode.upsert({
+      where: { companyType_code: { companyType: a.companyType, code: a.code } },
+      create: a,
+      update: { label: a.label },
+    });
+  }
+  console.log(`  · ateco allowlist: ${atecoDefaults.length} codici`);
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);

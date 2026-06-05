@@ -1411,3 +1411,16 @@ model PromoCodeRedemption {
   @@index([promoCodeId])
   @@map("promo_code_redemptions")
 }
+
+model AtecoAllowedCode {
+  id          String      @id @default(uuid()) @db.Uuid
+  companyType CompanyType
+  code        String // normalizzato senza punti, es. "4511"
+  label       String?
+  active      Boolean     @default(true)
+  createdById String?     @db.Uuid
+  createdAt   DateTime    @default(now())
+
+  @@unique([companyType, code])
+  @@map("ateco_allowed_codes")
+}

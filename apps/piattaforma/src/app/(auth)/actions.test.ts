@@ -9,6 +9,7 @@ vi.mock('@pv/db', () => ({
     verificationToken: {},
     promoCode: { findUnique: vi.fn() },
     promoCodeRedemption: { count: vi.fn() },
+    atecoAllowedCode: { findMany: vi.fn().mockResolvedValue([]) },
   },
   Prisma: { PrismaClientKnownRequestError: class {} },
 }));

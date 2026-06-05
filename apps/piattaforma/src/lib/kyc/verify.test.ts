@@ -57,4 +57,25 @@ describe('verifyRegistrationKyc', () => {
     expect(r.passed).toBe(false);
     if (!r.passed) expect(r.failures.some((f) => f.rule === 'ILLEGGIBILE' && f.doc === 'CI')).toBe(true);
   });
+
+  it('blocca (ILLEGGIBILE) se la visura espone l\'amministratore con solo CF (no nome) anche se il CF combacia', async () => {
+    const deps = {
+      ...goodDeps,
+      getVisuraData: async () => ({ ...(await goodDeps.getVisuraData(fakeInput)), amministratore: { codiceFiscale: 'RSSMRA80A01H501U' } }),
+      getCiData: async () => ({ nome: 'LUCA', cognome: 'BIANCHI', rawText: '' }), // CI di un'altra persona
+    };
+    const r = await verifyRegistrationKyc({ files, company, allowedAteco: allowed, now }, deps);
+    expect(r.passed).toBe(false);
+    if (!r.passed) expect(r.failures.some((f) => f.rule === 'ILLEGGIBILE' && f.doc === 'VISURA')).toBe(true);
+  });
+
+  it('blocca (ILLEGGIBILE) se la visura non espone il CF dell\'amministratore', async () => {
+    const deps = {
+      ...goodDeps,
+      getVisuraData: async () => ({ ...(await goodDeps.getVisuraData(fakeInput)), amministratore: { nome: 'MARIO', cognome: 'ROSSI' } }),
+    };
+    const r = await verifyRegistrationKyc({ files, company, allowedAteco: allowed, now }, deps);
+    expect(r.passed).toBe(false);
+    if (!r.passed) expect(r.failures.some((f) => f.rule === 'ILLEGGIBILE' && f.doc === 'VISURA')).toBe(true);
+  });
 });

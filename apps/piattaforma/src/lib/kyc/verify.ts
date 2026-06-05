@@ -63,8 +63,14 @@ export async function verifyRegistrationKyc(
   if (!visura.dataEmissione || !visura.ateco || (!visura.partitaIva && !visura.denominazione)) {
     failures.push({ rule: 'ILLEGGIBILE', doc: 'VISURA', message: 'Non siamo riusciti a leggere la visura: carica il PDF originale (non una scansione).' });
   }
-  if (!visura.amministratore?.cognome && !visura.amministratore?.nome && !visura.amministratore?.codiceFiscale) {
-    failures.push({ rule: 'ILLEGGIBILE', doc: 'VISURA', message: 'Non siamo riusciti a leggere l\'amministratore nella visura.' });
+  const adminNameReadable = !!(visura.amministratore?.nome && visura.amministratore?.cognome);
+  const adminCfReadable = !!visura.amministratore?.codiceFiscale;
+  if (!adminNameReadable || !adminCfReadable) {
+    failures.push({
+      rule: 'ILLEGGIBILE',
+      doc: 'VISURA',
+      message: "Non siamo riusciti a leggere completamente l'amministratore nella visura (servono nome, cognome e codice fiscale): carica il PDF originale.",
+    });
   }
   if (!ci.nome || !ci.cognome) {
     failures.push({ rule: 'ILLEGGIBILE', doc: 'CI', message: 'Non siamo riusciti a leggere nome e cognome dalla carta d\'identità: ricarica una foto più nitida.' });

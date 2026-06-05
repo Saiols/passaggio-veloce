@@ -219,6 +219,9 @@ export async function registerAction(
     docBuffers.find((d) => d.tipo === t)!;
 
   // GATE KYC (sincrono, bloccante). In DEMO_MODE è bypassato (banner "OCR simulati").
+  // Hoisted fuori dal gate per riusare i dati estratti dentro la transaction
+  // (persistenza ocrData/visuraCameraleData). null in DEMO_MODE (gate skippato).
+  let kycExtracted: Awaited<ReturnType<typeof verifyRegistrationKyc>> | null = null;
   if (!env.DEMO_MODE) {
     const allowedAteco = await prisma.atecoAllowedCode.findMany({
       where: { companyType: company.type, active: true },
@@ -244,6 +247,7 @@ export async function registerAction(
     if (!kyc.passed) {
       return { ok: false, error: 'Verifica documenti non superata', kycFailures: kyc.failures };
     }
+    kycExtracted = kyc;
   }
 
   const refCodeInput = refCodeFromPayload?.trim().toLowerCase();
@@ -363,8 +367,12 @@ export async function registerAction(
           utmMedium: utm.medium ?? null,
           utmCampaign: utm.campaign ?? null,
           utmContent: utm.content ?? null,
-          // Popolata in seguito dall'OCR sulla visura (data emissione estratta).
-          visuraCameraleData: null,
+          // Popolata dall'OCR sulla visura (data emissione estratta dal gate KYC).
+          // Colonna @db.Date: l'ISO yyyy-mm-dd va convertito in Date.
+          visuraCameraleData:
+            kycExtracted?.passed && kycExtracted.extracted.visura.dataEmissione
+              ? new Date(kycExtracted.extracted.visura.dataEmissione)
+              : null,
         },
       });
 
@@ -394,6 +402,18 @@ export async function registerAction(
       });
 
       for (const { tipo, put } of storedDocs) {
+        // Riusa i dati estratti dal gate KYC (no re-OCR). In DEMO_MODE
+        // kycExtracted è null → nessun payload, ocrStato resta NONE.
+        const ocrPayload =
+          kycExtracted?.passed
+            ? tipo === 'VISURA_CAMERALE'
+              ? kycExtracted.extracted.visura
+              : tipo === 'CI_FRONTE'
+                ? kycExtracted.extracted.ci
+                : tipo === 'CODICE_FISCALE'
+                  ? kycExtracted.extracted.cf
+                  : null
+            : null;
         await tx.documento.create({
           data: {
             tipo,
@@ -404,7 +424,10 @@ export async function registerAction(
             sizeBytes: put.sizeBytes,
             originalFilename: put.originalFilename,
             uploadedById: userId,
-            ocrStato: 'NONE',
+            ocrStato: ocrPayload ? 'SUCCESS' : 'NONE',
+            ocrProvider: ocrPayload ? env.OCR_PROVIDER : null,
+            ocrData: ocrPayload ? (ocrPayload as unknown as Prisma.InputJsonValue) : undefined,
+            ocrAt: ocrPayload ? new Date() : null,
             gatingStato: 'PASSED',
           },
         });

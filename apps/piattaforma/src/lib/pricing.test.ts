@@ -1,46 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { computeFees, type FeeBreakdown } from './pricing';
+import { computeFees } from './pricing';
 
 describe('computeFees', () => {
-  it('passaggio privato: 75€ agenzia / 25€ broker / 50€ noi / 10€ affiliazione totale', () => {
-    const result = computeFees({ tipo: 'PASSAGGIO_PRIVATO', numeroVeicoli: 1 });
-    expect(result).toEqual<FeeBreakdown>({
-      feeAgenziaCent: 7500,
-      creditoBrokerCent: 2500,
-      ricavoLordoCent: 5000,
-      costoAffiliazioneTotaleCent: 1000,
+  it('SEMPLICE singolo (1 veicolo): 75/25/50/10', () => {
+    expect(computeFees({ tipo: 'SEMPLICE', numeroVeicoli: 1 })).toEqual({
+      feeAgenziaCent: 7500, creditoBrokerCent: 2500, ricavoLordoCent: 5000, costoAffiliazioneTotaleCent: 1000,
     });
   });
-
-  it('minivolture multiple N=2: 30€ agenzia / 0 broker / 30€ noi / 10€ affiliazione', () => {
-    const result = computeFees({ tipo: 'MINIVOLTURE_MULTIPLE', numeroVeicoli: 2 });
-    expect(result).toEqual<FeeBreakdown>({
-      feeAgenziaCent: 3000,
-      creditoBrokerCent: 0,
-      ricavoLordoCent: 3000,
-      costoAffiliazioneTotaleCent: 1000,
+  it('SEMPLICE multiplo (3 veicoli): scala ×3', () => {
+    expect(computeFees({ tipo: 'SEMPLICE', numeroVeicoli: 3 })).toEqual({
+      feeAgenziaCent: 22500, creditoBrokerCent: 7500, ricavoLordoCent: 15000, costoAffiliazioneTotaleCent: 3000,
     });
   });
-
-  it('minivolture multiple N=5: scala lineare', () => {
-    const result = computeFees({ tipo: 'MINIVOLTURE_MULTIPLE', numeroVeicoli: 5 });
-    expect(result).toEqual<FeeBreakdown>({
-      feeAgenziaCent: 7500,
-      creditoBrokerCent: 0,
-      ricavoLordoCent: 7500,
-      costoAffiliazioneTotaleCent: 2500,
+  it('MINIVOLTURA singola (1 veicolo): 15/0/15/5', () => {
+    expect(computeFees({ tipo: 'MINIVOLTURA', numeroVeicoli: 1 })).toEqual({
+      feeAgenziaCent: 1500, creditoBrokerCent: 0, ricavoLordoCent: 1500, costoAffiliazioneTotaleCent: 500,
     });
   });
-
-  it('lancia errore se passaggio privato ha N != 1', () => {
-    expect(() => computeFees({ tipo: 'PASSAGGIO_PRIVATO', numeroVeicoli: 2 })).toThrow(
-      /numeroVeicoli deve essere 1/i,
-    );
+  it('MINIVOLTURA multipla (4 veicoli): scala ×4', () => {
+    expect(computeFees({ tipo: 'MINIVOLTURA', numeroVeicoli: 4 })).toEqual({
+      feeAgenziaCent: 6000, creditoBrokerCent: 0, ricavoLordoCent: 6000, costoAffiliazioneTotaleCent: 2000,
+    });
   });
-
-  it('lancia errore se minivolture multiple ha N < 2', () => {
-    expect(() => computeFees({ tipo: 'MINIVOLTURE_MULTIPLE', numeroVeicoli: 1 })).toThrow(
-      /numeroVeicoli deve essere ≥ 2/i,
-    );
+  it('lancia se numeroVeicoli < 1', () => {
+    expect(() => computeFees({ tipo: 'SEMPLICE', numeroVeicoli: 0 })).toThrow();
   });
 });

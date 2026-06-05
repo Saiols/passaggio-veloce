@@ -1,14 +1,8 @@
-// Engine economico Passaggio Veloce — modello §1 feedback demo 2026-04-29.
-//
-// PASSAGGIO_PRIVATO (singolo, privato → privato):
-//   detrazione agenzia 75 €, credito broker 25 €, nostro lordo 50 €,
-//   costo affiliazione totale 10 € (a nostro carico, mai aggiunto al prezzo agenzia).
-//
-// MINIVOLTURE_MULTIPLE (commercianti, N veicoli ≥ 2):
-//   detrazione agenzia 15 € × N, credito broker 0, nostro lordo 15 € × N,
-//   costo affiliazione totale 5 € × N.
+// Engine economico Passaggio Veloce. Fee PER VEICOLO × numeroVeicoli.
+// SEMPLICE (acquirente privato): agenzia 75€, broker 25€, lordo 50€, affiliazione 10€ — per veicolo.
+// MINIVOLTURA (acquirente commerciante): agenzia 15€, broker 0, lordo 15€, affiliazione 5€ — per veicolo.
 
-export type PraticaTipoEconomico = 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
+export type PraticaTipoEconomico = 'SEMPLICE' | 'MINIVOLTURA';
 
 export type FeeBreakdown = {
   feeAgenziaCent: number;
@@ -17,37 +11,22 @@ export type FeeBreakdown = {
   costoAffiliazioneTotaleCent: number;
 };
 
-export function computeFees(input: {
-  tipo: PraticaTipoEconomico;
-  numeroVeicoli: number;
-}): FeeBreakdown {
+const PER_VEICOLO: Record<PraticaTipoEconomico, FeeBreakdown> = {
+  SEMPLICE: { feeAgenziaCent: 7500, creditoBrokerCent: 2500, ricavoLordoCent: 5000, costoAffiliazioneTotaleCent: 1000 },
+  MINIVOLTURA: { feeAgenziaCent: 1500, creditoBrokerCent: 0, ricavoLordoCent: 1500, costoAffiliazioneTotaleCent: 500 },
+};
+
+export function computeFees(input: { tipo: PraticaTipoEconomico; numeroVeicoli: number }): FeeBreakdown {
   const { tipo, numeroVeicoli } = input;
-  if (tipo === 'PASSAGGIO_PRIVATO') {
-    if (numeroVeicoli !== 1) {
-      throw new Error(
-        `PASSAGGIO_PRIVATO: numeroVeicoli deve essere 1, ricevuto ${numeroVeicoli}`,
-      );
-    }
-    return {
-      feeAgenziaCent: 7500,
-      creditoBrokerCent: 2500,
-      ricavoLordoCent: 5000,
-      costoAffiliazioneTotaleCent: 1000,
-    };
+  if (!Number.isInteger(numeroVeicoli) || numeroVeicoli < 1) {
+    throw new Error(`numeroVeicoli deve essere un intero >= 1, ricevuto ${numeroVeicoli}`);
   }
-  if (tipo === 'MINIVOLTURE_MULTIPLE') {
-    if (numeroVeicoli < 2) {
-      throw new Error(
-        `MINIVOLTURE_MULTIPLE: numeroVeicoli deve essere ≥ 2, ricevuto ${numeroVeicoli}`,
-      );
-    }
-    return {
-      feeAgenziaCent: 1500 * numeroVeicoli,
-      creditoBrokerCent: 0,
-      ricavoLordoCent: 1500 * numeroVeicoli,
-      costoAffiliazioneTotaleCent: 500 * numeroVeicoli,
-    };
-  }
-  const _exhaustive: never = tipo;
-  throw new Error(`tipo non supportato: ${_exhaustive}`);
+  const u = PER_VEICOLO[tipo];
+  if (!u) throw new Error(`tipo non supportato: ${tipo}`);
+  return {
+    feeAgenziaCent: u.feeAgenziaCent * numeroVeicoli,
+    creditoBrokerCent: u.creditoBrokerCent * numeroVeicoli,
+    ricavoLordoCent: u.ricavoLordoCent * numeroVeicoli,
+    costoAffiliazioneTotaleCent: u.costoAffiliazioneTotaleCent * numeroVeicoli,
+  };
 }

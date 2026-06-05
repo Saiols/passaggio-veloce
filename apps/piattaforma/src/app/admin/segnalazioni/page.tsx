@@ -40,6 +40,7 @@ export default async function AdminSegnalazioniPage() {
       agenziaAssegnata: {
         select: { id: true, ragioneSociale: true, telefono: true, email: true },
       },
+      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });
 
@@ -80,7 +81,12 @@ export default async function AdminSegnalazioniPage() {
                       {p.codicePratica ?? '—'}
                     </Link>
                     <p className="mt-1 text-[14px] font-semibold text-pv-navy-800">
-                      {p.targa ?? '—'} · {p.comune ?? '—'} ({p.provincia ?? '—'})
+                      {p.veicoli[0]?.targa
+                        ? p.veicoli.length > 1
+                          ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                          : p.veicoli[0].targa
+                        : '—'}{' '}
+                      · {p.comune ?? '—'} ({p.provincia ?? '—'})
                     </p>
                     <p className="mt-0.5 text-[12px] text-pv-slate-700">
                       <strong>Tipo:</strong>{' '}

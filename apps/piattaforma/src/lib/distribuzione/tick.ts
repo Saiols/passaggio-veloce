@@ -250,7 +250,7 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
       pratica: {
         select: {
           codicePratica: true,
-          targa: true,
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           comune: true,
           provincia: true,
           feeAgenziaCent: true,
@@ -269,7 +269,12 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
     },
     payload: {
       codicePratica: a.pratica.codicePratica ?? '—',
-      targa: a.pratica.targa,
+      targa:
+        a.pratica.veicoli[0]?.targa
+          ? a.pratica.veicoli.length > 1
+            ? `${a.pratica.veicoli[0].targa} +${a.pratica.veicoli.length - 1}`
+            : a.pratica.veicoli[0].targa
+          : null,
       comune: a.pratica.comune,
       provincia: a.pratica.provincia,
       feeCent: a.pratica.feeAgenziaCent,
@@ -293,11 +298,18 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
         },
       },
       assegnazioni: { select: { id: true } },
+      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });
   if (!pratica) return;
 
   const tentativi = pratica.assegnazioni.length;
+  const targaPratica =
+    pratica.veicoli[0]?.targa
+      ? pratica.veicoli.length > 1
+        ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
+        : pratica.veicoli[0].targa
+      : null;
   const admins = await getAdminEmails();
 
   const targets = admins.map((a) => ({
@@ -305,7 +317,7 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
     target: { email: a.email, userId: a.userId, companyId: null },
     payload: {
       codicePratica: pratica.codicePratica ?? '—',
-      targa: pratica.targa,
+      targa: targaPratica,
       comune: pratica.comune,
       provincia: pratica.provincia,
       tentativi,
@@ -324,7 +336,7 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
       target: { email: brokerUser.email, userId: brokerUser.id, companyId: pratica.broker.id },
       payload: {
         codicePratica: pratica.codicePratica ?? '—',
-        targa: pratica.targa,
+        targa: targaPratica,
         nomeBroker: brokerUser.nome,
       },
     });

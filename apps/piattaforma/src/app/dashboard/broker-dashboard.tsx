@@ -20,7 +20,10 @@ export async function BrokerDashboard({
       where: { brokerId: companyId, deletedAt: null },
       orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       take: 5,
-      include: { agenziaAssegnata: { select: { ragioneSociale: true, citta: true } } },
+      include: {
+        agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
+      },
     }),
     prisma.wallet.findUnique({ where: { companyId } }),
     // A7 banner valuta post-firma: pratiche FIRMATA del broker per cui
@@ -37,7 +40,7 @@ export async function BrokerDashboard({
       select: {
         id: true,
         codicePratica: true,
-        targa: true,
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
         firmaAvvenutaAt: true,
         agenziaAssegnata: { select: { ragioneSociale: true } },
       },
@@ -108,8 +111,11 @@ export async function BrokerDashboard({
                 <div className="min-w-0">
                   <p className="text-[13px] font-semibold text-pv-navy-900">
                     {p.codicePratica ?? p.id.slice(0, 8)}
-                    {p.targa && (
-                      <span className="ml-2 text-pv-slate-500">({p.targa})</span>
+                    {p.veicoli[0]?.targa && (
+                      <span className="ml-2 text-pv-slate-500">
+                        ({p.veicoli[0].targa}
+                        {p.veicoli.length > 1 ? ` +${p.veicoli.length - 1}` : ''})
+                      </span>
                     )}
                   </p>
                   <p className="text-[11.5px] text-pv-slate-500">
@@ -187,9 +193,14 @@ export async function BrokerDashboard({
                       <StatusChip stato={p.stato as PraticaStato} viewerRole="BROKER" />
                     </div>
                     <p className="mt-1 truncate text-[13px] text-pv-slate-700">
-                      {p.targa && <span className="font-semibold">{p.targa}</span>}
-                      {p.targa && ' · '}
-                      {p.proprietarioAttuale ?? '—'}
+                      {p.veicoli[0]?.targa && (
+                        <span className="font-semibold">
+                          {p.veicoli[0].targa}
+                          {p.veicoli.length > 1 ? ` +${p.veicoli.length - 1}` : ''}
+                        </span>
+                      )}
+                      {p.veicoli[0]?.targa && ' · '}
+                      {p.veicoli[0]?.proprietarioAttuale ?? '—'}
                       {p.agenziaAssegnata && (
                         <>
                           {' · '}

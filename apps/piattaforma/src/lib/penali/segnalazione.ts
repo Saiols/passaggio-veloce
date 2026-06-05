@@ -44,7 +44,7 @@ export async function segnalaPraticaAction(
       agenziaAssegnataId: true,
       flagSegnalata: true,
       codicePratica: true,
-      targa: true,
+      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       broker: { select: { ragioneSociale: true } },
       agenziaAssegnata: { select: { ragioneSociale: true } },
     },
@@ -86,7 +86,12 @@ export async function segnalaPraticaAction(
         target: { email: a.email, userId: a.userId },
         payload: {
           codicePratica: pratica.codicePratica ?? '—',
-          targa: pratica.targa,
+          targa:
+            pratica.veicoli[0]?.targa
+              ? pratica.veicoli.length > 1
+                ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
+                : pratica.veicoli[0].targa
+              : null,
           brokerRagioneSociale: pratica.broker.ragioneSociale,
           agenziaRagioneSociale:
             pratica.agenziaAssegnata?.ragioneSociale ?? '—',
@@ -166,6 +171,7 @@ export async function confermaAnnullamentoConPenaleAction(
               },
             },
           },
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
         },
       });
       if (!pratica) throw new Error('Pratica non trovata');
@@ -233,7 +239,12 @@ export async function confermaAnnullamentoConPenaleAction(
 
       return {
         codicePratica: pratica.codicePratica ?? '—',
-        targa: pratica.targa,
+        targa:
+          pratica.veicoli[0]?.targa
+            ? pratica.veicoli.length > 1
+              ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
+              : pratica.veicoli[0].targa
+            : null,
         tipoSegnalazione:
           (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo,
         saldoBroker: newSaldo,

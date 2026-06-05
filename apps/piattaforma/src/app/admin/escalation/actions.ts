@@ -41,6 +41,7 @@ export async function assegnaEscalationAction(
         where: { id: praticaId },
         include: {
           broker: { select: { ragioneSociale: true } },
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
         },
       });
       if (!pratica) throw new Error('Pratica non trovata');
@@ -91,7 +92,12 @@ export async function assegnaEscalationAction(
         agenziaEmail: agenzia.email,
         agenziaRagioneSociale: agenzia.ragioneSociale,
         codicePratica: pratica.codicePratica,
-        targa: pratica.targa,
+        targa:
+          pratica.veicoli[0]?.targa
+            ? pratica.veicoli.length > 1
+              ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
+              : pratica.veicoli[0].targa
+            : null,
         comune: pratica.comune,
         provincia: pratica.provincia,
         feeCent: pratica.feeAgenziaCent,

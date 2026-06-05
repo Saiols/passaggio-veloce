@@ -98,7 +98,7 @@ export default async function AdminAffiliazioniPage({
           select: {
             id: true,
             codicePratica: true,
-            targa: true,
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
             broker: { select: { id: true, ragioneSociale: true, deletedAt: true } },
             agenziaAssegnata: {
               select: { id: true, ragioneSociale: true, deletedAt: true },
@@ -365,9 +365,12 @@ export default async function AdminAffiliazioniPage({
                         >
                           {c.pratica.codicePratica ?? '—'}
                         </Link>
-                        {c.pratica.targa && (
+                        {c.pratica.veicoli[0]?.targa && (
                           <span className="ml-2 text-[11px] text-pv-slate-500">
-                            {c.pratica.targa}
+                            {c.pratica.veicoli[0].targa}
+                            {c.pratica.veicoli.length > 1
+                              ? ` +${c.pratica.veicoli.length - 1}`
+                              : ''}
                           </span>
                         )}
                       </td>

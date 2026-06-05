@@ -33,7 +33,7 @@ export default async function SospettePage() {
         select: {
           id: true,
           codicePratica: true,
-          targa: true,
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           brokerId: true,
           agenziaAssegnataId: true,
           tipo: true,
@@ -88,7 +88,11 @@ export default async function SospettePage() {
     return {
       id: c.id,
       praticaCodice: c.pratica.codicePratica ?? c.pratica.id.slice(0, 8),
-      praticaTarga: c.pratica.targa,
+      praticaTarga: c.pratica.veicoli[0]?.targa
+        ? c.pratica.veicoli.length > 1
+          ? `${c.pratica.veicoli[0].targa} +${c.pratica.veicoli.length - 1}`
+          : c.pratica.veicoli[0].targa
+        : null,
       referenteRagioneSociale: c.referente.ragioneSociale,
       referenteTipo: c.referente.type,
       referralRagioneSociale: referral?.ragioneSociale ?? '—',

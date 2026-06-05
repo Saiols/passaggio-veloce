@@ -55,8 +55,8 @@ export default async function AdminPratichePage({
   if (q) {
     where.OR = [
       { codicePratica: { contains: q, mode: 'insensitive' } },
-      { targa: { contains: q, mode: 'insensitive' } },
-      { proprietarioAttuale: { contains: q, mode: 'insensitive' } },
+      { veicoli: { some: { targa: { contains: q, mode: 'insensitive' } } } },
+      { veicoli: { some: { proprietarioAttuale: { contains: q, mode: 'insensitive' } } } },
       { comune: { contains: q, mode: 'insensitive' } },
       { broker: { ragioneSociale: { contains: q, mode: 'insensitive' } } },
       { agenziaAssegnata: { ragioneSociale: { contains: q, mode: 'insensitive' } } },
@@ -70,6 +70,7 @@ export default async function AdminPratichePage({
     include: {
       broker: { select: { ragioneSociale: true } },
       agenziaAssegnata: { select: { ragioneSociale: true } },
+      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });
 
@@ -137,7 +138,13 @@ export default async function AdminPratichePage({
                       <span className="relative z-10">{p.codicePratica ?? 'BOZZA'}</span>
                     </td>
                     <td className="px-5 py-3">
-                      <span className="relative z-10">{p.targa ?? '—'}</span>
+                      <span className="relative z-10">
+                        {p.veicoli[0]?.targa
+                          ? p.veicoli.length > 1
+                            ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                            : p.veicoli[0].targa
+                          : '—'}
+                      </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
                       <span className="relative z-10">{p.broker.ragioneSociale}</span>

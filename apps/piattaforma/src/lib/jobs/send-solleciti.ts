@@ -24,7 +24,7 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
     select: {
       id: true,
       codicePratica: true,
-      targa: true,
+      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       feeAgenziaCent: true,
       accettataAt: true,
       broker: {
@@ -59,6 +59,12 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
 
   for (const p of pratiche) {
     const codice = p.codicePratica ?? p.id;
+    const targaPratica =
+      p.veicoli[0]?.targa
+        ? p.veicoli.length > 1
+          ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+          : p.veicoli[0].targa
+        : null;
     const now = Date.now();
     const accettataMs = p.accettataAt ? p.accettataAt.getTime() : now;
     const giorniTrascorsi = Math.floor((now - accettataMs) / 86_400_000);
@@ -79,7 +85,7 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
         },
         payload: {
           codicePratica: codice,
-          targa: p.targa,
+          targa: targaPratica,
           agenziaNome,
           nomeBroker,
           giorniTrascorsi,
@@ -109,7 +115,7 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
           },
           payload: {
             codicePratica: codice,
-            targa: p.targa,
+            targa: targaPratica,
             nomeAgenzia,
             feeCent: p.feeAgenziaCent,
             firmaEntroAt,

@@ -104,8 +104,8 @@ export default async function PratichePage({
   if (q) {
     where.OR = [
       { codicePratica: { contains: q, mode: 'insensitive' } },
-      { targa: { contains: q, mode: 'insensitive' } },
-      { proprietarioAttuale: { contains: q, mode: 'insensitive' } },
+      { veicoli: { some: { targa: { contains: q, mode: 'insensitive' } } } },
+      { veicoli: { some: { proprietarioAttuale: { contains: q, mode: 'insensitive' } } } },
     ];
   }
 
@@ -118,6 +118,7 @@ export default async function PratichePage({
       include: {
         agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
         broker: { select: { ragioneSociale: true } },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
       },
     }),
     prisma.pratica.count({ where }),
@@ -199,10 +200,16 @@ export default async function PratichePage({
                       <span className="relative z-10">{p.codicePratica ?? 'BOZZA'}</span>
                     </td>
                     <td className="px-5 py-3 font-semibold text-pv-slate-900">
-                      <span className="relative z-10">{p.targa ?? '—'}</span>
+                      <span className="relative z-10">
+                        {p.veicoli[0]?.targa
+                          ? p.veicoli.length > 1
+                            ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                            : p.veicoli[0].targa
+                          : '—'}
+                      </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 sm:table-cell">
-                      <span className="relative z-10">{p.proprietarioAttuale ?? '—'}</span>
+                      <span className="relative z-10">{p.veicoli[0]?.proprietarioAttuale ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
                       <span className="relative z-10">

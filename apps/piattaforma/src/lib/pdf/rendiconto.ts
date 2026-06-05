@@ -3,6 +3,14 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf
 import { prisma } from '@pv/db';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 
+/** Rappresentazione compatta delle targhe dei veicoli di una pratica. */
+function formatTargaVeicoli(veicoli?: { targa: string | null }[]): string {
+  if (!veicoli || veicoli.length === 0) return '—';
+  const targa = veicoli[0]?.targa;
+  if (!targa) return '—';
+  return veicoli.length > 1 ? `${targa} +${veicoli.length - 1}` : targa;
+}
+
 /**
  * Genera un rendiconto PDF mensile separando crediti pratiche da
  * crediti affiliazione (AF-PDF FASE 13.5). Output: Uint8Array con il
@@ -60,7 +68,12 @@ export async function generateRendicontoPDF(
       },
       orderBy: { createdAt: 'asc' },
       include: {
-        pratica: { select: { codicePratica: true, targa: true } },
+        pratica: {
+          select: {
+            codicePratica: true,
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+          },
+        },
       },
     }),
   ]);
@@ -259,7 +272,7 @@ export async function generateRendicontoPDF(
         y,
         { size: 9 },
       );
-      drawText(page, t.pratica?.targa ?? '—', margin + 200, y, { size: 9 });
+      drawText(page, formatTargaVeicoli(t.pratica?.veicoli), margin + 200, y, { size: 9 });
       drawText(
         page,
         formatCurrencyCent(t.importoCent),

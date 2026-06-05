@@ -130,6 +130,7 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
         agenziaAssegnata: {
           select: { ragioneSociale: true },
         },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
     });
     const brokerUser = full?.broker.users[0];
@@ -143,7 +144,12 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
         },
         payload: {
           codicePratica: full.codicePratica ?? '—',
-          targa: full.targa,
+          targa:
+            full.veicoli[0]?.targa
+              ? full.veicoli.length > 1
+                ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
+                : full.veicoli[0].targa
+              : null,
           agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
           nomeBroker: brokerUser.nome,
         },
@@ -253,7 +259,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       // (skip se referente sospeso o eliminato).
       const accreditOut = await accreditCommissioniAffiliazione(tx, {
         praticaId: pratica.id,
-        tipo: pratica.tipo as 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE',
+        tipo: pratica.tipo as 'SEMPLICE' | 'MINIVOLTURA',
         numeroVeicoli: pratica.numeroVeicoli,
         brokerId: pratica.brokerId,
         agenziaAssegnataId: pratica.agenziaAssegnataId,
@@ -298,9 +304,16 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
             },
           },
         },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
     });
     if (full) {
+      const fullTarga =
+        full.veicoli[0]?.targa
+          ? full.veicoli.length > 1
+            ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
+            : full.veicoli[0].targa
+          : null;
       const brokerUser = full.broker.users[0];
       if (brokerUser) {
         await sendNotification({
@@ -312,7 +325,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           },
           payload: {
             codicePratica: full.codicePratica ?? '—',
-            targa: full.targa,
+            targa: fullTarga,
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
             creditoCent: full.creditoBrokerCent,
             saldoCent: full.broker.wallet?.saldoCent ?? 0,
@@ -329,7 +342,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           },
           payload: {
             codicePratica: full.codicePratica ?? '—',
-            targa: full.targa,
+            targa: fullTarga,
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
             nomeBroker: brokerUser.nome,
             praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${praticaId}`,
@@ -363,7 +376,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         pratica: {
           select: {
             codicePratica: true,
-            targa: true,
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
             broker: { select: { ragioneSociale: true } },
             agenziaAssegnata: { select: { ragioneSociale: true } },
           },
@@ -399,7 +412,12 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         },
         payload: {
           codicePratica: c.pratica.codicePratica ?? '—',
-          targa: c.pratica.targa,
+          targa:
+            c.pratica.veicoli[0]?.targa
+              ? c.pratica.veicoli.length > 1
+                ? `${c.pratica.veicoli[0].targa} +${c.pratica.veicoli.length - 1}`
+                : c.pratica.veicoli[0].targa
+              : null,
           nomeReferente: refUser.nome,
           referralRagioneSociale,
           tipoReferente: c.tipo,

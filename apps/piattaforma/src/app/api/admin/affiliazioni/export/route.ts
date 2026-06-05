@@ -78,7 +78,7 @@ export async function GET(req: Request) {
       pratica: {
         select: {
           codicePratica: true,
-          targa: true,
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           tipo: true,
           stato: true,
           broker: { select: { ragioneSociale: true } },
@@ -112,7 +112,7 @@ export async function GET(req: Request) {
       c.createdAt.toISOString(),
       c.id,
       c.pratica.codicePratica ?? '',
-      c.pratica.targa ?? '',
+      c.pratica.veicoli.map((v) => v.targa ?? '').filter(Boolean).join('; '),
       c.pratica.tipo,
       c.pratica.stato,
       c.pratica.broker.ragioneSociale,

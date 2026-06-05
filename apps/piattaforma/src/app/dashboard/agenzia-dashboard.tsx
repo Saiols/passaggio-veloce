@@ -32,6 +32,7 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
         pratica: {
           include: {
             broker: { select: { ragioneSociale: true, citta: true } },
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
           },
         },
       },
@@ -169,9 +170,14 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
                       />
                     </div>
                     <p className="mt-1 truncate text-[13px] text-pv-slate-700">
-                      {a.pratica.targa && <span className="font-semibold">{a.pratica.targa}</span>}
-                      {a.pratica.targa && ' · '}
-                      {a.pratica.proprietarioAttuale ?? '—'}
+                      {a.pratica.veicoli[0]?.targa && (
+                        <span className="font-semibold">
+                          {a.pratica.veicoli[0].targa}
+                          {a.pratica.veicoli.length > 1 ? ` +${a.pratica.veicoli.length - 1}` : ''}
+                        </span>
+                      )}
+                      {a.pratica.veicoli[0]?.targa && ' · '}
+                      {a.pratica.veicoli[0]?.proprietarioAttuale ?? '—'}
                       {' · '}
                       <span className="text-pv-slate-500">da {a.pratica.broker.ragioneSociale}</span>
                     </p>

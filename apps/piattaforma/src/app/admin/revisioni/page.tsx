@@ -45,6 +45,7 @@ export default async function AdminRevisioniPage() {
           telefono: true,
         },
       },
+      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });
 
@@ -84,9 +85,10 @@ export default async function AdminRevisioniPage() {
                     >
                       {p.codicePratica ?? '(bozza)'}
                     </Link>
-                    {p.targa && (
+                    {p.veicoli[0]?.targa && (
                       <span className="ml-2 text-[12px] text-pv-slate-500">
-                        {p.targa}
+                        {p.veicoli[0].targa}
+                        {p.veicoli.length > 1 ? ` +${p.veicoli.length - 1}` : ''}
                       </span>
                     )}
                     <p className="mt-1 text-[12px] text-pv-slate-700">

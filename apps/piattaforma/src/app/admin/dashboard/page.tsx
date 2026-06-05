@@ -7,7 +7,7 @@ import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 
 type Periodo = 'giorno' | 'settimana' | 'mese' | 'anno';
-type TipoFiltro = '' | 'PASSAGGIO_PRIVATO' | 'MINIVOLTURE_MULTIPLE';
+type TipoFiltro = '' | 'SEMPLICE' | 'MINIVOLTURA';
 
 type SearchParams = { periodo?: Periodo; tipo?: TipoFiltro };
 
@@ -149,7 +149,7 @@ export default async function AdminDashboardPage({
             </h1>
             <p className="mt-1 text-[13px] text-pv-slate-500">
               {periodoLabel(periodo)}
-              {tipo ? ` · solo ${tipo === 'PASSAGGIO_PRIVATO' ? 'Passaggio privato' : 'Minivolture multiple'}` : ' · tutti i tipi'}
+              {tipo ? ` · solo ${tipo === 'SEMPLICE' ? 'Passaggio di proprietà semplice' : 'Minivoltura'}` : ' · tutti i tipi'}
             </p>
           </div>
           <a
@@ -310,8 +310,8 @@ function PeriodoTabs({ current, tipo }: { current: Periodo; tipo: TipoFiltro }) 
 function TipoTabs({ current, periodo }: { current: TipoFiltro; periodo: Periodo }) {
   const opzioni: { value: TipoFiltro; label: string }[] = [
     { value: '', label: 'Tutti i tipi' },
-    { value: 'PASSAGGIO_PRIVATO', label: 'Passaggio privato' },
-    { value: 'MINIVOLTURE_MULTIPLE', label: 'Minivolture multiple' },
+    { value: 'SEMPLICE', label: 'Passaggio di proprietà semplice' },
+    { value: 'MINIVOLTURA', label: 'Minivoltura' },
   ];
   return (
     <div className="mt-3 flex flex-wrap gap-2">

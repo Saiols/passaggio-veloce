@@ -85,6 +85,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
         agenziaAssegnata: {
           select: { ragioneSociale: true, citta: true, email: true, telefono: true },
         },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
     });
     const broker = full?.broker;
@@ -96,7 +97,12 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
         target: { email: brokerUser.email, userId: brokerUser.id, companyId: broker.id },
         payload: {
           codicePratica: full.codicePratica ?? '—',
-          targa: full.targa,
+          targa:
+            full.veicoli[0]?.targa
+              ? full.veicoli.length > 1
+                ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
+                : full.veicoli[0].targa
+              : null,
           agenziaNome: agenzia.ragioneSociale,
           agenziaCitta: agenzia.citta,
           agenziaEmail: agenzia.email,

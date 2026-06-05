@@ -31,6 +31,7 @@ export default async function InboxPage() {
         pratica: {
           include: {
             broker: { select: { ragioneSociale: true, citta: true } },
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
           },
         },
       },
@@ -43,6 +44,7 @@ export default async function InboxPage() {
         pratica: {
           include: {
             broker: { select: { ragioneSociale: true } },
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           },
         },
       },
@@ -101,7 +103,12 @@ export default async function InboxPage() {
                         </span>
                       </div>
                       <p className="mt-1 text-[14px] font-semibold text-pv-slate-900">
-                        {a.pratica.targa ?? '—'} · {a.pratica.proprietarioAttuale ?? '—'}
+                        {a.pratica.veicoli[0]?.targa
+                          ? a.pratica.veicoli.length > 1
+                            ? `${a.pratica.veicoli[0].targa} +${a.pratica.veicoli.length - 1}`
+                            : a.pratica.veicoli[0].targa
+                          : '—'}{' '}
+                        · {a.pratica.veicoli[0]?.proprietarioAttuale ?? '—'}
                       </p>
                       <p className="mt-0.5 text-[12px] text-pv-slate-500">
                         da <span className="font-semibold">{a.pratica.broker.ragioneSociale}</span>
@@ -144,7 +151,12 @@ export default async function InboxPage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-pv-navy-800">
-                      {a.pratica.codicePratica ?? '—'} · {a.pratica.targa ?? '—'}
+                      {a.pratica.codicePratica ?? '—'} ·{' '}
+                      {a.pratica.veicoli[0]?.targa
+                        ? a.pratica.veicoli.length > 1
+                          ? `${a.pratica.veicoli[0].targa} +${a.pratica.veicoli.length - 1}`
+                          : a.pratica.veicoli[0].targa
+                        : '—'}
                     </p>
                     <p className="text-[11px] text-pv-slate-500">
                       {a.pratica.broker.ragioneSociale}

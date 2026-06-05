@@ -54,7 +54,12 @@ export default async function WalletPage({
           orderBy: { createdAt: 'desc' },
           take: 20,
           include: {
-            pratica: { select: { codicePratica: true, targa: true } },
+            pratica: {
+              select: {
+                codicePratica: true,
+                veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+              },
+            },
           },
         },
         payouts: {
@@ -237,7 +242,13 @@ export default async function WalletPage({
                       {t.pratica?.codicePratica && (
                         <span className="ml-2 font-mono text-[12px] font-normal text-pv-slate-500">
                           {t.pratica.codicePratica}
-                          {t.pratica.targa ? ` · ${t.pratica.targa}` : ''}
+                          {t.pratica.veicoli[0]?.targa
+                            ? ` · ${t.pratica.veicoli[0].targa}${
+                                t.pratica.veicoli.length > 1
+                                  ? ` +${t.pratica.veicoli.length - 1}`
+                                  : ''
+                              }`
+                            : ''}
                         </span>
                       )}
                     </p>

@@ -57,7 +57,15 @@ export default async function AddebitiPage() {
   const fees = await prisma.feeAddebito.findMany({
     where: { agenziaId: companyId },
     orderBy: { createdAt: 'desc' },
-    include: { pratica: { select: { id: true, codicePratica: true, targa: true } } },
+    include: {
+      pratica: {
+        select: {
+          id: true,
+          codicePratica: true,
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+        },
+      },
+    },
   });
 
   const upcoming = fees
@@ -65,17 +73,22 @@ export default async function AddebitiPage() {
     .map((f) => ({ fee: f, giorni: computeGiorniResidui(f.scheduledAt, now) }))
     .sort((a, b) => (a.giorni ?? 0) - (b.giorni ?? 0));
 
-  const rows: StoricoRow[] = fees.map((f) => ({
-    id: f.id,
-    praticaId: f.pratica?.id ?? null,
-    importoCent: f.importoCent,
-    stato: f.stato,
-    refDate: f.scheduledAt ?? f.createdAt,
-    codice: f.pratica?.codicePratica ?? null,
-    targa: f.pratica?.targa ?? null,
-    scheduledAt: f.scheduledAt,
-    executedAt: f.executedAt,
-  }));
+  const rows: StoricoRow[] = fees.map((f) => {
+    const veicoli = f.pratica?.veicoli ?? [];
+    const targa0 = veicoli[0]?.targa ?? null;
+    const targa = targa0 && veicoli.length > 1 ? `${targa0} +${veicoli.length - 1}` : targa0;
+    return {
+      id: f.id,
+      praticaId: f.pratica?.id ?? null,
+      importoCent: f.importoCent,
+      stato: f.stato,
+      refDate: f.scheduledAt ?? f.createdAt,
+      codice: f.pratica?.codicePratica ?? null,
+      targa,
+      scheduledAt: f.scheduledAt,
+      executedAt: f.executedAt,
+    };
+  });
   const groups = groupFeeByMonth(rows);
 
   const totaleAnno = rows

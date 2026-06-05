@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     deletedAt: null,
     createdAt: { gte: since },
   };
-  if (tipo === 'PASSAGGIO_PRIVATO' || tipo === 'MINIVOLTURE_MULTIPLE') {
+  if (tipo === 'SEMPLICE' || tipo === 'MINIVOLTURA') {
     where.tipo = tipo;
   }
 

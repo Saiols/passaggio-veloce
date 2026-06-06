@@ -230,14 +230,14 @@ const TIPO_CARDS: {
     tipo: 'SEMPLICE',
     multiplo: false,
     label: 'Passaggio di proprietà semplice',
-    descrizione: 'chi acquista è un privato',
+    descrizione: "chi acquista è un privato o un'azienda che NON commercia auto",
   },
   {
     key: 'SEMPLICE_MULTIPLO',
     tipo: 'SEMPLICE',
     multiplo: true,
     label: 'Passaggio di proprietà semplice multiplo',
-    descrizione: 'chi acquista è un privato',
+    descrizione: "chi acquista è un privato o un'azienda che NON commercia auto",
   },
   {
     key: 'MINIVOLTURA_SINGOLA',
@@ -316,13 +316,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
   const [acquirenteIdentita, setAcquirenteIdentita] = useState<IdentitaFiles>({});
 
-  const [flagCointestazione, setFlagCointestazione] = useState(false);
-  const [flagMinivoltura, setFlagMinivoltura] = useState(false);
-  const [flagProcura, setFlagProcura] = useState(false);
-  // Schema Documentale v7 (SD-B): casi speciali aggiuntivi
-  const [flagSuccessione, setFlagSuccessione] = useState(false);
-  const [flagMinore, setFlagMinore] = useState(false);
-
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
 
@@ -399,8 +392,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         visuraData: v.visuraData ? new Date(v.visuraData) : null,
         permessoData: v.permessoData ? new Date(v.permessoData) : null,
       })),
-      flagProcura,
-      flagSuccessione,
+      flagProcura: false,
+      flagSuccessione: false,
       acquirenteTipoSoggetto: acquirente.tipoSoggetto,
       acquirenteVisuraData: acquirente.visuraData
         ? new Date(acquirente.visuraData)
@@ -409,18 +402,15 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         ? new Date(acquirente.permessoData)
         : null,
       acquirenteDocumentoIdentita: acquirenteDocId,
-      flagMinore,
+      flagMinore: false,
     });
   }, [
     veicoli,
     venditori,
-    flagProcura,
-    flagSuccessione,
     acquirente.tipoSoggetto,
     acquirente.visuraData,
     acquirente.permessoData,
     acquirenteDocId,
-    flagMinore,
   ]);
 
   // Upload del libretto su Blob (client upload) → poi OCR sulla BlobRef. Lo
@@ -585,12 +575,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       if (slot.ref) blobRefs[`DOC__${key}`] = slot.ref;
     }
 
-    fd.append('flagCointestazione', flagCointestazione ? 'true' : 'false');
-    fd.append('flagMinivoltura', flagMinivoltura ? 'true' : 'false');
-    fd.append('flagProcura', flagProcura ? 'true' : 'false');
-    fd.append('flagSuccessione', flagSuccessione ? 'true' : 'false');
-    fd.append('flagMinore', flagMinore ? 'true' : 'false');
-
     // Schema Documentale v7 (SD-B): tipo soggetto + date validità acquirente.
     // (Per i venditori questi campi sono nel JSON `venditori` qui sopra.)
     if (acquirente.tipoSoggetto) {
@@ -671,7 +655,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       ragioneSociale: v.ragioneSociale,
     })),
     proprietari,
-    { flagProcura },
+    { flagProcura: false },
   );
 
   // Gate per lasciare lo step 2 (Venditore): ogni venditore valido + identità
@@ -741,13 +725,17 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                       type="button"
                       aria-pressed={selected}
                       onClick={() => handleCardSelect(card)}
-                      className={`rounded-[12px] border-[1.5px] p-4 text-left transition ${
+                      className={`rounded-[12px] border-2 p-4 text-left transition ${
                         selected
-                          ? 'border-pv-navy-700 bg-pv-navy-50 shadow-[var(--pv-shadow-card)]'
+                          ? 'border-pv-orange-500 bg-pv-orange-500/10 ring-1 ring-pv-orange-500 shadow-[var(--pv-shadow-card)]'
                           : 'border-pv-slate-200 bg-white hover:border-pv-navy-400'
                       }`}
                     >
-                      <span className="block text-[14px] font-bold text-pv-navy-900">
+                      <span
+                        className={`block text-[14px] font-bold ${
+                          selected ? 'text-pv-orange-600' : 'text-pv-navy-900'
+                        }`}
+                      >
                         {card.label}
                       </span>
                       <span className="mt-1 block text-[12.5px] text-pv-slate-600">
@@ -880,51 +868,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               <Button variant="secondary" onClick={addVenditore}>
                 + Aggiungi venditore (co-intestatario)
               </Button>
-            </div>
-
-            <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Flag pratica</h2>
-              <p className="mb-3 text-[12px] text-pv-slate-500">
-                Spunta quelli applicabili: ogni flag aggiunge documenti
-                richiesti specifici (es. procura → atto procuratore + CI).
-              </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                  <Checkbox
-                    checked={flagCointestazione}
-                    onChange={(e) => setFlagCointestazione(e.target.checked)}
-                  />
-                  Cointestazione
-                </label>
-                <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                  <Checkbox
-                    checked={flagMinivoltura}
-                    onChange={(e) => setFlagMinivoltura(e.target.checked)}
-                  />
-                  Minivoltura
-                </label>
-                <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                  <Checkbox
-                    checked={flagProcura}
-                    onChange={(e) => setFlagProcura(e.target.checked)}
-                  />
-                  Vendita tramite procuratore
-                </label>
-                <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                  <Checkbox
-                    checked={flagSuccessione}
-                    onChange={(e) => setFlagSuccessione(e.target.checked)}
-                  />
-                  Veicolo da successione ereditaria
-                </label>
-                <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                  <Checkbox
-                    checked={flagMinore}
-                    onChange={(e) => setFlagMinore(e.target.checked)}
-                  />
-                  Compratore minorenne (richiede tutore)
-                </label>
-              </div>
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">

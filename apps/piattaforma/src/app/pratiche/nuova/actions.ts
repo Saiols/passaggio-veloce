@@ -16,7 +16,7 @@ import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
-import { proprietarioCrossCheck } from '@/lib/kyc/match';
+import { venditoriCrossCheck } from '@/lib/kyc/match';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import {
@@ -221,6 +221,37 @@ const veicoloSchema = z.object({
 
 export type VeicoloInputData = z.infer<typeof veicoloSchema>;
 
+const tipoSoggettoEnum = z.enum([
+  'PRIVATO_ITALIANO_CIE',
+  'PRIVATO_ITALIANO_CARTACEA',
+  'STRANIERO_EXTRA_UE',
+  'AZIENDA',
+  'OPERATORE_AUTO',
+]);
+
+/**
+ * Tipi pratica multiveicolo (B7): dati di un singolo venditore (co-intestatario).
+ * Arriva dal wizard come elemento dell'array `venditori` (JSON in FormData); i
+ * file identità/permesso corrispondenti arrivano negli slot VEND<ordine>_*.
+ */
+const venditoreSchema = z.object({
+  ordine: z.coerce.number().int().min(1).max(50),
+  isPG: z.boolean().default(false),
+  tipoSoggetto: tipoSoggettoEnum.optional().nullable(),
+  visuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  permessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  nome: z.string().trim().max(80).optional().nullable(),
+  cognome: z.string().trim().max(80).optional().nullable(),
+  cf: z.string().trim().max(16).optional().nullable(),
+  ragioneSociale: z.string().trim().max(160).optional().nullable(),
+  piva: z.string().trim().max(11).optional().nullable(),
+  telefono: z.string().trim().max(30).optional().nullable(),
+  email: z.string().trim().max(120).optional().nullable(),
+  docId: z.enum(['CI', 'PASSAPORTO', 'PATENTE']).default('CI'),
+});
+
+export type VenditoreInputData = z.infer<typeof venditoreSchema>;
+
 const submitSchema = z.object({
   tipo: z.enum(['SEMPLICE', 'MINIVOLTURA']),
   numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),
@@ -238,15 +269,18 @@ const submitSchema = z.object({
     })
     .pipe(z.array(veicoloSchema).min(1).max(50)),
 
-  // Venditore
-  venditoreIsPG: formBool.default(false),
-  venditoreNome: z.string().trim().max(80).optional(),
-  venditoreCognome: z.string().trim().max(80).optional(),
-  venditoreCF: z.string().trim().max(16).optional(),
-  venditoreRagioneSociale: z.string().trim().max(160).optional(),
-  venditorePIVA: z.string().trim().max(11).optional(),
-  venditoreTelefono: z.string().trim().max(30).optional(),
-  venditoreEmail: z.string().trim().max(120).optional(),
+  // Venditori (co-intestatari): lista (JSON stringificato in FormData). 1..n.
+  venditori: z
+    .string()
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s) as unknown;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'venditori non è JSON valido' });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(venditoreSchema).min(1).max(50)),
 
   // Acquirente
   acquirenteIsPG: formBool.default(false),
@@ -265,35 +299,13 @@ const submitSchema = z.object({
   flagSuccessione: formBool.default(false),
   flagMinore: formBool.default(false),
 
-  // Schema Documentale v7 (SD-B): branching variables
-  venditoreTipoSoggetto: z
-    .enum([
-      'PRIVATO_ITALIANO_CIE',
-      'PRIVATO_ITALIANO_CARTACEA',
-      'STRANIERO_EXTRA_UE',
-      'AZIENDA',
-      'OPERATORE_AUTO',
-    ])
-    .optional(),
-  venditoreVisuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  venditorePermessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  acquirenteTipoSoggetto: z
-    .enum([
-      'PRIVATO_ITALIANO_CIE',
-      'PRIVATO_ITALIANO_CARTACEA',
-      'STRANIERO_EXTRA_UE',
-      'AZIENDA',
-      'OPERATORE_AUTO',
-    ])
-    .optional(),
+  // Schema Documentale v7 (SD-B): branching variables.
+  // Quelle del venditore sono ora per-venditore (vedi `venditori` sopra).
+  acquirenteTipoSoggetto: tipoSoggettoEnum.optional(),
   acquirenteVisuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   acquirentePermessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 
   // Tipi pratica multiveicolo (A7): documento d'identità scelto per parte.
-  // La persistenza/cross-check server-side dei file identità è task A8.
-  venditoreDocumentoIdentita: z
-    .enum(['CI', 'PASSAPORTO', 'PATENTE'])
-    .default('CI'),
   acquirenteDocumentoIdentita: z
     .enum(['CI', 'PASSAPORTO', 'PATENTE'])
     .default('CI'),
@@ -335,6 +347,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   }
   const d = parsed.data;
   const veicoli = d.veicoli;
+  const venditori = d.venditori;
 
   // Coerenza numeroVeicoli ↔ numero di veicoli inviati.
   if (veicoli.length !== d.numeroVeicoli) {
@@ -374,14 +387,13 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       preImm2015: v.preImm2015,
       flagComodatoDuso: v.flagComodatoDuso,
     })),
-    venditoreTipoSoggetto: d.venditoreTipoSoggetto ?? null,
-    venditoreVisuraData: d.venditoreVisuraData
-      ? new Date(d.venditoreVisuraData)
-      : null,
-    venditorePermessoData: d.venditorePermessoData
-      ? new Date(d.venditorePermessoData)
-      : null,
-    venditoreDocumentoIdentita: d.venditoreDocumentoIdentita,
+    venditori: venditori.map((v) => ({
+      ordine: v.ordine,
+      tipoSoggetto: v.tipoSoggetto ?? null,
+      documentoIdentita: v.docId,
+      visuraData: v.visuraData ? new Date(v.visuraData) : null,
+      permessoData: v.permessoData ? new Date(v.permessoData) : null,
+    })),
     flagProcura: d.flagProcura,
     flagSuccessione: d.flagSuccessione,
     acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
@@ -473,6 +485,9 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   type IdentitaDocCandidate = {
     tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO';
     owner: 'VENDITORE' | 'ACQUIRENTE';
+    // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
+    // documento appartiene (serve per il linkage Documento.venditoreId).
+    venditoreOrdine?: number;
     file: File;
   };
   const identitaCandidates: IdentitaDocCandidate[] = [];
@@ -491,14 +506,16 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     return file;
   };
 
-  // Raccoglie i file identità di una parte (venditore/acquirente) secondo il
-  // tipo di documento scelto. Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO;
-  // passaporto/patente: <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO.
+  // Raccoglie i file identità di una parte secondo il tipo di documento scelto.
+  // Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO; passaporto/patente:
+  // <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO. Per i venditori
+  // `venditoreOrdine` tagga i candidati per il successivo linkage al Venditore.
   const collectIdentita = (
     owner: 'VENDITORE' | 'ACQUIRENTE',
-    prefix: 'VEND' | 'ACQ',
+    prefix: string,
     documentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
     labelParte: string,
+    venditoreOrdine?: number,
   ): void => {
     const missingMsg = `/pratiche/nuova?error=${encodeURIComponent(
       `Documento d'identità mancante per ${labelParte}`,
@@ -515,11 +532,13 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       identitaCandidates.push({
         tipo: 'CI_FRONTE',
         owner,
+        venditoreOrdine,
         file: validateIdentitaFile(fronte as File, "documento d'identità"),
       });
       identitaCandidates.push({
         tipo: 'CI_RETRO',
         owner,
+        venditoreOrdine,
         file: validateIdentitaFile(retro as File, "documento d'identità"),
       });
     } else {
@@ -530,6 +549,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       identitaCandidates.push({
         tipo: documentoIdentita === 'PASSAPORTO' ? 'PASSAPORTO' : 'PATENTE',
         owner,
+        venditoreOrdine,
         file: validateIdentitaFile(id as File, "documento d'identità"),
       });
     }
@@ -539,31 +559,50 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       identitaCandidates.push({
         tipo: 'PERMESSO_SOGGIORNO',
         owner,
+        venditoreOrdine,
         file: validateIdentitaFile(permesso as File, 'permesso di soggiorno'),
       });
     }
   };
 
-  collectIdentita('VENDITORE', 'VEND', d.venditoreDocumentoIdentita, 'il venditore');
+  // Un blocco di file identità per ciascun venditore (slot VEND<ordine>_*).
+  for (const v of venditori) {
+    const label =
+      venditori.length > 1 ? `il venditore ${v.ordine}` : 'il venditore';
+    collectIdentita('VENDITORE', `VEND${v.ordine}`, v.docId, label, v.ordine);
+  }
   collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente");
 
-  // Cross-check venditore ↔ intestatario del libretto (server-side, autoritativo).
-  // Il proprietario del primo veicolo arriva dall'OCR del libretto. MISMATCH
-  // blocca il submit; MATCH/SCONOSCIUTO proseguono.
-  const proprietario = veicoli[0]?.proprietarioAttuale;
-  const cc = proprietarioCrossCheck(
-    {
-      isPersonaGiuridica: d.venditoreIsPG,
-      nome: d.venditoreNome,
-      cognome: d.venditoreCognome,
-      ragioneSociale: d.venditoreRagioneSociale,
-    },
-    proprietario,
+  // Cross-check insiemistico venditori ↔ intestatari del libretto (server-side,
+  // autoritativo). Gli intestatari arrivano dall'OCR del primo veicolo (tutti i
+  // co-intestatari, con fallback al proprietarioAttuale editabile). MISMATCH
+  // blocca il submit; OK/SCONOSCIUTO proseguono.
+  const ocrProprietari = (() => {
+    const raw = veicoli[0]?.ocrData?.proprietari;
+    if (Array.isArray(raw)) {
+      return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+    }
+    return [];
+  })();
+  const proprietari = ocrProprietari.length
+    ? ocrProprietari
+    : veicoli[0]?.proprietarioAttuale
+      ? [veicoli[0].proprietarioAttuale]
+      : [];
+  const cc = venditoriCrossCheck(
+    venditori.map((v) => ({
+      isPersonaGiuridica: v.isPG,
+      nome: v.nome ?? undefined,
+      cognome: v.cognome ?? undefined,
+      ragioneSociale: v.ragioneSociale ?? undefined,
+    })),
+    proprietari,
+    { flagProcura: d.flagProcura },
   );
   if (cc === 'MISMATCH') {
     redirect(
       `/pratiche/nuova?error=${encodeURIComponent(
-        "Il venditore non corrisponde all'intestatario del libretto",
+        "I venditori non corrispondono agli intestatari del libretto",
       )}`,
     );
   }
@@ -620,7 +659,12 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
         originalFilename: cand.file.name,
         mimeType: cand.file.type,
       });
-      return { tipo: cand.tipo, owner: cand.owner, put };
+      return {
+        tipo: cand.tipo,
+        owner: cand.owner,
+        venditoreOrdine: cand.venditoreOrdine,
+        put,
+      };
     }),
   );
 
@@ -635,14 +679,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       numeroVeicoli: d.numeroVeicoli,
       stato: 'BOZZA',
 
-      venditoreIsPersonaGiuridica: d.venditoreIsPG,
-      venditoreNome: d.venditoreIsPG ? null : d.venditoreNome,
-      venditoreCognome: d.venditoreIsPG ? null : d.venditoreCognome,
-      venditoreCF: d.venditoreIsPG ? null : d.venditoreCF?.toUpperCase(),
-      venditoreRagioneSociale: d.venditoreIsPG ? d.venditoreRagioneSociale : null,
-      venditorePIVA: d.venditoreIsPG ? d.venditorePIVA : null,
-      venditoreTelefono: d.venditoreTelefono || null,
-      venditoreEmail: d.venditoreEmail?.toLowerCase() || null,
+      // Dati venditore: ora normalizzati in N righe Venditore (vedi sotto).
 
       acquirenteIsPersonaGiuridica: d.acquirenteIsPG,
       acquirenteNome: d.acquirenteIsPG ? null : d.acquirenteNome,
@@ -661,13 +698,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       provincia: d.provincia,
 
       // Schema Documentale v7 (SD-B): branching variables persistite.
-      venditoreTipoSoggetto: d.venditoreTipoSoggetto ?? null,
-      venditoreVisuraData: d.venditoreVisuraData
-        ? new Date(d.venditoreVisuraData)
-        : null,
-      venditorePermessoData: d.venditorePermessoData
-        ? new Date(d.venditorePermessoData)
-        : null,
+      // Quelle del venditore sono ora per-venditore (modello Venditore, sotto).
       acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
       acquirenteVisuraData: d.acquirenteVisuraData
         ? new Date(d.acquirenteVisuraData)
@@ -740,6 +771,32 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       });
     }
 
+    // Tipi pratica multiveicolo (B7): N venditori (co-intestatari) normalizzati
+    // in righe Venditore (ordine 1..n). I file identità/permesso vengono poi
+    // collegati alla riga Venditore corrispondente via Documento.venditoreId.
+    const venditoreIdByOrdine = new Map<number, string>();
+    for (const v of venditori) {
+      const venditore = await tx.venditore.create({
+        data: {
+          praticaId: created.id,
+          ordine: v.ordine,
+          nome: v.isPG ? null : v.nome || null,
+          cognome: v.isPG ? null : v.cognome || null,
+          cf: v.isPG ? null : v.cf?.toUpperCase() || null,
+          isPersonaGiuridica: v.isPG,
+          ragioneSociale: v.isPG ? v.ragioneSociale || null : null,
+          piva: v.isPG ? v.piva || null : null,
+          telefono: v.telefono || null,
+          email: v.email?.toLowerCase() || null,
+          tipoSoggetto: v.tipoSoggetto ?? null,
+          visuraData: v.visuraData ? new Date(v.visuraData) : null,
+          permessoData: v.permessoData ? new Date(v.permessoData) : null,
+          documentoIdentita: v.docId,
+        },
+      });
+      venditoreIdByOrdine.set(v.ordine, venditore.id);
+    }
+
     // Schema Documentale v7 (SD-B): documenti richiesti (esclusi libretti).
     // Gli upload su storage sono già avvenuti prima della transazione; qui
     // creiamo solo le righe Documento collegate alla pratica (e al veicolo se
@@ -766,15 +823,20 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       });
     }
 
-    // Tipi pratica multiveicolo (A8): documenti d'identità/permesso per parte.
+    // Tipi pratica multiveicolo (B7): documenti d'identità/permesso per parte.
     // Upload già avvenuti prima della transazione; qui creiamo le righe
-    // Documento collegate alla pratica (nessun veicolo associato).
-    for (const { tipo, owner, put } of identitaUploads) {
+    // Documento collegate alla pratica. I documenti del venditore vengono
+    // collegati alla riga Venditore corrispondente via venditoreId.
+    for (const { tipo, owner, venditoreOrdine, put } of identitaUploads) {
       await tx.documento.create({
         data: {
           tipo: tipo as Prisma.DocumentoCreateInput['tipo'],
           owner,
           praticaId: created.id,
+          venditoreId:
+            owner === 'VENDITORE' && venditoreOrdine
+              ? (venditoreIdByOrdine.get(venditoreOrdine) ?? null)
+              : null,
           storageKey: put.storageKey,
           storageProvider: put.storageProvider,
           mimeType: put.mimeType,

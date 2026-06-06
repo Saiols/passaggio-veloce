@@ -19,16 +19,20 @@ import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
 import { registerAction, checkPromoCodeAction, verifyRegistrationDocumentsAction } from '../actions';
 import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
+import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 
 type AccountData = z.infer<typeof registerStep1AccountSchema>;
 type CompanyData = z.infer<typeof registerStep2CompanySchema>;
 type PaymentData = z.infer<typeof registerStep4PaymentSchema>;
 
+// I documenti non viaggiano piu' come File dentro le Server Action (limite 4,5 MB
+// sul body serverless): vengono caricati dal browser direttamente su Vercel Blob
+// e qui teniamo solo le BlobRef (chiave + metadati), che poi inviamo come JSON.
 type DocumentsData = {
-  ciFronte: File;
-  ciRetro: File;
-  codiceFiscale: File;
-  visuraCamerale: File;
+  ciFronte: BlobRef;
+  ciRetro: BlobRef;
+  codiceFiscale: BlobRef;
+  visuraCamerale: BlobRef;
 };
 
 /**
@@ -123,10 +127,16 @@ export function RegisterWizard({
     startVerifyDocs(async () => {
       const fd = new FormData();
       fd.set('company', JSON.stringify(data.company));
-      fd.set('CI_FRONTE', values.ciFronte);
-      fd.set('CI_RETRO', values.ciRetro);
-      fd.set('CODICE_FISCALE', values.codiceFiscale);
-      fd.set('VISURA_CAMERALE', values.visuraCamerale);
+      // I file sono gia' su Blob: inviamo solo le BlobRef come mappa slot→ref.
+      fd.set(
+        'blobRefs',
+        JSON.stringify({
+          CI_FRONTE: values.ciFronte,
+          CI_RETRO: values.ciRetro,
+          CODICE_FISCALE: values.codiceFiscale,
+          VISURA_CAMERALE: values.visuraCamerale,
+        }),
+      );
 
       const res = await verifyRegistrationDocumentsAction(fd);
       if (res.ok) {
@@ -168,10 +178,16 @@ export function RegisterWizard({
           kycToken,
         }),
       );
-      fd.set('CI_FRONTE', docs.ciFronte);
-      fd.set('CI_RETRO', docs.ciRetro);
-      fd.set('CODICE_FISCALE', docs.codiceFiscale);
-      fd.set('VISURA_CAMERALE', docs.visuraCamerale);
+      // I file sono gia' su Blob: inviamo solo le BlobRef come mappa slot→ref.
+      fd.set(
+        'blobRefs',
+        JSON.stringify({
+          CI_FRONTE: docs.ciFronte,
+          CI_RETRO: docs.ciRetro,
+          CODICE_FISCALE: docs.codiceFiscale,
+          VISURA_CAMERALE: docs.visuraCamerale,
+        }),
+      );
 
       const result = await registerAction(fd);
 
@@ -479,6 +495,31 @@ function CompanyStep({
 // STEP 3 - DOCUMENTI KYC
 // ============================================================
 
+/**
+ * Stato di un singolo slot documento nello step KYC. Teniamo il File solo per
+ * l'anteprima/visualizzazione nella DocCard; ciò che conta per il submit è la
+ * `ref` (BlobRef), prodotta dall'upload diretto su Blob alla selezione del file.
+ */
+type DocSlotState = {
+  file: File | null;
+  ref: BlobRef | null;
+  /** 'idle' nessun file · 'uploading' caricamento in corso · 'done' caricato · 'error' fallito. */
+  status: 'idle' | 'uploading' | 'done' | 'error';
+  progress: number;
+  errorMsg?: string;
+};
+
+const EMPTY_SLOT: DocSlotState = { file: null, ref: null, status: 'idle', progress: 0 };
+
+type SlotKey = 'ciFronte' | 'ciRetro' | 'codiceFiscale' | 'visuraCamerale';
+
+const SLOT_TIPO: Record<SlotKey, 'CI_FRONTE' | 'CI_RETRO' | 'CODICE_FISCALE' | 'VISURA_CAMERALE'> = {
+  ciFronte: 'CI_FRONTE',
+  ciRetro: 'CI_RETRO',
+  codiceFiscale: 'CODICE_FISCALE',
+  visuraCamerale: 'VISURA_CAMERALE',
+};
+
 function DocumentsStep({
   defaultValues,
   kycErrors,
@@ -494,26 +535,53 @@ function DocumentsStep({
   onNext: (data: DocumentsData) => void;
   isVerifying: boolean;
 }) {
-  const [ciFronte, setCiFronte] = useState<File | null>(defaultValues?.ciFronte ?? null);
-  const [ciRetro, setCiRetro] = useState<File | null>(defaultValues?.ciRetro ?? null);
-  const [codiceFiscale, setCodiceFiscale] = useState<File | null>(
-    defaultValues?.codiceFiscale ?? null,
+  // defaultValues ora contiene BlobRef (file già caricati in un passaggio
+  // precedente del wizard): ripristiniamo lo stato "done" senza il File (non
+  // più disponibile dopo un Back/Avanti, ma non serve: abbiamo già la ref).
+  const fromRef = (ref?: BlobRef): DocSlotState =>
+    ref ? { file: null, ref, status: 'done', progress: 100 } : EMPTY_SLOT;
+
+  const [ciFronte, setCiFronte] = useState<DocSlotState>(fromRef(defaultValues?.ciFronte));
+  const [ciRetro, setCiRetro] = useState<DocSlotState>(fromRef(defaultValues?.ciRetro));
+  const [codiceFiscale, setCodiceFiscale] = useState<DocSlotState>(
+    fromRef(defaultValues?.codiceFiscale),
   );
-  const [visuraCamerale, setVisuraCamerale] = useState<File | null>(
-    defaultValues?.visuraCamerale ?? null,
+  const [visuraCamerale, setVisuraCamerale] = useState<DocSlotState>(
+    fromRef(defaultValues?.visuraCamerale),
   );
   const [error, setError] = useState<string | null>(null);
 
+  const slots: Record<SlotKey, DocSlotState> = {
+    ciFronte,
+    ciRetro,
+    codiceFiscale,
+    visuraCamerale,
+  };
+  const setters: Record<SlotKey, (s: DocSlotState) => void> = {
+    ciFronte: setCiFronte,
+    ciRetro: setCiRetro,
+    codiceFiscale: setCodiceFiscale,
+    visuraCamerale: setVisuraCamerale,
+  };
+
+  // Validazione rule-based sulle ref caricate (mime/size dei file su Blob).
   const validation = useMemo(() => {
-    if (!(ciFronte && ciRetro && codiceFiscale && visuraCamerale)) {
+    const keys: SlotKey[] = ['ciFronte', 'ciRetro', 'codiceFiscale', 'visuraCamerale'];
+    if (keys.some((k) => slots[k].status === 'uploading')) {
+      return { ok: false as const, error: 'Attendi il caricamento dei documenti' };
+    }
+    if (!keys.every((k) => slots[k].ref)) {
       return { ok: false as const, error: 'Carica tutti i documenti richiesti' };
     }
-    return validateRegistrationDocuments([
-      { tipo: 'CI_FRONTE', mimeType: ciFronte.type, sizeBytes: ciFronte.size, originalFilename: ciFronte.name },
-      { tipo: 'CI_RETRO', mimeType: ciRetro.type, sizeBytes: ciRetro.size, originalFilename: ciRetro.name },
-      { tipo: 'CODICE_FISCALE', mimeType: codiceFiscale.type, sizeBytes: codiceFiscale.size, originalFilename: codiceFiscale.name },
-      { tipo: 'VISURA_CAMERALE', mimeType: visuraCamerale.type, sizeBytes: visuraCamerale.size, originalFilename: visuraCamerale.name },
-    ]);
+    return validateRegistrationDocuments(
+      keys.map((k) => ({
+        tipo: SLOT_TIPO[k],
+        mimeType: slots[k].ref!.type,
+        sizeBytes: slots[k].ref!.size,
+        originalFilename: slots[k].ref!.name,
+      })),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ciFronte, ciRetro, codiceFiscale, visuraCamerale]);
 
   const handleSubmit = (e: FormEvent) => {
@@ -524,23 +592,52 @@ function DocumentsStep({
     }
     setError(null);
     onNext({
-      ciFronte: ciFronte!,
-      ciRetro: ciRetro!,
-      codiceFiscale: codiceFiscale!,
-      visuraCamerale: visuraCamerale!,
+      ciFronte: ciFronte.ref!,
+      ciRetro: ciRetro.ref!,
+      codiceFiscale: codiceFiscale.ref!,
+      visuraCamerale: visuraCamerale.ref!,
     });
   };
 
-  // Quando l'utente cambia/sostituisce un documento, la verifica precedente non
-  // vale più: azzeriamo errori e stato "verificato" (così l'Avanti ri-verifica).
-  const onDocChange = (setter: (f: File | null) => void) => (f: File | null) => {
+  // Selezione/sostituzione di un documento: invalida la verifica precedente e
+  // avvia subito l'upload diretto su Blob, aggiornando progress e stato. La ref
+  // ottenuta è ciò che verrà inviato alle Server Action (niente File nel body).
+  const onDocChange = (key: SlotKey) => async (f: File | null) => {
     onDocsChanged();
-    setter(f);
+    setError(null);
+    const setSlot = setters[key];
+    if (!f) {
+      setSlot(EMPTY_SLOT);
+      return;
+    }
+    setSlot({ file: f, ref: null, status: 'uploading', progress: 0 });
+    try {
+      const ref = await uploadToBlob(f, 'registrazione', (pct) =>
+        setSlot({ file: f, ref: null, status: 'uploading', progress: pct }),
+      );
+      setSlot({ file: f, ref, status: 'done', progress: 100 });
+    } catch (err) {
+      setSlot({
+        file: f,
+        ref: null,
+        status: 'error',
+        progress: 0,
+        errorMsg: err instanceof Error ? err.message : 'Caricamento non riuscito',
+      });
+    }
   };
 
   // Documenti coinvolti nel blocco KYC, per evidenziare le rispettive card
   // (CI → carta d'identità fronte/retro, CF → tessera, VISURA → visura).
   const failedDocs = new Set(kycErrors.map((f) => f.doc).filter(Boolean));
+
+  // Etichetta di stato upload mostrata sotto ogni card.
+  const uploadHint = (s: DocSlotState) => {
+    if (s.status === 'uploading') return <p className="mt-1 text-[12px] text-pv-slate-500">Caricamento… {Math.round(s.progress)}%</p>;
+    if (s.status === 'done') return <p className="mt-1 text-[12px] font-semibold text-pv-green-500">✓ Caricato</p>;
+    if (s.status === 'error') return <p className="mt-1 text-[12px] font-semibold text-pv-red-500">{s.errorMsg}</p>;
+    return null;
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -560,30 +657,42 @@ function DocumentsStep({
       </Alert>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DocCard
-          label="Carta d'identità — Fronte"
-          file={ciFronte}
-          onChange={onDocChange(setCiFronte)}
-          invalid={failedDocs.has('CI')}
-        />
-        <DocCard
-          label="Carta d'identità — Retro"
-          file={ciRetro}
-          onChange={onDocChange(setCiRetro)}
-          invalid={failedDocs.has('CI')}
-        />
-        <DocCard
-          label="Codice Fiscale / Tessera Sanitaria"
-          file={codiceFiscale}
-          onChange={onDocChange(setCodiceFiscale)}
-          invalid={failedDocs.has('CF')}
-        />
-        <DocCard
-          label="Visura Camerale"
-          file={visuraCamerale}
-          onChange={onDocChange(setVisuraCamerale)}
-          invalid={failedDocs.has('VISURA')}
-        />
+        <div>
+          <DocCard
+            label="Carta d'identità — Fronte"
+            file={ciFronte.file}
+            onChange={onDocChange('ciFronte')}
+            invalid={failedDocs.has('CI') || ciFronte.status === 'error'}
+          />
+          {uploadHint(ciFronte)}
+        </div>
+        <div>
+          <DocCard
+            label="Carta d'identità — Retro"
+            file={ciRetro.file}
+            onChange={onDocChange('ciRetro')}
+            invalid={failedDocs.has('CI') || ciRetro.status === 'error'}
+          />
+          {uploadHint(ciRetro)}
+        </div>
+        <div>
+          <DocCard
+            label="Codice Fiscale / Tessera Sanitaria"
+            file={codiceFiscale.file}
+            onChange={onDocChange('codiceFiscale')}
+            invalid={failedDocs.has('CF') || codiceFiscale.status === 'error'}
+          />
+          {uploadHint(codiceFiscale)}
+        </div>
+        <div>
+          <DocCard
+            label="Visura Camerale"
+            file={visuraCamerale.file}
+            onChange={onDocChange('visuraCamerale')}
+            invalid={failedDocs.has('VISURA') || visuraCamerale.status === 'error'}
+          />
+          {uploadHint(visuraCamerale)}
+        </div>
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}

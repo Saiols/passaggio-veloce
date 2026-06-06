@@ -31,3 +31,17 @@ export function getStorage(): StorageProvider {
   }
   return instance;
 }
+
+/**
+ * Legge un oggetto dallo storage e ne restituisce il contenuto come Buffer.
+ * Usato dalle Server Action OCR per leggere i byte di un file caricato dal
+ * browser direttamente su Blob (client upload), dato il suo storageKey.
+ */
+export async function storageGetBuffer(storageKey: string): Promise<Buffer> {
+  const { stream } = await getStorage().get(storageKey);
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}

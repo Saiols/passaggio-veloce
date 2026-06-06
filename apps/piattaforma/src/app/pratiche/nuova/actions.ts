@@ -12,7 +12,7 @@ import {
   type IdentitaData,
   type IdentitaTipo,
 } from '@/lib/kyc/extract-identita';
-import { getStorage } from '@/lib/providers/storage';
+import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
@@ -57,40 +57,42 @@ async function getRequestMetadata(): Promise<{ ip: string; userAgent: string }> 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
 
-const CURRENT_YEAR = new Date().getFullYear();
+/**
+ * Riferimento a un file già caricato su Vercel Blob (client upload). Il browser
+ * carica i file DIRETTAMENTE su Blob (aggira il limite 4,5 MB sul body delle
+ * Server Action) e passa qui solo la chiave + i metadati. Forma identica a
+ * `BlobRef` lato client (@/lib/blob/upload-client).
+ */
+type FileRef = { key: string; name: string; size: number; type: string };
 
-async function bufferFromFile(file: File): Promise<Buffer> {
-  const ab = await file.arrayBuffer();
-  return Buffer.from(ab);
-}
+const CURRENT_YEAR = new Date().getFullYear();
 
 export type ExtractLibrettoResult =
   | { ok: true; data: LibrettoCircolazioneData }
   | { ok: false; error: string };
 
 export async function extractLibrettoAction(
-  formData: FormData,
+  ref: FileRef,
 ): Promise<ExtractLibrettoResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
 
-  const file = formData.get('libretto');
-  if (!(file instanceof File) || file.size === 0) {
+  if (!ref?.key || ref.size === 0) {
     return { ok: false, error: 'File libretto mancante' };
   }
-  if (file.size > MAX_LIBRETTO_BYTES) {
+  if (ref.size > MAX_LIBRETTO_BYTES) {
     return { ok: false, error: 'File troppo grande (max 10 MB)' };
   }
-  if (!ACCEPTED_MIME.includes(file.type)) {
+  if (!ACCEPTED_MIME.includes(ref.type)) {
     return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
   }
 
-  const buffer = await bufferFromFile(file);
+  const buffer = await storageGetBuffer(ref.key);
   const ocr = await getOcr();
   const input = {
     buffer,
-    mimeType: file.type,
-    originalFilename: file.name,
+    mimeType: ref.type,
+    originalFilename: ref.name,
   };
 
   type AttemptResult =
@@ -149,36 +151,34 @@ export type ExtractIdentitaResult =
  * provider OCR e applica il parser deterministico extractIdentita.
  */
 export async function extractIdentitaAction(
-  formData: FormData,
+  ref: FileRef,
+  tipo: IdentitaTipo,
 ): Promise<ExtractIdentitaResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
 
-  const file = formData.get('file');
-  if (!(file instanceof File) || file.size === 0) {
+  if (!ref?.key || ref.size === 0) {
     return { ok: false, error: 'File documento mancante' };
   }
-  if (file.size > MAX_LIBRETTO_BYTES) {
+  if (ref.size > MAX_LIBRETTO_BYTES) {
     return { ok: false, error: 'File troppo grande (max 10 MB)' };
   }
-  if (!ACCEPTED_MIME.includes(file.type)) {
+  if (!ACCEPTED_MIME.includes(ref.type)) {
     return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
   }
 
-  const tipoRaw = formData.get('tipo');
-  const tipo = tipoRaw as IdentitaTipo;
   if (tipo !== 'CI' && tipo !== 'PASSAPORTO' && tipo !== 'PATENTE') {
     return { ok: false, error: 'Tipo documento non valido' };
   }
 
   try {
-    const buffer = await bufferFromFile(file);
+    const buffer = await storageGetBuffer(ref.key);
     const ocr = await getOcr();
     const text = (
       await ocr.extractText({
         buffer,
-        mimeType: file.type,
-        originalFilename: file.name,
+        mimeType: ref.type,
+        originalFilename: ref.name,
       })
     ).text;
     const data = extractIdentita(text, tipo);
@@ -358,6 +358,31 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   const veicoli = d.veicoli;
   const venditori = d.venditori;
 
+  // Client uploads: i file sono già su Vercel Blob (browser → Blob diretto, per
+  // aggirare il limite 4,5 MB sul body delle Server Action). Dalla FormData
+  // arrivano solo le BlobRef in una mappa JSON `blobRefs` (slot → ref); i byte
+  // NON transitano più dalla Server Action.
+  const blobRefs: Record<string, FileRef> = (() => {
+    try {
+      const raw = JSON.parse(String(formData.get('blobRefs') ?? '{}')) as unknown;
+      return raw && typeof raw === 'object' ? (raw as Record<string, FileRef>) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const getRef = (slot: string): FileRef | null => {
+    const r = blobRefs[slot];
+    return r && typeof r.key === 'string' && r.key.length > 0 ? r : null;
+  };
+  const storageName = getStorage().name;
+  const refToPut = (ref: FileRef) => ({
+    storageKey: ref.key,
+    storageProvider: storageName,
+    sizeBytes: ref.size,
+    mimeType: ref.type,
+    originalFilename: ref.name,
+  });
+
   // Coerenza numeroVeicoli ↔ numero di veicoli inviati.
   if (veicoli.length !== d.numeroVeicoli) {
     redirect(
@@ -365,17 +390,17 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     );
   }
 
-  // Libretto file per ciascun veicolo: slot LIBRETTO_1..LIBRETTO_<n> (in ordine).
-  const librettoFiles: File[] = [];
+  // Libretto per ciascun veicolo: slot LIBRETTO_1..LIBRETTO_<n> (in ordine).
+  const librettoRefs: FileRef[] = [];
   for (let i = 1; i <= veicoli.length; i++) {
-    const f = formData.get(`LIBRETTO_${i}`);
-    if (!(f instanceof File) || f.size === 0) {
+    const r = getRef(`LIBRETTO_${i}`);
+    if (!r || r.size === 0) {
       redirect(`/pratiche/nuova?error=Libretto%20veicolo%20${i}%20mancante`);
     }
-    if ((f as File).size > MAX_LIBRETTO_BYTES) {
+    if (r!.size > MAX_LIBRETTO_BYTES) {
       redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
     }
-    librettoFiles.push(f as File);
+    librettoRefs.push(r!);
   }
 
   // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
@@ -438,40 +463,40 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   const richiesti = requiredUploadDocs(esitoSchema);
   type DocUploadCandidate = {
     d: (typeof richiesti)[number];
-    file: File;
+    ref: FileRef;
   };
   const docCandidates: DocUploadCandidate[] = [];
   const gatingCandidates: GatingCandidate[] = [];
   for (const docReq of richiesti) {
-    const f = formData.get(`DOC__${docKey(docReq)}`);
-    if (!(f instanceof File) || f.size === 0) {
+    const r = getRef(`DOC__${docKey(docReq)}`);
+    if (!r || r.size === 0) {
       redirect(
         `/pratiche/nuova?error=${encodeURIComponent(
           `Manca un documento richiesto: ${docLabel(docReq)}`,
         )}`,
       );
     }
-    const file = f as File;
-    if (file.size > MAX_LIBRETTO_BYTES) {
+    const ref = r!;
+    if (ref.size > MAX_LIBRETTO_BYTES) {
       redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
     }
-    if (!ACCEPTED_MIME.includes(file.type)) {
+    if (!ACCEPTED_MIME.includes(ref.type)) {
       redirect(
         `/pratiche/nuova?error=${encodeURIComponent(
           `Formato non supportato per ${docLabel(docReq)} (PDF/JPG/PNG)`,
         )}`,
       );
     }
-    docCandidates.push({ d: docReq, file });
+    docCandidates.push({ d: docReq, ref });
     // P1.1 — Hard-block pre-invio: classifica i documenti allegati e blocca il
     // submit se almeno uno NON passa il gating rule-based. L'owner serve solo
     // come etichetta diagnostica nel messaggio d'errore.
     gatingCandidates.push({
       owner: parteToOwner(docReq.parte) === 'ACQUIRENTE' ? 'acquirente' : 'venditore',
       tipo: docReq.tipo,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      originalFilename: file.name,
+      mimeType: ref.type,
+      sizeBytes: ref.size,
+      originalFilename: ref.name,
     });
   }
   const blocking = findBlockingDocuments(gatingCandidates);
@@ -497,22 +522,22 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
     // documento appartiene (serve per il linkage Documento.venditoreId).
     venditoreOrdine?: number;
-    file: File;
+    ref: FileRef;
   };
   const identitaCandidates: IdentitaDocCandidate[] = [];
 
-  const validateIdentitaFile = (file: File, label: string): File => {
-    if (file.size > MAX_LIBRETTO_BYTES) {
+  const validateIdentitaRef = (ref: FileRef, label: string): FileRef => {
+    if (ref.size > MAX_LIBRETTO_BYTES) {
       redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
     }
-    if (!ACCEPTED_MIME.includes(file.type)) {
+    if (!ACCEPTED_MIME.includes(ref.type)) {
       redirect(
         `/pratiche/nuova?error=${encodeURIComponent(
           `Formato non supportato per ${label} (PDF/JPG/PNG)`,
         )}`,
       );
     }
-    return file;
+    return ref;
   };
 
   // Raccoglie i file identità di una parte secondo il tipo di documento scelto.
@@ -530,46 +555,43 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       `Documento d'identità mancante per ${labelParte}`,
     )}`;
     if (documentoIdentita === 'CI') {
-      const fronte = formData.get(`${prefix}_ID_FRONTE`);
-      const retro = formData.get(`${prefix}_ID_RETRO`);
-      if (
-        !(fronte instanceof File) || fronte.size === 0 ||
-        !(retro instanceof File) || retro.size === 0
-      ) {
+      const fronte = getRef(`${prefix}_ID_FRONTE`);
+      const retro = getRef(`${prefix}_ID_RETRO`);
+      if (!fronte || fronte.size === 0 || !retro || retro.size === 0) {
         redirect(missingMsg);
       }
       identitaCandidates.push({
         tipo: 'CI_FRONTE',
         owner,
         venditoreOrdine,
-        file: validateIdentitaFile(fronte as File, "documento d'identità"),
+        ref: validateIdentitaRef(fronte!, "documento d'identità"),
       });
       identitaCandidates.push({
         tipo: 'CI_RETRO',
         owner,
         venditoreOrdine,
-        file: validateIdentitaFile(retro as File, "documento d'identità"),
+        ref: validateIdentitaRef(retro!, "documento d'identità"),
       });
     } else {
-      const id = formData.get(`${prefix}_ID`);
-      if (!(id instanceof File) || id.size === 0) {
+      const id = getRef(`${prefix}_ID`);
+      if (!id || id.size === 0) {
         redirect(missingMsg);
       }
       identitaCandidates.push({
         tipo: documentoIdentita === 'PASSAPORTO' ? 'PASSAPORTO' : 'PATENTE',
         owner,
         venditoreOrdine,
-        file: validateIdentitaFile(id as File, "documento d'identità"),
+        ref: validateIdentitaRef(id!, "documento d'identità"),
       });
     }
 
-    const permesso = formData.get(`${prefix}_PERMESSO`);
-    if (permesso instanceof File && permesso.size > 0) {
+    const permesso = getRef(`${prefix}_PERMESSO`);
+    if (permesso && permesso.size > 0) {
       identitaCandidates.push({
         tipo: 'PERMESSO_SOGGIORNO',
         owner,
         venditoreOrdine,
-        file: validateIdentitaFile(permesso as File, 'permesso di soggiorno'),
+        ref: validateIdentitaRef(permesso, 'permesso di soggiorno'),
       });
     }
   };
@@ -624,58 +646,25 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   const codicePratica = await nextCodicePratica();
   const now = new Date();
 
-  // Upload dei libretti su storage PRIMA della transazione DB (filesystem/R2,
-  // fuori dal contesto transazionale di Prisma). Uno per veicolo, in ordine.
-  const storage = getStorage();
+  // I file sono già su Vercel Blob (client upload): non serve ri-caricarli.
+  // Mappiamo ogni BlobRef nella forma StoragePutResult attesa dalle create
+  // Documento (storageKey = chiave Blob, niente trasferimento di byte).
   const ocrManuale = formData.get('ocrManuale') === 'true';
-  const librettoUploads = await Promise.all(
-    librettoFiles.map(async (file) => {
-      const buffer = await bufferFromFile(file);
-      return storage.put({
-        scope: `pratica/new`,
-        buffer,
-        originalFilename: file.name,
-        mimeType: file.type,
-      });
-    }),
-  );
+  const librettoUploads = librettoRefs.map(refToPut);
 
-  // Schema Documentale v7 (SD-B): upload dei documenti richiesti su storage
-  // PRIMA della transazione (storage non transazionale, come i libretti). Le
-  // righe Documento vengono poi create dentro la transazione.
-  const docUploads = await Promise.all(
-    docCandidates.map(async ({ d: docReq, file }) => {
-      const buffer = await bufferFromFile(file);
-      const put = await storage.put({
-        scope: `pratica/new`,
-        buffer,
-        originalFilename: file.name,
-        mimeType: file.type,
-      });
-      return { d: docReq, put };
-    }),
-  );
+  // Schema Documentale v7 (SD-B): documenti richiesti.
+  const docUploads = docCandidates.map(({ d: docReq, ref }) => ({
+    d: docReq,
+    put: refToPut(ref),
+  }));
 
-  // Tipi pratica multiveicolo (A8): upload dei documenti d'identità/permesso su
-  // storage PRIMA della transazione (storage non transazionale, come i libretti
-  // e i doc DOC__). Le righe Documento vengono create dentro la transazione.
-  const identitaUploads = await Promise.all(
-    identitaCandidates.map(async (cand) => {
-      const buffer = await bufferFromFile(cand.file);
-      const put = await storage.put({
-        scope: `pratica/new`,
-        buffer,
-        originalFilename: cand.file.name,
-        mimeType: cand.file.type,
-      });
-      return {
-        tipo: cand.tipo,
-        owner: cand.owner,
-        venditoreOrdine: cand.venditoreOrdine,
-        put,
-      };
-    }),
-  );
+  // Tipi pratica multiveicolo (A8): documenti d'identità/permesso per parte.
+  const identitaUploads = identitaCandidates.map((cand) => ({
+    tipo: cand.tipo,
+    owner: cand.owner,
+    venditoreOrdine: cand.venditoreOrdine,
+    put: refToPut(cand.ref),
+  }));
 
   // Crea la pratica in BOZZA + i veicoli + i libretti in un'unica transazione.
   // L'apertura del round 1 avviene subito dopo tramite l'engine di

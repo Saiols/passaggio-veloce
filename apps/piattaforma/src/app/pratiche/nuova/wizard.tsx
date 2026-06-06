@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useTransition, useMemo } from 'react';
+import { useState, useTransition, useMemo, useEffect } from 'react';
 import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
-import { DocCard } from '@/components/doc-card';
 import { docKey, docLabel, requiredUploadDocs } from '@/lib/documenti/richiesti';
 import {
   calcolaDocumentiRichiesti,
@@ -14,6 +13,7 @@ import {
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import { venditoriCrossCheck } from '@/lib/kyc/match';
+import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 import {
   extractLibrettoAction,
   extractIdentitaAction,
@@ -22,12 +22,40 @@ import {
 
 type DocIdTipo = 'CI' | 'PASSAPORTO' | 'PATENTE';
 
-/** File del documento d'identità di una parte (slot variabili per tipo). */
+/**
+ * Slot di upload diretto su Vercel Blob. Il browser carica il file
+ * direttamente su Blob (aggira il limite 4,5 MB sul body delle Server Action)
+ * e teniamo in stato solo la BlobRef (il "gettone"). `file` è conservato solo
+ * per l'anteprima locale (nome/dimensione/immagine) e NON viene mai inviato al
+ * server né alle action OCR. `uploading`/`progress`/`error` guidano la UI.
+ */
+type BlobSlot = {
+  ref: BlobRef | null;
+  file: File | null;
+  uploading: boolean;
+  progress: number;
+  error: string | null;
+};
+
+const emptySlot = (): BlobSlot => ({
+  ref: null,
+  file: null,
+  uploading: false,
+  progress: 0,
+  error: null,
+});
+
+/** True se almeno uno slot è in caricamento (gate "Avanti"/submit). */
+function slotUploading(s: BlobSlot | undefined): boolean {
+  return !!s && s.uploading;
+}
+
+/** Documento d'identità di una parte (slot variabili per tipo) → BlobRef. */
 type IdentitaFiles = {
-  fronte?: File;
-  retro?: File;
-  single?: File;
-  permesso?: File;
+  fronte?: BlobSlot;
+  retro?: BlobSlot;
+  single?: BlobSlot;
+  permesso?: BlobSlot;
 };
 
 /**
@@ -39,9 +67,23 @@ type IdentitaFiles = {
  * A7: presenza documento d'identità per parte. Per la CI servono ENTRAMBE le
  * facciate (fronte+retro) — coerente con la validazione server-side; per
  * passaporto/patente basta il file singolo. Il permesso è opzionale.
+ * "Presente" significa BlobRef caricata (non basta aver scelto il file: serve
+ * che l'upload su Blob sia completato).
  */
 function identitaPresente(docId: DocIdTipo, files: IdentitaFiles): boolean {
-  return docId === 'CI' ? !!files.fronte && !!files.retro : !!files.single;
+  return docId === 'CI'
+    ? !!files.fronte?.ref && !!files.retro?.ref
+    : !!files.single?.ref;
+}
+
+/** True se un upload identità è ancora in corso (gate). */
+function identitaUploading(files: IdentitaFiles): boolean {
+  return (
+    slotUploading(files.fronte) ||
+    slotUploading(files.retro) ||
+    slotUploading(files.single) ||
+    slotUploading(files.permesso)
+  );
 }
 
 function splitNomeCompleto(full: string): { nome: string; cognome: string } {
@@ -62,9 +104,10 @@ const STEPS = [
 
 type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
 
-/** Dati di un singolo veicolo nel wizard (file libretto + estrazione + correzioni). */
+/** Dati di un singolo veicolo nel wizard (libretto + estrazione + correzioni). */
 type VeicoloInput = {
-  file: File | null;
+  /** BlobRef del libretto caricato su Blob (slot LIBRETTO_<n> al submit). */
+  libretto: BlobSlot;
   fileName: string | null;
   ocr?: LibrettoCircolazioneData;
   extracting: boolean;
@@ -80,7 +123,7 @@ type VeicoloInput = {
 
 function emptyVeicolo(): VeicoloInput {
   return {
-    file: null,
+    libretto: emptySlot(),
     fileName: null,
     ocr: undefined,
     extracting: false,
@@ -281,8 +324,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
 
-  // Step Documenti: file caricati per documento richiesto (chiave = docKey).
-  const [documenti, setDocumenti] = useState<Record<string, File>>({});
+  // Step Documenti: BlobRef caricate per documento richiesto (chiave = docKey).
+  const [documenti, setDocumenti] = useState<Record<string, BlobSlot>>({});
 
   const acquirenteTipiSoggetto =
     tipo === 'MINIVOLTURA'
@@ -378,19 +421,49 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     flagMinore,
   ]);
 
+  // Upload del libretto su Blob (client upload) → poi OCR sulla BlobRef. Lo
+  // stato del veicolo tiene lo slot (ref/progress/error) + l'estrazione. Se
+  // l'upload fallisce, niente OCR (mostra l'errore sul libretto). Se cambia il
+  // file, invalida anche l'OCR precedente.
   const onFileSelected = async (idx: number, file: File | undefined) => {
     if (!file) return;
+    // Reset stato veicolo: nuovo libretto in caricamento + OCR azzerato.
     updateVeicolo(idx, {
-      file,
+      libretto: { ref: null, file, uploading: true, progress: 0, error: null },
       fileName: file.name,
+      ocr: undefined,
       ocrError: null,
       ocrManuale: false,
+      extracting: false,
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx ? { ...v, libretto: { ...v.libretto, progress: pct } } : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        libretto: {
+          ref: null,
+          file,
+          uploading: false,
+          progress: 0,
+          error: (err as Error).message,
+        },
+      });
+      return;
+    }
+    // Upload OK: salva la ref e avvia l'estrazione OCR sulla BlobRef.
+    updateVeicolo(idx, {
+      libretto: { ref, file, uploading: false, progress: 100, error: null },
       extracting: true,
     });
     try {
-      const fd = new FormData();
-      fd.append('libretto', file);
-      const res = await extractLibrettoAction(fd);
+      const res = await extractLibrettoAction(ref);
       if (res.ok) {
         updateVeicolo(idx, {
           extracting: false,
@@ -416,18 +489,15 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   };
 
   // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte.
-  // Chiamato quando viene impostato il file principale (fronte CI o single).
-  // Non sovrascrive campi già compilati a mano dal broker.
+  // Chiamato quando la BlobRef del file principale (fronte CI o single) è
+  // pronta. Non sovrascrive campi già compilati a mano dal broker.
   const runIdentitaOcr = async <P extends Parte>(
-    file: File,
+    ref: BlobRef,
     tipo: DocIdTipo,
     onChange: (updater: (p: P) => P) => void,
   ) => {
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('tipo', tipo);
-      const res = await extractIdentitaAction(fd);
+      const res = await extractIdentitaAction(ref, tipo);
       if (!res.ok) return;
       const { nome, cognome, codiceFiscale } = res.data;
       onChange((prev) => {
@@ -445,12 +515,17 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   };
 
   const handleFinalSubmit = () => {
-    if (veicoli.some((v) => !v.file)) return;
+    // Tutti i libretti devono avere la BlobRef pronta (nessun upload a metà).
+    if (veicoli.some((v) => !v.libretto.ref)) return;
     const fd = new FormData();
     fd.append('tipo', tipo);
     fd.append('numeroVeicoli', String(numeroVeicoli));
 
-    // Lista veicoli (JSON) + file libretto come slot LIBRETTO_1..LIBRETTO_n.
+    // Mappa slot → BlobRef: i file sono già su Blob (client upload), alla
+    // Server Action passa SOLO le chiavi (BlobRef) in un unico campo JSON.
+    const blobRefs: Record<string, BlobRef> = {};
+
+    // Lista veicoli (JSON). I libretti vanno negli slot LIBRETTO_1..LIBRETTO_n.
     const veicoliPayload = veicoli.map((v) => ({
       targa: v.targa,
       telaio: v.telaio,
@@ -462,7 +537,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
     veicoli.forEach((v, i) => {
-      if (v.file) fd.append(`LIBRETTO_${i + 1}`, v.file);
+      if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}`] = v.libretto.ref;
     });
 
     // ocrManuale: true se almeno un veicolo è stato compilato a mano.
@@ -473,7 +548,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
     // B6: N venditori (co-intestatari) come JSON. Ordine = indice + 1. Include
     // tutti i campi parte + docId per ciascuno; i file identità vanno negli slot
-    // VEND<n>_* qui sotto. La persistenza server-side è task B7.
+    // VEND<n>_* (BlobRef) qui sotto.
     const venditoriPayload = venditori.map((v, i) => ({
       ordine: i + 1,
       isPG: v.isPG,
@@ -503,9 +578,9 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     fd.append('acquirenteTelefono', acquirente.telefono);
     fd.append('acquirenteEmail', acquirente.email);
 
-    // Documenti richiesti (step Documenti) come slot DOC__<docKey>.
-    for (const [key, f] of Object.entries(documenti)) {
-      fd.append(`DOC__${key}`, f);
+    // Documenti richiesti (step Documenti) come slot DOC__<docKey> (BlobRef).
+    for (const [key, slot] of Object.entries(documenti)) {
+      if (slot.ref) blobRefs[`DOC__${key}`] = slot.ref;
     }
 
     fd.append('flagCointestazione', flagCointestazione ? 'true' : 'false');
@@ -522,29 +597,31 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     if (acquirente.visuraData) fd.append('acquirenteVisuraData', acquirente.visuraData);
     if (acquirente.permessoData) fd.append('acquirentePermessoData', acquirente.permessoData);
 
-    // B6: file documento d'identità PER venditore in slot VEND<n>_*. Il tipo
-    // documento (docId) viaggia nel JSON `venditori`. La persistenza server-side
-    // dei file + cross-check insiemistico è task B7.
+    // B6: documento d'identità PER venditore negli slot VEND<n>_* (BlobRef). Il
+    // tipo documento (docId) viaggia nel JSON `venditori`.
     venditori.forEach((v, i) => {
       const n = i + 1;
       if (v.docId === 'CI') {
-        if (v.identita.fronte) fd.append(`VEND${n}_ID_FRONTE`, v.identita.fronte);
-        if (v.identita.retro) fd.append(`VEND${n}_ID_RETRO`, v.identita.retro);
-      } else if (v.identita.single) {
-        fd.append(`VEND${n}_ID`, v.identita.single);
+        if (v.identita.fronte?.ref) blobRefs[`VEND${n}_ID_FRONTE`] = v.identita.fronte.ref;
+        if (v.identita.retro?.ref) blobRefs[`VEND${n}_ID_RETRO`] = v.identita.retro.ref;
+      } else if (v.identita.single?.ref) {
+        blobRefs[`VEND${n}_ID`] = v.identita.single.ref;
       }
-      if (v.identita.permesso) fd.append(`VEND${n}_PERMESSO`, v.identita.permesso);
+      if (v.identita.permesso?.ref) blobRefs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
     });
 
-    // A7: documento d'identità acquirente (tipo + file in slot).
+    // A7: documento d'identità acquirente (tipo + slot BlobRef).
     fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
     if (acquirenteDocId === 'CI') {
-      if (acquirenteIdentita.fronte) fd.append('ACQ_ID_FRONTE', acquirenteIdentita.fronte);
-      if (acquirenteIdentita.retro) fd.append('ACQ_ID_RETRO', acquirenteIdentita.retro);
-    } else if (acquirenteIdentita.single) {
-      fd.append('ACQ_ID', acquirenteIdentita.single);
+      if (acquirenteIdentita.fronte?.ref) blobRefs['ACQ_ID_FRONTE'] = acquirenteIdentita.fronte.ref;
+      if (acquirenteIdentita.retro?.ref) blobRefs['ACQ_ID_RETRO'] = acquirenteIdentita.retro.ref;
+    } else if (acquirenteIdentita.single?.ref) {
+      blobRefs['ACQ_ID'] = acquirenteIdentita.single.ref;
     }
-    if (acquirenteIdentita.permesso) fd.append('ACQ_PERMESSO', acquirenteIdentita.permesso);
+    if (acquirenteIdentita.permesso?.ref) blobRefs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
+
+    // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
+    fd.append('blobRefs', JSON.stringify(blobRefs));
 
     fd.append('comune', comune);
     fd.append('provincia', provincia);
@@ -560,13 +637,15 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   const current = STEPS.find((s) => s.id === step)!;
 
-  // Tutti i veicoli devono avere file + campi obbligatori (targa/telaio/
-  // proprietario/data) prima di proseguire.
+  // Tutti i veicoli devono avere il libretto caricato (BlobRef) + campi
+  // obbligatori (targa/telaio/proprietario/data) prima di proseguire. Nessun
+  // upload del libretto deve essere ancora in corso.
+  const librettiUploading = veicoli.some((v) => v.libretto.uploading);
   const veicoliValidi =
     veicoli.length === numeroVeicoli &&
     veicoli.every(
       (v) =>
-        !!v.file &&
+        !!v.libretto.ref &&
         v.targa.length >= 5 &&
         v.telaio.length >= 11 &&
         v.proprietarioAttuale.length > 0 &&
@@ -574,7 +653,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     );
   const comodatoBloccante = veicoli.some((v) => v.flagComodatoDuso);
   // Gate per lasciare lo step 1 (Tipo & veicoli).
-  const canStep1 = veicoliValidi && !comodatoBloccante;
+  const canStep1 = veicoliValidi && !comodatoBloccante && !librettiUploading;
 
   // B6: cross-check insiemistico venditori ↔ proprietari del primo libretto.
   // I proprietari sono tutti gli intestatari estratti dall'OCR (co-intestatari),
@@ -594,22 +673,29 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   );
 
   // Gate per lasciare lo step 2 (Venditore): ogni venditore valido + identità
-  // presente + nessun mismatch insiemistico (SCONOSCIUTO/OK non bloccano).
+  // presente (BlobRef) + nessun upload in corso + nessun mismatch insiemistico.
   const canStep2 =
     venditori.every(
-      (v) => parteValida(v) && identitaPresente(v.docId, v.identita),
+      (v) =>
+        parteValida(v) &&
+        identitaPresente(v.docId, v.identita) &&
+        !identitaUploading(v.identita),
     ) && ccVend !== 'MISMATCH';
 
-  // Gate per lasciare lo step 3 (Acquirente): parte valida + identità.
+  // Gate per lasciare lo step 3 (Acquirente): parte valida + identità (BlobRef)
+  // pronta + nessun upload in corso.
   const canStep3 =
     parteValida(acquirente) &&
-    identitaPresente(acquirenteDocId, acquirenteIdentita);
+    identitaPresente(acquirenteDocId, acquirenteIdentita) &&
+    !identitaUploading(acquirenteIdentita);
 
   // Step Documenti: tutti i documenti richiesti (esclusi i libretti) devono
-  // essere caricati prima di proseguire alla localizzazione/invio.
+  // avere la BlobRef caricata + nessun upload in corso, prima di proseguire.
+  const docsUploading = Object.values(documenti).some((s) => s.uploading);
   const docsValidi =
     esitoSchema.kind === 'OK' &&
-    requiredUploadDocs(esitoSchema).every((d) => !!documenti[docKey(d)]);
+    requiredUploadDocs(esitoSchema).every((d) => !!documenti[docKey(d)]?.ref) &&
+    !docsUploading;
 
   // Schema Documentale v7 (SD-B): blocca il submit se l'engine non torna OK
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
@@ -777,8 +863,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                       ),
                     )
                   }
-                  onMainFile={(file) =>
-                    runIdentitaOcr<VenditoreInput>(file, v.docId, (upd) =>
+                  onMainRef={(ref) =>
+                    runIdentitaOcr<VenditoreInput>(ref, v.docId, (upd) =>
                       setVenditori((prev) =>
                         prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
                       ),
@@ -873,8 +959,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               onDocId={setAcquirenteDocId}
               files={acquirenteIdentita}
               onFiles={setAcquirenteIdentita}
-              onMainFile={(file) =>
-                runIdentitaOcr(file, acquirenteDocId, (updater) =>
+              onMainRef={(ref) =>
+                runIdentitaOcr(ref, acquirenteDocId, (updater) =>
                   setAcquirente((prev) => updater(prev)),
                 )
               }
@@ -915,29 +1001,31 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
             {esitoSchema.kind === 'OK' &&
               (() => {
                 const docs = requiredUploadDocs(esitoSchema);
-                const caricati = docs.filter((d) => documenti[docKey(d)]).length;
+                const caricati = docs.filter((d) => documenti[docKey(d)]?.ref).length;
                 return (
                   <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
                     <p className="mb-3 text-[12px] font-semibold text-pv-slate-600">
                       {caricati}/{docs.length} documenti caricati
                     </p>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {docs.map((d) => (
-                        <DocCard
-                          key={docKey(d)}
-                          label={docLabel(d)}
-                          file={documenti[docKey(d)] ?? null}
-                          onChange={(f) =>
-                            setDocumenti((m) => {
-                              const n = { ...m };
-                              const k = docKey(d);
-                              if (f) n[k] = f;
-                              else delete n[k];
-                              return n;
-                            })
-                          }
-                        />
-                      ))}
+                      {docs.map((d) => {
+                        const k = docKey(d);
+                        return (
+                          <UploadCard
+                            key={k}
+                            label={docLabel(d)}
+                            slot={documenti[k]}
+                            onSelect={(file) => uploadDocumento(k, file)}
+                            onRemove={() =>
+                              setDocumenti((m) => {
+                                const n = { ...m };
+                                delete n[k];
+                                return n;
+                              })
+                            }
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1066,6 +1154,48 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       />
     </>
   );
+
+  // Carica un documento richiesto su Blob (client upload) e ne salva la BlobRef
+  // nello stato `documenti` (chiave docKey). Mostra progress/errore per-file.
+  function uploadDocumento(k: string, file: File | null) {
+    if (!file) {
+      setDocumenti((m) => {
+        const n = { ...m };
+        delete n[k];
+        return n;
+      });
+      return;
+    }
+    setDocumenti((m) => ({
+      ...m,
+      [k]: { ref: null, file, uploading: true, progress: 0, error: null },
+    }));
+    void uploadToBlob(file, 'pratiche-staging', (pct) => {
+      setDocumenti((m) => {
+        const cur = m[k];
+        if (!cur) return m;
+        return { ...m, [k]: { ...cur, progress: pct } };
+      });
+    })
+      .then((ref) => {
+        setDocumenti((m) => ({
+          ...m,
+          [k]: { ref, file, uploading: false, progress: 100, error: null },
+        }));
+      })
+      .catch((err: unknown) => {
+        setDocumenti((m) => ({
+          ...m,
+          [k]: {
+            ref: null,
+            file,
+            uploading: false,
+            progress: 0,
+            error: (err as Error).message,
+          },
+        }));
+      });
+  }
 }
 
 /**
@@ -1088,6 +1218,7 @@ function VeicoloSection({
   onManuale: () => void;
 }) {
   const hasOcr = !!veicolo.ocr || veicolo.ocrManuale;
+  const lib = veicolo.libretto;
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
@@ -1131,6 +1262,21 @@ function VeicoloSection({
           </div>
         </div>
       </Field>
+
+      {/* Stato upload del libretto su Blob (prima dell'OCR). */}
+      {lib.uploading && (
+        <p className="mt-2 text-[12px] font-semibold text-pv-navy-700" role="status" aria-live="polite">
+          Caricamento libretto… {lib.progress}%
+        </p>
+      )}
+      {!lib.uploading && lib.ref && (
+        <p className="mt-2 text-[12px] font-semibold text-pv-green-500">✓ Libretto caricato</p>
+      )}
+      {lib.error && (
+        <div className="mt-2">
+          <Alert variant="error">{lib.error}</Alert>
+        </div>
+      )}
 
       {veicolo.extracting && (
         <div
@@ -1387,11 +1533,132 @@ const DOC_ID_OPTIONS: { value: DocIdTipo; label: string }[] = [
 ];
 
 /**
+ * Card di upload diretto su Blob con stato per-file. Sostituisce DocCard negli
+ * slot del wizard che vanno su Blob (documenti richiesti, identità): mostra
+ * anteprima locale + badge stato (Caricamento N% / ✓ caricato / errore) e
+ * delega upload+rimozione al chiamante. NON tiene il File in stato di submit:
+ * l'anteprima usa il File solo localmente.
+ */
+function UploadCard({
+  label,
+  slot,
+  onSelect,
+  onRemove,
+  invalid = false,
+}: {
+  label: string;
+  slot: BlobSlot | undefined;
+  onSelect: (file: File | null) => void;
+  onRemove: () => void;
+  invalid?: boolean;
+}) {
+  const file = slot?.file ?? null;
+  const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+  const previewUrl = useMemo(
+    () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
+    [file],
+  );
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  const isPdf = file?.type === 'application/pdf';
+  const caricato = !!slot?.ref && !slot.uploading;
+  const uploading = !!slot?.uploading;
+  const erroreUpload = slot?.error ?? null;
+
+  return (
+    <div
+      className={`rounded-xl border p-4 transition ${
+        invalid || erroreUpload
+          ? 'border-pv-red-500 bg-pv-red-50'
+          : caricato
+            ? 'border-pv-green-500/40 bg-pv-green-50'
+            : 'border-pv-slate-200 bg-white'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-semibold text-pv-navy-900">{label}</span>
+        {uploading ? (
+          <span className="rounded-full bg-pv-navy-50 px-2 py-0.5 text-[11px] font-semibold text-pv-navy-700">
+            Caricamento… {slot?.progress ?? 0}%
+          </span>
+        ) : caricato ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-pv-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-pv-green-500">
+            ✓ Caricato
+          </span>
+        ) : (
+          <span className="rounded-full bg-pv-slate-100 px-2 py-0.5 text-[11px] font-semibold text-pv-slate-500">
+            Da caricare
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-pv-slate-200 bg-pv-slate-50">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt={`Anteprima ${label}`} className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-[11px] font-bold text-pv-slate-400">{isPdf ? 'PDF' : 'DOC'}</span>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          {file ? (
+            <>
+              <p className="truncate text-[12px] text-pv-slate-700" title={file.name}>
+                {file.name}
+              </p>
+              <p className="text-[11px] text-pv-slate-500">
+                {(file.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </>
+          ) : (
+            <p className="text-[12px] text-pv-slate-500">PDF, JPG o PNG · max 10 MB</p>
+          )}
+          {erroreUpload && (
+            <p className="mt-0.5 text-[11px] font-semibold text-pv-red-500">{erroreUpload}</p>
+          )}
+          <div className="mt-1.5 flex gap-3">
+            <label
+              htmlFor={inputId}
+              className="cursor-pointer text-[12px] font-semibold text-pv-navy-600 hover:underline"
+            >
+              {file ? 'Sostituisci' : 'Carica file'}
+            </label>
+            {file && (
+              <button
+                type="button"
+                onClick={onRemove}
+                className="text-[12px] font-semibold text-pv-red-500 hover:underline"
+              >
+                Rimuovi
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <input
+        id={inputId}
+        type="file"
+        accept="application/pdf,image/jpeg,image/png,image/jpg"
+        className="sr-only"
+        onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+      />
+    </div>
+  );
+}
+
+/**
  * A7: sezione "Documento d'identità" sotto ciascuna parte. Il broker sceglie
  * il tipo documento; per la CI servono fronte+retro, per passaporto/patente un
- * file unico. Il permesso di soggiorno è sempre opzionale. Quando viene
- * impostato il file principale (fronte CI o single) viene avviato l'OCR di
- * pre-fill via `onMainFile`.
+ * file unico. Il permesso di soggiorno è sempre opzionale. Ogni file viene
+ * caricato subito su Blob (client upload) e ne teniamo la BlobRef. Quando la
+ * BlobRef del file principale (fronte CI o single) è pronta viene avviato l'OCR
+ * di pre-fill via `onMainRef`.
  */
 function IdentitaSection({
   titolo,
@@ -1399,15 +1666,59 @@ function IdentitaSection({
   onDocId,
   files,
   onFiles,
-  onMainFile,
+  onMainRef,
 }: {
   titolo: string;
   docId: DocIdTipo;
   onDocId: (t: DocIdTipo) => void;
   files: IdentitaFiles;
   onFiles: (updater: (prev: IdentitaFiles) => IdentitaFiles) => void;
-  onMainFile: (file: File) => void;
+  onMainRef: (ref: BlobRef) => void;
 }) {
+  // Upload di un singolo campo identità su Blob, aggiornando lo slot via
+  // `onFiles`. Se è il file principale (main=true), all'esito chiama onMainRef
+  // per l'OCR di pre-fill. Se file=null, rimuove lo slot (invalida la ref).
+  const handleField = (
+    field: keyof IdentitaFiles,
+    file: File | null,
+    main: boolean,
+  ) => {
+    if (!file) {
+      onFiles((prev) => ({ ...prev, [field]: undefined }));
+      return;
+    }
+    onFiles((prev) => ({
+      ...prev,
+      [field]: { ref: null, file, uploading: true, progress: 0, error: null },
+    }));
+    void uploadToBlob(file, 'pratiche-staging', (pct) => {
+      onFiles((prev) => {
+        const cur = prev[field];
+        if (!cur) return prev;
+        return { ...prev, [field]: { ...cur, progress: pct } };
+      });
+    })
+      .then((ref) => {
+        onFiles((prev) => ({
+          ...prev,
+          [field]: { ref, file, uploading: false, progress: 100, error: null },
+        }));
+        if (main) onMainRef(ref);
+      })
+      .catch((err: unknown) => {
+        onFiles((prev) => ({
+          ...prev,
+          [field]: {
+            ref: null,
+            file,
+            uploading: false,
+            progress: 0,
+            error: (err as Error).message,
+          },
+        }));
+      });
+  };
+
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">{titolo}</h2>
@@ -1427,38 +1738,32 @@ function IdentitaSection({
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {docId === 'CI' ? (
           <>
-            <DocCard
+            <UploadCard
               label="Fronte"
-              file={files.fronte ?? null}
-              onChange={(f) => {
-                onFiles((prev) => ({ ...prev, fronte: f ?? undefined }));
-                if (f) onMainFile(f);
-              }}
+              slot={files.fronte}
+              onSelect={(f) => handleField('fronte', f, true)}
+              onRemove={() => handleField('fronte', null, true)}
             />
-            <DocCard
+            <UploadCard
               label="Retro"
-              file={files.retro ?? null}
-              onChange={(f) =>
-                onFiles((prev) => ({ ...prev, retro: f ?? undefined }))
-              }
+              slot={files.retro}
+              onSelect={(f) => handleField('retro', f, false)}
+              onRemove={() => handleField('retro', null, false)}
             />
           </>
         ) : (
-          <DocCard
+          <UploadCard
             label={docId === 'PASSAPORTO' ? 'Passaporto' : 'Patente'}
-            file={files.single ?? null}
-            onChange={(f) => {
-              onFiles((prev) => ({ ...prev, single: f ?? undefined }));
-              if (f) onMainFile(f);
-            }}
+            slot={files.single}
+            onSelect={(f) => handleField('single', f, true)}
+            onRemove={() => handleField('single', null, true)}
           />
         )}
-        <DocCard
+        <UploadCard
           label="Permesso di soggiorno (opzionale)"
-          file={files.permesso ?? null}
-          onChange={(f) =>
-            onFiles((prev) => ({ ...prev, permesso: f ?? undefined }))
-          }
+          slot={files.permesso}
+          onSelect={(f) => handleField('permesso', f, false)}
+          onRemove={() => handleField('permesso', null, false)}
         />
       </div>
     </div>

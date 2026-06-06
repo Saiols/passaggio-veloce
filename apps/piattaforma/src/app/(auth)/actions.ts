@@ -18,7 +18,7 @@ import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
 import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
 import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
 import { randomUUID } from 'node:crypto';
-import { getStorage } from '@/lib/providers/storage';
+import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { getRegistroImprese } from '@/lib/providers/registro-imprese';
 import {
   validateRegistrationDocuments,
@@ -131,6 +131,60 @@ const REGISTRATION_DOC_SLOTS = [
   'VISURA_CAMERALE',
 ] as const;
 
+type RegistrationDocSlot = (typeof REGISTRATION_DOC_SLOTS)[number];
+
+/**
+ * Riferimento a un file caricato dal browser direttamente su Vercel Blob
+ * (mirror server di BlobRef in @/lib/blob/upload-client). I file NON viaggiano
+ * più dentro le Server Action (limite 4,5 MB sul body serverless): qui arriva
+ * solo la chiave + i metadati, e i byte si leggono da storage via storageKey.
+ */
+type BlobRef = { key: string; name: string; size: number; type: string };
+
+function isBlobRef(v: unknown): v is BlobRef {
+  if (typeof v !== 'object' || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.key === 'string' &&
+    r.key.length > 0 &&
+    typeof r.name === 'string' &&
+    typeof r.size === 'number' &&
+    typeof r.type === 'string'
+  );
+}
+
+/**
+ * Estrae e valida la mappa slot→BlobRef dal campo FormData `blobRefs` (JSON).
+ * Applica gli stessi controlli presenza/dimensione/MIME che prima erano sui
+ * File, ma ora su ref.size / ref.type. Ritorna i 4 documenti nell'ordine degli
+ * slot, oppure un messaggio d'errore (stessa UX dei controlli precedenti).
+ */
+function parseBlobRefs(
+  formData: FormData,
+):
+  | { ok: true; docs: { tipo: RegistrationDocSlot; ref: BlobRef }[] }
+  | { ok: false; error: string } {
+  const raw = formData.get('blobRefs');
+  let map: Record<string, unknown>;
+  try {
+    map = JSON.parse(typeof raw === 'string' ? raw : '{}');
+  } catch {
+    return { ok: false, error: 'Carica tutti i documenti richiesti' };
+  }
+  const docs: { tipo: RegistrationDocSlot; ref: BlobRef }[] = [];
+  for (const slot of REGISTRATION_DOC_SLOTS) {
+    const ref = map[slot];
+    if (!isBlobRef(ref) || ref.size === 0) {
+      return { ok: false, error: 'Carica tutti i documenti richiesti' };
+    }
+    if (ref.size > MAX_DOC_BYTES) {
+      return { ok: false, error: 'Un documento supera il limite di 10 MB' };
+    }
+    docs.push({ tipo: slot, ref });
+  }
+  return { ok: true, docs };
+}
+
 export type RegisterActionResult =
   | {
       ok: true;
@@ -189,26 +243,21 @@ export async function registerAction(
       ? (payloadObj as { kycToken: string }).kycToken
       : '';
 
-  // 2. Estrai i 4 file obbligatori dal FormData.
-  const docFiles: { tipo: (typeof REGISTRATION_DOC_SLOTS)[number]; file: File }[] = [];
-  for (const slot of REGISTRATION_DOC_SLOTS) {
-    const f = formData.get(slot);
-    if (!(f instanceof File) || f.size === 0) {
-      return { ok: false, error: 'Carica tutti i documenti richiesti' };
-    }
-    if (f.size > MAX_DOC_BYTES) {
-      return { ok: false, error: 'Un documento supera il limite di 10 MB' };
-    }
-    docFiles.push({ tipo: slot, file: f });
+  // 2. Estrai i 4 documenti obbligatori dalle BlobRef (campo FormData `blobRefs`).
+  // I file sono già su Blob (client upload): qui arrivano solo chiave+metadati.
+  const refsParsed = parseBlobRefs(formData);
+  if (!refsParsed.ok) {
+    return { ok: false, error: refsParsed.error };
   }
+  const docRefs = refsParsed.docs;
 
   // 3. Validazione documenti (gating rule-based). Bloccante. La data emissione
   // visura non è più richiesta a mano: sarà estratta/validata dall'OCR.
-  const docInputs: RegistrationDocInput[] = docFiles.map(({ tipo, file }) => ({
+  const docInputs: RegistrationDocInput[] = docRefs.map(({ tipo, ref }) => ({
     tipo,
-    mimeType: file.type,
-    sizeBytes: file.size,
-    originalFilename: file.name,
+    mimeType: ref.type,
+    sizeBytes: ref.size,
+    originalFilename: ref.name,
   }));
   const docCheck = validateRegistrationDocuments(docInputs);
   if (!docCheck.ok) {
@@ -217,31 +266,32 @@ export async function registerAction(
 
   const { account, company, payment } = parsed.data;
 
-  // Buffer dei file (riusati per OCR del gate KYC e poi per lo storage).
-  const docBuffers = await Promise.all(
-    docFiles.map(async ({ tipo, file }) => ({
-      tipo, file, buffer: Buffer.from(await file.arrayBuffer()),
-    })),
-  );
-  const bufByTipo = (t: (typeof REGISTRATION_DOC_SLOTS)[number]) =>
-    docBuffers.find((d) => d.tipo === t)!;
+  const refByTipo = (t: RegistrationDocSlot) => docRefs.find((d) => d.tipo === t)!.ref;
 
   // GATE KYC (sincrono, bloccante). In DEMO_MODE è bypassato (banner "OCR simulati").
   // Hoisted fuori dal gate per riusare i dati estratti dentro la transaction
   // (persistenza ocrData/visuraCameraleData). null in DEMO_MODE (gate skippato).
   let kycExtracted: Awaited<ReturnType<typeof verifyRegistrationKyc>> | null = null;
   if (!env.DEMO_MODE) {
-    const toInput = (t: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
-      const d = bufByTipo(t);
-      return { buffer: d.buffer, mimeType: d.file.type, originalFilename: d.file.name };
+    // Byte letti da Blob via storageKey (client upload): servono per l'hash
+    // KYC e per l'OCR. Solo i 3 doc che entrano nel gate (la CI_RETRO no).
+    const [ciFronteBuf, cfBuf, visuraBuf] = await Promise.all([
+      storageGetBuffer(refByTipo('CI_FRONTE').key),
+      storageGetBuffer(refByTipo('CODICE_FISCALE').key),
+      storageGetBuffer(refByTipo('VISURA_CAMERALE').key),
+    ]);
+    const bufBySlot: Partial<Record<RegistrationDocSlot, Buffer>> = {
+      CI_FRONTE: ciFronteBuf,
+      CODICE_FISCALE: cfBuf,
+      VISURA_CAMERALE: visuraBuf,
+    };
+    const toInput = (t: RegistrationDocSlot) => {
+      const ref = refByTipo(t);
+      return { buffer: bufBySlot[t]!, mimeType: ref.type, originalFilename: ref.name };
     };
     // Token KYC: se il client ha già superato la verifica allo step Documenti e
     // porta un token valido legato a QUESTI file, NON ri-eseguiamo l'OCR.
-    const docsHash = hashDocs([
-      bufByTipo('CI_FRONTE').buffer,
-      bufByTipo('CODICE_FISCALE').buffer,
-      bufByTipo('VISURA_CAMERALE').buffer,
-    ]);
+    const docsHash = hashDocs([ciFronteBuf, cfBuf, visuraBuf]);
     const tokenCheck = kycTokenFromPayload
       ? verifyKycToken(kycTokenFromPayload, docsHash, Date.now())
       : ({ valid: false } as const);
@@ -339,27 +389,14 @@ export async function registerAction(
   const utmRaw = (await cookies()).get('pv_utm')?.value;
   const utm = parseUtmCookie(utmRaw);
 
-  // Pre-generiamo gli id così lo scope storage coincide col companyId e i
-  // Documento possono referenziare l'uploader (User) nella stessa transaction.
+  // Pre-generiamo gli id così i Documento possono referenziare l'uploader
+  // (User) nella stessa transaction.
   const companyId = randomUUID();
   const userId = randomUUID();
 
-  // Upload dei file su storage PRIMA della transaction (filesystem/S3 sono
-  // fuori dalla transaction DB). Se un put fallisce l'eccezione interrompe
-  // tutto: nessun record creato. In caso di fallimento della transaction
-  // restano al massimo file orfani su storage (raro, ripulibili).
-  const storage = getStorage();
-  const storedDocs = await Promise.all(
-    docBuffers.map(async ({ tipo, file, buffer }) => {
-      const put = await storage.put({
-        scope: `company/${companyId}`,
-        buffer,
-        originalFilename: file.name,
-        mimeType: file.type,
-      });
-      return { tipo, put };
-    }),
-  );
+  // I file sono GIÀ su Blob (client upload): niente storage.put qui. Il nome del
+  // provider corrente serve a popolare Documento.storageProvider.
+  const storageProvider = getStorage().name;
 
   // Holder per l'esito del riscatto promozionale (aggiornato dentro la transazione).
   let promoResult: PromoRedeemResult = { applied: false };
@@ -437,7 +474,7 @@ export async function registerAction(
         },
       });
 
-      for (const { tipo, put } of storedDocs) {
+      for (const { tipo, ref } of docRefs) {
         // Riusa i dati estratti dal gate KYC (no re-OCR). In DEMO_MODE
         // kycExtracted è null → nessun payload, ocrStato resta NONE.
         const ocrPayload =
@@ -454,11 +491,12 @@ export async function registerAction(
           data: {
             tipo,
             companyId,
-            storageKey: put.storageKey,
-            storageProvider: put.storageProvider,
-            mimeType: put.mimeType,
-            sizeBytes: put.sizeBytes,
-            originalFilename: put.originalFilename,
+            // Il file è già su Blob: la chiave è la ref ritornata dall'upload.
+            storageKey: ref.key,
+            storageProvider,
+            mimeType: ref.type,
+            sizeBytes: ref.size,
+            originalFilename: ref.name,
             uploadedById: userId,
             ocrStato: ocrPayload ? 'SUCCESS' : 'NONE',
             ocrProvider: ocrPayload ? env.OCR_PROVIDER : null,
@@ -593,24 +631,17 @@ export async function verifyRegistrationDocumentsAction(
     return { ok: false, error: 'Completa prima i dati azienda' };
   }
 
-  // Estrai e valida i 4 file (presenza/dimensione/mime), come nel submit.
-  const docFiles: { tipo: (typeof REGISTRATION_DOC_SLOTS)[number]; file: File }[] = [];
-  for (const slot of REGISTRATION_DOC_SLOTS) {
-    const f = formData.get(slot);
-    if (!(f instanceof File) || f.size === 0) {
-      return { ok: false, error: 'Carica tutti i documenti richiesti' };
-    }
-    if (f.size > MAX_DOC_BYTES) {
-      return { ok: false, error: 'Un documento supera il limite di 10 MB' };
-    }
-    docFiles.push({ tipo: slot, file: f });
-  }
+  // Estrai e valida i 4 documenti dalle BlobRef (presenza/dimensione/mime),
+  // come nel submit. I file sono già su Blob: qui arrivano solo chiave+metadati.
+  const refsParsed = parseBlobRefs(formData);
+  if (!refsParsed.ok) return { ok: false, error: refsParsed.error };
+  const docRefs = refsParsed.docs;
   const docCheck = validateRegistrationDocuments(
-    docFiles.map(({ tipo, file }) => ({
+    docRefs.map(({ tipo, ref }) => ({
       tipo,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      originalFilename: file.name,
+      mimeType: ref.type,
+      sizeBytes: ref.size,
+      originalFilename: ref.name,
     })),
   );
   if (!docCheck.ok) return { ok: false, error: docCheck.error };
@@ -622,12 +653,13 @@ export async function verifyRegistrationDocumentsAction(
     where: { companyType: company.type, active: true },
     select: { companyType: true, code: true, active: true },
   });
-  const inputFor = async (tipo: (typeof REGISTRATION_DOC_SLOTS)[number]) => {
-    const d = docFiles.find((x) => x.tipo === tipo)!;
+  const inputFor = async (tipo: RegistrationDocSlot) => {
+    const ref = docRefs.find((x) => x.tipo === tipo)!.ref;
     return {
-      buffer: Buffer.from(await d.file.arrayBuffer()),
-      mimeType: d.file.type,
-      originalFilename: d.file.name,
+      // Byte letti da Blob via storageKey (client upload).
+      buffer: await storageGetBuffer(ref.key),
+      mimeType: ref.type,
+      originalFilename: ref.name,
     };
   };
   try {

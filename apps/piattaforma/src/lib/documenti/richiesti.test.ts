@@ -13,9 +13,10 @@ describe('docKey', () => {
   });
 });
 describe('requiredUploadDocs', () => {
-  it('esclude il libretto e tiene il resto', () => {
-    const r = requiredUploadDocs({ kind: 'OK', documentiRichiesti: [libretto, cdp, ciVend] });
-    expect(r.map((d) => d.tipo)).toEqual(['CERTIFICATO_PROPRIETA', 'CI_FRONTE']);
+  it('esclude libretto + documenti identità personali, tiene il resto', () => {
+    const visura: DocumentoRichiesto = { tipo: 'VISURA_CAMERALE', parte: 'VENDITORE', motivo: '' };
+    const r = requiredUploadDocs({ kind: 'OK', documentiRichiesti: [libretto, cdp, ciVend, visura] });
+    expect(r.map((d) => d.tipo)).toEqual(['CERTIFICATO_PROPRIETA', 'VISURA_CAMERALE']);
   });
   it('[] se non OK', () => {
     expect(requiredUploadDocs({ kind: 'BLOCCO', motivo: 'x', soluzione: 'y' })).toEqual([]);

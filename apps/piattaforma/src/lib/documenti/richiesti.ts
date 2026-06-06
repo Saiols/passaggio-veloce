@@ -4,9 +4,13 @@ export function docKey(d: DocumentoRichiesto): string {
   return `${d.tipo}__${d.parte}__${d.veicoloOrdine ?? 0}`;
 }
 
+const TIPI_IDENTITA: ReadonlySet<string> = new Set([
+  'LIBRETTO_CIRCOLAZIONE', 'CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'PASSAPORTO', 'PATENTE', 'PERMESSO_SOGGIORNO',
+]);
+
 export function requiredUploadDocs(esito: EsitoSchemaDocumentale): DocumentoRichiesto[] {
   if (esito.kind !== 'OK') return [];
-  return esito.documentiRichiesti.filter((d) => d.tipo !== 'LIBRETTO_CIRCOLAZIONE');
+  return esito.documentiRichiesti.filter((d) => !TIPI_IDENTITA.has(d.tipo));
 }
 
 export function parteToOwner(parte: ParteDocumento): 'VENDITORE' | 'ACQUIRENTE' | null {

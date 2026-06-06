@@ -16,6 +16,7 @@ import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
+import { proprietarioCrossCheck } from '@/lib/kyc/match';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import {
@@ -464,6 +465,109 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     );
   }
 
+  // Tipi pratica multiveicolo (A8): documenti d'identità per parte.
+  // Per ciascuna parte, in base al tipo di documento scelto, raccogliamo i file
+  // identità dalle slot del wizard, ne validiamo presenza + MIME + dimensione,
+  // e li mappiamo al rispettivo DocumentoTipo. Il permesso di soggiorno è
+  // opzionale (la presenza per stranieri è già gestita dall'engine via BLOCCO).
+  type IdentitaDocCandidate = {
+    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO';
+    owner: 'VENDITORE' | 'ACQUIRENTE';
+    file: File;
+  };
+  const identitaCandidates: IdentitaDocCandidate[] = [];
+
+  const validateIdentitaFile = (file: File, label: string): File => {
+    if (file.size > MAX_LIBRETTO_BYTES) {
+      redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+    }
+    if (!ACCEPTED_MIME.includes(file.type)) {
+      redirect(
+        `/pratiche/nuova?error=${encodeURIComponent(
+          `Formato non supportato per ${label} (PDF/JPG/PNG)`,
+        )}`,
+      );
+    }
+    return file;
+  };
+
+  // Raccoglie i file identità di una parte (venditore/acquirente) secondo il
+  // tipo di documento scelto. Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO;
+  // passaporto/patente: <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO.
+  const collectIdentita = (
+    owner: 'VENDITORE' | 'ACQUIRENTE',
+    prefix: 'VEND' | 'ACQ',
+    documentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
+    labelParte: string,
+  ): void => {
+    const missingMsg = `/pratiche/nuova?error=${encodeURIComponent(
+      `Documento d'identità mancante per ${labelParte}`,
+    )}`;
+    if (documentoIdentita === 'CI') {
+      const fronte = formData.get(`${prefix}_ID_FRONTE`);
+      const retro = formData.get(`${prefix}_ID_RETRO`);
+      if (
+        !(fronte instanceof File) || fronte.size === 0 ||
+        !(retro instanceof File) || retro.size === 0
+      ) {
+        redirect(missingMsg);
+      }
+      identitaCandidates.push({
+        tipo: 'CI_FRONTE',
+        owner,
+        file: validateIdentitaFile(fronte as File, "documento d'identità"),
+      });
+      identitaCandidates.push({
+        tipo: 'CI_RETRO',
+        owner,
+        file: validateIdentitaFile(retro as File, "documento d'identità"),
+      });
+    } else {
+      const id = formData.get(`${prefix}_ID`);
+      if (!(id instanceof File) || id.size === 0) {
+        redirect(missingMsg);
+      }
+      identitaCandidates.push({
+        tipo: documentoIdentita === 'PASSAPORTO' ? 'PASSAPORTO' : 'PATENTE',
+        owner,
+        file: validateIdentitaFile(id as File, "documento d'identità"),
+      });
+    }
+
+    const permesso = formData.get(`${prefix}_PERMESSO`);
+    if (permesso instanceof File && permesso.size > 0) {
+      identitaCandidates.push({
+        tipo: 'PERMESSO_SOGGIORNO',
+        owner,
+        file: validateIdentitaFile(permesso as File, 'permesso di soggiorno'),
+      });
+    }
+  };
+
+  collectIdentita('VENDITORE', 'VEND', d.venditoreDocumentoIdentita, 'il venditore');
+  collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente");
+
+  // Cross-check venditore ↔ intestatario del libretto (server-side, autoritativo).
+  // Il proprietario del primo veicolo arriva dall'OCR del libretto. MISMATCH
+  // blocca il submit; MATCH/SCONOSCIUTO proseguono.
+  const proprietario = veicoli[0]?.proprietarioAttuale;
+  const cc = proprietarioCrossCheck(
+    {
+      isPersonaGiuridica: d.venditoreIsPG,
+      nome: d.venditoreNome,
+      cognome: d.venditoreCognome,
+      ragioneSociale: d.venditoreRagioneSociale,
+    },
+    proprietario,
+  );
+  if (cc === 'MISMATCH') {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        "Il venditore non corrisponde all'intestatario del libretto",
+      )}`,
+    );
+  }
+
   // Pricing derivato dal tipo + numero veicoli (engine in lib/pricing.ts).
   const fees = computeFees({ tipo: d.tipo, numeroVeicoli: d.numeroVeicoli });
   const feeAgenziaCent = fees.feeAgenziaCent;
@@ -501,6 +605,22 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
         mimeType: file.type,
       });
       return { d: docReq, put };
+    }),
+  );
+
+  // Tipi pratica multiveicolo (A8): upload dei documenti d'identità/permesso su
+  // storage PRIMA della transazione (storage non transazionale, come i libretti
+  // e i doc DOC__). Le righe Documento vengono create dentro la transazione.
+  const identitaUploads = await Promise.all(
+    identitaCandidates.map(async (cand) => {
+      const buffer = await bufferFromFile(cand.file);
+      const put = await storage.put({
+        scope: `pratica/new`,
+        buffer,
+        originalFilename: cand.file.name,
+        mimeType: cand.file.type,
+      });
+      return { tipo: cand.tipo, owner: cand.owner, put };
     }),
   );
 
@@ -634,6 +754,27 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
             docReq.parte === 'VEICOLO' && docReq.veicoloOrdine
               ? (veicoloIdByOrdine.get(docReq.veicoloOrdine) ?? null)
               : null,
+          storageKey: put.storageKey,
+          storageProvider: put.storageProvider,
+          mimeType: put.mimeType,
+          sizeBytes: put.sizeBytes,
+          originalFilename: put.originalFilename,
+          uploadedById: userId,
+          ocrStato: 'NONE',
+          gatingStato: 'PASSED',
+        },
+      });
+    }
+
+    // Tipi pratica multiveicolo (A8): documenti d'identità/permesso per parte.
+    // Upload già avvenuti prima della transazione; qui creiamo le righe
+    // Documento collegate alla pratica (nessun veicolo associato).
+    for (const { tipo, owner, put } of identitaUploads) {
+      await tx.documento.create({
+        data: {
+          tipo: tipo as Prisma.DocumentoCreateInput['tipo'],
+          owner,
+          praticaId: created.id,
           storageKey: put.storageKey,
           storageProvider: put.storageProvider,
           mimeType: put.mimeType,

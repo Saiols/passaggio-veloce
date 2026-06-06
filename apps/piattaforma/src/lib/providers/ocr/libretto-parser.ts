@@ -18,14 +18,19 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
   const dm = DATE_RE.exec(upper);
   const dataImmatricolazione = dm ? toIso(dm[1]!, dm[2]!, dm[3]!) : undefined;
   const year = dm ? Number(dm[3]) : undefined;
-  // Estrazione intestatario: cerca pattern su una singola riga (non attraversa newline)
-  const propM = /(?:INTESTAT[OA] A|INTESTATARIO|C1\.1\)?\s*)[^\S\n]*([A-ZÀ-Ù'']+(?:[^\S\n]+[A-ZÀ-Ù'']+){1,3})/.exec(upper);
-  const proprietarioAttuale = propM ? propM[1]!.trim() : undefined;
+  // Estrazione intestatari: raccoglie tutti i proprietari (cointestazione inclusa)
+  const owners: string[] = [];
+  const ownerRe = /(?:INTESTAT[OA] A|INTESTATARIO|COINTESTATARIO|C1\.1\)?)[^\S\n]*([A-ZÀ-Ù'']+(?:[^\S\n]+[A-ZÀ-Ù'']+){1,3})/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = ownerRe.exec(upper)) !== null) owners.push(mm[1]!.trim());
+  const proprietari = owners.length ? Array.from(new Set(owners)) : undefined;
+  const proprietarioAttuale = proprietari?.[0];
   return {
     targa,
     telaio,
     dataImmatricolazione,
     proprietarioAttuale,
+    proprietari,
     preImm2015: year !== undefined && year < 2015,
     flagComodatoDuso: /COMODATO/.test(upper),
     confidenceScore: confidence,

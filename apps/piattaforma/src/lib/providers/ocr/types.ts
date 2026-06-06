@@ -4,6 +4,7 @@ export type LibrettoCircolazioneData = {
   targa?: string;
   telaio?: string;
   proprietarioAttuale?: string;
+  proprietari?: string[];
   dataImmatricolazione?: string; // ISO yyyy-mm-dd
   preImm2015: boolean;
   flagComodatoDuso: boolean;

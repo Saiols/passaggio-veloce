@@ -41,4 +41,13 @@ describe('parseLibrettoText', () => {
   it('proprietario undefined se non riconosciuto', () => {
     expect(parseLibrettoText('targa AB123CD', 0.9).proprietarioAttuale).toBeUndefined();
   });
+  it('estrae più proprietari (cointestazione)', () => {
+    const r = parseLibrettoText('INTESTATO A ROSSI MARIO\nCOINTESTATARIO BIANCHI LUCA\nA) AB123CD', 0.9);
+    expect(r.proprietari).toEqual(['ROSSI MARIO', 'BIANCHI LUCA']);
+    expect(r.proprietarioAttuale).toBe('ROSSI MARIO');
+  });
+  it('un solo proprietario', () => {
+    const r = parseLibrettoText('INTESTATO A ROSSI MARIO\nA) AB123CD', 0.9);
+    expect(r.proprietari).toEqual(['ROSSI MARIO']);
+  });
 });

@@ -5,7 +5,8 @@ export type LibrettoCircolazioneData = {
   telaio?: string;
   proprietarioAttuale?: string;
   proprietari?: string[];
-  dataImmatricolazione?: string; // ISO yyyy-mm-dd
+  dataImmatricolazione?: string; // ISO yyyy-mm-dd — (B) prima immatricolazione
+  dataAcquisto?: string; // ISO yyyy-mm-dd — (I) immatric. cui si riferisce la carta
   preImm2015: boolean;
   flagComodatoDuso: boolean;
   confidenceScore: number; // 0..1

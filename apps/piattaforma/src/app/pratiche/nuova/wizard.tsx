@@ -87,10 +87,12 @@ function identitaUploading(files: IdentitaFiles): boolean {
 }
 
 function splitNomeCompleto(full: string): { nome: string; cognome: string } {
+  // Il proprietario dal libretto è "COGNOME NOME" (C.2.1 cognome, poi C.2.2
+  // nome): il PRIMO token è il cognome, il resto il nome.
   const parts = full.trim().split(/\s+/);
   if (parts.length <= 1) return { nome: '', cognome: parts[0] ?? '' };
-  const cognome = parts[parts.length - 1]!;
-  const nome = parts.slice(0, -1).join(' ');
+  const cognome = parts[0]!;
+  const nome = parts.slice(1).join(' ');
   return { nome, cognome };
 }
 

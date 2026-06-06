@@ -10,10 +10,15 @@ import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
-import { classifyDocumento } from '@/lib/documenti/classifier';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
+import {
+  requiredUploadDocs,
+  docKey,
+  docLabel,
+  parteToOwner,
+} from '@/lib/documenti/richiesti';
 import { env } from '@/env';
 
 /**
@@ -45,16 +50,6 @@ async function getRequestMetadata(): Promise<{ ip: string; userAgent: string }> 
 
 const MAX_LIBRETTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-
-/** Tipi documento di parte (venditore/acquirente) gestiti dal wizard pratica. */
-const PARTY_DOC_TIPI = [
-  'CI_FRONTE',
-  'CI_RETRO',
-  'CODICE_FISCALE',
-  'PROCURA',
-  'VISURA_CAMERALE',
-  'PERMESSO_SOGGIORNO',
-] as const;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -343,23 +338,49 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     );
   }
 
-  // P1.1 — Hard-block pre-invio: classifica i documenti di parte allegati e
-  // blocca il submit se almeno uno NON passa il gating rule-based. L'override
-  // admin resta la valvola di sfogo post-submit (qui i FAILED non vengono mai
-  // creati). Stessi nomi campo del loop di persistenza piu' sotto.
+  // Schema Documentale v7 (SD-B): i documenti richiesti (esclusi i libretti,
+  // gestiti coi veicoli) arrivano nello slot DOC__<docKey>. Ognuno deve essere
+  // presente, valido per MIME/dimensione e deve superare il gating rule-based.
+  // Costruiamo qui il candidato per ciascun doc richiesto e validiamo presenza
+  // + size + MIME prima del gating bloccante.
+  const richiesti = requiredUploadDocs(esitoSchema);
+  type DocUploadCandidate = {
+    d: (typeof richiesti)[number];
+    file: File;
+  };
+  const docCandidates: DocUploadCandidate[] = [];
   const gatingCandidates: GatingCandidate[] = [];
-  for (const owner of ['venditore', 'acquirente'] as const) {
-    for (const docTipo of PARTY_DOC_TIPI) {
-      const f = formData.get(`${owner}_${docTipo}`);
-      if (!(f instanceof File) || f.size === 0) continue;
-      gatingCandidates.push({
-        owner,
-        tipo: docTipo,
-        mimeType: f.type,
-        sizeBytes: f.size,
-        originalFilename: f.name,
-      });
+  for (const docReq of richiesti) {
+    const f = formData.get(`DOC__${docKey(docReq)}`);
+    if (!(f instanceof File) || f.size === 0) {
+      redirect(
+        `/pratiche/nuova?error=${encodeURIComponent(
+          `Manca un documento richiesto: ${docLabel(docReq)}`,
+        )}`,
+      );
     }
+    const file = f as File;
+    if (file.size > MAX_LIBRETTO_BYTES) {
+      redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+    }
+    if (!ACCEPTED_MIME.includes(file.type)) {
+      redirect(
+        `/pratiche/nuova?error=${encodeURIComponent(
+          `Formato non supportato per ${docLabel(docReq)} (PDF/JPG/PNG)`,
+        )}`,
+      );
+    }
+    docCandidates.push({ d: docReq, file });
+    // P1.1 — Hard-block pre-invio: classifica i documenti allegati e blocca il
+    // submit se almeno uno NON passa il gating rule-based. L'owner serve solo
+    // come etichetta diagnostica nel messaggio d'errore.
+    gatingCandidates.push({
+      owner: parteToOwner(docReq.parte) === 'ACQUIRENTE' ? 'acquirente' : 'venditore',
+      tipo: docReq.tipo,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      originalFilename: file.name,
+    });
   }
   const blocking = findBlockingDocuments(gatingCandidates);
   if (blocking.length > 0) {
@@ -394,6 +415,22 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
         originalFilename: file.name,
         mimeType: file.type,
       });
+    }),
+  );
+
+  // Schema Documentale v7 (SD-B): upload dei documenti richiesti su storage
+  // PRIMA della transazione (storage non transazionale, come i libretti). Le
+  // righe Documento vengono poi create dentro la transazione.
+  const docUploads = await Promise.all(
+    docCandidates.map(async ({ d: docReq, file }) => {
+      const buffer = await bufferFromFile(file);
+      const put = await storage.put({
+        scope: `pratica/new`,
+        buffer,
+        originalFilename: file.name,
+        mimeType: file.type,
+      });
+      return { d: docReq, put };
     }),
   );
 
@@ -460,6 +497,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   });
 
     // Un Veicolo per elemento (ordine 1..n) + il libretto collegato.
+    const veicoloIdByOrdine = new Map<number, string>();
     for (let i = 0; i < veicoli.length; i++) {
       const v = veicoli[i]!;
       const upload = librettoUploads[i]!;
@@ -480,6 +518,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
           ocrAt: now,
         },
       });
+      veicoloIdByOrdine.set(i + 1, veicolo.id);
 
       const ocrSnapshot: Prisma.InputJsonValue = {
         targa: v.targa,
@@ -506,6 +545,32 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
           ocrProvider: env.OCR_PROVIDER,
           ocrData: ocrSnapshot,
           ocrAt: now,
+          gatingStato: 'PASSED',
+        },
+      });
+    }
+
+    // Schema Documentale v7 (SD-B): documenti richiesti (esclusi libretti).
+    // Gli upload su storage sono già avvenuti prima della transazione; qui
+    // creiamo solo le righe Documento collegate alla pratica (e al veicolo se
+    // il documento è di tipo VEICOLO, es. certificato di proprietà).
+    for (const { d: docReq, put } of docUploads) {
+      await tx.documento.create({
+        data: {
+          tipo: docReq.tipo as Prisma.DocumentoCreateInput['tipo'],
+          owner: parteToOwner(docReq.parte),
+          praticaId: created.id,
+          veicoloId:
+            docReq.parte === 'VEICOLO' && docReq.veicoloOrdine
+              ? (veicoloIdByOrdine.get(docReq.veicoloOrdine) ?? null)
+              : null,
+          storageKey: put.storageKey,
+          storageProvider: put.storageProvider,
+          mimeType: put.mimeType,
+          sizeBytes: put.sizeBytes,
+          originalFilename: put.originalFilename,
+          uploadedById: userId,
+          ocrStato: 'NONE',
           gatingStato: 'PASSED',
         },
       });
@@ -551,51 +616,6 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
         nomeBroker: me.name?.split(' ')[0] ?? 'utente',
       },
     }).catch(() => undefined);
-  }
-
-  // Documenti aggiuntivi per parte (D-06): CI, CF, procura, visura, permesso.
-  // Tutti opzionali. Salviamo file su storage + record Documento con owner.
-  for (const owner of ['venditore', 'acquirente'] as const) {
-    for (const docTipo of PARTY_DOC_TIPI) {
-      const f = formData.get(`${owner}_${docTipo}`);
-      if (!(f instanceof File) || f.size === 0) continue;
-      // Difesa in profondita': il pre-check hard-block piu' sopra ha gia'
-      // scartato MIME/size non validi; questi skip restano come rete di sicurezza.
-      if (f.size > MAX_LIBRETTO_BYTES) continue; // skip silently se troppo grande
-      if (!ACCEPTED_MIME.includes(f.type)) continue;
-      const buf = await bufferFromFile(f);
-      const partyPut = await storage.put({
-        scope: `pratica/${pratica.id}`,
-        buffer: buf,
-        originalFilename: f.name,
-        mimeType: f.type,
-      });
-      // A4: gating rule-based al momento dell'upload. Il classificatore
-      // decide PASSED/FAILED in base a MIME, dimensioni e naming hints.
-      // Quando arriva Document AI, swap del classifier; il resto è invariato.
-      const gating = classifyDocumento({
-        tipo: docTipo,
-        mimeType: partyPut.mimeType,
-        sizeBytes: partyPut.sizeBytes,
-        originalFilename: partyPut.originalFilename,
-      });
-      await prisma.documento.create({
-        data: {
-          tipo: docTipo,
-          owner: owner === 'venditore' ? 'VENDITORE' : 'ACQUIRENTE',
-          praticaId: pratica.id,
-          storageKey: partyPut.storageKey,
-          storageProvider: partyPut.storageProvider,
-          mimeType: partyPut.mimeType,
-          sizeBytes: partyPut.sizeBytes,
-          originalFilename: partyPut.originalFilename,
-          uploadedById: userId,
-          ocrStato: 'NONE',
-          gatingStato: gating.stato,
-          gatingError: gating.stato === 'FAILED' ? gating.reason : null,
-        },
-      });
-    }
   }
 
   revalidatePath('/dashboard');

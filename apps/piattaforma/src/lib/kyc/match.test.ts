@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeName, normalizeCompanyName, normalizeCf, normalizePiva,
-  isValidCodiceFiscale, nameMatches, companyMatches,
+  isValidCodiceFiscale, nameMatches, companyMatches, proprietarioCrossCheck,
 } from './match';
 
 describe('normalize', () => {
@@ -58,5 +58,20 @@ describe('companyMatches', () => {
       { denominazione: 'Rossi Auto', partitaIva: '11111111111' },
       { denominazione: 'Bianchi Auto', partitaIva: '22222222222' },
     )).toBe(false);
+  });
+});
+
+describe('proprietarioCrossCheck', () => {
+  it('MATCH persona', () => {
+    expect(proprietarioCrossCheck({ isPersonaGiuridica: false, nome: 'Mario', cognome: 'Rossi' }, 'ROSSI MARIO')).toBe('MATCH');
+  });
+  it('MISMATCH persona', () => {
+    expect(proprietarioCrossCheck({ isPersonaGiuridica: false, nome: 'Luca', cognome: 'Bianchi' }, 'ROSSI MARIO')).toBe('MISMATCH');
+  });
+  it('MATCH azienda per ragione sociale', () => {
+    expect(proprietarioCrossCheck({ isPersonaGiuridica: true, ragioneSociale: 'Rossi Auto SRL' }, 'ROSSI AUTO')).toBe('MATCH');
+  });
+  it('SCONOSCIUTO se proprietario non estratto', () => {
+    expect(proprietarioCrossCheck({ isPersonaGiuridica: false, nome: 'Mario', cognome: 'Rossi' }, undefined)).toBe('SCONOSCIUTO');
   });
 });

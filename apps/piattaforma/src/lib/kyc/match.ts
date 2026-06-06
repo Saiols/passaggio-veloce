@@ -80,6 +80,28 @@ export function nameMatches(a: string, b: string): boolean {
   return shorter.every((t) => longer.some((u) => tokenSimilar(t, u)));
 }
 
+/**
+ * Confronta il venditore col proprietario estratto dal libretto.
+ * - MATCH: combaciano (nome persona o ragione sociale azienda).
+ * - MISMATCH: leggibili ma diversi → blocco.
+ * - SCONOSCIUTO: proprietario non estratto o venditore senza identificativo → niente blocco.
+ */
+export function proprietarioCrossCheck(
+  venditore: { isPersonaGiuridica: boolean; nome?: string; cognome?: string; ragioneSociale?: string },
+  proprietario: string | undefined,
+): 'MATCH' | 'MISMATCH' | 'SCONOSCIUTO' {
+  if (!proprietario || !proprietario.trim()) return 'SCONOSCIUTO';
+  if (venditore.isPersonaGiuridica) {
+    if (!venditore.ragioneSociale?.trim()) return 'SCONOSCIUTO';
+    const sameCompany =
+      normalizeCompanyName(venditore.ragioneSociale) === normalizeCompanyName(proprietario);
+    return sameCompany || nameMatches(venditore.ragioneSociale, proprietario) ? 'MATCH' : 'MISMATCH';
+  }
+  const full = `${venditore.nome ?? ''} ${venditore.cognome ?? ''}`.trim();
+  if (!full) return 'SCONOSCIUTO';
+  return nameMatches(full, proprietario) ? 'MATCH' : 'MISMATCH';
+}
+
 export function companyMatches(
   visura: { denominazione?: string; partitaIva?: string },
   step2: { denominazione: string; partitaIva: string },

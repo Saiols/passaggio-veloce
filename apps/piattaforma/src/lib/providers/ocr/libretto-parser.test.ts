@@ -26,4 +26,12 @@ describe('parseLibrettoText', () => {
     expect(r.telaio).toBeUndefined();
     expect(r.preImm2015).toBe(false);
   });
+  it('rileva comodato in varie formulazioni', () => {
+    expect(parseLibrettoText("... COMODATO D'USO ...", 0.9).flagComodatoDuso).toBe(true);
+    expect(parseLibrettoText('... locazione/comodato ...', 0.9).flagComodatoDuso).toBe(true);
+    expect(parseLibrettoText('... CONTRATTO DI COMODATO ...', 0.9).flagComodatoDuso).toBe(true);
+  });
+  it('non segnala comodato se assente', () => {
+    expect(parseLibrettoText('CARTA DI CIRCOLAZIONE targa AB123CD', 0.9).flagComodatoDuso).toBe(false);
+  });
 });

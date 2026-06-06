@@ -7,6 +7,11 @@ import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
+import {
+  extractIdentita,
+  type IdentitaData,
+  type IdentitaTipo,
+} from '@/lib/kyc/extract-identita';
 import { getStorage } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
@@ -133,6 +138,60 @@ export async function extractLibrettoAction(
   };
 }
 
+export type ExtractIdentitaResult =
+  | { ok: true; data: IdentitaData }
+  | { ok: false; error: string };
+
+/**
+ * OCR del documento d'identità (CI/passaporto/patente) della parte, per
+ * pre-compilare nome/cognome/CF nel wizard. Estrae il testo grezzo via
+ * provider OCR e applica il parser deterministico extractIdentita.
+ */
+export async function extractIdentitaAction(
+  formData: FormData,
+): Promise<ExtractIdentitaResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: 'File documento mancante' };
+  }
+  if (file.size > MAX_LIBRETTO_BYTES) {
+    return { ok: false, error: 'File troppo grande (max 10 MB)' };
+  }
+  if (!ACCEPTED_MIME.includes(file.type)) {
+    return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+  }
+
+  const tipoRaw = formData.get('tipo');
+  const tipo = tipoRaw as IdentitaTipo;
+  if (tipo !== 'CI' && tipo !== 'PASSAPORTO' && tipo !== 'PATENTE') {
+    return { ok: false, error: 'Tipo documento non valido' };
+  }
+
+  try {
+    const buffer = await bufferFromFile(file);
+    const ocr = await getOcr();
+    const text = (
+      await ocr.extractText({
+        buffer,
+        mimeType: file.type,
+        originalFilename: file.name,
+      })
+    ).text;
+    const data = extractIdentita(text, tipo);
+    return { ok: true, data };
+  } catch (e) {
+    console.error('[ocr] extractIdentita failed:', (e as Error).message);
+    return {
+      ok: false,
+      error:
+        'OCR non riuscito sul documento. Compila manualmente i campi della parte.',
+    };
+  }
+}
+
 // Tratta correttamente "false" / "true" / "on" / assenza di campo dalle FormData
 const formBool = z.preprocess(
   (v) => v === 'true' || v === 'on' || v === true,
@@ -229,6 +288,15 @@ const submitSchema = z.object({
   acquirenteVisuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   acquirentePermessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 
+  // Tipi pratica multiveicolo (A7): documento d'identità scelto per parte.
+  // La persistenza/cross-check server-side dei file identità è task A8.
+  venditoreDocumentoIdentita: z
+    .enum(['CI', 'PASSAPORTO', 'PATENTE'])
+    .default('CI'),
+  acquirenteDocumentoIdentita: z
+    .enum(['CI', 'PASSAPORTO', 'PATENTE'])
+    .default('CI'),
+
   // Localizzazione
   comune: z.string().trim().min(1).max(100),
   provincia: z
@@ -312,6 +380,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     venditorePermessoData: d.venditorePermessoData
       ? new Date(d.venditorePermessoData)
       : null,
+    venditoreDocumentoIdentita: d.venditoreDocumentoIdentita,
     flagProcura: d.flagProcura,
     flagSuccessione: d.flagSuccessione,
     acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
@@ -321,6 +390,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     acquirentePermessoData: d.acquirentePermessoData
       ? new Date(d.acquirentePermessoData)
       : null,
+    acquirenteDocumentoIdentita: d.acquirenteDocumentoIdentita,
     flagMinore: d.flagMinore,
   });
   if (esitoSchema.kind === 'BLOCCO') {

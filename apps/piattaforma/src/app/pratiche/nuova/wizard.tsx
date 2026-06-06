@@ -13,7 +13,22 @@ import {
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
-import { extractLibrettoAction, submitNuovaPraticaAction } from './actions';
+import { proprietarioCrossCheck } from '@/lib/kyc/match';
+import {
+  extractLibrettoAction,
+  extractIdentitaAction,
+  submitNuovaPraticaAction,
+} from './actions';
+
+type DocIdTipo = 'CI' | 'PASSAPORTO' | 'PATENTE';
+
+/** File del documento d'identità di una parte (slot variabili per tipo). */
+type IdentitaFiles = {
+  fronte?: File;
+  retro?: File;
+  single?: File;
+  permesso?: File;
+};
 
 /**
  * Splitta una stringa "Nome Cognome" in due parti.
@@ -30,9 +45,10 @@ function splitNomeCompleto(full: string): { nome: string; cognome: string } {
 
 const STEPS = [
   { id: 1, label: 'Tipo & veicoli', title: 'Tipo pratica e veicoli', hint: 'Scegli il tipo di pratica e carica i libretti di circolazione.' },
-  { id: 2, label: 'Parti', title: 'Parti coinvolte', hint: 'Dati del venditore e dell\'acquirente + eventuali flag speciali.' },
-  { id: 3, label: 'Documenti', title: 'Documenti richiesti', hint: 'Carica i documenti richiesti. La firma avviene in agenzia con gli originali.' },
-  { id: 4, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
+  { id: 2, label: 'Venditore', title: 'Venditore', hint: 'Dati del venditore e documento d\'identità + eventuali flag speciali.' },
+  { id: 3, label: 'Acquirente', title: 'Acquirente', hint: 'Dati dell\'acquirente e documento d\'identità.' },
+  { id: 4, label: 'Documenti', title: 'Documenti richiesti', hint: 'Carica i documenti richiesti. La firma avviene in agenzia con gli originali.' },
+  { id: 5, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
 ] as const;
 
 type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
@@ -214,6 +230,14 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   const [venditore, setVenditore] = useState<Parte>(emptyParte());
   const [acquirente, setAcquirente] = useState<Parte>(emptyParte());
+
+  // Documento d'identità per parte (A7): tipo scelto + file caricati. Il file
+  // principale (fronte CI / single passaporto-patente) avvia l'OCR di pre-fill.
+  const [venditoreDocId, setVenditoreDocId] = useState<DocIdTipo>('CI');
+  const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
+  const [venditoreIdentita, setVenditoreIdentita] = useState<IdentitaFiles>({});
+  const [acquirenteIdentita, setAcquirenteIdentita] = useState<IdentitaFiles>({});
+
   const [flagCointestazione, setFlagCointestazione] = useState(false);
   const [flagMinivoltura, setFlagMinivoltura] = useState(false);
   const [flagProcura, setFlagProcura] = useState(false);
@@ -273,6 +297,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       venditorePermessoData: venditore.permessoData
         ? new Date(venditore.permessoData)
         : null,
+      venditoreDocumentoIdentita: venditoreDocId,
       flagProcura,
       flagSuccessione,
       acquirenteTipoSoggetto: acquirente.tipoSoggetto,
@@ -282,6 +307,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       acquirentePermessoData: acquirente.permessoData
         ? new Date(acquirente.permessoData)
         : null,
+      acquirenteDocumentoIdentita: acquirenteDocId,
       flagMinore,
     });
   }, [
@@ -289,11 +315,13 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     venditore.tipoSoggetto,
     venditore.visuraData,
     venditore.permessoData,
+    venditoreDocId,
     flagProcura,
     flagSuccessione,
     acquirente.tipoSoggetto,
     acquirente.visuraData,
     acquirente.permessoData,
+    acquirenteDocId,
     flagMinore,
   ]);
 
@@ -331,6 +359,35 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         extracting: false,
         ocrError: (err as Error).message,
       });
+    }
+  };
+
+  // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte.
+  // Chiamato quando viene impostato il file principale (fronte CI o single).
+  // Non sovrascrive campi già compilati a mano dal broker.
+  const runIdentitaOcr = async (
+    file: File,
+    tipo: DocIdTipo,
+    onChange: (updater: (p: Parte) => Parte) => void,
+  ) => {
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('tipo', tipo);
+      const res = await extractIdentitaAction(fd);
+      if (!res.ok) return;
+      const { nome, cognome, codiceFiscale } = res.data;
+      onChange((prev) => {
+        if (prev.isPG) return prev;
+        return {
+          ...prev,
+          nome: prev.nome.trim() ? prev.nome : nome ?? prev.nome,
+          cognome: prev.cognome.trim() ? prev.cognome : cognome ?? prev.cognome,
+          cf: prev.cf.trim() ? prev.cf : (codiceFiscale ?? prev.cf).toUpperCase(),
+        };
+      });
+    } catch {
+      // best-effort: il broker può sempre compilare a mano
     }
   };
 
@@ -409,6 +466,25 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     if (acquirente.visuraData) fd.append('acquirenteVisuraData', acquirente.visuraData);
     if (acquirente.permessoData) fd.append('acquirentePermessoData', acquirente.permessoData);
 
+    // A7: documento d'identità per parte (tipo + file in slot). La persistenza
+    // server-side dei file + cross-check venditore è task A8.
+    fd.append('venditoreDocumentoIdentita', venditoreDocId);
+    fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
+    if (venditoreDocId === 'CI') {
+      if (venditoreIdentita.fronte) fd.append('VEND_ID_FRONTE', venditoreIdentita.fronte);
+      if (venditoreIdentita.retro) fd.append('VEND_ID_RETRO', venditoreIdentita.retro);
+    } else if (venditoreIdentita.single) {
+      fd.append('VEND_ID', venditoreIdentita.single);
+    }
+    if (venditoreIdentita.permesso) fd.append('VEND_PERMESSO', venditoreIdentita.permesso);
+    if (acquirenteDocId === 'CI') {
+      if (acquirenteIdentita.fronte) fd.append('ACQ_ID_FRONTE', acquirenteIdentita.fronte);
+      if (acquirenteIdentita.retro) fd.append('ACQ_ID_RETRO', acquirenteIdentita.retro);
+    } else if (acquirenteIdentita.single) {
+      fd.append('ACQ_ID', acquirenteIdentita.single);
+    }
+    if (acquirenteIdentita.permesso) fd.append('ACQ_PERMESSO', acquirenteIdentita.permesso);
+
     fd.append('comune', comune);
     fd.append('provincia', provincia);
 
@@ -436,9 +512,36 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         /^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione),
     );
   const comodatoBloccante = veicoli.some((v) => v.flagComodatoDuso);
-  const canStep2 = veicoliValidi && !comodatoBloccante;
+  // Gate per lasciare lo step 1 (Tipo & veicoli).
+  const canStep1 = veicoliValidi && !comodatoBloccante;
 
-  const canStep3 = parteValida(venditore) && parteValida(acquirente);
+  // A7: cross-check venditore vs intestatario del primo libretto.
+  const proprietario = veicoli[0]?.proprietarioAttuale;
+  const cc = proprietarioCrossCheck(
+    {
+      isPersonaGiuridica: venditore.isPG,
+      nome: venditore.nome,
+      cognome: venditore.cognome,
+      ragioneSociale: venditore.ragioneSociale,
+    },
+    proprietario,
+  );
+
+  // A7: presenza documento d'identità per parte (fronte CI o single per
+  // passaporto/patente). Il permesso è opzionale.
+  const identitaPresente = (docId: DocIdTipo, files: IdentitaFiles): boolean =>
+    docId === 'CI' ? !!files.fronte : !!files.single;
+
+  // Gate per lasciare lo step 2 (Venditore): parte valida + identità + no mismatch.
+  const canStep2 =
+    parteValida(venditore) &&
+    identitaPresente(venditoreDocId, venditoreIdentita) &&
+    cc !== 'MISMATCH';
+
+  // Gate per lasciare lo step 3 (Acquirente): parte valida + identità.
+  const canStep3 =
+    parteValida(acquirente) &&
+    identitaPresente(acquirenteDocId, acquirenteIdentita);
 
   // Step Documenti: tutti i documenti richiesti (esclusi i libretti) devono
   // essere caricati prima di proseguire alla localizzazione/invio.
@@ -555,7 +658,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               </Alert>
             )}
             <div className="flex justify-end">
-              <Button disabled={!canStep2} onClick={() => setStep(2)}>
+              <Button disabled={!canStep1} onClick={() => setStep(2)}>
                 Avanti
               </Button>
             </div>
@@ -573,20 +676,25 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               />
             </div>
 
-            <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Acquirente</h2>
-              {tipo === 'MINIVOLTURA' && (
-                <p className="mb-3 text-[12px] text-pv-slate-500">
-                  Nelle minivolture l&apos;acquirente è un commerciante d&apos;auto
-                  (operatore auto), con visura camerale.
-                </p>
-              )}
-              <ParteForm
-                parte={acquirente}
-                onChange={setAcquirente}
-                tipiSoggetto={acquirenteTipiSoggetto}
-              />
-            </div>
+            <IdentitaSection
+              titolo="Documento d'identità del venditore"
+              docId={venditoreDocId}
+              onDocId={setVenditoreDocId}
+              files={venditoreIdentita}
+              onFiles={setVenditoreIdentita}
+              onMainFile={(file) =>
+                runIdentitaOcr(file, venditoreDocId, (updater) =>
+                  setVenditore((prev) => updater(prev)),
+                )
+              }
+            />
+
+            {cc === 'MISMATCH' && (
+              <Alert variant="error">
+                Il venditore non corrisponde all&apos;intestatario del libretto
+                ({proprietario}).
+              </Alert>
+            )}
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Flag pratica</h2>
@@ -637,7 +745,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               <Button variant="secondary" onClick={() => setStep(1)}>
                 Indietro
               </Button>
-              <Button disabled={!canStep3} onClick={() => setStep(3)}>
+              <Button disabled={!canStep2} onClick={() => setStep(3)}>
                 Avanti
               </Button>
             </div>
@@ -645,6 +753,47 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         )}
 
         {step === 3 && (
+          <div className="space-y-5">
+            <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Acquirente</h2>
+              {tipo === 'MINIVOLTURA' && (
+                <p className="mb-3 text-[12px] text-pv-slate-500">
+                  Nelle minivolture l&apos;acquirente è un commerciante d&apos;auto
+                  (operatore auto), con visura camerale.
+                </p>
+              )}
+              <ParteForm
+                parte={acquirente}
+                onChange={setAcquirente}
+                tipiSoggetto={acquirenteTipiSoggetto}
+              />
+            </div>
+
+            <IdentitaSection
+              titolo="Documento d'identità dell'acquirente"
+              docId={acquirenteDocId}
+              onDocId={setAcquirenteDocId}
+              files={acquirenteIdentita}
+              onFiles={setAcquirenteIdentita}
+              onMainFile={(file) =>
+                runIdentitaOcr(file, acquirenteDocId, (updater) =>
+                  setAcquirente((prev) => updater(prev)),
+                )
+              }
+            />
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+              <Button variant="secondary" onClick={() => setStep(2)}>
+                Indietro
+              </Button>
+              <Button disabled={!canStep3} onClick={() => setStep(4)}>
+                Avanti
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
           <div className="space-y-5">
             <Alert variant="info">
               Ricorda: tutti i documenti richiesti vanno portati in originale,
@@ -697,17 +846,17 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               })()}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-              <Button variant="secondary" onClick={() => setStep(2)}>
+              <Button variant="secondary" onClick={() => setStep(3)}>
                 Indietro
               </Button>
-              <Button disabled={!docsValidi} onClick={() => setStep(4)}>
+              <Button disabled={!docsValidi} onClick={() => setStep(5)}>
                 Avanti
               </Button>
             </div>
           </div>
         )}
 
-        {step === 4 && (
+        {step === 5 && (
           <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
@@ -781,7 +930,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-              <Button variant="secondary" onClick={() => setStep(3)} disabled={submitting}>
+              <Button variant="secondary" onClick={() => setStep(4)} disabled={submitting}>
                 Indietro
               </Button>
               <Button
@@ -1133,6 +1282,91 @@ function ParteForm({
   );
 }
 
+const DOC_ID_OPTIONS: { value: DocIdTipo; label: string }[] = [
+  { value: 'CI', label: "Carta d'identità" },
+  { value: 'PASSAPORTO', label: 'Passaporto' },
+  { value: 'PATENTE', label: 'Patente' },
+];
+
+/**
+ * A7: sezione "Documento d'identità" sotto ciascuna parte. Il broker sceglie
+ * il tipo documento; per la CI servono fronte+retro, per passaporto/patente un
+ * file unico. Il permesso di soggiorno è sempre opzionale. Quando viene
+ * impostato il file principale (fronte CI o single) viene avviato l'OCR di
+ * pre-fill via `onMainFile`.
+ */
+function IdentitaSection({
+  titolo,
+  docId,
+  onDocId,
+  files,
+  onFiles,
+  onMainFile,
+}: {
+  titolo: string;
+  docId: DocIdTipo;
+  onDocId: (t: DocIdTipo) => void;
+  files: IdentitaFiles;
+  onFiles: (updater: (prev: IdentitaFiles) => IdentitaFiles) => void;
+  onMainFile: (file: File) => void;
+}) {
+  return (
+    <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+      <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">{titolo}</h2>
+      <Field label="Tipo documento" required>
+        <Select
+          value={docId}
+          onChange={(e) => onDocId(e.target.value as DocIdTipo)}
+        >
+          {DOC_ID_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {docId === 'CI' ? (
+          <>
+            <DocCard
+              label="Fronte"
+              file={files.fronte ?? null}
+              onChange={(f) => {
+                onFiles((prev) => ({ ...prev, fronte: f ?? undefined }));
+                if (f) onMainFile(f);
+              }}
+            />
+            <DocCard
+              label="Retro"
+              file={files.retro ?? null}
+              onChange={(f) =>
+                onFiles((prev) => ({ ...prev, retro: f ?? undefined }))
+              }
+            />
+          </>
+        ) : (
+          <DocCard
+            label={docId === 'PASSAPORTO' ? 'Passaporto' : 'Patente'}
+            file={files.single ?? null}
+            onChange={(f) => {
+              onFiles((prev) => ({ ...prev, single: f ?? undefined }));
+              if (f) onMainFile(f);
+            }}
+          />
+        )}
+        <DocCard
+          label="Permesso di soggiorno (opzionale)"
+          file={files.permesso ?? null}
+          onChange={(f) =>
+            onFiles((prev) => ({ ...prev, permesso: f ?? undefined }))
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
 function RiepilogoRow({ label, value }: { label: string; value: string }) {
   return (
     <>
@@ -1197,7 +1431,7 @@ function SchemaDocumentalePreview({
         </h2>
         <Alert variant="info">
           Per calcolare la lista esatta di documenti, completa il tipo
-          soggetto del venditore e dell&apos;acquirente nello step Parti.
+          soggetto del venditore e dell&apos;acquirente negli step precedenti.
         </Alert>
       </div>
     );

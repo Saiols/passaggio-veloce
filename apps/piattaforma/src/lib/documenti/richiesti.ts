@@ -33,6 +33,8 @@ const TIPO_LABEL: Record<DocumentoTipoEngine, string> = {
   ATTO_ACCETTAZIONE_EREDITA: 'Atto di accettazione eredità',
   DICHIARAZIONE_QUALITA_EREDE: 'Dichiarazione qualità di erede',
   AUTORIZZAZIONE_TUTORE: 'Autorizzazione del tutore',
+  PASSAPORTO: 'Passaporto',
+  PATENTE: 'Patente',
 };
 
 const PARTE_LABEL: Record<Exclude<ParteDocumento, 'VEICOLO'>, string> = {

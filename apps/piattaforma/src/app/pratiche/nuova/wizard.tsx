@@ -6,7 +6,7 @@ import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
-import { docKey, docLabel, requiredUploadDocs } from '@/lib/documenti/richiesti';
+import { docKey } from '@/lib/documenti/richiesti';
 import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
@@ -109,12 +109,17 @@ function splitNomeCompleto(full: string): { nome: string; cognome: string } {
   return { nome, cognome };
 }
 
+// docKey del Certificato di Proprietà di un veicolo (pre-2015). Stessa chiave
+// usata dall'engine/submit (parte VEICOLO, slot DOC__<docKey>).
+function cdpDocKey(ordine: number): string {
+  return docKey({ tipo: 'CERTIFICATO_PROPRIETA', parte: 'VEICOLO', veicoloOrdine: ordine, motivo: '' });
+}
+
 const STEPS = [
   { id: 1, label: 'Tipo & veicoli', title: 'Tipo pratica e veicoli', hint: 'Scegli il tipo di pratica e carica i libretti di circolazione.' },
   { id: 2, label: 'Venditore', title: 'Venditore', hint: 'Dati del venditore e documento d\'identità + eventuali flag speciali.' },
   { id: 3, label: 'Acquirente', title: 'Acquirente', hint: 'Dati dell\'acquirente e documento d\'identità.' },
-  { id: 4, label: 'Documenti', title: 'Documenti richiesti', hint: 'Carica i documenti richiesti. La firma avviene in agenzia con gli originali.' },
-  { id: 5, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
+  { id: 4, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
 ] as const;
 
 type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
@@ -702,7 +707,11 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     );
   const comodatoBloccante = veicoli.some((v) => v.flagComodatoDuso);
   // Gate per lasciare lo step 1 (Tipo & veicoli).
-  const canStep1 = veicoliValidi && !comodatoBloccante && !librettiUploading;
+  // Veicoli pre-2015: il Certificato di Proprietà va caricato qui (step veicolo).
+  const cdpUploading = veicoli.some((v, i) => v.preImm2015 && documenti[cdpDocKey(i + 1)]?.uploading);
+  const cdpMancante = veicoli.some((v, i) => v.preImm2015 && !documenti[cdpDocKey(i + 1)]?.ref);
+  const canStep1 =
+    veicoliValidi && !comodatoBloccante && !librettiUploading && !cdpUploading && !cdpMancante;
 
   // B6: cross-check insiemistico venditori ↔ proprietari del primo libretto.
   // I proprietari sono tutti gli intestatari estratti dall'OCR (co-intestatari),
@@ -747,14 +756,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     identitaPresente(acquirenteDocId, acquirenteIdentita) &&
     !identitaUploading(acquirenteIdentita) &&
     verdettoAcquirente.ok;
-
-  // Step Documenti: tutti i documenti richiesti (esclusi i libretti) devono
-  // avere la BlobRef caricata + nessun upload in corso, prima di proseguire.
-  const docsUploading = Object.values(documenti).some((s) => s.uploading);
-  const docsValidi =
-    esitoSchema.kind === 'OK' &&
-    requiredUploadDocs(esitoSchema).every((d) => !!documenti[docKey(d)]?.ref) &&
-    !docsUploading;
 
   // Schema Documentale v7 (SD-B): blocca il submit se l'engine non torna OK
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
@@ -840,27 +841,54 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
             </div>
 
             {veicoli.map((v, idx) => (
-              <VeicoloSection
-                key={idx}
-                ordine={idx + 1}
-                veicolo={v}
-                multiplo={multiplo}
-                onFile={(file) => onFileSelected(idx, file)}
-                onChange={(patch) => updateVeicolo(idx, patch)}
-                onManuale={() =>
-                  updateVeicolo(idx, {
-                    ocr: undefined,
-                    ocrManuale: true,
-                    ocrError: null,
-                    targa: '',
-                    telaio: '',
-                    proprietarioAttuale: '',
-                    dataImmatricolazione: '',
-                    preImm2015: false,
-                    flagComodatoDuso: false,
-                  })
-                }
-              />
+              <div key={idx} className="space-y-3">
+                <VeicoloSection
+                  ordine={idx + 1}
+                  veicolo={v}
+                  multiplo={multiplo}
+                  onFile={(file) => onFileSelected(idx, file)}
+                  onChange={(patch) => updateVeicolo(idx, patch)}
+                  onManuale={() =>
+                    updateVeicolo(idx, {
+                      ocr: undefined,
+                      ocrManuale: true,
+                      ocrError: null,
+                      targa: '',
+                      telaio: '',
+                      proprietarioAttuale: '',
+                      dataImmatricolazione: '',
+                      preImm2015: false,
+                      flagComodatoDuso: false,
+                    })
+                  }
+                />
+                {/* Veicolo pre-2015: serve il Certificato di Proprietà (documento
+                    del veicolo, caricato qui insieme al libretto). */}
+                {v.preImm2015 && (
+                  <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+                    <h3 className="mb-1 text-[14px] font-bold text-pv-navy-800">
+                      Certificato di Proprietà{multiplo ? ` — Veicolo ${idx + 1}` : ''}
+                    </h3>
+                    <p className="mb-3 text-[12px] text-pv-slate-500">
+                      Veicolo immatricolato prima del 2015: carica il Certificato di Proprietà.
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <UploadCard
+                        label="Certificato di Proprietà"
+                        slot={documenti[cdpDocKey(idx + 1)]}
+                        onSelect={(file) => uploadDocumento(cdpDocKey(idx + 1), file)}
+                        onRemove={() =>
+                          setDocumenti((m) => {
+                            const n = { ...m };
+                            delete n[cdpDocKey(idx + 1)];
+                            return n;
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
 
             {comodatoBloccante && (
@@ -878,6 +906,11 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
         {step === 2 && (
           <div className="space-y-5">
+            <Alert variant="info">
+              Ricorda: tutti i documenti vanno portati in originale, fisicamente
+              in agenzia, al momento della firma.
+            </Alert>
+
             {ccVend === 'MISMATCH' && (
               <Alert variant="error">
                 I venditori non corrispondono agli intestatari del libretto
@@ -1006,6 +1039,11 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
         {step === 3 && (
           <div className="space-y-5">
+            <Alert variant="info">
+              Ricorda: tutti i documenti vanno portati in originale, fisicamente
+              in agenzia, al momento della firma.
+            </Alert>
+
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Acquirente</h2>
               {tipo === 'MINIVOLTURA' && (
@@ -1081,71 +1119,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
         {step === 4 && (
           <div className="space-y-5">
-            <Alert variant="info">
-              Ricorda: tutti i documenti richiesti vanno portati in originale,
-              fisicamente in agenzia, al momento della firma.
-            </Alert>
-
-            {esitoSchema.kind === 'BLOCCO' && (
-              <Alert variant="error">
-                <strong>Motivo:</strong> {esitoSchema.motivo}
-                <br />
-                <strong>Come sbloccare:</strong> {esitoSchema.soluzione}
-              </Alert>
-            )}
-
-            {esitoSchema.kind === 'INPUT_INCOMPLETO' && (
-              <Alert variant="warning">
-                Completa i dati delle parti per calcolare i documenti richiesti.
-              </Alert>
-            )}
-
-            {esitoSchema.kind === 'OK' &&
-              (() => {
-                const docs = requiredUploadDocs(esitoSchema);
-                const caricati = docs.filter((d) => documenti[docKey(d)]?.ref).length;
-                return (
-                  <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-                    <p className="mb-3 text-[12px] font-semibold text-pv-slate-600">
-                      {caricati}/{docs.length} documenti caricati
-                    </p>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {docs.map((d) => {
-                        const k = docKey(d);
-                        return (
-                          <UploadCard
-                            key={k}
-                            label={docLabel(d)}
-                            slot={documenti[k]}
-                            onSelect={(file) => uploadDocumento(k, file)}
-                            onRemove={() =>
-                              setDocumenti((m) => {
-                                const n = { ...m };
-                                delete n[k];
-                                return n;
-                              })
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-              <Button variant="secondary" onClick={() => setStep(3)}>
-                Indietro
-              </Button>
-              <Button disabled={!docsValidi} onClick={() => setStep(5)}>
-                Avanti
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === 5 && (
-          <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1218,7 +1191,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-              <Button variant="secondary" onClick={() => setStep(4)} disabled={submitting}>
+              <Button variant="secondary" onClick={() => setStep(3)} disabled={submitting}>
                 Indietro
               </Button>
               <Button

@@ -64,15 +64,11 @@ export type SchemaDocumentaleInput = {
     ordine: number;
     tipoSoggetto: TipoSoggetto | null;
     documentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
-    visuraData: Date | null;
-    permessoData: Date | null;
   }[];
   flagProcura: boolean;
   flagSuccessione: boolean;
 
   acquirenteTipoSoggetto: TipoSoggetto | null;
-  acquirenteVisuraData: Date | null;
-  acquirentePermessoData: Date | null;
   acquirenteDocumentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
   flagMinore: boolean;
 
@@ -84,28 +80,6 @@ export type EsitoSchemaDocumentale =
   | { kind: 'OK'; documentiRichiesti: DocumentoRichiesto[] }
   | { kind: 'BLOCCO'; motivo: string; soluzione: string }
   | { kind: 'INPUT_INCOMPLETO'; mancanti: string[] };
-
-const VISURA_VALIDITA_MESI = 6;
-
-/**
- * Verifica se la data del permesso di soggiorno è ancora valida (non
- * scaduta) alla data di riferimento. Null = non compilato.
- */
-function permessoValido(permessoData: Date | null, now: Date): boolean {
-  if (!permessoData) return false;
-  return permessoData.getTime() >= now.getTime();
-}
-
-/**
- * Verifica se la visura camerale è "fresca" (≤ 6 mesi dalla data di
- * rilascio). Null = non compilato. Useremo una soglia in MESI calendari.
- */
-function visuraFresca(visuraData: Date | null, now: Date): boolean {
-  if (!visuraData) return false;
-  const limite = new Date(now);
-  limite.setMonth(limite.getMonth() - VISURA_VALIDITA_MESI);
-  return visuraData.getTime() >= limite.getTime();
-}
 
 function emettiIdentita(
   out: DocumentoRichiesto[],
@@ -167,8 +141,6 @@ function aggiungiDocumentiPersona(
 export function calcolaDocumentiRichiesti(
   input: SchemaDocumentaleInput,
 ): EsitoSchemaDocumentale {
-  const now = input.now ?? new Date();
-
   // 0. Input minimi: tipo soggetto di ogni venditore + acquirente
   const mancanti: string[] = [];
   if (input.venditori.some((v) => !v.tipoSoggetto)) {
@@ -188,55 +160,9 @@ export function calcolaDocumentiRichiesti(
         'Il comodato deve essere revocato al PRA prima del passaggio. Riprovare dopo la revoca.',
     };
   }
-  for (const v of input.venditori) {
-    if (
-      v.tipoSoggetto === 'STRANIERO_EXTRA_UE' &&
-      !permessoValido(v.permessoData, now)
-    ) {
-      return {
-        kind: 'BLOCCO',
-        motivo: 'Permesso di soggiorno del venditore scaduto o mancante',
-        soluzione:
-          'Il venditore deve essere in possesso di permesso di soggiorno in corso di validità.',
-      };
-    }
-  }
-  if (
-    input.acquirenteTipoSoggetto === 'STRANIERO_EXTRA_UE' &&
-    !permessoValido(input.acquirentePermessoData, now)
-  ) {
-    return {
-      kind: 'BLOCCO',
-      motivo: 'Permesso di soggiorno dell\'acquirente scaduto o mancante',
-      soluzione:
-        'L\'acquirente deve essere in possesso di permesso di soggiorno in corso di validità.',
-    };
-  }
-  for (const v of input.venditori) {
-    if (
-      (v.tipoSoggetto === 'AZIENDA' || v.tipoSoggetto === 'OPERATORE_AUTO') &&
-      !visuraFresca(v.visuraData, now)
-    ) {
-      return {
-        kind: 'BLOCCO',
-        motivo: 'Visura camerale del venditore non fresca (>6 mesi o assente)',
-        soluzione:
-          'Servono visure camerali rilasciate negli ultimi 6 mesi. Richiedere una nuova visura.',
-      };
-    }
-  }
-  if (
-    (input.acquirenteTipoSoggetto === 'AZIENDA' ||
-      input.acquirenteTipoSoggetto === 'OPERATORE_AUTO') &&
-    !visuraFresca(input.acquirenteVisuraData, now)
-  ) {
-    return {
-      kind: 'BLOCCO',
-      motivo: 'Visura camerale dell\'acquirente non fresca (>6 mesi o assente)',
-      soluzione:
-        'Servono visure camerali rilasciate negli ultimi 6 mesi. Richiedere una nuova visura.',
-    };
-  }
+  // Nota: la validità temporale di visura (≤6 mesi) e permesso (non scaduto) e
+  // la corrispondenza dei documenti col soggetto sono ora verificate nello step
+  // parte via OCR (lib/kyc/parte-docs), non più qui da date inserite a mano.
 
   // 2. Costruzione lista documenti richiesti
   const out: DocumentoRichiesto[] = [];

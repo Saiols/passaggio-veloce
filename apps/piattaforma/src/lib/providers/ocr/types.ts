@@ -4,6 +4,7 @@ export type LibrettoCircolazioneData = {
   targa?: string;
   telaio?: string;
   proprietarioAttuale?: string;
+  proprietarioCf?: string; // CF dell'intestatario (tra C.2.2 e C.2.3)
   proprietari?: string[];
   dataImmatricolazione?: string; // ISO yyyy-mm-dd — (B) prima immatricolazione
   dataAcquisto?: string; // ISO yyyy-mm-dd — (I) immatric. cui si riferisce la carta

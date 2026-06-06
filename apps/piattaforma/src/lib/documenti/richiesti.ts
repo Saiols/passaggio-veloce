@@ -4,13 +4,16 @@ export function docKey(d: DocumentoRichiesto): string {
   return `${d.tipo}__${d.parte}__${d.veicoloOrdine ?? 0}__${d.venditoreOrdine ?? 0}`;
 }
 
-const TIPI_IDENTITA: ReadonlySet<string> = new Set([
-  'LIBRETTO_CIRCOLAZIONE', 'CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'PASSAPORTO', 'PATENTE', 'PERMESSO_SOGGIORNO',
+// Documenti raccolti e validati nello step parte (Venditore/Acquirente), NON
+// come card dello step Documenti: identità, permesso e visura camerale.
+const TIPI_RACCOLTI_NELLA_PARTE: ReadonlySet<string> = new Set([
+  'LIBRETTO_CIRCOLAZIONE', 'CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'PASSAPORTO', 'PATENTE',
+  'PERMESSO_SOGGIORNO', 'VISURA_CAMERALE',
 ]);
 
 export function requiredUploadDocs(esito: EsitoSchemaDocumentale): DocumentoRichiesto[] {
   if (esito.kind !== 'OK') return [];
-  return esito.documentiRichiesti.filter((d) => !TIPI_IDENTITA.has(d.tipo));
+  return esito.documentiRichiesti.filter((d) => !TIPI_RACCOLTI_NELLA_PARTE.has(d.tipo));
 }
 
 export function parteToOwner(parte: ParteDocumento): 'VENDITORE' | 'ACQUIRENTE' | null {

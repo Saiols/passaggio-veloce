@@ -13,10 +13,20 @@ import {
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import { venditoriCrossCheck } from '@/lib/kyc/match';
+import {
+  validaParte,
+  type ParteDati,
+  type OcrParte,
+  type IdentitaEstratta,
+  type VisuraEstratta,
+  type PermessoEstratto,
+} from '@/lib/kyc/parte-docs';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 import {
   extractLibrettoAction,
   extractIdentitaAction,
+  extractVisuraAction,
+  extractPermessoAction,
   submitNuovaPraticaAction,
 } from './actions';
 
@@ -56,6 +66,8 @@ type IdentitaFiles = {
   retro?: BlobSlot;
   single?: BlobSlot;
   permesso?: BlobSlot;
+  /** Visura camerale (solo AZIENDA / OPERATORE_AUTO). */
+  visura?: BlobSlot;
 };
 
 /**
@@ -82,7 +94,8 @@ function identitaUploading(files: IdentitaFiles): boolean {
     slotUploading(files.fronte) ||
     slotUploading(files.retro) ||
     slotUploading(files.single) ||
-    slotUploading(files.permesso)
+    slotUploading(files.permesso) ||
+    slotUploading(files.visura)
   );
 }
 
@@ -157,10 +170,6 @@ type Parte = {
    * e OPERATORE_AUTO settano isPG=true automaticamente.
    */
   tipoSoggetto: TipoSoggetto | null;
-  /** Solo per AZIENDA / OPERATORE_AUTO: data rilascio visura (YYYY-MM-DD). */
-  visuraData: string;
-  /** Solo per STRANIERO_EXTRA_UE: data scadenza permesso (YYYY-MM-DD). */
-  permessoData: string;
   nome: string;
   cognome: string;
   cf: string;
@@ -168,13 +177,20 @@ type Parte = {
   piva: string;
   telefono: string;
   email: string;
+  /**
+   * Verifica documentale OCR (fail-closed): risultati grezzi degli OCR sui
+   * documenti caricati per la parte, confrontati con i dati inseriti via
+   * validaParte (lib/kyc/parte-docs). Re-OCR solo al cambio file; al cambio
+   * file lo slot corrispondente viene invalidato (undefined).
+   */
+  identitaOcr?: IdentitaEstratta;
+  visuraOcr?: VisuraEstratta;
+  permessoOcr?: PermessoEstratto;
 };
 
 const emptyParte = (): Parte => ({
   isPG: false,
   tipoSoggetto: null,
-  visuraData: '',
-  permessoData: '',
   nome: '',
   cognome: '',
   cf: '',
@@ -182,6 +198,9 @@ const emptyParte = (): Parte => ({
   piva: '',
   telefono: '',
   email: '',
+  identitaOcr: undefined,
+  visuraOcr: undefined,
+  permessoOcr: undefined,
 });
 
 /**
@@ -257,6 +276,12 @@ const TIPO_CARDS: {
 
 export function WizardNuovaPratica({ error }: { error?: string }) {
   const [step, setStep] = useState(1);
+
+  // Al cambio step riporta la pagina in cima: gli step sono lunghi (upload +
+  // OCR + verifiche) e l'utente deve ripartire dall'inizio della sezione.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [step]);
   const [tipo, setTipo] = useState<Tipo>('SEMPLICE');
   const [multiplo, setMultiplo] = useState(false);
   const [numeroVeicoli, setNumeroVeicoli] = useState<number>(1);
@@ -279,7 +304,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     if (card.tipo !== 'MINIVOLTURA') {
       setAcquirente((prev) =>
         prev.tipoSoggetto === 'OPERATORE_AUTO'
-          ? { ...prev, tipoSoggetto: null, isPG: false, visuraData: '' }
+          ? { ...prev, tipoSoggetto: null, isPG: false, visuraOcr: undefined }
           : prev,
       );
     } else {
@@ -353,8 +378,15 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       // Un solo proprietario: pre-fill il venditore esistente (preserva docId/file).
       if (proprietari.length === 1) {
         const { nome, cognome } = splitNomeCompleto(proprietari[0]!);
-        if (!nome && !cognome) return prev;
-        return [{ ...prev[0]!, nome, cognome }];
+        // CF del proprietario dal libretto (C.2.2/C.2.3): pre-compila solo se
+        // non già inserito a mano. La verifica documentale lo confronterà con
+        // l'OCR del documento d'identità.
+        const cf =
+          !prev[0]!.cf.trim() && data.proprietarioCf
+            ? data.proprietarioCf.toUpperCase()
+            : prev[0]!.cf;
+        if (!nome && !cognome && cf === prev[0]!.cf) return prev;
+        return [{ ...prev[0]!, nome, cognome, cf }];
       }
       // Più proprietari: un venditore per ciascuno.
       return proprietari.map((p) => {
@@ -389,18 +421,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         ordine: i + 1,
         tipoSoggetto: v.tipoSoggetto,
         documentoIdentita: v.docId,
-        visuraData: v.visuraData ? new Date(v.visuraData) : null,
-        permessoData: v.permessoData ? new Date(v.permessoData) : null,
       })),
       flagProcura: false,
       flagSuccessione: false,
       acquirenteTipoSoggetto: acquirente.tipoSoggetto,
-      acquirenteVisuraData: acquirente.visuraData
-        ? new Date(acquirente.visuraData)
-        : null,
-      acquirentePermessoData: acquirente.permessoData
-        ? new Date(acquirente.permessoData)
-        : null,
       acquirenteDocumentoIdentita: acquirenteDocId,
       flagMinore: false,
     });
@@ -408,8 +432,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     veicoli,
     venditori,
     acquirente.tipoSoggetto,
-    acquirente.visuraData,
-    acquirente.permessoData,
     acquirenteDocId,
   ]);
 
@@ -480,9 +502,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     }
   };
 
-  // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte.
-  // Chiamato quando la BlobRef del file principale (fronte CI o single) è
-  // pronta. Non sovrascrive campi già compilati a mano dal broker.
+  // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte +
+  // salvataggio del risultato grezzo (`identitaOcr`) per la verifica documentale
+  // (validaParte). Chiamato quando la BlobRef del file principale (fronte CI o
+  // single) è pronta. Non sovrascrive i campi già compilati a mano dal broker.
   const runIdentitaOcr = async <P extends Parte>(
     ref: BlobRef,
     tipo: DocIdTipo,
@@ -492,10 +515,18 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       const res = await extractIdentitaAction(ref, tipo);
       if (!res.ok) return;
       const { nome, cognome, codiceFiscale } = res.data;
+      const identitaOcr: IdentitaEstratta = {
+        nome,
+        cognome,
+        codiceFiscale,
+      };
       onChange((prev) => {
-        if (prev.isPG) return prev;
+        // Persona giuridica: il documento è del legale rappresentante → non
+        // pre-fillare i campi azienda, ma conserva l'OCR per il verdetto.
+        if (prev.isPG) return { ...prev, identitaOcr };
         return {
           ...prev,
+          identitaOcr,
           nome: prev.nome.trim() ? prev.nome : nome ?? prev.nome,
           cognome: prev.cognome.trim() ? prev.cognome : cognome ?? prev.cognome,
           cf: prev.cf.trim() ? prev.cf : (codiceFiscale ?? prev.cf).toUpperCase(),
@@ -503,6 +534,38 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       });
     } catch {
       // best-effort: il broker può sempre compilare a mano
+    }
+  };
+
+  // Verifica documentale — OCR visura camerale (AZIENDA / OPERATORE_AUTO).
+  // Salva il risultato grezzo (`visuraOcr`) per validaParte (cross-check
+  // denominazione/P.IVA + freschezza ≤6 mesi). Re-OCR solo al cambio file.
+  const runVisuraOcr = async <P extends Parte>(
+    ref: BlobRef,
+    onChange: (updater: (p: P) => P) => void,
+  ) => {
+    try {
+      const res = await extractVisuraAction(ref);
+      if (!res.ok) return;
+      onChange((prev) => ({ ...prev, visuraOcr: res.data }));
+    } catch {
+      // best-effort: il verdetto resterà ILLEGGIBILE finché non si ricarica
+    }
+  };
+
+  // Verifica documentale — OCR permesso di soggiorno (STRANIERO_EXTRA_UE).
+  // Salva il risultato grezzo (`permessoOcr`) per validaParte (cross-check
+  // nominativo + scadenza valida). Re-OCR solo al cambio file.
+  const runPermessoOcr = async <P extends Parte>(
+    ref: BlobRef,
+    onChange: (updater: (p: P) => P) => void,
+  ) => {
+    try {
+      const res = await extractPermessoAction(ref);
+      if (!res.ok) return;
+      onChange((prev) => ({ ...prev, permessoOcr: res.data }));
+    } catch {
+      // best-effort: il verdetto resterà ILLEGGIBILE finché non si ricarica
     }
   };
 
@@ -545,8 +608,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       ordine: i + 1,
       isPG: v.isPG,
       tipoSoggetto: v.tipoSoggetto,
-      visuraData: v.visuraData || null,
-      permessoData: v.permessoData || null,
       nome: v.nome,
       cognome: v.cognome,
       cf: v.cf,
@@ -575,16 +636,16 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       if (slot.ref) blobRefs[`DOC__${key}`] = slot.ref;
     }
 
-    // Schema Documentale v7 (SD-B): tipo soggetto + date validità acquirente.
-    // (Per i venditori questi campi sono nel JSON `venditori` qui sopra.)
+    // Schema Documentale v7 (SD-B): tipo soggetto acquirente.
+    // (Per i venditori questo campo è nel JSON `venditori` qui sopra. Le date
+    // validità visura/permesso non si passano più: la validità è verificata
+    // via OCR nella verifica documentale, vedi lib/kyc/parte-docs.)
     if (acquirente.tipoSoggetto) {
       fd.append('acquirenteTipoSoggetto', acquirente.tipoSoggetto);
     }
-    if (acquirente.visuraData) fd.append('acquirenteVisuraData', acquirente.visuraData);
-    if (acquirente.permessoData) fd.append('acquirentePermessoData', acquirente.permessoData);
 
-    // B6: documento d'identità PER venditore negli slot VEND<n>_* (BlobRef). Il
-    // tipo documento (docId) viaggia nel JSON `venditori`.
+    // B6: documento d'identità + visura + permesso PER venditore negli slot
+    // VEND<n>_* (BlobRef). Il tipo documento (docId) viaggia nel JSON `venditori`.
     venditori.forEach((v, i) => {
       const n = i + 1;
       if (v.docId === 'CI') {
@@ -594,9 +655,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         blobRefs[`VEND${n}_ID`] = v.identita.single.ref;
       }
       if (v.identita.permesso?.ref) blobRefs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
+      if (v.identita.visura?.ref) blobRefs[`VEND${n}_VISURA`] = v.identita.visura.ref;
     });
 
-    // A7: documento d'identità acquirente (tipo + slot BlobRef).
+    // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
     fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
     if (acquirenteDocId === 'CI') {
       if (acquirenteIdentita.fronte?.ref) blobRefs['ACQ_ID_FRONTE'] = acquirenteIdentita.fronte.ref;
@@ -605,6 +667,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       blobRefs['ACQ_ID'] = acquirenteIdentita.single.ref;
     }
     if (acquirenteIdentita.permesso?.ref) blobRefs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
+    if (acquirenteIdentita.visura?.ref) blobRefs['ACQ_VISURA'] = acquirenteIdentita.visura.ref;
 
     // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
     fd.append('blobRefs', JSON.stringify(blobRefs));
@@ -658,22 +721,32 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     { flagProcura: false },
   );
 
+  // Verifica documentale OCR (fail-closed): verdetto per ogni venditore e per
+  // l'acquirente, calcolato dai campi inseriti + OCR salvati. `now` unico per
+  // tutta la render così i verdetti sono coerenti tra gate e Alert.
+  const now = new Date();
+  const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, now));
+  const verdettoAcquirente = verificaDocumentaleParte(acquirente, now);
+
   // Gate per lasciare lo step 2 (Venditore): ogni venditore valido + identità
-  // presente (BlobRef) + nessun upload in corso + nessun mismatch insiemistico.
+  // presente (BlobRef) + nessun upload in corso + verifica documentale OK
+  // (fail-closed) + nessun mismatch insiemistico.
   const canStep2 =
     venditori.every(
-      (v) =>
+      (v, i) =>
         parteValida(v) &&
         identitaPresente(v.docId, v.identita) &&
-        !identitaUploading(v.identita),
+        !identitaUploading(v.identita) &&
+        verdettiVenditori[i]!.ok,
     ) && ccVend !== 'MISMATCH';
 
   // Gate per lasciare lo step 3 (Acquirente): parte valida + identità (BlobRef)
-  // pronta + nessun upload in corso.
+  // pronta + nessun upload in corso + verifica documentale OK (fail-closed).
   const canStep3 =
     parteValida(acquirente) &&
     identitaPresente(acquirenteDocId, acquirenteIdentita) &&
-    !identitaUploading(acquirenteIdentita);
+    !identitaUploading(acquirenteIdentita) &&
+    verdettoAcquirente.ok;
 
   // Step Documenti: tutti i documenti richiesti (esclusi i libretti) devono
   // avere la BlobRef caricata + nessun upload in corso, prima di proseguire.
@@ -846,6 +919,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                   docId={v.docId}
                   onDocId={(t) => updateVenditore(idx, { docId: t })}
                   files={v.identita}
+                  isPG={v.isPG}
+                  tipoSoggetto={v.tipoSoggetto}
                   onFiles={(updater) =>
                     setVenditori((prev) =>
                       prev.map((vv, i) =>
@@ -860,7 +935,55 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                       ),
                     )
                   }
+                  onVisuraRef={(ref) =>
+                    runVisuraOcr<VenditoreInput>(ref, (upd) =>
+                      setVenditori((prev) =>
+                        prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
+                      ),
+                    )
+                  }
+                  onPermessoRef={(ref) =>
+                    runPermessoOcr<VenditoreInput>(ref, (upd) =>
+                      setVenditori((prev) =>
+                        prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
+                      ),
+                    )
+                  }
+                  onInvalidateVisura={() =>
+                    setVenditori((prev) =>
+                      prev.map((vv, i) =>
+                        i === idx ? { ...vv, visuraOcr: undefined } : vv,
+                      ),
+                    )
+                  }
+                  onInvalidatePermesso={() =>
+                    setVenditori((prev) =>
+                      prev.map((vv, i) =>
+                        i === idx ? { ...vv, permessoOcr: undefined } : vv,
+                      ),
+                    )
+                  }
+                  onInvalidateIdentita={() =>
+                    setVenditori((prev) =>
+                      prev.map((vv, i) =>
+                        i === idx ? { ...vv, identitaOcr: undefined } : vv,
+                      ),
+                    )
+                  }
                 />
+
+                {/* Verifica documentale OCR (fail-closed): finché ci sono
+                    problemi il venditore non supera il gate "Avanti". */}
+                {verdettiVenditori[idx] && !verdettiVenditori[idx]!.ok && (
+                  <Alert variant="error">
+                    <strong>Verifica documenti del venditore non superata:</strong>
+                    <ul className="mt-1 list-disc pl-5">
+                      {verdettiVenditori[idx]!.problemi.map((p, i) => (
+                        <li key={i}>{p}</li>
+                      ))}
+                    </ul>
+                  </Alert>
+                )}
               </div>
             ))}
 
@@ -903,13 +1026,47 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               docId={acquirenteDocId}
               onDocId={setAcquirenteDocId}
               files={acquirenteIdentita}
+              isPG={acquirente.isPG}
+              tipoSoggetto={acquirente.tipoSoggetto}
               onFiles={setAcquirenteIdentita}
               onMainRef={(ref) =>
                 runIdentitaOcr(ref, acquirenteDocId, (updater) =>
                   setAcquirente((prev) => updater(prev)),
                 )
               }
+              onVisuraRef={(ref) =>
+                runVisuraOcr(ref, (updater) =>
+                  setAcquirente((prev) => updater(prev)),
+                )
+              }
+              onPermessoRef={(ref) =>
+                runPermessoOcr(ref, (updater) =>
+                  setAcquirente((prev) => updater(prev)),
+                )
+              }
+              onInvalidateVisura={() =>
+                setAcquirente((prev) => ({ ...prev, visuraOcr: undefined }))
+              }
+              onInvalidatePermesso={() =>
+                setAcquirente((prev) => ({ ...prev, permessoOcr: undefined }))
+              }
+              onInvalidateIdentita={() =>
+                setAcquirente((prev) => ({ ...prev, identitaOcr: undefined }))
+              }
             />
+
+            {/* Verifica documentale OCR (fail-closed): finché ci sono problemi
+                l'acquirente non supera il gate "Avanti". */}
+            {!verdettoAcquirente.ok && (
+              <Alert variant="error">
+                <strong>Verifica documenti dell&apos;acquirente non superata:</strong>
+                <ul className="mt-1 list-disc pl-5">
+                  {verdettoAcquirente.problemi.map((p, i) => (
+                    <li key={i}>{p}</li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
               <Button variant="secondary" onClick={() => setStep(2)}>
@@ -1341,19 +1498,19 @@ function ParteForm({
   onChange: (p: Parte) => void;
   tipiSoggetto: { value: TipoSoggetto; label: string }[];
 }) {
-  // Schema Documentale v7 (SD-B): il select tipoSoggetto guida i campi
-  // condizionali (data visura per AZIENDA/OPERATORE_AUTO, data permesso
-  // per STRANIERO_EXTRA_UE) e popola in cascata isPG e isPersonaGiuridica
-  // per backward compatibility con la rotta esistente.
+  // Schema Documentale v7 (SD-B): il select tipoSoggetto popola in cascata
+  // isPG/isPersonaGiuridica per backward compatibility con la rotta esistente.
+  // La validità di visura/permesso non si inserisce più a mano: è verificata via
+  // OCR nella verifica documentale (lib/kyc/parte-docs). Al cambio tipo soggetto
+  // invalidiamo gli OCR non più pertinenti così il verdetto resta coerente.
   const handleTipoSoggetto = (next: TipoSoggetto): void => {
     const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
     onChange({
       ...parte,
       tipoSoggetto: next,
       isPG,
-      // Reset le date se il nuovo tipo non le usa
-      visuraData: isPG ? parte.visuraData : '',
-      permessoData: next === 'STRANIERO_EXTRA_UE' ? parte.permessoData : '',
+      visuraOcr: isPG ? parte.visuraOcr : undefined,
+      permessoOcr: next === 'STRANIERO_EXTRA_UE' ? parte.permessoOcr : undefined,
     });
   };
 
@@ -1376,41 +1533,6 @@ function ParteForm({
           ))}
         </Select>
       </Field>
-
-      {parte.tipoSoggetto === 'STRANIERO_EXTRA_UE' && (
-        <Field
-          label="Data scadenza permesso di soggiorno"
-          required
-          hint="Il permesso deve essere ancora valido alla data di invio"
-          className="mt-3"
-        >
-          <Input
-            type="date"
-            value={parte.permessoData}
-            onChange={(e) =>
-              onChange({ ...parte, permessoData: e.target.value })
-            }
-          />
-        </Field>
-      )}
-
-      {(parte.tipoSoggetto === 'AZIENDA' ||
-        parte.tipoSoggetto === 'OPERATORE_AUTO') && (
-        <Field
-          label="Data rilascio visura camerale"
-          required
-          hint="La visura deve essere rilasciata negli ultimi 6 mesi"
-          className="mt-3"
-        >
-          <Input
-            type="date"
-            value={parte.visuraData}
-            onChange={(e) =>
-              onChange({ ...parte, visuraData: e.target.value })
-            }
-          />
-        </Field>
-      )}
 
       <div className="my-3 h-px bg-pv-slate-200" />
       {parte.isPG ? (
@@ -1598,36 +1720,61 @@ function UploadCard({
 }
 
 /**
- * A7: sezione "Documento d'identità" sotto ciascuna parte. Il broker sceglie
- * il tipo documento; per la CI servono fronte+retro, per passaporto/patente un
- * file unico. Il permesso di soggiorno è sempre opzionale. Ogni file viene
- * caricato subito su Blob (client upload) e ne teniamo la BlobRef. Quando la
- * BlobRef del file principale (fronte CI o single) è pronta viene avviato l'OCR
- * di pre-fill via `onMainRef`.
+ * A7 + Verifica documentale: sezione "Documento d'identità" sotto ciascuna
+ * parte. Il broker sceglie il tipo documento; per la CI servono fronte+retro,
+ * per passaporto/patente un file unico. In base al tipo soggetto compaiono i
+ * blocchi condizionali: Visura camerale (AZIENDA / OPERATORE_AUTO) e Permesso
+ * di soggiorno (STRANIERO_EXTRA_UE). Ogni file viene caricato subito su Blob
+ * (client upload) e ne teniamo la BlobRef. Al completamento dell'upload parte
+ * l'OCR corrispondente (identità via `onMainRef`, visura via `onVisuraRef`,
+ * permesso via `onPermessoRef`) il cui risultato alimenta la verifica
+ * documentale (validaParte). Al cambio file l'OCR corrispondente viene
+ * invalidato via `onInvalidate*` (re-OCR solo al cambio file).
  */
 function IdentitaSection({
   titolo,
   docId,
   onDocId,
   files,
+  isPG,
+  tipoSoggetto,
   onFiles,
   onMainRef,
+  onVisuraRef,
+  onPermessoRef,
+  onInvalidateIdentita,
+  onInvalidateVisura,
+  onInvalidatePermesso,
 }: {
   titolo: string;
   docId: DocIdTipo;
   onDocId: (t: DocIdTipo) => void;
   files: IdentitaFiles;
+  isPG: boolean;
+  tipoSoggetto: TipoSoggetto | null;
   onFiles: (updater: (prev: IdentitaFiles) => IdentitaFiles) => void;
   onMainRef: (ref: BlobRef) => void;
+  onVisuraRef: (ref: BlobRef) => void;
+  onPermessoRef: (ref: BlobRef) => void;
+  onInvalidateIdentita: () => void;
+  onInvalidateVisura: () => void;
+  onInvalidatePermesso: () => void;
 }) {
-  // Upload di un singolo campo identità su Blob, aggiornando lo slot via
-  // `onFiles`. Se è il file principale (main=true), all'esito chiama onMainRef
-  // per l'OCR di pre-fill. Se file=null, rimuove lo slot (invalida la ref).
+  const mostraVisura =
+    isPG || tipoSoggetto === 'AZIENDA' || tipoSoggetto === 'OPERATORE_AUTO';
+  const mostraPermesso = tipoSoggetto === 'STRANIERO_EXTRA_UE';
+
+  // Upload di un singolo campo su Blob, aggiornando lo slot via `onFiles`. Al
+  // termine chiama `afterUpload(ref)` (es. OCR). `onInvalidate` azzera l'OCR
+  // collegato sia al cambio file (re-OCR) sia alla rimozione. Se file=null,
+  // rimuove lo slot (invalida la ref) e invalida l'OCR.
   const handleField = (
     field: keyof IdentitaFiles,
     file: File | null,
-    main: boolean,
+    afterUpload?: (ref: BlobRef) => void,
+    onInvalidate?: () => void,
   ) => {
+    onInvalidate?.();
     if (!file) {
       onFiles((prev) => ({ ...prev, [field]: undefined }));
       return;
@@ -1648,7 +1795,7 @@ function IdentitaSection({
           ...prev,
           [field]: { ref, file, uploading: false, progress: 100, error: null },
         }));
-        if (main) onMainRef(ref);
+        afterUpload?.(ref);
       })
       .catch((err: unknown) => {
         onFiles((prev) => ({
@@ -1686,31 +1833,51 @@ function IdentitaSection({
             <UploadCard
               label="Fronte"
               slot={files.fronte}
-              onSelect={(f) => handleField('fronte', f, true)}
-              onRemove={() => handleField('fronte', null, true)}
+              onSelect={(f) => handleField('fronte', f, onMainRef, onInvalidateIdentita)}
+              onRemove={() => handleField('fronte', null, onMainRef, onInvalidateIdentita)}
             />
             <UploadCard
               label="Retro"
               slot={files.retro}
-              onSelect={(f) => handleField('retro', f, false)}
-              onRemove={() => handleField('retro', null, false)}
+              onSelect={(f) => handleField('retro', f)}
+              onRemove={() => handleField('retro', null)}
             />
           </>
         ) : (
           <UploadCard
             label={docId === 'PASSAPORTO' ? 'Passaporto' : 'Patente'}
             slot={files.single}
-            onSelect={(f) => handleField('single', f, true)}
-            onRemove={() => handleField('single', null, true)}
+            onSelect={(f) => handleField('single', f, onMainRef, onInvalidateIdentita)}
+            onRemove={() => handleField('single', null, onMainRef, onInvalidateIdentita)}
           />
         )}
-        <UploadCard
-          label="Permesso di soggiorno (opzionale)"
-          slot={files.permesso}
-          onSelect={(f) => handleField('permesso', f, false)}
-          onRemove={() => handleField('permesso', null, false)}
-        />
       </div>
+
+      {/* Visura camerale: solo per AZIENDA / OPERATORE_AUTO. L'OCR alimenta il
+          cross-check denominazione/P.IVA + freschezza ≤6 mesi (validaParte). */}
+      {mostraVisura && (
+        <div className="mt-3">
+          <UploadCard
+            label="Visura camerale (ultimi 6 mesi)"
+            slot={files.visura}
+            onSelect={(f) => handleField('visura', f, onVisuraRef, onInvalidateVisura)}
+            onRemove={() => handleField('visura', null, onVisuraRef, onInvalidateVisura)}
+          />
+        </div>
+      )}
+
+      {/* Permesso di soggiorno: solo per STRANIERO_EXTRA_UE. L'OCR alimenta il
+          cross-check nominativo + scadenza valida (validaParte). */}
+      {mostraPermesso && (
+        <div className="mt-3">
+          <UploadCard
+            label="Permesso di soggiorno (in corso di validità)"
+            slot={files.permesso}
+            onSelect={(f) => handleField('permesso', f, onPermessoRef, onInvalidatePermesso)}
+            onRemove={() => handleField('permesso', null, onPermessoRef, onInvalidatePermesso)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1725,22 +1892,42 @@ function RiepilogoRow({ label, value }: { label: string; value: string }) {
 }
 
 function parteValida(p: Parte): boolean {
-  // Schema Documentale v7 (SD-B): tipoSoggetto obbligatorio + se richiesto
-  // anche la data corrispondente (visura per AZIENDA/OPERATORE_AUTO,
-  // permesso per STRANIERO_EXTRA_UE).
+  // Schema Documentale v7 (SD-B): tipoSoggetto obbligatorio + anagrafica
+  // completa. La validità dei documenti (visura ≤6 mesi, permesso non scaduto)
+  // è verificata via OCR nella verifica documentale (lib/kyc/parte-docs).
   if (!p.tipoSoggetto) return false;
-  if (
-    (p.tipoSoggetto === 'AZIENDA' || p.tipoSoggetto === 'OPERATORE_AUTO') &&
-    !p.visuraData
-  ) {
-    return false;
-  }
-  if (p.tipoSoggetto === 'STRANIERO_EXTRA_UE' && !p.permessoData) return false;
 
   if (p.isPG) return p.ragioneSociale.trim().length > 0 && p.piva.length === 11;
   return (
     p.nome.trim().length > 0 && p.cognome.trim().length > 0 && p.cf.trim().length === 16
   );
+}
+
+/**
+ * Verifica documentale OCR (fail-closed) di una parte: costruisce ParteDati dai
+ * campi inseriti e OcrParte dai risultati OCR salvati, poi delega a validaParte
+ * (lib/kyc/parte-docs). `ok` solo se ogni documento richiesto è presente e ogni
+ * verdetto è MATCH. Stesso modulo puro usato lato server (autoritativo).
+ */
+function verificaDocumentaleParte(
+  p: Parte,
+  now: Date,
+): { ok: boolean; problemi: string[] } {
+  const parteDati: ParteDati = {
+    isPersonaGiuridica: p.isPG,
+    tipoSoggetto: p.tipoSoggetto,
+    nome: p.nome,
+    cognome: p.cognome,
+    cf: p.cf,
+    ragioneSociale: p.ragioneSociale,
+    piva: p.piva,
+  };
+  const ocr: OcrParte = {
+    identita: p.identitaOcr,
+    visura: p.visuraOcr,
+    permesso: p.permessoOcr,
+  };
+  return validaParte(parteDati, ocr, now);
 }
 
 function parteNome(p: Parte): string {

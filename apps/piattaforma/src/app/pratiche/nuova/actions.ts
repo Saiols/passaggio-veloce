@@ -17,6 +17,15 @@ import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { venditoriCrossCheck } from '@/lib/kyc/match';
+import { extractVisura } from '@/lib/kyc/visura-parser';
+import { parsePermessoText } from '@/lib/kyc/extract-permesso';
+import {
+  validaParte,
+  type VisuraEstratta,
+  type PermessoEstratto,
+  type ParteDati,
+  type OcrParte,
+} from '@/lib/kyc/parte-docs';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import {
@@ -193,6 +202,64 @@ export async function extractIdentitaAction(
   }
 }
 
+export type ExtractVisuraResult =
+  | { ok: true; data: VisuraEstratta }
+  | { ok: false; error: string };
+
+/**
+ * OCR della visura camerale del venditore/acquirente (azienda/operatore). Estrae
+ * denominazione, P.IVA, data emissione e amministratore per il cross-check
+ * Visura↔azienda (vedi lib/kyc/parte-docs).
+ */
+export async function extractVisuraAction(ref: FileRef): Promise<ExtractVisuraResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  if (!ref?.key || ref.size === 0) return { ok: false, error: 'File visura mancante' };
+  if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
+  if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+  try {
+    const buffer = await storageGetBuffer(ref.key);
+    const v = await extractVisura({ buffer, mimeType: ref.type, originalFilename: ref.name });
+    return {
+      ok: true,
+      data: {
+        denominazione: v.denominazione,
+        partitaIva: v.partitaIva,
+        dataEmissione: v.dataEmissione,
+        amministratore: v.amministratore,
+      },
+    };
+  } catch (e) {
+    console.error('[ocr] extractVisura failed:', (e as Error).message);
+    return { ok: false, error: 'OCR non riuscito sulla visura. Ricarica un file leggibile.' };
+  }
+}
+
+export type ExtractPermessoResult =
+  | { ok: true; data: PermessoEstratto }
+  | { ok: false; error: string };
+
+/**
+ * OCR del permesso di soggiorno (venditore/acquirente straniero extra-UE).
+ * Estrae cognome/nome/scadenza per il cross-check col soggetto (parte-docs).
+ */
+export async function extractPermessoAction(ref: FileRef): Promise<ExtractPermessoResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  if (!ref?.key || ref.size === 0) return { ok: false, error: 'File permesso mancante' };
+  if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
+  if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+  try {
+    const buffer = await storageGetBuffer(ref.key);
+    const ocr = await getOcr();
+    const text = (await ocr.extractText({ buffer, mimeType: ref.type, originalFilename: ref.name })).text;
+    return { ok: true, data: parsePermessoText(text) };
+  } catch (e) {
+    console.error('[ocr] extractPermesso failed:', (e as Error).message);
+    return { ok: false, error: 'OCR non riuscito sul permesso. Ricarica un file leggibile.' };
+  }
+}
+
 // Tratta correttamente "false" / "true" / "on" / assenza di campo dalle FormData
 const formBool = z.preprocess(
   (v) => v === 'true' || v === 'on' || v === true,
@@ -238,8 +305,6 @@ const venditoreSchema = z.object({
   ordine: z.coerce.number().int().min(1).max(50),
   isPG: z.boolean().default(false),
   tipoSoggetto: tipoSoggettoEnum.optional().nullable(),
-  visuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
-  permessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   nome: z.string().trim().max(80).optional().nullable(),
   cognome: z.string().trim().max(80).optional().nullable(),
   cf: z.string().trim().max(16).optional().nullable(),
@@ -311,8 +376,6 @@ const submitSchema = z.object({
   // Schema Documentale v7 (SD-B): branching variables.
   // Quelle del venditore sono ora per-venditore (vedi `venditori` sopra).
   acquirenteTipoSoggetto: tipoSoggettoEnum.optional(),
-  acquirenteVisuraData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  acquirentePermessoData: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 
   // Tipi pratica multiveicolo (A7): documento d'identità scelto per parte.
   acquirenteDocumentoIdentita: z
@@ -425,18 +488,10 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       ordine: v.ordine,
       tipoSoggetto: v.tipoSoggetto ?? null,
       documentoIdentita: v.docId,
-      visuraData: v.visuraData ? new Date(v.visuraData) : null,
-      permessoData: v.permessoData ? new Date(v.permessoData) : null,
     })),
     flagProcura: d.flagProcura,
     flagSuccessione: d.flagSuccessione,
     acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
-    acquirenteVisuraData: d.acquirenteVisuraData
-      ? new Date(d.acquirenteVisuraData)
-      : null,
-    acquirentePermessoData: d.acquirentePermessoData
-      ? new Date(d.acquirentePermessoData)
-      : null,
     acquirenteDocumentoIdentita: d.acquirenteDocumentoIdentita,
     flagMinore: d.flagMinore,
   });
@@ -517,7 +572,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   // e li mappiamo al rispettivo DocumentoTipo. Il permesso di soggiorno è
   // opzionale (la presenza per stranieri è già gestita dall'engine via BLOCCO).
   type IdentitaDocCandidate = {
-    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO';
+    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO' | 'VISURA_CAMERALE';
     owner: 'VENDITORE' | 'ACQUIRENTE';
     // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
     // documento appartiene (serve per il linkage Documento.venditoreId).
@@ -594,6 +649,18 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
         ref: validateIdentitaRef(permesso, 'permesso di soggiorno'),
       });
     }
+
+    // Visura camerale (azienda/operatore): slot <PREFIX>_VISURA. La presenza
+    // obbligatoria per le PG è imposta dalla verifica fail-closed più sotto.
+    const visura = getRef(`${prefix}_VISURA`);
+    if (visura && visura.size > 0) {
+      identitaCandidates.push({
+        tipo: 'VISURA_CAMERALE',
+        owner,
+        venditoreOrdine,
+        ref: validateIdentitaRef(visura, 'visura camerale'),
+      });
+    }
   };
 
   // Un blocco di file identità per ciascun venditore (slot VEND<ordine>_*).
@@ -634,6 +701,99 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
     redirect(
       `/pratiche/nuova?error=${encodeURIComponent(
         "I venditori non corrispondono agli intestatari del libretto",
+      )}`,
+    );
+  }
+
+  // Verifica documentale fail-closed (autoritativa): per ogni parte ri-eseguiamo
+  // l'OCR dei documenti caricati e confrontiamo coi dati inseriti
+  // (lib/kyc/parte-docs). Se un documento non corrisponde, è scaduto o non è
+  // leggibile → blocco. Lo stesso controllo gira nel wizard per il feedback.
+  const ocrParteServer = async (
+    prefix: string,
+    docId: 'CI' | 'PASSAPORTO' | 'PATENTE',
+  ): Promise<OcrParte> => {
+    const out: OcrParte = {};
+    const idRef = docId === 'CI' ? getRef(`${prefix}_ID_FRONTE`) : getRef(`${prefix}_ID`);
+    if (idRef) {
+      const text = (
+        await (await getOcr()).extractText({
+          buffer: await storageGetBuffer(idRef.key),
+          mimeType: idRef.type,
+          originalFilename: idRef.name,
+        })
+      ).text;
+      out.identita = extractIdentita(text, docId);
+    }
+    const vRef = getRef(`${prefix}_VISURA`);
+    if (vRef) {
+      out.visura = await extractVisura({
+        buffer: await storageGetBuffer(vRef.key),
+        mimeType: vRef.type,
+        originalFilename: vRef.name,
+      });
+    }
+    const pRef = getRef(`${prefix}_PERMESSO`);
+    if (pRef) {
+      const text = (
+        await (await getOcr()).extractText({
+          buffer: await storageGetBuffer(pRef.key),
+          mimeType: pRef.type,
+          originalFilename: pRef.name,
+        })
+      ).text;
+      out.permesso = parsePermessoText(text);
+    }
+    return out;
+  };
+
+  const partiDaVerificare: {
+    parte: ParteDati;
+    prefix: string;
+    docId: 'CI' | 'PASSAPORTO' | 'PATENTE';
+    label: string;
+  }[] = [
+    ...venditori.map((v) => ({
+      parte: {
+        isPersonaGiuridica: v.isPG,
+        tipoSoggetto: v.tipoSoggetto ?? null,
+        nome: v.nome ?? undefined,
+        cognome: v.cognome ?? undefined,
+        cf: v.cf ?? undefined,
+        ragioneSociale: v.ragioneSociale ?? undefined,
+        piva: v.piva ?? undefined,
+      } satisfies ParteDati,
+      prefix: `VEND${v.ordine}`,
+      docId: v.docId,
+      label: venditori.length > 1 ? `Venditore ${v.ordine}` : 'Venditore',
+    })),
+    {
+      parte: {
+        isPersonaGiuridica: d.acquirenteIsPG,
+        tipoSoggetto: d.acquirenteTipoSoggetto ?? null,
+        nome: d.acquirenteNome,
+        cognome: d.acquirenteCognome,
+        cf: d.acquirenteCF,
+        ragioneSociale: d.acquirenteRagioneSociale,
+        piva: d.acquirentePIVA,
+      } satisfies ParteDati,
+      prefix: 'ACQ',
+      docId: d.acquirenteDocumentoIdentita,
+      label: 'Acquirente',
+    },
+  ];
+
+  const verificheParti = await Promise.all(
+    partiDaVerificare.map(async (x) => ({
+      label: x.label,
+      esito: validaParte(x.parte, await ocrParteServer(x.prefix, x.docId), new Date()),
+    })),
+  );
+  const parteKo = verificheParti.find((v) => !v.esito.ok);
+  if (parteKo) {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        `${parteKo.label} — ${parteKo.esito.problemi[0] ?? 'documenti non validi'}`,
       )}`,
     );
   }
@@ -697,13 +857,9 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
 
       // Schema Documentale v7 (SD-B): branching variables persistite.
       // Quelle del venditore sono ora per-venditore (modello Venditore, sotto).
+      // Le date visura/permesso non sono più raccolte (verifica via OCR nello
+      // step parte): le colonne restano null.
       acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
-      acquirenteVisuraData: d.acquirenteVisuraData
-        ? new Date(d.acquirenteVisuraData)
-        : null,
-      acquirentePermessoData: d.acquirentePermessoData
-        ? new Date(d.acquirentePermessoData)
-        : null,
       flagSuccessione: d.flagSuccessione,
       flagMinore: d.flagMinore,
 
@@ -787,8 +943,6 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
           telefono: v.telefono || null,
           email: v.email?.toLowerCase() || null,
           tipoSoggetto: v.tipoSoggetto ?? null,
-          visuraData: v.visuraData ? new Date(v.visuraData) : null,
-          permessoData: v.permessoData ? new Date(v.permessoData) : null,
           documentoIdentita: v.docId,
         },
       });

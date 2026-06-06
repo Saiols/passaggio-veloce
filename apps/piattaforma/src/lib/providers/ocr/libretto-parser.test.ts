@@ -22,7 +22,7 @@ N° A000000M000
 (C.2.2) MARIA
 (A)
 AB123CD
-NATO IL 09.12.1980 (RSSMRA80A41F205Z)
+NATO IL 09.12.1980 (RSSMRA80A01F205X)
 A MILANO (MI)
 (C.2.3) VIA ROMA 1
 MILANO (MI)
@@ -61,6 +61,9 @@ describe('parseLibrettoText — carta reale (anonimizzata)', () => {
   it('proprietario = (C.2.1) cognome + (C.2.2) nome', () => {
     expect(r.proprietarioAttuale).toBe('ROSSI MARIA');
     expect(r.proprietari).toEqual(['ROSSI MARIA']);
+  });
+  it('estrae il CF del proprietario tra (C.2.2) e (C.2.3)', () => {
+    expect(r.proprietarioCf).toBe('RSSMRA80A01F205X');
   });
   it('pre-2015 dalla data di acquisto (I), NON dalla prima immatricolazione', () => {
     // (I)=2026 → post-2015, anche se (B)=2012.

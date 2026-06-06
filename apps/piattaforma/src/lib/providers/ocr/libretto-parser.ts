@@ -1,7 +1,9 @@
 import type { LibrettoCircolazioneData } from './types';
+import { isValidCodiceFiscale } from '@/lib/kyc/match';
 
 const TARGA_RE = /\b([A-Z]{2}\d{3}[A-Z]{2})\b/;
 const TELAIO_RE = /\b([A-HJ-NPR-Z0-9]{17})\b/;
+const CF_RE = /\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/;
 const DATE = String.raw`(\d{2})[./-](\d{2})[./-](\d{4})`;
 
 // La carta di circolazione riporta sul retro la legenda "SIGNIFICATO DEI CODICI
@@ -60,6 +62,17 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
   const proprietarioAttuale = intestatario.length ? intestatario : undefined;
   const proprietari = proprietarioAttuale ? [proprietarioAttuale] : undefined;
 
+  // Codice fiscale del proprietario: tra parentesi nel segmento tra (C.2.2) e
+  // (C.2.3) (es. "... (SNAFRC94T49F205Y) ..."). Validato col check digit.
+  const c22 = data.search(/\(C\.2\.2\)/);
+  const c23 = data.search(/\(C\.2\.3\)/);
+  let proprietarioCf: string | undefined;
+  if (c22 >= 0) {
+    const seg = data.slice(c22, c23 > c22 ? c23 : c22 + 400);
+    const cfMatch = CF_RE.exec(seg);
+    if (cfMatch && isValidCodiceFiscale(cfMatch[1]!)) proprietarioCf = cfMatch[1]!;
+  }
+
   // pre-2015 = regime Certificato di Proprietà, determinato dalla data di
   // ACQUISTO dell'attuale proprietario (I); fallback alla prima immatricolazione.
   const annoRegime = acquisto?.year ?? immat?.year;
@@ -71,6 +84,7 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
     dataImmatricolazione,
     dataAcquisto,
     proprietarioAttuale,
+    proprietarioCf,
     proprietari,
     preImm2015,
     flagComodatoDuso: /COMODATO/.test(data),

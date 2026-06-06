@@ -1,7 +1,7 @@
 import type { DocumentoRichiesto, EsitoSchemaDocumentale, DocumentoTipoEngine, ParteDocumento } from './engine';
 
 export function docKey(d: DocumentoRichiesto): string {
-  return `${d.tipo}__${d.parte}__${d.veicoloOrdine ?? 0}`;
+  return `${d.tipo}__${d.parte}__${d.veicoloOrdine ?? 0}__${d.venditoreOrdine ?? 0}`;
 }
 
 const TIPI_IDENTITA: ReadonlySet<string> = new Set([
@@ -50,5 +50,12 @@ const PARTE_LABEL: Record<Exclude<ParteDocumento, 'VEICOLO'>, string> = {
 export function docLabel(d: DocumentoRichiesto): string {
   const tipo = TIPO_LABEL[d.tipo];
   if (d.parte === 'VEICOLO') return `${tipo} — Veicolo ${d.veicoloOrdine ?? 1}`;
-  return `${tipo} — ${PARTE_LABEL[d.parte]}`;
+  const parteLbl = PARTE_LABEL[d.parte];
+  if (
+    d.venditoreOrdine !== undefined &&
+    (d.parte === 'VENDITORE' || d.parte === 'AMMINISTRATORE_VENDITORE')
+  ) {
+    return `${tipo} — ${parteLbl} — Venditore ${d.venditoreOrdine}`;
+  }
+  return `${tipo} — ${parteLbl}`;
 }

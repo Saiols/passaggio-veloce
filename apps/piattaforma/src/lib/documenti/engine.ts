@@ -54,6 +54,7 @@ export type DocumentoRichiesto = {
   parte: ParteDocumento;
   motivo: string;
   veicoloOrdine?: number;
+  venditoreOrdine?: number;
 };
 
 export type SchemaDocumentaleInput = {

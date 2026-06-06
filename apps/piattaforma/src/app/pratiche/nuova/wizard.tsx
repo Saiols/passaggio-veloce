@@ -6,6 +6,8 @@ import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
+import { DocCard } from '@/components/doc-card';
+import { docKey, docLabel, requiredUploadDocs } from '@/lib/documenti/richiesti';
 import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
@@ -29,7 +31,8 @@ function splitNomeCompleto(full: string): { nome: string; cognome: string } {
 const STEPS = [
   { id: 1, label: 'Tipo & veicoli', title: 'Tipo pratica e veicoli', hint: 'Scegli il tipo di pratica e carica i libretti di circolazione.' },
   { id: 2, label: 'Parti', title: 'Parti coinvolte', hint: 'Dati del venditore e dell\'acquirente + eventuali flag speciali.' },
-  { id: 3, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
+  { id: 3, label: 'Documenti', title: 'Documenti richiesti', hint: 'Carica i documenti richiesti. La firma avviene in agenzia con gli originali.' },
+  { id: 4, label: 'Invio', title: 'Localizzazione e invio', hint: 'Comune di riferimento e riepilogo finale.' },
 ] as const;
 
 type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
@@ -76,17 +79,6 @@ function resizeVeicoli(prev: VeicoloInput[], n: number): VeicoloInput[] {
   return next;
 }
 
-// Tipi documento caricabili per parte (sottoinsieme di DocumentoTipo lato DB).
-const DOC_TIPI = [
-  'CI_FRONTE',
-  'CI_RETRO',
-  'CODICE_FISCALE',
-  'PROCURA',
-  'VISURA_CAMERALE',
-  'PERMESSO_SOGGIORNO',
-] as const;
-type DocTipo = (typeof DOC_TIPI)[number];
-
 type Parte = {
   isPG: boolean;
   /**
@@ -106,7 +98,6 @@ type Parte = {
   piva: string;
   telefono: string;
   email: string;
-  documenti: Partial<Record<DocTipo, File>>;
 };
 
 const emptyParte = (): Parte => ({
@@ -121,7 +112,6 @@ const emptyParte = (): Parte => ({
   piva: '',
   telefono: '',
   email: '',
-  documenti: {},
 });
 
 const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
@@ -139,30 +129,6 @@ const TIPI_SOGGETTO_ACQUIRENTE_SEMPLICE: { value: TipoSoggetto; label: string }[
 
 const TIPI_SOGGETTO_ACQUIRENTE_MINIVOLTURA: { value: TipoSoggetto; label: string }[] = [
   { value: 'OPERATORE_AUTO', label: 'Operatore auto / Commerciante' },
-];
-
-function labelDocTipo(t: DocTipo, isPG: boolean): string {
-  if (t === 'CI_FRONTE')
-    return isPG ? 'CI legale rappresentante (fronte)' : "Carta d'identità (fronte)";
-  if (t === 'CI_RETRO')
-    return isPG ? 'CI legale rappresentante (retro)' : "Carta d'identità (retro)";
-  if (t === 'CODICE_FISCALE') return 'Tessera codice fiscale';
-  if (t === 'PROCURA') return 'Procura';
-  if (t === 'VISURA_CAMERALE') return 'Visura camerale';
-  if (t === 'PERMESSO_SOGGIORNO') return 'Permesso di soggiorno';
-  return t;
-}
-
-const DOC_TIPI_FISICA: readonly DocTipo[] = [
-  'CI_FRONTE',
-  'CI_RETRO',
-  'CODICE_FISCALE',
-  'PROCURA',
-];
-const DOC_TIPI_GIURIDICA: readonly DocTipo[] = [
-  'VISURA_CAMERALE',
-  'CI_FRONTE',
-  'CI_RETRO',
 ];
 
 /** Card selezionabile per il tipo pratica (4 combinazioni tipo × multiplo). */
@@ -257,6 +223,9 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
+
+  // Step Documenti: file caricati per documento richiesto (chiave = docKey).
+  const [documenti, setDocumenti] = useState<Record<string, File>>({});
 
   const acquirenteTipiSoggetto =
     tipo === 'MINIVOLTURA'
@@ -416,14 +385,9 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     fd.append('acquirenteTelefono', acquirente.telefono);
     fd.append('acquirenteEmail', acquirente.email);
 
-    // Documenti caricati per ciascuna parte (tutti opzionali)
-    for (const t of DOC_TIPI) {
-      const f = venditore.documenti[t];
-      if (f) fd.append(`venditore_${t}`, f);
-    }
-    for (const t of DOC_TIPI) {
-      const f = acquirente.documenti[t];
-      if (f) fd.append(`acquirente_${t}`, f);
+    // Documenti richiesti (step Documenti) come slot DOC__<docKey>.
+    for (const [key, f] of Object.entries(documenti)) {
+      fd.append(`DOC__${key}`, f);
     }
 
     fd.append('flagCointestazione', flagCointestazione ? 'true' : 'false');
@@ -475,6 +439,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const canStep2 = veicoliValidi && !comodatoBloccante;
 
   const canStep3 = parteValida(venditore) && parteValida(acquirente);
+
+  // Step Documenti: tutti i documenti richiesti (esclusi i libretti) devono
+  // essere caricati prima di proseguire alla localizzazione/invio.
+  const docsValidi =
+    esitoSchema.kind === 'OK' &&
+    requiredUploadDocs(esitoSchema).every((d) => !!documenti[docKey(d)]);
 
   // Schema Documentale v7 (SD-B): blocca il submit se l'engine non torna OK
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
@@ -676,6 +646,69 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
         {step === 3 && (
           <div className="space-y-5">
+            <Alert variant="info">
+              Ricorda: tutti i documenti richiesti vanno portati in originale,
+              fisicamente in agenzia, al momento della firma.
+            </Alert>
+
+            {esitoSchema.kind === 'BLOCCO' && (
+              <Alert variant="error">
+                <strong>Motivo:</strong> {esitoSchema.motivo}
+                <br />
+                <strong>Come sbloccare:</strong> {esitoSchema.soluzione}
+              </Alert>
+            )}
+
+            {esitoSchema.kind === 'INPUT_INCOMPLETO' && (
+              <Alert variant="warning">
+                Completa i dati delle parti per calcolare i documenti richiesti.
+              </Alert>
+            )}
+
+            {esitoSchema.kind === 'OK' &&
+              (() => {
+                const docs = requiredUploadDocs(esitoSchema);
+                const caricati = docs.filter((d) => documenti[docKey(d)]).length;
+                return (
+                  <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+                    <p className="mb-3 text-[12px] font-semibold text-pv-slate-600">
+                      {caricati}/{docs.length} documenti caricati
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {docs.map((d) => (
+                        <DocCard
+                          key={docKey(d)}
+                          label={docLabel(d)}
+                          file={documenti[docKey(d)] ?? null}
+                          onChange={(f) =>
+                            setDocumenti((m) => {
+                              const n = { ...m };
+                              const k = docKey(d);
+                              if (f) n[k] = f;
+                              else delete n[k];
+                              return n;
+                            })
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+              <Button variant="secondary" onClick={() => setStep(2)}>
+                Indietro
+              </Button>
+              <Button disabled={!docsValidi} onClick={() => setStep(4)}>
+                Avanti
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -748,7 +781,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
             </div>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
-              <Button variant="secondary" onClick={() => setStep(2)} disabled={submitting}>
+              <Button variant="secondary" onClick={() => setStep(3)} disabled={submitting}>
                 Indietro
               </Button>
               <Button
@@ -1096,88 +1129,6 @@ function ParteForm({
           />
         </Field>
       </div>
-
-      <DocumentiUploader parte={parte} onChange={onChange} />
-    </div>
-  );
-}
-
-function DocumentiUploader({
-  parte,
-  onChange,
-}: {
-  parte: Parte;
-  onChange: (p: Parte) => void;
-}) {
-  const tipi = parte.isPG ? DOC_TIPI_GIURIDICA : DOC_TIPI_FISICA;
-
-  const handleFile = (tipo: DocTipo, file: File | null) => {
-    const next = { ...parte.documenti };
-    if (file) next[tipo] = file;
-    else delete next[tipo];
-    onChange({ ...parte, documenti: next });
-  };
-
-  return (
-    <div className="mt-5 rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4">
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-        Documenti (opzionali)
-      </p>
-      <p className="mb-3 text-[12px] text-pv-slate-500">
-        PDF / JPG / PNG · max 10 MB per file. Vengono salvati e restano scaricabili
-        in ogni momento dal dettaglio pratica.
-      </p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {tipi.map((t) => (
-          <DocFileInput
-            key={t}
-            label={labelDocTipo(t, parte.isPG)}
-            file={parte.documenti[t] ?? null}
-            onChange={(f) => handleFile(t, f)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DocFileInput({
-  label,
-  file,
-  onChange,
-}: {
-  label: string;
-  file: File | null;
-  onChange: (f: File | null) => void;
-}) {
-  return (
-    <div>
-      <label className="block text-[12px] font-semibold text-pv-slate-700">
-        {label}
-      </label>
-      <label className="mt-1 flex cursor-pointer items-center justify-between gap-2 rounded-[8px] border-[1.5px] border-dashed border-pv-slate-300 bg-white px-3 py-2 text-[12px] hover:border-pv-navy-600">
-        <span className="truncate text-pv-slate-700">
-          {file ? file.name : 'Seleziona file'}
-        </span>
-        <span className="shrink-0 text-[11px] font-semibold text-pv-navy-600">
-          {file ? 'Cambia' : 'Sfoglia'}
-        </span>
-        <input
-          type="file"
-          accept="application/pdf,image/jpeg,image/png"
-          onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-          className="sr-only"
-        />
-      </label>
-      {file && (
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          className="mt-1 text-[11px] text-pv-slate-500 hover:text-pv-red-500 hover:underline"
-        >
-          Rimuovi
-        </button>
-      )}
     </div>
   );
 }

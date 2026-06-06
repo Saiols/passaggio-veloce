@@ -54,14 +54,19 @@ export async function buildCatalogoContatti(filtroQuery?: string): Promise<Conta
     where: { deletedAt: null },
     select: {
       createdAt: true,
-      venditoreIsPersonaGiuridica: true,
-      venditoreNome: true,
-      venditoreCognome: true,
-      venditoreRagioneSociale: true,
-      venditoreCF: true,
-      venditorePIVA: true,
-      venditoreTelefono: true,
-      venditoreEmail: true,
+      venditori: {
+        orderBy: { ordine: 'asc' },
+        select: {
+          isPersonaGiuridica: true,
+          nome: true,
+          cognome: true,
+          ragioneSociale: true,
+          cf: true,
+          piva: true,
+          telefono: true,
+          email: true,
+        },
+      },
       acquirenteIsPersonaGiuridica: true,
       acquirenteNome: true,
       acquirenteCognome: true,
@@ -75,18 +80,20 @@ export async function buildCatalogoContatti(filtroQuery?: string): Promise<Conta
 
   const raw: RawContact[] = [];
   for (const p of pratiche) {
-    raw.push({
-      ruolo: 'VENDITORE',
-      isPG: p.venditoreIsPersonaGiuridica,
-      nome: p.venditoreNome,
-      cognome: p.venditoreCognome,
-      ragioneSociale: p.venditoreRagioneSociale,
-      cf: p.venditoreCF,
-      piva: p.venditorePIVA,
-      telefono: p.venditoreTelefono,
-      email: p.venditoreEmail,
-      praticaCreatedAt: p.createdAt,
-    });
+    for (const v of p.venditori) {
+      raw.push({
+        ruolo: 'VENDITORE',
+        isPG: v.isPersonaGiuridica,
+        nome: v.nome,
+        cognome: v.cognome,
+        ragioneSociale: v.ragioneSociale,
+        cf: v.cf,
+        piva: v.piva,
+        telefono: v.telefono,
+        email: v.email,
+        praticaCreatedAt: p.createdAt,
+      });
+    }
     raw.push({
       ruolo: 'ACQUIRENTE',
       isPG: p.acquirenteIsPersonaGiuridica,

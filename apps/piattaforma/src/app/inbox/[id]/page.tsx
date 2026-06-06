@@ -36,6 +36,7 @@ export default async function InboxDetailPage({
         broker: { select: { ragioneSociale: true, citta: true, telefono: true, email: true } },
         documenti: { where: { deletedAt: null } },
         veicoli: { orderBy: { ordine: 'asc' } },
+        venditori: { orderBy: { ordine: 'asc' } },
       },
     }),
   ]);
@@ -162,22 +163,25 @@ export default async function InboxDetailPage({
               <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                    Venditore
+                    {pratica.venditori.length > 1
+                      ? `Venditori (${pratica.venditori.length})`
+                      : 'Venditore'}
                   </p>
                   <p className="mt-1.5 text-[14px] font-semibold text-pv-navy-800">
-                    {pratica.venditoreIsPersonaGiuridica
-                      ? pratica.venditoreRagioneSociale ?? '—'
-                      : `${pratica.venditoreNome ?? ''} ${pratica.venditoreCognome ?? ''}`.trim() ||
+                    {pratica.venditori[0]?.isPersonaGiuridica
+                      ? pratica.venditori[0]?.ragioneSociale ?? '—'
+                      : `${pratica.venditori[0]?.nome ?? ''} ${pratica.venditori[0]?.cognome ?? ''}`.trim() ||
                         '—'}
+                    {pratica.venditori.length > 1 ? ` +${pratica.venditori.length - 1}` : ''}
                   </p>
                   <p className="text-[12px] text-pv-slate-500">
-                    {pratica.venditoreIsPersonaGiuridica
-                      ? pratica.venditorePIVA ?? '—'
-                      : pratica.venditoreCF ?? '—'}
+                    {pratica.venditori[0]?.isPersonaGiuridica
+                      ? pratica.venditori[0]?.piva ?? '—'
+                      : pratica.venditori[0]?.cf ?? '—'}
                   </p>
                   <ContattiParte
-                    telefono={pratica.venditoreTelefono}
-                    email={pratica.venditoreEmail}
+                    telefono={pratica.venditori[0]?.telefono ?? null}
+                    email={pratica.venditori[0]?.email ?? null}
                   />
                 </div>
                 <div>

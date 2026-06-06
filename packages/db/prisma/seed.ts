@@ -462,14 +462,47 @@ async function main() {
         round1StartedAt: submittedAt,
         accettataAt,
         firmaAvvenutaAt: firmaAt,
-        venditoreNome: 'Fabio',
-        venditoreCognome: 'Galli',
-        venditoreCF: 'GLLFBA70A01F205P',
         acquirenteNome: 'Nuovo',
         acquirenteCognome: 'Proprietario',
         acquirenteCF: 'NVPRPR85E10L736X',
       },
     });
+
+    // Crea Venditore(s) collegati — mirror del pattern Veicolo
+    // PV-2026-00001 ha 2 co-intestatari per esercitare il path multi-venditore
+    if (p.codicePratica === 'PV-2026-00001') {
+      await prisma.venditore.create({
+        data: {
+          praticaId: pratica.id,
+          ordine: 1,
+          nome: 'Fabio',
+          cognome: 'Galli',
+          cf: 'GLLFBA70A01F205P',
+          documentoIdentita: 'CI',
+        },
+      });
+      await prisma.venditore.create({
+        data: {
+          praticaId: pratica.id,
+          ordine: 2,
+          nome: 'Maria',
+          cognome: 'Galli',
+          cf: 'GLLMRA75B42F205Z',
+          documentoIdentita: 'CI',
+        },
+      });
+    } else {
+      await prisma.venditore.create({
+        data: {
+          praticaId: pratica.id,
+          ordine: 1,
+          nome: 'Fabio',
+          cognome: 'Galli',
+          cf: 'GLLFBA70A01F205P',
+          documentoIdentita: 'CI',
+        },
+      });
+    }
 
     // Crea Veicolo(s) collegati
     for (let vi = 0; vi < nVeicoli; vi++) {
@@ -1038,13 +1071,26 @@ async function main() {
       creditoBrokerCent: 1800,
       submittedAt,
       round1StartedAt: submittedAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `Demo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `Demo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica R1
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: pratica.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `Demo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicoli per pratica R1
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
@@ -1111,13 +1157,26 @@ async function main() {
       submittedAt,
       round1StartedAt: submittedAt,
       round2StartedAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `R2Demo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `R2Demo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica R2
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: pratica.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `R2Demo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicolo per pratica R2
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
@@ -1202,13 +1261,26 @@ async function main() {
       round1StartedAt: submittedAt,
       round2StartedAt,
       round3StartedAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `R3Demo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `R3Demo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica R3
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: pratica.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `R3Demo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicolo per pratica R3
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
@@ -1314,13 +1386,26 @@ async function main() {
       submittedAt,
       round1StartedAt: submittedAt,
       accettataAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `AccDemo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `AccDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica ACCETTATA
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: pratica.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `AccDemo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicoli per pratica ACCETTATA
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
@@ -1392,13 +1477,26 @@ async function main() {
       accettataAt,
       firmaAvvenutaAt: firmaAt,
       autoAddebitoAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `FirmaDemo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `FirmaDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica FIRMATA
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: pratica.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `FirmaDemo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicoli per pratica FIRMATA
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
@@ -1487,13 +1585,26 @@ async function main() {
       round2StartedAt,
       round3StartedAt,
       escalationAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `EscDemo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `EscDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica IN_ESCALATION
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: pratica.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: pratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `EscDemo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicolo per pratica IN_ESCALATION
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: pratica.id } });
@@ -1597,13 +1708,26 @@ async function main() {
       submittedAt,
       round1StartedAt: submittedAt,
       annullataAt,
-      venditoreNome: 'Venditore',
-      venditoreCognome: `AnnDemo${seq}`,
-      venditoreCF: 'VNDDMO70A01F205P',
       acquirenteNome: 'Acquirente',
       acquirenteCognome: `AnnDemo${seq}`,
       acquirenteCF: 'CQRDMO85E10L736X',
     });
+    // Venditore per pratica ANNULLATA
+    {
+      const vendExist = await prisma.venditore.findFirst({ where: { praticaId: praticaAnn.id } });
+      if (!vendExist) {
+        await prisma.venditore.create({
+          data: {
+            praticaId: praticaAnn.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `AnnDemo${seq}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
+          },
+        });
+      }
+    }
     // Veicolo per pratica ANNULLATA
     {
       const vExist = await prisma.veicolo.findFirst({ where: { praticaId: praticaAnn.id } });
@@ -1870,12 +1994,19 @@ async function main() {
           round1StartedAt: submittedAt,
           accettataAt,
           firmaAvvenutaAt: firmaAt,
-          venditoreNome: 'Venditore',
-          venditoreCognome: `Val${i + 1}`,
-          venditoreCF: 'VNDDMO70A01F205P',
           acquirenteNome: 'Acquirente',
           acquirenteCognome: `Val${i + 1}`,
           acquirenteCF: 'CQRDMO85E10L736X',
+        },
+      });
+      await prisma.venditore.create({
+        data: {
+          praticaId: valPratica.id,
+          ordine: 1,
+          nome: 'Venditore',
+          cognome: `Val${i + 1}`,
+          cf: 'VNDDMO70A01F205P',
+          documentoIdentita: 'CI',
         },
       });
       const nValV = valTipo === 'MINIVOLTURA' ? 2 : 1;
@@ -1934,12 +2065,19 @@ async function main() {
             round1StartedAt: submittedAt,
             accettataAt,
             firmaAvvenutaAt: firmaAt,
-            venditoreNome: 'Venditore',
-            venditoreCognome: `Extra${i + 1}`,
-            venditoreCF: 'VNDDMO70A01F205P',
             acquirenteNome: 'Acquirente',
             acquirenteCognome: `Extra${i + 1}`,
             acquirenteCF: 'CQRDMO85E10L736X',
+          },
+        });
+        await prisma.venditore.create({
+          data: {
+            praticaId: extraPratica.id,
+            ordine: 1,
+            nome: 'Venditore',
+            cognome: `Extra${i + 1}`,
+            cf: 'VNDDMO70A01F205P',
+            documentoIdentita: 'CI',
           },
         });
         const nExtraV = extraTipo === 'MINIVOLTURA' ? 2 : 1;
@@ -1990,12 +2128,19 @@ async function main() {
           round1StartedAt: submittedAt,
           accettataAt,
           firmaAvvenutaAt: firmaAt,
-          venditoreNome: 'Venditore',
-          venditoreCognome: `Vr${i + 1}`,
-          venditoreCF: 'VNDDMO70A01F205P',
           acquirenteNome: 'Acquirente',
           acquirenteCognome: `Vr${i + 1}`,
           acquirenteCF: 'CQRDMO85E10L736X',
+        },
+      });
+      await prisma.venditore.create({
+        data: {
+          praticaId: vrPratica.id,
+          ordine: 1,
+          nome: 'Venditore',
+          cognome: `Vr${i + 1}`,
+          cf: 'VNDDMO70A01F205P',
+          documentoIdentita: 'CI',
         },
       });
       await prisma.veicolo.create({

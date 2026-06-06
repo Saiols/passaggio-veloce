@@ -62,12 +62,14 @@ export type SchemaDocumentaleInput = {
   venditoreTipoSoggetto: TipoSoggetto | null;
   venditoreVisuraData: Date | null;
   venditorePermessoData: Date | null;
+  venditoreDocumentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
   flagProcura: boolean;
   flagSuccessione: boolean;
 
   acquirenteTipoSoggetto: TipoSoggetto | null;
   acquirenteVisuraData: Date | null;
   acquirentePermessoData: Date | null;
+  acquirenteDocumentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
   flagMinore: boolean;
 
   /** Data di riferimento per i calcoli scadenza. Default: now. */
@@ -101,56 +103,42 @@ function visuraFresca(visuraData: Date | null, now: Date): boolean {
   return visuraData.getTime() >= limite.getTime();
 }
 
+function emettiIdentita(
+  out: DocumentoRichiesto[],
+  parte: ParteDocumento,
+  motivoPrefix: string,
+  tipoSoggetto: TipoSoggetto,
+  docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
+): void {
+  if (docIdentita === 'PASSAPORTO') {
+    out.push({ tipo: 'PASSAPORTO', parte, motivo: `${motivoPrefix}: passaporto` });
+    return;
+  }
+  if (docIdentita === 'PATENTE') {
+    out.push({ tipo: 'PATENTE', parte, motivo: `${motivoPrefix}: patente` });
+    return;
+  }
+  out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte` });
+  out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro` });
+  if (tipoSoggetto === 'PRIVATO_ITALIANO_CARTACEA') {
+    out.push({ tipo: 'CODICE_FISCALE', parte, motivo: `${motivoPrefix}: tessera CF` });
+  }
+}
+
 function aggiungiDocumentiPersona(
   out: DocumentoRichiesto[],
   parteCI: ParteDocumento,
   parteAmministratore: ParteDocumento,
   tipo: TipoSoggetto,
   motivoPrefix: string,
+  docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
 ): void {
-  if (tipo === 'PRIVATO_ITALIANO_CIE') {
-    // CIE elettronica: CI fronte+retro (CF già incorporato)
-    out.push({
-      tipo: 'CI_FRONTE',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: CIE elettronica fronte`,
-    });
-    out.push({
-      tipo: 'CI_RETRO',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: CIE elettronica retro`,
-    });
-    return;
-  }
-  if (tipo === 'PRIVATO_ITALIANO_CARTACEA') {
-    out.push({
-      tipo: 'CI_FRONTE',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: CI cartacea fronte`,
-    });
-    out.push({
-      tipo: 'CI_RETRO',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: CI cartacea retro`,
-    });
-    out.push({
-      tipo: 'CODICE_FISCALE',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: tessera CF (la cartacea non incorpora il CF)`,
-    });
+  if (tipo === 'PRIVATO_ITALIANO_CIE' || tipo === 'PRIVATO_ITALIANO_CARTACEA') {
+    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita);
     return;
   }
   if (tipo === 'STRANIERO_EXTRA_UE') {
-    out.push({
-      tipo: 'CI_FRONTE',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: documento identità fronte`,
-    });
-    out.push({
-      tipo: 'CI_RETRO',
-      parte: parteCI,
-      motivo: `${motivoPrefix}: documento identità retro`,
-    });
+    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita);
     out.push({
       tipo: 'PERMESSO_SOGGIORNO',
       parte: parteCI,
@@ -164,16 +152,7 @@ function aggiungiDocumentiPersona(
       parte: parteCI,
       motivo: `${motivoPrefix}: visura camerale rilasciata negli ultimi 6 mesi`,
     });
-    out.push({
-      tipo: 'CI_FRONTE',
-      parte: parteAmministratore,
-      motivo: `${motivoPrefix}: CI amministratore fronte`,
-    });
-    out.push({
-      tipo: 'CI_RETRO',
-      parte: parteAmministratore,
-      motivo: `${motivoPrefix}: CI amministratore retro`,
-    });
+    emettiIdentita(out, parteAmministratore, motivoPrefix, 'PRIVATO_ITALIANO_CIE', docIdentita);
   }
 }
 
@@ -270,6 +249,7 @@ export function calcolaDocumentiRichiesti(
     'AMMINISTRATORE_VENDITORE',
     input.venditoreTipoSoggetto!,
     'Venditore',
+    input.venditoreDocumentoIdentita,
   );
 
   // Procura: doc procuratore + atto + CI venditore originale
@@ -323,6 +303,7 @@ export function calcolaDocumentiRichiesti(
     'AMMINISTRATORE_ACQUIRENTE',
     input.acquirenteTipoSoggetto!,
     'Acquirente',
+    input.acquirenteDocumentoIdentita,
   );
 
   // Compratore minorenne: + autorizzazione tutore + CI tutore

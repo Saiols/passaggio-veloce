@@ -14,11 +14,13 @@ function baseInput(
     venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE',
     venditoreVisuraData: null,
     venditorePermessoData: null,
+    venditoreDocumentoIdentita: 'CI',
     flagProcura: false,
     flagSuccessione: false,
     acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE',
     acquirenteVisuraData: null,
     acquirentePermessoData: null,
+    acquirenteDocumentoIdentita: 'CI',
     flagMinore: false,
     now: REF_NOW,
     ...overrides,
@@ -350,8 +352,10 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
         { ordine: 2, preImm2015: true, flagComodatoDuso: false },
       ],
       venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
+      venditoreDocumentoIdentita: 'CI',
       flagProcura: false, flagSuccessione: false,
       acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE', acquirenteVisuraData: null, acquirentePermessoData: null,
+      acquirenteDocumentoIdentita: 'CI',
       flagMinore: false,
     });
     expect(r.kind).toBe('OK');
@@ -368,8 +372,10 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
     const r = calcolaDocumentiRichiesti({
       veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: false }],
       venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
+      venditoreDocumentoIdentita: 'CI',
       flagProcura: false, flagSuccessione: false,
       acquirenteTipoSoggetto: 'OPERATORE_AUTO', acquirenteVisuraData: null, acquirentePermessoData: null,
+      acquirenteDocumentoIdentita: 'CI',
       flagMinore: false,
     });
     expect(r.kind).toBe('BLOCCO');
@@ -382,10 +388,98 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
         { ordine: 2, preImm2015: false, flagComodatoDuso: true },
       ],
       venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
+      venditoreDocumentoIdentita: 'CI',
       flagProcura: false, flagSuccessione: false,
       acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE', acquirenteVisuraData: null, acquirentePermessoData: null,
+      acquirenteDocumentoIdentita: 'CI',
       flagMinore: false,
     });
     expect(r.kind).toBe('BLOCCO');
+  });
+});
+
+describe('calcolaDocumentiRichiesti — documento identità alternativo', () => {
+  it('venditore con passaporto: richiede PASSAPORTO non CI', () => {
+    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditoreDocumentoIdentita: 'PASSAPORTO' });
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+      expect(tipiVend).toContain('PASSAPORTO');
+      expect(tipiVend).not.toContain('CI_FRONTE');
+    }
+  });
+
+  it('venditore con patente: richiede PATENTE non CI', () => {
+    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditoreDocumentoIdentita: 'PATENTE' });
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+      expect(tipiVend).toContain('PATENTE');
+      expect(tipiVend).not.toContain('CI_FRONTE');
+    }
+  });
+
+  it('acquirente con passaporto: richiede PASSAPORTO non CI', () => {
+    const r = calcolaDocumentiRichiesti({ ...baseInput(), acquirenteDocumentoIdentita: 'PASSAPORTO' });
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const tipiAcq = r.documentiRichiesti.filter((d) => d.parte === 'ACQUIRENTE').map((d) => d.tipo);
+      expect(tipiAcq).toContain('PASSAPORTO');
+      expect(tipiAcq).not.toContain('CI_FRONTE');
+    }
+  });
+
+  it('venditore azienda con admin passaporto: visura + PASSAPORTO amministratore', () => {
+    const fresca = new Date(REF_NOW);
+    fresca.setMonth(fresca.getMonth() - 2);
+    const r = calcolaDocumentiRichiesti(
+      baseInput({
+        venditoreTipoSoggetto: 'AZIENDA',
+        venditoreVisuraData: fresca,
+        venditoreDocumentoIdentita: 'PASSAPORTO',
+      }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const tipiAmm = r.documentiRichiesti
+        .filter((d) => d.parte === 'AMMINISTRATORE_VENDITORE')
+        .map((d) => d.tipo);
+      expect(tipiAmm).toContain('PASSAPORTO');
+      expect(tipiAmm).not.toContain('CI_FRONTE');
+    }
+  });
+
+  it('venditore straniero con passaporto valido: PASSAPORTO + permesso (niente CI)', () => {
+    const valido = new Date(REF_NOW);
+    valido.setMonth(valido.getMonth() + 6);
+    const r = calcolaDocumentiRichiesti(
+      baseInput({
+        venditoreTipoSoggetto: 'STRANIERO_EXTRA_UE',
+        venditorePermessoData: valido,
+        venditoreDocumentoIdentita: 'PASSAPORTO',
+      }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+      expect(tipiVend).toContain('PASSAPORTO');
+      expect(tipiVend).toContain('PERMESSO_SOGGIORNO');
+      expect(tipiVend).not.toContain('CI_FRONTE');
+    }
+  });
+
+  it('CI cartacea con passaporto scelto: niente CODICE_FISCALE separato', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({
+        venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA',
+        venditoreDocumentoIdentita: 'PASSAPORTO',
+      }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+      expect(tipiVend).toContain('PASSAPORTO');
+      expect(tipiVend).not.toContain('CODICE_FISCALE');
+    }
   });
 });

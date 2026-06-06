@@ -171,8 +171,8 @@ export function calcolaDocumentiRichiesti(
 
   // 0. Input minimi: tipo soggetto di ogni venditore + acquirente
   const mancanti: string[] = [];
-  for (const v of input.venditori) {
-    if (!v.tipoSoggetto) mancanti.push('venditoreTipoSoggetto');
+  if (input.venditori.some((v) => !v.tipoSoggetto)) {
+    mancanti.push('venditoreTipoSoggetto');
   }
   if (!input.acquirenteTipoSoggetto) mancanti.push('acquirenteTipoSoggetto');
   if (mancanti.length > 0) {

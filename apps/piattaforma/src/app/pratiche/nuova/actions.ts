@@ -280,7 +280,16 @@ const submitSchema = z.object({
         return z.NEVER;
       }
     })
-    .pipe(z.array(venditoreSchema).min(1).max(50)),
+    .pipe(
+      z
+        .array(venditoreSchema)
+        .min(1)
+        .max(50)
+        .refine(
+          (arr) => new Set(arr.map((v) => v.ordine)).size === arr.length,
+          { message: 'ordine venditore duplicato' },
+        ),
+    ),
 
   // Acquirente
   acquirenteIsPG: formBool.default(false),

@@ -512,15 +512,8 @@ model Pratica {
   // Numero veicoli: 1 per SEMPLICE, ≥ 2 per MINIVOLTURA.
   numeroVeicoli Int @default(1)
 
-  // Dati venditore
-  venditoreNome               String?
-  venditoreCognome            String?
-  venditoreCF                 String?
-  venditoreIsPersonaGiuridica Boolean @default(false)
-  venditoreRagioneSociale     String?
-  venditorePIVA               String?
-  venditoreTelefono           String?
-  venditoreEmail              String?
+  // Dati venditore: ora normalizzati in modello Venditore (co-intestatari, N
+  // per pratica). Vedi relation `venditori` sotto.
 
   // Dati acquirente
   acquirenteNome               String?
@@ -540,9 +533,7 @@ model Pratica {
   // Schema Documentale v7 (SD-A release 2026-05): variabili dell'albero
   // decisionale documenti. Compilate dal broker durante il wizard branching,
   // determinano la lista di documenti richiesti tramite engine puro.
-  venditoreTipoSoggetto  TipoSoggetto?
-  venditoreVisuraData    DateTime?     @db.Date
-  venditorePermessoData  DateTime?     @db.Date
+  // venditoreTipoSoggetto/VisuraData/PermessoData spostati in modello Venditore.
   acquirenteTipoSoggetto TipoSoggetto?
   acquirenteVisuraData   DateTime?     @db.Date
   acquirentePermessoData DateTime?     @db.Date
@@ -606,6 +597,7 @@ model Pratica {
 
   // Relations
   veicoli                 Veicolo[]
+  venditori               Venditore[]
   documenti               Documento[]
   assegnazioni            PraticaAssegnazione[]
   transazioni             TransazioneWallet[]
@@ -703,6 +695,10 @@ model Documento {
   veicoloId String?  @db.Uuid
   veicolo   Veicolo? @relation("DocumentiVeicolo", fields: [veicoloId], references: [id], onDelete: SetNull)
 
+  // Venditore specifico (co-intestatario): documenti identità/permesso per parte
+  venditoreId String?    @db.Uuid
+  venditore   Venditore? @relation("DocumentiVenditore", fields: [venditoreId], references: [id], onDelete: SetNull)
+
   // Storage
   storageKey       String // path/key nel provider (locale o S3)
   storageProvider  String @default("local") // "local" | "s3" | "gcs"
@@ -733,6 +729,7 @@ model Documento {
   @@index([praticaId])
   @@index([companyId])
   @@index([veicoloId])
+  @@index([venditoreId])
   @@index([tipo])
   @@index([gatingStato])
   @@map("documenti")
@@ -758,6 +755,31 @@ model Veicolo {
 
   @@index([praticaId])
   @@map("veicoli")
+}
+
+model Venditore {
+  id                 String        @id @default(uuid()) @db.Uuid
+  praticaId          String        @db.Uuid
+  pratica            Pratica       @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+  ordine             Int
+  nome               String?
+  cognome            String?
+  cf                 String?
+  isPersonaGiuridica Boolean       @default(false)
+  ragioneSociale     String?
+  piva               String?
+  telefono           String?
+  email              String?
+  tipoSoggetto       TipoSoggetto?
+  visuraData         DateTime?     @db.Date
+  permessoData       DateTime?     @db.Date
+  documentoIdentita  String?
+  documenti          Documento[]   @relation("DocumentiVenditore")
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([praticaId])
+  @@map("venditori")
 }
 
 // ============================================================

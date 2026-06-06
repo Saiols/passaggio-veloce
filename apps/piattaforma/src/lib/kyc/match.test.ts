@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeName, normalizeCompanyName, normalizeCf, normalizePiva,
   isValidCodiceFiscale, nameMatches, companyMatches, proprietarioCrossCheck,
+  venditoriCrossCheck,
 } from './match';
 
 describe('normalize', () => {
@@ -58,6 +59,26 @@ describe('companyMatches', () => {
       { denominazione: 'Rossi Auto', partitaIva: '11111111111' },
       { denominazione: 'Bianchi Auto', partitaIva: '22222222222' },
     )).toBe(false);
+  });
+});
+
+const vp = (nome: string, cognome: string) => ({ isPersonaGiuridica: false, nome, cognome });
+
+describe('venditoriCrossCheck', () => {
+  it('OK: insieme combacia', () => {
+    expect(venditoriCrossCheck([vp('Mario','Rossi'), vp('Luca','Bianchi')], ['ROSSI MARIO','BIANCHI LUCA'], { flagProcura: false })).toBe('OK');
+  });
+  it('MISMATCH: proprietario non coperto', () => {
+    expect(venditoriCrossCheck([vp('Mario','Rossi')], ['ROSSI MARIO','BIANCHI LUCA'], { flagProcura: false })).toBe('MISMATCH');
+  });
+  it('MISMATCH: venditore estraneo', () => {
+    expect(venditoriCrossCheck([vp('Mario','Rossi'), vp('Anna','Verdi')], ['ROSSI MARIO'], { flagProcura: false })).toBe('MISMATCH');
+  });
+  it('procura: rilassato (basta un venditore corrispondente)', () => {
+    expect(venditoriCrossCheck([vp('Mario','Rossi')], ['ROSSI MARIO','BIANCHI LUCA'], { flagProcura: true })).toBe('OK');
+  });
+  it('SCONOSCIUTO: nessun proprietario estratto', () => {
+    expect(venditoriCrossCheck([vp('Mario','Rossi')], [], { flagProcura: false })).toBe('SCONOSCIUTO');
   });
 });
 

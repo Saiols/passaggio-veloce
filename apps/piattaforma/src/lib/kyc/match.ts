@@ -102,6 +102,24 @@ export function proprietarioCrossCheck(
   return nameMatches(full, proprietario) ? 'MATCH' : 'MISMATCH';
 }
 
+export function venditoriCrossCheck(
+  venditori: { isPersonaGiuridica: boolean; nome?: string; cognome?: string; ragioneSociale?: string }[],
+  proprietari: string[],
+  opts: { flagProcura: boolean },
+): 'OK' | 'MISMATCH' | 'SCONOSCIUTO' {
+  if (!proprietari.length) return 'SCONOSCIUTO';
+  const matchesOwner = (
+    vend: { isPersonaGiuridica: boolean; nome?: string; cognome?: string; ragioneSociale?: string },
+    owner: string,
+  ) => proprietarioCrossCheck(vend, owner) === 'MATCH';
+  if (opts.flagProcura) {
+    return venditori.some((vd) => proprietari.some((o) => matchesOwner(vd, o))) ? 'OK' : 'MISMATCH';
+  }
+  const ownersCovered = proprietari.every((o) => venditori.some((vd) => matchesOwner(vd, o)));
+  const noExtraneous = venditori.every((vd) => proprietari.some((o) => matchesOwner(vd, o)));
+  return ownersCovered && noExtraneous ? 'OK' : 'MISMATCH';
+}
+
 export function companyMatches(
   visura: { denominazione?: string; partitaIva?: string },
   step2: { denominazione: string; partitaIva: string },

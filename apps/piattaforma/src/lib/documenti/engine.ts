@@ -60,10 +60,13 @@ export type DocumentoRichiesto = {
 export type SchemaDocumentaleInput = {
   veicoli: { ordine: number; preImm2015: boolean; flagComodatoDuso: boolean }[];
 
-  venditoreTipoSoggetto: TipoSoggetto | null;
-  venditoreVisuraData: Date | null;
-  venditorePermessoData: Date | null;
-  venditoreDocumentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
+  venditori: {
+    ordine: number;
+    tipoSoggetto: TipoSoggetto | null;
+    documentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
+    visuraData: Date | null;
+    permessoData: Date | null;
+  }[];
   flagProcura: boolean;
   flagSuccessione: boolean;
 
@@ -110,19 +113,20 @@ function emettiIdentita(
   motivoPrefix: string,
   tipoSoggetto: TipoSoggetto,
   docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
+  venditoreOrdine?: number,
 ): void {
   if (docIdentita === 'PASSAPORTO') {
-    out.push({ tipo: 'PASSAPORTO', parte, motivo: `${motivoPrefix}: passaporto` });
+    out.push({ tipo: 'PASSAPORTO', parte, motivo: `${motivoPrefix}: passaporto`, venditoreOrdine });
     return;
   }
   if (docIdentita === 'PATENTE') {
-    out.push({ tipo: 'PATENTE', parte, motivo: `${motivoPrefix}: patente` });
+    out.push({ tipo: 'PATENTE', parte, motivo: `${motivoPrefix}: patente`, venditoreOrdine });
     return;
   }
-  out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte` });
-  out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro` });
+  out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte`, venditoreOrdine });
+  out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro`, venditoreOrdine });
   if (tipoSoggetto === 'PRIVATO_ITALIANO_CARTACEA') {
-    out.push({ tipo: 'CODICE_FISCALE', parte, motivo: `${motivoPrefix}: tessera CF` });
+    out.push({ tipo: 'CODICE_FISCALE', parte, motivo: `${motivoPrefix}: tessera CF`, venditoreOrdine });
   }
 }
 
@@ -133,17 +137,19 @@ function aggiungiDocumentiPersona(
   tipo: TipoSoggetto,
   motivoPrefix: string,
   docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
+  venditoreOrdine?: number,
 ): void {
   if (tipo === 'PRIVATO_ITALIANO_CIE' || tipo === 'PRIVATO_ITALIANO_CARTACEA') {
-    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita);
+    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita, venditoreOrdine);
     return;
   }
   if (tipo === 'STRANIERO_EXTRA_UE') {
-    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita);
+    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita, venditoreOrdine);
     out.push({
       tipo: 'PERMESSO_SOGGIORNO',
       parte: parteCI,
       motivo: `${motivoPrefix}: permesso di soggiorno in corso di validità`,
+      venditoreOrdine,
     });
     return;
   }
@@ -152,8 +158,9 @@ function aggiungiDocumentiPersona(
       tipo: 'VISURA_CAMERALE',
       parte: parteCI,
       motivo: `${motivoPrefix}: visura camerale rilasciata negli ultimi 6 mesi`,
+      venditoreOrdine,
     });
-    emettiIdentita(out, parteAmministratore, motivoPrefix, 'PRIVATO_ITALIANO_CIE', docIdentita);
+    emettiIdentita(out, parteAmministratore, motivoPrefix, 'PRIVATO_ITALIANO_CIE', docIdentita, venditoreOrdine);
   }
 }
 
@@ -162,9 +169,11 @@ export function calcolaDocumentiRichiesti(
 ): EsitoSchemaDocumentale {
   const now = input.now ?? new Date();
 
-  // 0. Input minimi: tipo soggetto venditore + acquirente
+  // 0. Input minimi: tipo soggetto di ogni venditore + acquirente
   const mancanti: string[] = [];
-  if (!input.venditoreTipoSoggetto) mancanti.push('venditoreTipoSoggetto');
+  for (const v of input.venditori) {
+    if (!v.tipoSoggetto) mancanti.push('venditoreTipoSoggetto');
+  }
   if (!input.acquirenteTipoSoggetto) mancanti.push('acquirenteTipoSoggetto');
   if (mancanti.length > 0) {
     return { kind: 'INPUT_INCOMPLETO', mancanti };
@@ -179,16 +188,18 @@ export function calcolaDocumentiRichiesti(
         'Il comodato deve essere revocato al PRA prima del passaggio. Riprovare dopo la revoca.',
     };
   }
-  if (
-    input.venditoreTipoSoggetto === 'STRANIERO_EXTRA_UE' &&
-    !permessoValido(input.venditorePermessoData, now)
-  ) {
-    return {
-      kind: 'BLOCCO',
-      motivo: 'Permesso di soggiorno del venditore scaduto o mancante',
-      soluzione:
-        'Il venditore deve essere in possesso di permesso di soggiorno in corso di validità.',
-    };
+  for (const v of input.venditori) {
+    if (
+      v.tipoSoggetto === 'STRANIERO_EXTRA_UE' &&
+      !permessoValido(v.permessoData, now)
+    ) {
+      return {
+        kind: 'BLOCCO',
+        motivo: 'Permesso di soggiorno del venditore scaduto o mancante',
+        soluzione:
+          'Il venditore deve essere in possesso di permesso di soggiorno in corso di validità.',
+      };
+    }
   }
   if (
     input.acquirenteTipoSoggetto === 'STRANIERO_EXTRA_UE' &&
@@ -201,17 +212,18 @@ export function calcolaDocumentiRichiesti(
         'L\'acquirente deve essere in possesso di permesso di soggiorno in corso di validità.',
     };
   }
-  if (
-    (input.venditoreTipoSoggetto === 'AZIENDA' ||
-      input.venditoreTipoSoggetto === 'OPERATORE_AUTO') &&
-    !visuraFresca(input.venditoreVisuraData, now)
-  ) {
-    return {
-      kind: 'BLOCCO',
-      motivo: 'Visura camerale del venditore non fresca (>6 mesi o assente)',
-      soluzione:
-        'Servono visure camerali rilasciate negli ultimi 6 mesi. Richiedere una nuova visura.',
-    };
+  for (const v of input.venditori) {
+    if (
+      (v.tipoSoggetto === 'AZIENDA' || v.tipoSoggetto === 'OPERATORE_AUTO') &&
+      !visuraFresca(v.visuraData, now)
+    ) {
+      return {
+        kind: 'BLOCCO',
+        motivo: 'Visura camerale del venditore non fresca (>6 mesi o assente)',
+        soluzione:
+          'Servono visure camerali rilasciate negli ultimi 6 mesi. Richiedere una nuova visura.',
+      };
+    }
   }
   if (
     (input.acquirenteTipoSoggetto === 'AZIENDA' ||
@@ -243,15 +255,18 @@ export function calcolaDocumentiRichiesti(
     }
   }
 
-  // Documenti venditore
-  aggiungiDocumentiPersona(
-    out,
-    'VENDITORE',
-    'AMMINISTRATORE_VENDITORE',
-    input.venditoreTipoSoggetto!,
-    'Venditore',
-    input.venditoreDocumentoIdentita,
-  );
+  // Documenti venditore (uno per ciascun co-intestatario)
+  for (const v of input.venditori) {
+    aggiungiDocumentiPersona(
+      out,
+      'VENDITORE',
+      'AMMINISTRATORE_VENDITORE',
+      v.tipoSoggetto!,
+      'Venditore',
+      v.documentoIdentita,
+      v.ordine,
+    );
+  }
 
   // Procura: doc procuratore + atto + CI venditore originale
   if (input.flagProcura) {

@@ -11,10 +11,9 @@ function baseInput(
 ): SchemaDocumentaleInput {
   return {
     veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: false }],
-    venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE',
-    venditoreVisuraData: null,
-    venditorePermessoData: null,
-    venditoreDocumentoIdentita: 'CI',
+    venditori: [
+      { ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI', visuraData: null, permessoData: null },
+    ],
     flagProcura: false,
     flagSuccessione: false,
     acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE',
@@ -57,7 +56,7 @@ describe('calcolaDocumentiRichiesti — casi base', () => {
 
   it('CI cartacea aggiunge CODICE_FISCALE (3 doc venditore invece di 2)', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA' }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'CI', visuraData: null, permessoData: null }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
@@ -78,8 +77,7 @@ describe('calcolaDocumentiRichiesti — straniero extra-UE', () => {
     valido.setMonth(valido.getMonth() + 6);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'STRANIERO_EXTRA_UE',
-        venditorePermessoData: valido,
+        venditori: [{ ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'CI', visuraData: null, permessoData: valido }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -99,8 +97,7 @@ describe('calcolaDocumentiRichiesti — straniero extra-UE', () => {
     scaduto.setMonth(scaduto.getMonth() - 1);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'STRANIERO_EXTRA_UE',
-        venditorePermessoData: scaduto,
+        venditori: [{ ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'CI', visuraData: null, permessoData: scaduto }],
       }),
     );
     expect(r.kind).toBe('BLOCCO');
@@ -111,8 +108,7 @@ describe('calcolaDocumentiRichiesti — straniero extra-UE', () => {
   it('venditore straniero senza data permesso compilata → BLOCCO', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'STRANIERO_EXTRA_UE',
-        venditorePermessoData: null,
+        venditori: [{ ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'CI', visuraData: null, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('BLOCCO');
@@ -139,8 +135,7 @@ describe('calcolaDocumentiRichiesti — azienda / operatore auto', () => {
     fresca.setMonth(fresca.getMonth() - 2);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'AZIENDA',
-        venditoreVisuraData: fresca,
+        venditori: [{ ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'CI', visuraData: fresca, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -161,8 +156,7 @@ describe('calcolaDocumentiRichiesti — azienda / operatore auto', () => {
     vecchia.setMonth(vecchia.getMonth() - 8);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'AZIENDA',
-        venditoreVisuraData: vecchia,
+        venditori: [{ ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'CI', visuraData: vecchia, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('BLOCCO');
@@ -175,8 +169,7 @@ describe('calcolaDocumentiRichiesti — azienda / operatore auto', () => {
     fresca.setMonth(fresca.getMonth() - 1);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'OPERATORE_AUTO',
-        venditoreVisuraData: fresca,
+        venditori: [{ ordine: 1, tipoSoggetto: 'OPERATORE_AUTO', documentoIdentita: 'CI', visuraData: fresca, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -249,7 +242,7 @@ describe('calcolaDocumentiRichiesti — comodato / blocchi', () => {
 
   it('input incompleto: tipo soggetto venditore mancante', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditoreTipoSoggetto: null }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: null, documentoIdentita: 'CI', visuraData: null, permessoData: null }] }),
     );
     expect(r.kind).toBe('INPUT_INCOMPLETO');
     if (r.kind !== 'INPUT_INCOMPLETO') return;
@@ -273,7 +266,7 @@ describe('calcolaDocumentiRichiesti — combinazioni complesse', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
         veicoli: [{ ordine: 1, preImm2015: true, flagComodatoDuso: false }],
-        venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA',
+        venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'CI', visuraData: null, permessoData: null }],
         flagProcura: true,
         flagSuccessione: true,
         acquirenteTipoSoggetto: 'AZIENDA',
@@ -326,8 +319,7 @@ describe('calcolaDocumentiRichiesti — soglia visura 6 mesi', () => {
     al_limite.setDate(al_limite.getDate() - 1);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'AZIENDA',
-        venditoreVisuraData: al_limite,
+        venditori: [{ ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'CI', visuraData: al_limite, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('BLOCCO');
@@ -336,8 +328,7 @@ describe('calcolaDocumentiRichiesti — soglia visura 6 mesi', () => {
   it('visura emessa oggi → OK', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'AZIENDA',
-        venditoreVisuraData: REF_NOW,
+        venditori: [{ ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'CI', visuraData: REF_NOW, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -351,8 +342,7 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
         { ordine: 1, preImm2015: false, flagComodatoDuso: false },
         { ordine: 2, preImm2015: true, flagComodatoDuso: false },
       ],
-      venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
-      venditoreDocumentoIdentita: 'CI',
+      venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI', visuraData: null, permessoData: null }],
       flagProcura: false, flagSuccessione: false,
       acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE', acquirenteVisuraData: null, acquirentePermessoData: null,
       acquirenteDocumentoIdentita: 'CI',
@@ -371,8 +361,7 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
   it('acquirente OPERATORE_AUTO (minivoltura): blocco se visura non fresca', () => {
     const r = calcolaDocumentiRichiesti({
       veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: false }],
-      venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
-      venditoreDocumentoIdentita: 'CI',
+      venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI', visuraData: null, permessoData: null }],
       flagProcura: false, flagSuccessione: false,
       acquirenteTipoSoggetto: 'OPERATORE_AUTO', acquirenteVisuraData: null, acquirentePermessoData: null,
       acquirenteDocumentoIdentita: 'CI',
@@ -387,8 +376,7 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
         { ordine: 1, preImm2015: false, flagComodatoDuso: false },
         { ordine: 2, preImm2015: false, flagComodatoDuso: true },
       ],
-      venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CIE', venditoreVisuraData: null, venditorePermessoData: null,
-      venditoreDocumentoIdentita: 'CI',
+      venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI', visuraData: null, permessoData: null }],
       flagProcura: false, flagSuccessione: false,
       acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE', acquirenteVisuraData: null, acquirentePermessoData: null,
       acquirenteDocumentoIdentita: 'CI',
@@ -398,9 +386,23 @@ describe('calcolaDocumentiRichiesti — multi-veicolo', () => {
   });
 });
 
+describe('calcolaDocumentiRichiesti — co-intestatari venditori', () => {
+  it('due venditori: documenti identità per ciascuno con venditoreOrdine', () => {
+    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditori: [
+      { ordine:1, tipoSoggetto:'PRIVATO_ITALIANO_CIE', documentoIdentita:'CI', visuraData:null, permessoData:null },
+      { ordine:2, tipoSoggetto:'PRIVATO_ITALIANO_CIE', documentoIdentita:'CI', visuraData:null, permessoData:null },
+    ]});
+    expect(r.kind).toBe('OK');
+    if (r.kind === 'OK') {
+      const vendCI = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE' && d.tipo === 'CI_FRONTE');
+      expect(vendCI.map((d) => d.venditoreOrdine).sort()).toEqual([1, 2]);
+    }
+  });
+});
+
 describe('calcolaDocumentiRichiesti — documento identità alternativo', () => {
   it('venditore con passaporto: richiede PASSAPORTO non CI', () => {
-    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditoreDocumentoIdentita: 'PASSAPORTO' });
+    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PASSAPORTO', visuraData: null, permessoData: null }] });
     expect(r.kind).toBe('OK');
     if (r.kind === 'OK') {
       const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
@@ -410,7 +412,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
   });
 
   it('venditore con patente: richiede PATENTE non CI', () => {
-    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditoreDocumentoIdentita: 'PATENTE' });
+    const r = calcolaDocumentiRichiesti({ ...baseInput(), venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PATENTE', visuraData: null, permessoData: null }] });
     expect(r.kind).toBe('OK');
     if (r.kind === 'OK') {
       const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
@@ -434,9 +436,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
     fresca.setMonth(fresca.getMonth() - 2);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'AZIENDA',
-        venditoreVisuraData: fresca,
-        venditoreDocumentoIdentita: 'PASSAPORTO',
+        venditori: [{ ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'PASSAPORTO', visuraData: fresca, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -454,9 +454,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
     valido.setMonth(valido.getMonth() + 6);
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'STRANIERO_EXTRA_UE',
-        venditorePermessoData: valido,
-        venditoreDocumentoIdentita: 'PASSAPORTO',
+        venditori: [{ ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'PASSAPORTO', visuraData: null, permessoData: valido }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -471,8 +469,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
   it('CI cartacea con passaporto scelto: niente CODICE_FISCALE separato', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditoreTipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA',
-        venditoreDocumentoIdentita: 'PASSAPORTO',
+        venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'PASSAPORTO', visuraData: null, permessoData: null }],
       }),
     );
     expect(r.kind).toBe('OK');

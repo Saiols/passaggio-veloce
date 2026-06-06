@@ -527,10 +527,11 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     proprietario,
   );
 
-  // A7: presenza documento d'identità per parte (fronte CI o single per
-  // passaporto/patente). Il permesso è opzionale.
+  // A7: presenza documento d'identità per parte. Per la CI servono ENTRAMBE le
+  // facciate (fronte+retro) — coerente con la validazione server-side; per
+  // passaporto/patente basta il file singolo. Il permesso è opzionale.
   const identitaPresente = (docId: DocIdTipo, files: IdentitaFiles): boolean =>
-    docId === 'CI' ? !!files.fronte : !!files.single;
+    docId === 'CI' ? !!files.fronte && !!files.retro : !!files.single;
 
   // Gate per lasciare lo step 2 (Venditore): parte valida + identità + no mismatch.
   const canStep2 =

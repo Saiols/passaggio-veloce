@@ -13,7 +13,7 @@ import {
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
-import { proprietarioCrossCheck } from '@/lib/kyc/match';
+import { venditoriCrossCheck } from '@/lib/kyc/match';
 import {
   extractLibrettoAction,
   extractIdentitaAction,
@@ -35,6 +35,15 @@ type IdentitaFiles = {
  * Per nomi composti (es. "Maria Carla Bianchi") l'ultimo token è cognome.
  * Se la stringa è una sola parola, la usiamo come cognome (caso edge).
  */
+/**
+ * A7: presenza documento d'identità per parte. Per la CI servono ENTRAMBE le
+ * facciate (fronte+retro) — coerente con la validazione server-side; per
+ * passaporto/patente basta il file singolo. Il permesso è opzionale.
+ */
+function identitaPresente(docId: DocIdTipo, files: IdentitaFiles): boolean {
+  return docId === 'CI' ? !!files.fronte && !!files.retro : !!files.single;
+}
+
 function splitNomeCompleto(full: string): { nome: string; cognome: string } {
   const parts = full.trim().split(/\s+/);
   if (parts.length <= 1) return { nome: '', cognome: parts[0] ?? '' };
@@ -128,6 +137,22 @@ const emptyParte = (): Parte => ({
   piva: '',
   telefono: '',
   email: '',
+});
+
+/**
+ * Tipi pratica multi-veicolo (B6): un venditore (co-intestatario) ha gli stessi
+ * campi di una Parte + il proprio documento d'identità (tipo + file). Quando il
+ * libretto ha più proprietari, si crea un VenditoreInput per ciascuno.
+ */
+type VenditoreInput = Parte & {
+  docId: DocIdTipo;
+  identita: IdentitaFiles;
+};
+
+const emptyVenditore = (): VenditoreInput => ({
+  ...emptyParte(),
+  docId: 'CI',
+  identita: {},
 });
 
 const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
@@ -228,14 +253,22 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     );
   };
 
-  const [venditore, setVenditore] = useState<Parte>(emptyParte());
+  // B6: N venditori (co-intestatari). Ciascuno ha gli stessi campi di una Parte
+  // + il proprio documento d'identità. Default: un venditore vuoto.
+  const [venditori, setVenditori] = useState<VenditoreInput[]>([emptyVenditore()]);
   const [acquirente, setAcquirente] = useState<Parte>(emptyParte());
+
+  // Aggiorna un singolo venditore per indice (update immutabile).
+  const updateVenditore = (idx: number, patch: Partial<VenditoreInput>) => {
+    setVenditori((prev) => prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
+  };
+  const addVenditore = () => setVenditori((prev) => [...prev, emptyVenditore()]);
+  const removeVenditore = (idx: number) =>
+    setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
 
   // Documento d'identità per parte (A7): tipo scelto + file caricati. Il file
   // principale (fronte CI / single passaporto-patente) avvia l'OCR di pre-fill.
-  const [venditoreDocId, setVenditoreDocId] = useState<DocIdTipo>('CI');
   const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
-  const [venditoreIdentita, setVenditoreIdentita] = useState<IdentitaFiles>({});
   const [acquirenteIdentita, setAcquirenteIdentita] = useState<IdentitaFiles>({});
 
   const [flagCointestazione, setFlagCointestazione] = useState(false);
@@ -256,16 +289,40 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       ? TIPI_SOGGETTO_ACQUIRENTE_MINIVOLTURA
       : TIPI_SOGGETTO_ACQUIRENTE_SEMPLICE;
 
-  // Q-10: pre-fill nome venditore da proprietarioAttuale del primo veicolo.
-  // Solo se l'utente non ha ancora toccato i campi nome+cognome venditore (PF).
+  // B6: auto-popola i venditori dai proprietari estratti dal primo libretto.
+  // - Se il libretto ha N proprietari (co-intestatari), crea un VenditoreInput
+  //   per ciascuno (split best-effort del nominativo MAIUSCOLO in cognome+nome).
+  // - Non sovrascrive dati già inseriti: agisce solo se i venditori sono ancora
+  //   al default (uno solo, vuoto). L'utente può poi aggiungere/correggere.
   // Chiamato post-estrazione del veicolo 1 (no effect → evita cascading render).
-  const maybePrefillVenditore = (proprietario: string) => {
-    if (!proprietario) return;
-    setVenditore((prev) => {
-      if (prev.isPG || prev.nome.trim() || prev.cognome.trim()) return prev;
-      const { nome, cognome } = splitNomeCompleto(proprietario);
-      if (!nome && !cognome) return prev;
-      return { ...prev, nome, cognome };
+  const maybePrefillVenditori = (data: LibrettoCircolazioneData) => {
+    const proprietari =
+      data.proprietari && data.proprietari.length > 0
+        ? data.proprietari
+        : data.proprietarioAttuale
+          ? [data.proprietarioAttuale]
+          : [];
+    if (!proprietari.length) return;
+    setVenditori((prev) => {
+      // Solo se l'utente non ha ancora toccato nulla (un venditore vuoto).
+      const isDefault =
+        prev.length === 1 &&
+        !prev[0]!.isPG &&
+        !prev[0]!.nome.trim() &&
+        !prev[0]!.cognome.trim() &&
+        !prev[0]!.ragioneSociale.trim();
+      if (!isDefault) return prev;
+      // Un solo proprietario: pre-fill il venditore esistente (preserva docId/file).
+      if (proprietari.length === 1) {
+        const { nome, cognome } = splitNomeCompleto(proprietari[0]!);
+        if (!nome && !cognome) return prev;
+        return [{ ...prev[0]!, nome, cognome }];
+      }
+      // Più proprietari: un venditore per ciascuno.
+      return proprietari.map((p) => {
+        const { nome, cognome } = splitNomeCompleto(p);
+        return { ...emptyVenditore(), nome, cognome };
+      });
     });
   };
 
@@ -290,14 +347,13 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         preImm2015: v.preImm2015,
         flagComodatoDuso: v.flagComodatoDuso,
       })),
-      venditoreTipoSoggetto: venditore.tipoSoggetto,
-      venditoreVisuraData: venditore.visuraData
-        ? new Date(venditore.visuraData)
-        : null,
-      venditorePermessoData: venditore.permessoData
-        ? new Date(venditore.permessoData)
-        : null,
-      venditoreDocumentoIdentita: venditoreDocId,
+      venditori: venditori.map((v, i) => ({
+        ordine: i + 1,
+        tipoSoggetto: v.tipoSoggetto,
+        documentoIdentita: v.docId,
+        visuraData: v.visuraData ? new Date(v.visuraData) : null,
+        permessoData: v.permessoData ? new Date(v.permessoData) : null,
+      })),
       flagProcura,
       flagSuccessione,
       acquirenteTipoSoggetto: acquirente.tipoSoggetto,
@@ -312,10 +368,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     });
   }, [
     veicoli,
-    venditore.tipoSoggetto,
-    venditore.visuraData,
-    venditore.permessoData,
-    venditoreDocId,
+    venditori,
     flagProcura,
     flagSuccessione,
     acquirente.tipoSoggetto,
@@ -349,8 +402,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           preImm2015: res.data.preImm2015,
           flagComodatoDuso: res.data.flagComodatoDuso,
         });
-        // Pre-fill venditore solo dal proprietario del primo veicolo.
-        if (idx === 0) maybePrefillVenditore(res.data.proprietarioAttuale ?? '');
+        // Pre-fill venditori solo dai proprietari del primo veicolo.
+        if (idx === 0) maybePrefillVenditori(res.data);
       } else {
         updateVeicolo(idx, { extracting: false, ocrError: res.error });
       }
@@ -365,10 +418,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte.
   // Chiamato quando viene impostato il file principale (fronte CI o single).
   // Non sovrascrive campi già compilati a mano dal broker.
-  const runIdentitaOcr = async (
+  const runIdentitaOcr = async <P extends Parte>(
     file: File,
     tipo: DocIdTipo,
-    onChange: (updater: (p: Parte) => Parte) => void,
+    onChange: (updater: (p: P) => P) => void,
   ) => {
     try {
       const fd = new FormData();
@@ -418,17 +471,25 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       veicoli.some((v) => v.ocrManuale) ? 'true' : 'false',
     );
 
-    fd.append('venditoreIsPG', venditore.isPG ? 'true' : 'false');
-    if (venditore.isPG) {
-      fd.append('venditoreRagioneSociale', venditore.ragioneSociale);
-      fd.append('venditorePIVA', venditore.piva);
-    } else {
-      fd.append('venditoreNome', venditore.nome);
-      fd.append('venditoreCognome', venditore.cognome);
-      fd.append('venditoreCF', venditore.cf);
-    }
-    fd.append('venditoreTelefono', venditore.telefono);
-    fd.append('venditoreEmail', venditore.email);
+    // B6: N venditori (co-intestatari) come JSON. Ordine = indice + 1. Include
+    // tutti i campi parte + docId per ciascuno; i file identità vanno negli slot
+    // VEND<n>_* qui sotto. La persistenza server-side è task B7.
+    const venditoriPayload = venditori.map((v, i) => ({
+      ordine: i + 1,
+      isPG: v.isPG,
+      tipoSoggetto: v.tipoSoggetto,
+      visuraData: v.visuraData || null,
+      permessoData: v.permessoData || null,
+      nome: v.nome,
+      cognome: v.cognome,
+      cf: v.cf,
+      ragioneSociale: v.ragioneSociale,
+      piva: v.piva,
+      telefono: v.telefono,
+      email: v.email,
+      docId: v.docId,
+    }));
+    fd.append('venditori', JSON.stringify(venditoriPayload));
 
     fd.append('acquirenteIsPG', acquirente.isPG ? 'true' : 'false');
     if (acquirente.isPG) {
@@ -453,30 +514,30 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     fd.append('flagSuccessione', flagSuccessione ? 'true' : 'false');
     fd.append('flagMinore', flagMinore ? 'true' : 'false');
 
-    // Schema Documentale v7 (SD-B): tipo soggetto + date validità.
-    if (venditore.tipoSoggetto) {
-      fd.append('venditoreTipoSoggetto', venditore.tipoSoggetto);
-    }
-    if (venditore.visuraData) fd.append('venditoreVisuraData', venditore.visuraData);
-    if (venditore.permessoData) fd.append('venditorePermessoData', venditore.permessoData);
-
+    // Schema Documentale v7 (SD-B): tipo soggetto + date validità acquirente.
+    // (Per i venditori questi campi sono nel JSON `venditori` qui sopra.)
     if (acquirente.tipoSoggetto) {
       fd.append('acquirenteTipoSoggetto', acquirente.tipoSoggetto);
     }
     if (acquirente.visuraData) fd.append('acquirenteVisuraData', acquirente.visuraData);
     if (acquirente.permessoData) fd.append('acquirentePermessoData', acquirente.permessoData);
 
-    // A7: documento d'identità per parte (tipo + file in slot). La persistenza
-    // server-side dei file + cross-check venditore è task A8.
-    fd.append('venditoreDocumentoIdentita', venditoreDocId);
+    // B6: file documento d'identità PER venditore in slot VEND<n>_*. Il tipo
+    // documento (docId) viaggia nel JSON `venditori`. La persistenza server-side
+    // dei file + cross-check insiemistico è task B7.
+    venditori.forEach((v, i) => {
+      const n = i + 1;
+      if (v.docId === 'CI') {
+        if (v.identita.fronte) fd.append(`VEND${n}_ID_FRONTE`, v.identita.fronte);
+        if (v.identita.retro) fd.append(`VEND${n}_ID_RETRO`, v.identita.retro);
+      } else if (v.identita.single) {
+        fd.append(`VEND${n}_ID`, v.identita.single);
+      }
+      if (v.identita.permesso) fd.append(`VEND${n}_PERMESSO`, v.identita.permesso);
+    });
+
+    // A7: documento d'identità acquirente (tipo + file in slot).
     fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
-    if (venditoreDocId === 'CI') {
-      if (venditoreIdentita.fronte) fd.append('VEND_ID_FRONTE', venditoreIdentita.fronte);
-      if (venditoreIdentita.retro) fd.append('VEND_ID_RETRO', venditoreIdentita.retro);
-    } else if (venditoreIdentita.single) {
-      fd.append('VEND_ID', venditoreIdentita.single);
-    }
-    if (venditoreIdentita.permesso) fd.append('VEND_PERMESSO', venditoreIdentita.permesso);
     if (acquirenteDocId === 'CI') {
       if (acquirenteIdentita.fronte) fd.append('ACQ_ID_FRONTE', acquirenteIdentita.fronte);
       if (acquirenteIdentita.retro) fd.append('ACQ_ID_RETRO', acquirenteIdentita.retro);
@@ -515,29 +576,29 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   // Gate per lasciare lo step 1 (Tipo & veicoli).
   const canStep1 = veicoliValidi && !comodatoBloccante;
 
-  // A7: cross-check venditore vs intestatario del primo libretto.
-  const proprietario = veicoli[0]?.proprietarioAttuale;
-  const cc = proprietarioCrossCheck(
-    {
-      isPersonaGiuridica: venditore.isPG,
-      nome: venditore.nome,
-      cognome: venditore.cognome,
-      ragioneSociale: venditore.ragioneSociale,
-    },
-    proprietario,
+  // B6: cross-check insiemistico venditori ↔ proprietari del primo libretto.
+  // I proprietari sono tutti gli intestatari estratti dall'OCR (co-intestatari),
+  // con fallback al proprietarioAttuale (campo editabile) se la lista è vuota.
+  const proprietari =
+    veicoli[0]?.ocr?.proprietari ??
+    (veicoli[0]?.proprietarioAttuale ? [veicoli[0].proprietarioAttuale] : []);
+  const ccVend = venditoriCrossCheck(
+    venditori.map((v) => ({
+      isPersonaGiuridica: v.isPG,
+      nome: v.nome,
+      cognome: v.cognome,
+      ragioneSociale: v.ragioneSociale,
+    })),
+    proprietari,
+    { flagProcura },
   );
 
-  // A7: presenza documento d'identità per parte. Per la CI servono ENTRAMBE le
-  // facciate (fronte+retro) — coerente con la validazione server-side; per
-  // passaporto/patente basta il file singolo. Il permesso è opzionale.
-  const identitaPresente = (docId: DocIdTipo, files: IdentitaFiles): boolean =>
-    docId === 'CI' ? !!files.fronte && !!files.retro : !!files.single;
-
-  // Gate per lasciare lo step 2 (Venditore): parte valida + identità + no mismatch.
+  // Gate per lasciare lo step 2 (Venditore): ogni venditore valido + identità
+  // presente + nessun mismatch insiemistico (SCONOSCIUTO/OK non bloccano).
   const canStep2 =
-    parteValida(venditore) &&
-    identitaPresente(venditoreDocId, venditoreIdentita) &&
-    cc !== 'MISMATCH';
+    venditori.every(
+      (v) => parteValida(v) && identitaPresente(v.docId, v.identita),
+    ) && ccVend !== 'MISMATCH';
 
   // Gate per lasciare lo step 3 (Acquirente): parte valida + identità.
   const canStep3 =
@@ -668,34 +729,70 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
         {step === 2 && (
           <div className="space-y-5">
-            <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Venditore</h2>
-              <ParteForm
-                parte={venditore}
-                onChange={setVenditore}
-                tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
-              />
-            </div>
-
-            <IdentitaSection
-              titolo="Documento d'identità del venditore"
-              docId={venditoreDocId}
-              onDocId={setVenditoreDocId}
-              files={venditoreIdentita}
-              onFiles={setVenditoreIdentita}
-              onMainFile={(file) =>
-                runIdentitaOcr(file, venditoreDocId, (updater) =>
-                  setVenditore((prev) => updater(prev)),
-                )
-              }
-            />
-
-            {cc === 'MISMATCH' && (
+            {ccVend === 'MISMATCH' && (
               <Alert variant="error">
-                Il venditore non corrisponde all&apos;intestatario del libretto
-                ({proprietario}).
+                I venditori non corrispondono agli intestatari del libretto
+                {proprietari.length > 0 && <> ({proprietari.join(', ')})</>}.
+                Verifica i nominativi o aggiungi i co-intestatari mancanti.
               </Alert>
             )}
+
+            {venditori.map((v, idx) => (
+              <div key={idx} className="space-y-5">
+                <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-[15px] font-bold text-pv-navy-800">
+                      {venditori.length > 1 ? `Venditore ${idx + 1}` : 'Venditore'}
+                    </h2>
+                    {venditori.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeVenditore(idx)}
+                        className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600"
+                      >
+                        Rimuovi
+                      </button>
+                    )}
+                  </div>
+                  <ParteForm
+                    parte={v}
+                    onChange={(p) => updateVenditore(idx, p)}
+                    tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
+                  />
+                </div>
+
+                <IdentitaSection
+                  titolo={
+                    venditori.length > 1
+                      ? `Documento d'identità del venditore ${idx + 1}`
+                      : "Documento d'identità del venditore"
+                  }
+                  docId={v.docId}
+                  onDocId={(t) => updateVenditore(idx, { docId: t })}
+                  files={v.identita}
+                  onFiles={(updater) =>
+                    setVenditori((prev) =>
+                      prev.map((vv, i) =>
+                        i === idx ? { ...vv, identita: updater(vv.identita) } : vv,
+                      ),
+                    )
+                  }
+                  onMainFile={(file) =>
+                    runIdentitaOcr<VenditoreInput>(file, v.docId, (upd) =>
+                      setVenditori((prev) =>
+                        prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
+                      ),
+                    )
+                  }
+                />
+              </div>
+            ))}
+
+            <div className="flex justify-start">
+              <Button variant="secondary" onClick={addVenditore}>
+                + Aggiungi venditore (co-intestatario)
+              </Button>
+            </div>
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Flag pratica</h2>
@@ -882,8 +979,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 <RiepilogoRow label="Tipo" value={labelTipo(tipo, multiplo)} />
                 <RiepilogoRow label="Numero veicoli" value={String(numeroVeicoli)} />
                 <RiepilogoRow
-                  label="Venditore"
-                  value={parteNome(venditore)}
+                  label={venditori.length > 1 ? 'Venditori' : 'Venditore'}
+                  value={venditori.map((v) => parteNome(v)).join(', ')}
                 />
                 <RiepilogoRow
                   label="Acquirente"

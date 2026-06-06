@@ -34,4 +34,11 @@ describe('parseLibrettoText', () => {
   it('non segnala comodato se assente', () => {
     expect(parseLibrettoText('CARTA DI CIRCOLAZIONE targa AB123CD', 0.9).flagComodatoDuso).toBe(false);
   });
+  it('estrae il proprietario (intestatario)', () => {
+    const r = parseLibrettoText('CARTA DI CIRCOLAZIONE\nINTESTATO A ROSSI MARIO\nA) AB123CD', 0.9);
+    expect(r.proprietarioAttuale).toBe('ROSSI MARIO');
+  });
+  it('proprietario undefined se non riconosciuto', () => {
+    expect(parseLibrettoText('targa AB123CD', 0.9).proprietarioAttuale).toBeUndefined();
+  });
 });

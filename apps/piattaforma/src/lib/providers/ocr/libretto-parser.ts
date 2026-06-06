@@ -18,11 +18,14 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
   const dm = DATE_RE.exec(upper);
   const dataImmatricolazione = dm ? toIso(dm[1]!, dm[2]!, dm[3]!) : undefined;
   const year = dm ? Number(dm[3]) : undefined;
+  // Estrazione intestatario: cerca pattern su una singola riga (non attraversa newline)
+  const propM = /(?:INTESTAT[OA] A|INTESTATARIO|C1\.1\)?\s*)[^\S\n]*([A-ZÀ-Ù'']+(?:[^\S\n]+[A-ZÀ-Ù'']+){1,3})/.exec(upper);
+  const proprietarioAttuale = propM ? propM[1]!.trim() : undefined;
   return {
     targa,
     telaio,
     dataImmatricolazione,
-    proprietarioAttuale: undefined,
+    proprietarioAttuale,
     preImm2015: year !== undefined && year < 2015,
     flagComodatoDuso: /COMODATO/.test(upper),
     confidenceScore: confidence,

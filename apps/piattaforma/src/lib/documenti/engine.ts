@@ -35,7 +35,9 @@ export type DocumentoTipoEngine =
   | 'CERTIFICATO_MORTE'
   | 'ATTO_ACCETTAZIONE_EREDITA'
   | 'DICHIARAZIONE_QUALITA_EREDE'
-  | 'AUTORIZZAZIONE_TUTORE';
+  | 'AUTORIZZAZIONE_TUTORE'
+  | 'PASSAPORTO'
+  | 'PATENTE';
 
 export type ParteDocumento =
   | 'VEICOLO'

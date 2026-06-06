@@ -106,6 +106,8 @@ enum DocumentoTipo {
   DICHIARAZIONE_QUALITA_EREDE
   AUTORIZZAZIONE_TUTORE
   ALTRO
+  PASSAPORTO
+  PATENTE
 }
 
 // Schema Documentale v7: tipologia di soggetto (venditore o acquirente).

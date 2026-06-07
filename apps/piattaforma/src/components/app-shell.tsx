@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/components/ui';
 import { logoutAction } from '@/app/(auth)/actions';
 import { DemoBanner } from '@/components/demo-banner';
+import { AdminShell } from '@/components/admin/admin-shell';
 
 export type AppShellSession = {
   user: {
@@ -17,6 +18,10 @@ export type AppShellSession = {
 type NavLink = { href: string; label: string };
 
 function navForRole(role: string | undefined, companyType: string | undefined): NavLink[] {
+  // NOTA: lo staff di piattaforma (ADMIN_PIATTAFORMA / ASSISTENTE) NON passa più
+  // di qui — AppShell fa un early-return verso AdminShell (sidebar CRM). Questo
+  // ramo resta solo come riferimento storico; la nav admin "viva" è la lista
+  // NAV_GROUPS in components/admin/admin-shell.tsx (stessi href e stessi permessi).
   if (role === 'ADMIN_PIATTAFORMA' || role === 'ASSISTENTE') {
     const adminLinks: NavLink[] = [
       { href: '/dashboard', label: 'Dashboard' },
@@ -89,6 +94,22 @@ export function AppShell({
   activePath?: string;
   children: ReactNode;
 }) {
+  // Lo staff di piattaforma (admin + assistenti) usa la chrome CRM con sidebar
+  // a colonna. Dealer e agenzie mantengono la top-bar storica invariata.
+  if (session.user.role === 'ADMIN_PIATTAFORMA' || session.user.role === 'ASSISTENTE') {
+    const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7);
+    return (
+      <AdminShell
+        session={session}
+        activePath={activePath}
+        buildSha={buildSha}
+        demoBanner={<DemoBanner isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />}
+      >
+        {children}
+      </AdminShell>
+    );
+  }
+
   const links = navForRole(session.user.role, session.user.companyType);
 
   return (

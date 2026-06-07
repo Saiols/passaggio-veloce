@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { AppShell } from '@/components/app-shell';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { BrokerDashboard } from './broker-dashboard';
 import { AgenziaDashboard } from './agenzia-dashboard';
 import { AdminDashboard } from './admin-dashboard';
@@ -26,7 +27,10 @@ export default async function DashboardPage({
 
   return (
     <AppShell session={session} activePath="/dashboard">
-      {role === 'ADMIN_PIATTAFORMA' ? (
+      {/* Admin e Assistente condividono l'overview operativa (conteggi pratiche/
+          anagrafiche/escalation). I dati finanziari aggregati restano riservati
+          all'Admin nella pagina dedicata /admin/dashboard (canViewAggregatedFinancials). */}
+      {isAdminOrAssistente(role) ? (
         <AdminDashboard
           tickBanner={
             sp.tick === '1'

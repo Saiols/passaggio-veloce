@@ -136,7 +136,7 @@ export function DocumentScannerModal({
           }
           mat.delete();
           if (!cancelled) setStatus('ready');
-        } catch (e) {
+        } catch {
           // OpenCV non disponibile: l'utente può comunque usare l'originale.
           if (!cancelled) {
             setStatus('error');

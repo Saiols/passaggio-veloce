@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useEffect } from 'react';
+import { useDocumentScanner } from '@/components/document-scanner-modal';
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/jpg';
 
@@ -16,6 +17,8 @@ export function DocCard({
   /** Evidenzia la card quando il gate KYC ha segnalato un problema su questo documento. */
   invalid?: boolean;
 }) {
+  // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
+  const { pick, modal } = useDocumentScanner({ onFile: onChange });
   const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   const previewUrl = useMemo(
     () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
@@ -101,8 +104,12 @@ export function DocCard({
         type="file"
         accept={ACCEPT}
         className="sr-only"
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          pick(e.target.files?.[0] ?? null);
+          e.target.value = '';
+        }}
       />
+      {modal}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
 import { docKey } from '@/lib/documenti/richiesti';
+import { useDocumentScanner } from '@/components/document-scanner-modal';
 import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
@@ -1593,6 +1594,8 @@ function UploadCard({
   invalid?: boolean;
 }) {
   const file = slot?.file ?? null;
+  // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
+  const { pick, modal } = useDocumentScanner({ onFile: onSelect });
   const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   const previewUrl = useMemo(
     () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
@@ -1686,8 +1689,12 @@ function UploadCard({
         type="file"
         accept="application/pdf,image/jpeg,image/png,image/jpg"
         className="sr-only"
-        onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          pick(e.target.files?.[0] ?? null);
+          e.target.value = '';
+        }}
       />
+      {modal}
     </div>
   );
 }

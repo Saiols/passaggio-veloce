@@ -16,7 +16,7 @@ import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
-import { venditoriCrossCheck } from '@/lib/kyc/match';
+import { crossCheckPerVeicolo } from './venditori-per-veicolo';
 import { extractVisura } from '@/lib/kyc/visura-parser';
 import { parsePermessoText } from '@/lib/kyc/extract-permesso';
 import {
@@ -303,6 +303,7 @@ const tipoSoggettoEnum = z.enum([
  */
 const venditoreSchema = z.object({
   ordine: z.coerce.number().int().min(1).max(50),
+  veicoloOrdine: z.coerce.number().int().min(1).max(50).default(1),
   isPG: z.boolean().default(false),
   tipoSoggetto: tipoSoggettoEnum.optional().nullable(),
   nome: z.string().trim().max(80).optional().nullable(),
@@ -671,38 +672,28 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   }
   collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente");
 
-  // Cross-check insiemistico venditori ↔ intestatari (server-side, autoritativo).
-  // Gli intestatari sono l'UNIONE (dedup) dei proprietari estratti da TUTTI i
-  // libretti (C.2 + C.3 di ogni veicolo), con fallback al proprietarioAttuale
+  // Cross-check insiemistico venditori ↔ intestatari PER VEICOLO (server-side,
+  // autoritativo): i venditori del veicolo i devono coincidere con gli
+  // intestatari del libretto i (C.2 + C.3), con fallback al proprietarioAttuale
   // editabile. MISMATCH blocca il submit; OK/SCONOSCIUTO proseguono.
-  const proprietari = (() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const v of veicoli) {
-      const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
-      const lista = Array.isArray(raw)
-        ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-        : v.proprietarioAttuale
-          ? [v.proprietarioAttuale]
-          : [];
-      for (const p of lista) {
-        const k = p.trim().toUpperCase().replace(/\s+/g, ' ');
-        if (k && !seen.has(k)) {
-          seen.add(k);
-          out.push(p);
-        }
-      }
-    }
-    return out;
-  })();
-  const cc = venditoriCrossCheck(
+  const proprietariPerVeicolo: Record<number, string[]> = {};
+  veicoli.forEach((v, i) => {
+    const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
+    proprietariPerVeicolo[i + 1] = Array.isArray(raw)
+      ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+      : v.proprietarioAttuale
+        ? [v.proprietarioAttuale]
+        : [];
+  });
+  const cc = crossCheckPerVeicolo(
     venditori.map((v) => ({
-      isPersonaGiuridica: v.isPG,
+      veicoloOrdine: v.veicoloOrdine,
+      isPG: v.isPG,
       nome: v.nome ?? undefined,
       cognome: v.cognome ?? undefined,
       ragioneSociale: v.ragioneSociale ?? undefined,
     })),
-    proprietari,
+    proprietariPerVeicolo,
     { flagProcura: d.flagProcura },
   );
   if (cc === 'MISMATCH') {
@@ -941,6 +932,7 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
       const venditore = await tx.venditore.create({
         data: {
           praticaId: created.id,
+          veicoloId: veicoloIdByOrdine.get(v.veicoloOrdine) ?? null,
           ordine: v.ordine,
           nome: v.isPG ? null : v.nome || null,
           cognome: v.isPG ? null : v.cognome || null,

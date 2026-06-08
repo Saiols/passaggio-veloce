@@ -34,7 +34,9 @@ type VendMin = {
 export function crossCheckPerVeicolo(
   venditori: VendMin[],
   proprietariPerVeicolo: Record<number, string[]>,
+  opts: { flagProcura?: boolean } = {},
 ): 'OK' | 'MISMATCH' | 'SCONOSCIUTO' {
+  const flagProcura = opts.flagProcura ?? false;
   const ordini = new Set(venditori.map((v) => v.veicoloOrdine));
   let qualcheNoto = false;
   for (const ord of ordini) {
@@ -49,7 +51,7 @@ export function crossCheckPerVeicolo(
         cognome: v.cognome ?? undefined,
         ragioneSociale: v.ragioneSociale ?? undefined,
       }));
-    if (venditoriCrossCheck(gruppo, proprietari, { flagProcura: false }) === 'MISMATCH') {
+    if (venditoriCrossCheck(gruppo, proprietari, { flagProcura }) === 'MISMATCH') {
       return 'MISMATCH';
     }
   }

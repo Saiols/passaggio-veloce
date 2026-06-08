@@ -12,8 +12,8 @@ import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
-import type { LibrettoCircolazioneData, OwnerInfo } from '@/lib/providers/ocr/types';
-import { venditoriCrossCheck } from '@/lib/kyc/match';
+import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
+import { intestatariPerVeicolo, crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
   validaParte,
   type ParteDati,
@@ -98,26 +98,6 @@ function identitaUploading(files: IdentitaFiles): boolean {
     slotUploading(files.permesso) ||
     slotUploading(files.visura)
   );
-}
-
-// Unione degli intestatari rilevati su TUTTI i veicoli, dedup per nome/ragione
-// sociale. Ogni libretto può avere 2 intestatari (C.2 proprietario + C.3
-// secondo intestatario/utilizzatore). Pura/testabile.
-function aggregaIntestatari(
-  veicoli: { ocr?: LibrettoCircolazioneData }[],
-): OwnerInfo[] {
-  const out: OwnerInfo[] = [];
-  const seen = new Set<string>();
-  for (const v of veicoli) {
-    for (const o of v.ocr?.proprietariInfo ?? []) {
-      const key = o.display.trim().toUpperCase().replace(/\s+/g, ' ');
-      if (key && !seen.has(key)) {
-        seen.add(key);
-        out.push(o);
-      }
-    }
-  }
-  return out;
 }
 
 // docKey del Certificato di Proprietà di un veicolo (pre-2015). Stessa chiave
@@ -227,12 +207,14 @@ const emptyParte = (): Parte => ({
 type VenditoreInput = Parte & {
   docId: DocIdTipo;
   identita: IdentitaFiles;
+  veicoloOrdine: number; // veicolo (1..n) a cui appartiene questo venditore
 };
 
-const emptyVenditore = (): VenditoreInput => ({
+const emptyVenditore = (veicoloOrdine = 1): VenditoreInput => ({
   ...emptyParte(),
   docId: 'CI',
   identita: {},
+  veicoloOrdine,
 });
 
 const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
@@ -342,13 +324,16 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   // B6: N venditori (co-intestatari). Ciascuno ha gli stessi campi di una Parte
   // + il proprio documento d'identità. Default: un venditore vuoto.
   const [venditori, setVenditori] = useState<VenditoreInput[]>([emptyVenditore()]);
+  // Accordion step Venditore (solo multiplo): veicolo aperto (default il primo).
+  const [veicoloAperto, setVeicoloAperto] = useState<number>(1);
   const [acquirente, setAcquirente] = useState<Parte>(emptyParte());
 
   // Aggiorna un singolo venditore per indice (update immutabile).
   const updateVenditore = (idx: number, patch: Partial<VenditoreInput>) => {
     setVenditori((prev) => prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
   };
-  const addVenditore = () => setVenditori((prev) => [...prev, emptyVenditore()]);
+  const addVenditore = (veicoloOrdine = 1) =>
+    setVenditori((prev) => [...prev, emptyVenditore(veicoloOrdine)]);
   const removeVenditore = (idx: number) =>
     setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
 
@@ -368,22 +353,21 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       ? TIPI_SOGGETTO_ACQUIRENTE_MINIVOLTURA
       : TIPI_SOGGETTO_ACQUIRENTE_SEMPLICE;
 
-  // Rigenera i venditori dall'UNIONE degli intestatari di TUTTI i veicoli (per
-  // ogni libretto: C.2 proprietario + C.3 secondo intestatario/utilizzatore),
-  // con dati strutturati (azienda → ragione sociale/P.IVA; persona → nome/
-  // cognome/CF). Si attiva solo quando l'insieme degli intestatari CAMBIA
-  // (upload/modifica di un libretto), così non sovrascrive le modifiche fatte a
-  // mano nello step Venditore (dove l'insieme non cambia).
+  // Rigenera i venditori PER VEICOLO: per ogni libretto un venditore per ciascun
+  // intestatario (C.2 proprietario + C.3 secondo intestatario/utilizzatore),
+  // taggato col veicoloOrdine (no dedup tra veicoli → stesso intestatario su 2
+  // veicoli = 2 voci). Si attiva solo quando l'insieme cambia, così non
+  // sovrascrive le modifiche fatte a mano nello step Venditore.
   const ownersSig = useRef<string>('');
   useEffect(() => {
-    const owners = aggregaIntestatari(veicoli);
-    const sig = owners.map((o) => o.display).join('|');
+    const prefill = intestatariPerVeicolo(veicoli);
+    const sig = prefill.map((o) => `${o.veicoloOrdine}#${o.display}`).join('|');
     if (sig === ownersSig.current) return;
     ownersSig.current = sig;
-    if (!owners.length) return;
+    if (!prefill.length) return;
     setVenditori(
-      owners.map((o) => ({
-        ...emptyVenditore(),
+      prefill.map((o) => ({
+        ...emptyVenditore(o.veicoloOrdine),
         isPG: o.isPersonaGiuridica,
         tipoSoggetto: o.isPersonaGiuridica ? 'AZIENDA' : null,
         nome: o.nome ?? '',
@@ -622,6 +606,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     // VEND<n>_* (BlobRef) qui sotto.
     const venditoriPayload = venditori.map((v, i) => ({
       ordine: i + 1,
+      veicoloOrdine: v.veicoloOrdine,
       isPG: v.isPG,
       tipoSoggetto: v.tipoSoggetto,
       nome: v.nome,
@@ -725,34 +710,31 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const canStep1 =
     veicoliValidi && !comodatoBloccante && !librettiUploading && !cdpUploading && !cdpMancante;
 
-  // Cross-check insiemistico venditori ↔ intestatari. Gli intestatari sono
-  // l'UNIONE (dedup) di tutti i proprietari estratti da TUTTI i libretti
-  // (C.2 + C.3 di ogni veicolo), con fallback al proprietarioAttuale editabile.
-  const proprietari = (() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const v of veicoli) {
-      const lista = v.ocr?.proprietari ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
-      for (const p of lista) {
-        const k = p.trim().toUpperCase().replace(/\s+/g, ' ');
-        if (k && !seen.has(k)) {
-          seen.add(k);
-          out.push(p);
-        }
-      }
-    }
-    return out;
-  })();
-  const ccVend = venditoriCrossCheck(
-    venditori.map((v) => ({
-      isPersonaGiuridica: v.isPG,
-      nome: v.nome,
-      cognome: v.cognome,
-      ragioneSociale: v.ragioneSociale,
-    })),
-    proprietari,
-    { flagProcura: false },
-  );
+  // Cross-check insiemistico venditori ↔ intestatari PER VEICOLO: i venditori del
+  // veicolo i devono coincidere con gli intestatari del libretto i (C.2 + C.3),
+  // con fallback al proprietarioAttuale editabile.
+  const proprietariPerVeicolo: Record<number, string[]> = {};
+  veicoli.forEach((v, i) => {
+    proprietariPerVeicolo[i + 1] =
+      v.ocr?.proprietari ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
+  });
+  const venditoriCC = venditori.map((v) => ({
+    veicoloOrdine: v.veicoloOrdine,
+    isPG: v.isPG,
+    nome: v.nome,
+    cognome: v.cognome,
+    ragioneSociale: v.ragioneSociale,
+  }));
+  const ccVend = crossCheckPerVeicolo(venditoriCC, proprietariPerVeicolo);
+  // Esito per singolo veicolo (per mostrare l'alert nell'accordion giusto).
+  const ccPerVeicolo: Record<number, 'OK' | 'MISMATCH' | 'SCONOSCIUTO'> = {};
+  veicoli.forEach((_, i) => {
+    const ord = i + 1;
+    ccPerVeicolo[ord] = crossCheckPerVeicolo(
+      venditoriCC.filter((v) => v.veicoloOrdine === ord),
+      { [ord]: proprietariPerVeicolo[ord] ?? [] },
+    );
+  });
 
   // Verifica documentale OCR (fail-closed): verdetto per ogni venditore e per
   // l'acquirente, calcolato dai campi inseriti + OCR salvati. `now` unico per
@@ -760,6 +742,96 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const now = new Date();
   const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, now));
   const verdettoAcquirente = verificaDocumentaleParte(acquirente, now);
+
+  // Blocco UI di un singolo venditore (riusato dal layout singolo e dall'accordion
+  // multiplo). `idx` è l'indice GLOBALE nell'array venditori (handler + slot file).
+  const renderVenditore = (
+    v: VenditoreInput,
+    idx: number,
+    label: string,
+    canRemove: boolean,
+  ) => (
+    <div key={idx} className="space-y-5">
+      <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[15px] font-bold text-pv-navy-800">{label}</h2>
+          {canRemove && (
+            <button
+              type="button"
+              onClick={() => removeVenditore(idx)}
+              className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600"
+            >
+              Rimuovi
+            </button>
+          )}
+        </div>
+        <ParteForm
+          parte={v}
+          onChange={(p) => updateVenditore(idx, p)}
+          tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
+        />
+      </div>
+
+      <IdentitaSection
+        titolo={
+          label === 'Venditore'
+            ? "Documento d'identità del venditore"
+            : `Documento d'identità — ${label.toLowerCase()}`
+        }
+        docId={v.docId}
+        onDocId={(t) => updateVenditore(idx, { docId: t })}
+        files={v.identita}
+        isPG={v.isPG}
+        tipoSoggetto={v.tipoSoggetto}
+        onFiles={(updater) =>
+          setVenditori((prev) =>
+            prev.map((vv, i) => (i === idx ? { ...vv, identita: updater(vv.identita) } : vv)),
+          )
+        }
+        onMainRef={(ref) =>
+          runIdentitaOcr<VenditoreInput>(ref, v.docId, (upd) =>
+            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+          )
+        }
+        onVisuraRef={(ref) =>
+          runVisuraOcr<VenditoreInput>(ref, (upd) =>
+            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+          )
+        }
+        onPermessoRef={(ref) =>
+          runPermessoOcr<VenditoreInput>(ref, (upd) =>
+            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+          )
+        }
+        onInvalidateVisura={() =>
+          setVenditori((prev) =>
+            prev.map((vv, i) => (i === idx ? { ...vv, visuraOcr: undefined } : vv)),
+          )
+        }
+        onInvalidatePermesso={() =>
+          setVenditori((prev) =>
+            prev.map((vv, i) => (i === idx ? { ...vv, permessoOcr: undefined } : vv)),
+          )
+        }
+        onInvalidateIdentita={() =>
+          setVenditori((prev) =>
+            prev.map((vv, i) => (i === idx ? { ...vv, identitaOcr: undefined } : vv)),
+          )
+        }
+      />
+
+      {verdettiVenditori[idx] && !verdettiVenditori[idx]!.ok && (
+        <Alert variant="error">
+          <strong>Verifica documenti del venditore non superata:</strong>
+          <ul className="mt-1 list-disc pl-5">
+            {verdettiVenditori[idx]!.problemi.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
+    </div>
+  );
 
   // Gate per lasciare lo step 2 (Venditore): ogni venditore valido + identità
   // presente (BlobRef) + nessun upload in corso + verifica documentale OK
@@ -920,120 +992,99 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               in agenzia, al momento della firma.
             </Alert>
 
-            {ccVend === 'MISMATCH' && (
-              <Alert variant="error">
-                I venditori non corrispondono agli intestatari del libretto
-                {proprietari.length > 0 && <> ({proprietari.join(', ')})</>}.
-                Verifica i nominativi o aggiungi i co-intestatari mancanti.
-              </Alert>
-            )}
-
-            {venditori.map((v, idx) => (
-              <div key={idx} className="space-y-5">
-                <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-[15px] font-bold text-pv-navy-800">
-                      {venditori.length > 1 ? `Venditore ${idx + 1}` : 'Venditore'}
-                    </h2>
-                    {venditori.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeVenditore(idx)}
-                        className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600"
-                      >
-                        Rimuovi
-                      </button>
+            {multiplo ? (
+              veicoli.map((veic, vi) => {
+                const ord = vi + 1;
+                const gruppo = venditori
+                  .map((v, idx) => ({ v, idx }))
+                  .filter((x) => x.v.veicoloOrdine === ord);
+                const aperto = veicoloAperto === ord;
+                return (
+                  <div
+                    key={ord}
+                    className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setVeicoloAperto(aperto ? -1 : ord)}
+                      className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                    >
+                      <span className="text-[15px] font-bold text-pv-navy-800">
+                        Veicolo {ord} — {veic.targa || '—'}
+                      </span>
+                      <span className="flex items-center gap-2 text-[12.5px] font-semibold text-pv-slate-500">
+                        {ccPerVeicolo[ord] === 'MISMATCH' && (
+                          <span className="text-pv-red-500">⚠ verifica intestatari</span>
+                        )}
+                        {gruppo.length} {gruppo.length === 1 ? 'venditore' : 'venditori'}
+                        <svg
+                          className={`h-4 w-4 transition-transform ${aperto ? 'rotate-180' : ''}`}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden="true"
+                        >
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </span>
+                    </button>
+                    {aperto && (
+                      <div className="space-y-5 border-t border-pv-slate-100 p-5">
+                        {ccPerVeicolo[ord] === 'MISMATCH' && (
+                          <Alert variant="error">
+                            I venditori non corrispondono agli intestatari del libretto di questo
+                            veicolo
+                            {(proprietariPerVeicolo[ord]?.length ?? 0) > 0 && (
+                              <> ({proprietariPerVeicolo[ord]!.join(', ')})</>
+                            )}
+                            . Verifica i nominativi o aggiungi i co-intestatari mancanti.
+                          </Alert>
+                        )}
+                        {gruppo.map(({ v, idx }, gi) =>
+                          renderVenditore(
+                            v,
+                            idx,
+                            gruppo.length > 1 ? `Venditore ${gi + 1}` : 'Venditore',
+                            venditori.length > 1,
+                          ),
+                        )}
+                        <div className="flex justify-start">
+                          <Button variant="secondary" onClick={() => addVenditore(ord)}>
+                            + Aggiungi co-intestatario
+                          </Button>
+                        </div>
+                      </div>
                     )}
                   </div>
-                  <ParteForm
-                    parte={v}
-                    onChange={(p) => updateVenditore(idx, p)}
-                    tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
-                  />
-                </div>
-
-                <IdentitaSection
-                  titolo={
-                    venditori.length > 1
-                      ? `Documento d'identità del venditore ${idx + 1}`
-                      : "Documento d'identità del venditore"
-                  }
-                  docId={v.docId}
-                  onDocId={(t) => updateVenditore(idx, { docId: t })}
-                  files={v.identita}
-                  isPG={v.isPG}
-                  tipoSoggetto={v.tipoSoggetto}
-                  onFiles={(updater) =>
-                    setVenditori((prev) =>
-                      prev.map((vv, i) =>
-                        i === idx ? { ...vv, identita: updater(vv.identita) } : vv,
-                      ),
-                    )
-                  }
-                  onMainRef={(ref) =>
-                    runIdentitaOcr<VenditoreInput>(ref, v.docId, (upd) =>
-                      setVenditori((prev) =>
-                        prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
-                      ),
-                    )
-                  }
-                  onVisuraRef={(ref) =>
-                    runVisuraOcr<VenditoreInput>(ref, (upd) =>
-                      setVenditori((prev) =>
-                        prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
-                      ),
-                    )
-                  }
-                  onPermessoRef={(ref) =>
-                    runPermessoOcr<VenditoreInput>(ref, (upd) =>
-                      setVenditori((prev) =>
-                        prev.map((vv, i) => (i === idx ? upd(vv) : vv)),
-                      ),
-                    )
-                  }
-                  onInvalidateVisura={() =>
-                    setVenditori((prev) =>
-                      prev.map((vv, i) =>
-                        i === idx ? { ...vv, visuraOcr: undefined } : vv,
-                      ),
-                    )
-                  }
-                  onInvalidatePermesso={() =>
-                    setVenditori((prev) =>
-                      prev.map((vv, i) =>
-                        i === idx ? { ...vv, permessoOcr: undefined } : vv,
-                      ),
-                    )
-                  }
-                  onInvalidateIdentita={() =>
-                    setVenditori((prev) =>
-                      prev.map((vv, i) =>
-                        i === idx ? { ...vv, identitaOcr: undefined } : vv,
-                      ),
-                    )
-                  }
-                />
-
-                {/* Verifica documentale OCR (fail-closed): finché ci sono
-                    problemi il venditore non supera il gate "Avanti". */}
-                {verdettiVenditori[idx] && !verdettiVenditori[idx]!.ok && (
+                );
+              })
+            ) : (
+              <>
+                {ccVend === 'MISMATCH' && (
                   <Alert variant="error">
-                    <strong>Verifica documenti del venditore non superata:</strong>
-                    <ul className="mt-1 list-disc pl-5">
-                      {verdettiVenditori[idx]!.problemi.map((p, i) => (
-                        <li key={i}>{p}</li>
-                      ))}
-                    </ul>
+                    I venditori non corrispondono agli intestatari del libretto
+                    {(proprietariPerVeicolo[1]?.length ?? 0) > 0 && (
+                      <> ({proprietariPerVeicolo[1]!.join(', ')})</>
+                    )}
+                    . Verifica i nominativi o aggiungi i co-intestatari mancanti.
                   </Alert>
                 )}
-              </div>
-            ))}
-
-            <div className="flex justify-start">
-              <Button variant="secondary" onClick={addVenditore}>
-                + Aggiungi venditore (co-intestatario)
-              </Button>
-            </div>
+                {venditori.map((v, idx) =>
+                  renderVenditore(
+                    v,
+                    idx,
+                    venditori.length > 1 ? `Venditore ${idx + 1}` : 'Venditore',
+                    venditori.length > 1,
+                  ),
+                )}
+                <div className="flex justify-start">
+                  <Button variant="secondary" onClick={() => addVenditore(1)}>
+                    + Aggiungi venditore (co-intestatario)
+                  </Button>
+                </div>
+              </>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
               <Button variant="secondary" onClick={() => setStep(1)}>

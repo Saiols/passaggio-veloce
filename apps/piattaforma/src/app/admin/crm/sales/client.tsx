@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert, Button } from '@/components/ui';
+import { Alert, Button, NumberInput } from '@/components/ui';
 import {
   createSalesAgentAction,
   updateSalesAgentAction,
@@ -820,14 +820,25 @@ function FieldText({
       <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
         {label}
       </span>
-      <input
-        type={type}
-        value={value}
-        required={required}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
-      />
+      {type === 'number' ? (
+        <NumberInput
+          value={value === '' ? null : Number(value)}
+          required={required}
+          placeholder={placeholder}
+          integer
+          onChange={(n) => onChange(n == null ? '' : String(n))}
+          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          required={required}
+          placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+        />
+      )}
     </label>
   );
 }

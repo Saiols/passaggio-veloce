@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { CookieBanner } from '@/components/cookie-banner';
+import { NumberInputWheelGuard } from '@/components/number-input-wheel-guard';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { BRAND } from '@/lib/seo/brand';
 import { organizationJsonLd, websiteJsonLd } from '@/lib/seo/jsonLd';
@@ -109,6 +110,7 @@ export default function RootLayout({
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
         {children}
         <CookieBanner />
+        <NumberInputWheelGuard />
       </body>
     </html>
   );

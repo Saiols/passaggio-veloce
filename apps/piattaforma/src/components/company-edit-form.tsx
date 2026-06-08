@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Field, Input } from '@/components/ui';
+import { Button, Field, Input, NumberInput } from '@/components/ui';
 
 export type CompanyEditDefaults = {
   ragioneSociale: string;
@@ -110,15 +110,13 @@ export function CompanyEditForm({
             hint="Range 1.000 - 5.000 €"
             className="sm:col-span-2"
           >
-            <Input
-              type="number"
+            <NumberInput
               name="payoutThresholdEur"
-              defaultValue={(
-                (defaults.payoutThresholdCent ?? 100000) / 100
-              ).toString()}
+              defaultValue={(defaults.payoutThresholdCent ?? 100000) / 100}
               min={1000}
               max={5000}
               step={100}
+              integer
             />
           </Field>
         )}

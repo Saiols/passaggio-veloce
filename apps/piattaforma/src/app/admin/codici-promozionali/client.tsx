@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Alert, Button, Field, Input } from '@/components/ui';
+import { Alert, Button, Field, Input, NumberInput } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { createPromoCodeAction, togglePromoCodeAction } from './actions';
 
@@ -19,9 +19,9 @@ function stato(r: Row): string {
 
 export function PromoCodiClient({ rows }: { rows: Row[] }) {
   const [code, setCode] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState<number | null>(null);
   const [expires, setExpires] = useState('');
-  const [maxR, setMaxR] = useState('');
+  const [maxR, setMaxR] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -30,13 +30,13 @@ export function PromoCodiClient({ rows }: { rows: Row[] }) {
     startTransition(async () => {
       const r = await createPromoCodeAction({
         code,
-        amountEuro: Number(amount),
+        amountEuro: amount ?? 0,
         expiresAt: expires || null,
-        maxRedemptions: maxR ? Number(maxR) : null,
+        maxRedemptions: maxR,
       });
       if (!r.ok) setError(r.error);
       else {
-        setCode(''); setAmount(''); setExpires(''); setMaxR('');
+        setCode(''); setAmount(null); setExpires(''); setMaxR(null);
       }
     });
   };
@@ -57,13 +57,13 @@ export function PromoCodiClient({ rows }: { rows: Row[] }) {
             <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="BENVENUTO" />
           </Field>
           <Field label="Importo (€)" required>
-            <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <NumberInput min={0} step="0.01" value={amount} onChange={setAmount} />
           </Field>
           <Field label="Scadenza" hint="Opzionale">
             <Input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
           </Field>
           <Field label="Max riscatti" hint="Opzionale">
-            <Input type="number" min="1" step="1" value={maxR} onChange={(e) => setMaxR(e.target.value)} />
+            <NumberInput min={1} step={1} integer allowEmpty value={maxR} onChange={setMaxR} />
           </Field>
         </div>
         <Button type="button" onClick={create} loading={pending} className="mt-4">

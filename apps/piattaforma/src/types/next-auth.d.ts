@@ -11,6 +11,7 @@ declare module 'next-auth' {
       status: string;
       companyId?: string;
       companyType?: string;
+      companyName?: string;
     };
   }
 
@@ -22,6 +23,7 @@ declare module 'next-auth' {
     status: string;
     companyId?: string;
     companyType?: string;
+    companyName?: string;
   }
 }
 
@@ -32,5 +34,6 @@ declare module 'next-auth/jwt' {
     status: string;
     companyId?: string;
     companyType?: string;
+    companyName?: string;
   }
 }

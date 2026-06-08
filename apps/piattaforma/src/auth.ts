@@ -85,6 +85,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           status: matched.status,
           companyId: matched.companyId ?? undefined,
           companyType: matched.company?.type ?? undefined,
+          companyName: matched.company?.ragioneSociale ?? undefined,
         };
       },
     }),
@@ -98,6 +99,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.status = user.status;
         token.companyId = user.companyId;
         token.companyType = user.companyType;
+        token.companyName = user.companyName;
       }
       return token;
     },
@@ -108,6 +110,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.status = token.status as string;
         session.user.companyId = token.companyId as string | undefined;
         session.user.companyType = token.companyType as string | undefined;
+        session.user.companyName = token.companyName as string | undefined;
       }
       return session;
     },

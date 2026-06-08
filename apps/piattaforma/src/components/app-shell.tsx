@@ -12,6 +12,7 @@ export type AppShellSession = {
     email?: string | null;
     role?: string;
     companyType?: string;
+    companyName?: string | null;
   };
 };
 
@@ -180,13 +181,24 @@ export function AppShell({
 
 function UserMenu({ session }: { session: AppShellSession }) {
   const name = session.user.name ?? session.user.email ?? 'Utente';
+  const companyName = session.user.companyName?.trim() || null;
   return (
     <div className="flex items-center gap-3">
       <div className="hidden text-right sm:block">
         <p className="text-[13px] font-semibold leading-tight text-white">{name}</p>
-        <p className="text-[11px] text-[#b8cdea]">
-          {roleBadgeLabel(session.user.role, session.user.companyType)}
-        </p>
+        <div className="mt-1 flex items-center justify-end gap-1.5 leading-none">
+          {companyName && (
+            <span
+              className="max-w-[170px] truncate text-[11px] font-medium text-[#cfe0f6]"
+              title={companyName}
+            >
+              {companyName}
+            </span>
+          )}
+          <span className="inline-flex items-center rounded-full bg-white/10 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-[#b8cdea] ring-1 ring-inset ring-white/15">
+            {roleBadgeLabel(session.user.role, session.user.companyType)}
+          </span>
+        </div>
       </div>
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-pv-navy-700 text-[12px] font-bold text-white ring-2 ring-white/20">
         {initials(name)}

@@ -106,6 +106,76 @@ SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
   });
 });
 
+describe('parseLibrettoText — ricevuta PRA / minivoltura (venditore commerciante)', () => {
+  // Testo OCR reale (Document AI) del documento PRA del commerciante.
+  const PRA1 = `Ministero delle Infrastrutture e dei Trasporti
+DOCUMENTO NON VALIDO PER LA CIRCOLAZIONE
+A684319MI25 03/10/2025
+DP243SK WFODXXGAJD8G75490
+FORD W GMBH JD3 FUJA1 5BEBKA
+FIESTA
+0EWF017EST86
+M1
+AUTOVETTURA PER TRASPORTO DI PERSONE USO PROPRIO
+055,00 kw
+EURO4 Massa massima
+1520 kg
+DIMENSIONE AUTO MILANO SPL
+13180640966
+BUCCINASCO (MI)
+PZZA CAVALIERI DI VITT VENETO 23
+Art. 56 comma 6 D. Lgs. n. 446/1997
+N. Progressivo PRA 25/N620029S
+Scrittura Privata del 03-10-2025
+Vincoli/Gravami: No
+IMPOSTA DI BOLLO ASSOLTA IN MODO VIRTUALE
+MI1417`;
+
+  // Secondo esempio: targa e telaio su righe separate, telaio senza refusi.
+  const PRA2 = `Ministero delle Infrastrutture e dei Trasporti
+DOCUMENTO NON VALIDO PER LA CIRCOLAZIONE
+A081814MI26 03/02/2026
+GT440ZX
+RENAULT
+VF1RJA00672164604
+M1
+RJA BE2 MG5WA2HA5000
+CLIO
+DIMENSIONE AUTO MILANO SPL
+13180640966
+BUCCINASCO (MI)
+N. Progressivo PRA 26/B504321K
+Scrittura Privata del 03-02-2026`;
+
+  it('intestatario = azienda commerciante (ragione sociale + P.IVA)', () => {
+    const r = parseLibrettoText(PRA1, 0.9);
+    expect(r.targa).toBe('DP243SK');
+    expect(r.proprietariInfo).toEqual([
+      {
+        isPersonaGiuridica: true,
+        ragioneSociale: 'DIMENSIONE AUTO MILANO SPL',
+        piva: '13180640966',
+        display: 'DIMENSIONE AUTO MILANO SPL',
+      },
+    ]);
+    expect(r.proprietari).toEqual(['DIMENSIONE AUTO MILANO SPL']);
+    expect(r.dataAcquisto).toBe('2025-10-03');
+    expect(r.preImm2015).toBe(false);
+  });
+
+  it('telaio: normalizza il refuso OCR O→0 nel VIN', () => {
+    expect(parseLibrettoText(PRA1, 0.9).telaio).toBe('WF0DXXGAJD8G75490');
+  });
+
+  it('secondo esempio: targa/telaio su righe separate', () => {
+    const r = parseLibrettoText(PRA2, 0.9);
+    expect(r.targa).toBe('GT440ZX');
+    expect(r.telaio).toBe('VF1RJA00672164604');
+    expect(r.proprietari).toEqual(['DIMENSIONE AUTO MILANO SPL']);
+    expect(r.dataAcquisto).toBe('2026-02-03');
+  });
+});
+
 describe('parseLibrettoText — pre-2015 da (I)', () => {
   it('(I) anteriore al 2015 → preImm2015 true', () => {
     const txt = '(B) 20.06.2009\n(C.2.1) BIANCHI\n(C.2.2) LUCA\n(A) FA123GH\n(1) 10.03.2010';

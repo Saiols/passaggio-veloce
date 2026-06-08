@@ -53,6 +53,47 @@ function parseOwner(data: string, prefix: string): OwnerInfo | undefined {
   return { isPersonaGiuridica: true, ragioneSociale: p1, piva: pivaM ? pivaM[1] : undefined, display: p1 };
 }
 
+/** Telaio (VIN, 17 caratteri). I VIN non usano mai O/I/Q: se l'OCR li ha
+ * introdotti (tipico: O al posto di 0) normalizziamo e ri-validiamo. */
+function extractTelaio(data: string): string | undefined {
+  const strict = TELAIO_RE.exec(data)?.[1];
+  if (strict) return strict;
+  const m = /\b[A-Z0-9]{17}\b/.exec(data);
+  if (!m) return undefined;
+  const norm = m[0].replace(/[OIQ]/g, (c) => (c === 'I' ? '1' : '0'));
+  return TELAIO_RE.test(norm) ? norm : undefined;
+}
+
+// Ricevuta PRA / minivoltura: "DOCUMENTO NON VALIDO PER LA CIRCOLAZIONE" +
+// "N. PROGRESSIVO PRA". Testo libero (niente codici armonizzati/legenda).
+// L'intestatario è il COMMERCIANTE (azienda).
+const DEALER_MARKER = 'PROGRESSIVO PRA';
+
+/** Estrae l'intestatario (azienda commerciante) e la data di acquisto da una
+ * ricevuta PRA. Ragione sociale = riga non vuota subito sopra la P.IVA (11 cifre);
+ * data acquisto = "Scrittura Privata del GG-MM-AAAA". */
+function parseRicevutaPra(data: string): {
+  proprietariInfo: OwnerInfo[];
+  dataAcquisto?: string;
+} {
+  const lines = data.split('\n').map((l) => l.trim());
+  let owner: OwnerInfo | undefined;
+  for (let i = 1; i < lines.length; i++) {
+    if (/^\d{11}$/.test(lines[i]!)) {
+      let j = i - 1;
+      while (j >= 0 && !lines[j]) j--;
+      const ragioneSociale = j >= 0 ? lines[j]! : undefined;
+      if (ragioneSociale) {
+        owner = { isPersonaGiuridica: true, ragioneSociale, piva: lines[i]!, display: ragioneSociale };
+      }
+      break;
+    }
+  }
+  const sp = new RegExp(`SCRITTURA PRIVATA DEL\\s+${DATE}`).exec(data);
+  const dataAcquisto = sp ? toIso(sp[1]!, sp[2]!, sp[3]!) : undefined;
+  return { proprietariInfo: owner ? [owner] : [], dataAcquisto };
+}
+
 /** Estrae i campi del libretto dal testo OCR. Tutti i campi sono best-effort:
  * un campo non trovato resta undefined (la pre-compilazione è editabile). */
 export function parseLibrettoText(text: string, confidence: number): LibrettoCircolazioneData {
@@ -61,7 +102,7 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
   const data = legendIdx >= 0 ? upper.slice(0, legendIdx) : upper;
 
   const targa = TARGA_RE.exec(data)?.[1];
-  const telaio = TELAIO_RE.exec(data)?.[1];
+  const telaio = extractTelaio(data);
 
   // (B) data della prima immatricolazione; fallback alla prima data trovata.
   const immat =
@@ -72,23 +113,39 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
     })();
   const dataImmatricolazione = immat?.iso;
 
-  // (I) data di immatricolazione cui si riferisce la carta = data di acquisto
-  // dell'attuale proprietario. L'OCR rende spesso "(I)" come "(1)" o "(L)".
-  const acquisto = dateAfter(data, String.raw`\((?:I|1|L)\)`);
-  const dataAcquisto = acquisto?.iso;
+  const isRicevutaPra = data.includes(DEALER_MARKER);
 
-  // Intestatari: C.2 (proprietario) + C.3 (secondo intestatario/utilizzatore,
-  // es. nei leasing). Ciascuno può essere azienda o persona.
-  const proprietariInfo = [parseOwner(data, 'C\\.2'), parseOwner(data, 'C\\.3')].filter(
-    (o): o is OwnerInfo => o !== undefined,
-  );
+  let proprietariInfo: OwnerInfo[];
+  let dataAcquisto: string | undefined;
+  let annoAcquisto: number | undefined;
+
+  if (isRicevutaPra) {
+    // Ricevuta PRA (venditore commerciante): intestatario = azienda;
+    // acquisto = data della scrittura privata.
+    const pra = parseRicevutaPra(data);
+    proprietariInfo = pra.proprietariInfo;
+    dataAcquisto = pra.dataAcquisto;
+    annoAcquisto = dataAcquisto ? Number(dataAcquisto.slice(0, 4)) : undefined;
+  } else {
+    // (I) data di immatricolazione cui si riferisce la carta = data di acquisto
+    // dell'attuale proprietario. L'OCR rende spesso "(I)" come "(1)" o "(L)".
+    const acquisto = dateAfter(data, String.raw`\((?:I|1|L)\)`);
+    dataAcquisto = acquisto?.iso;
+    annoAcquisto = acquisto?.year;
+    // Intestatari: C.2 (proprietario) + C.3 (secondo intestatario/utilizzatore,
+    // es. nei leasing). Ciascuno può essere azienda o persona.
+    proprietariInfo = [parseOwner(data, 'C\\.2'), parseOwner(data, 'C\\.3')].filter(
+      (o): o is OwnerInfo => o !== undefined,
+    );
+  }
+
   const proprietari = proprietariInfo.length ? proprietariInfo.map((o) => o.display) : undefined;
   const proprietarioAttuale = proprietariInfo[0]?.display;
   const proprietarioCf = proprietariInfo[0]?.cf;
 
   // pre-2015 = regime Certificato di Proprietà, determinato dalla data di
-  // ACQUISTO dell'attuale proprietario (I); fallback alla prima immatricolazione.
-  const annoRegime = acquisto?.year ?? immat?.year;
+  // ACQUISTO dell'attuale proprietario; fallback alla prima immatricolazione.
+  const annoRegime = annoAcquisto ?? immat?.year;
   const preImm2015 = annoRegime !== undefined && annoRegime < 2015;
 
   return {

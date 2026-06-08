@@ -20,12 +20,18 @@ let cv: any = null;
 async function getCv(): Promise<any> {
   if (cv) return cv;
   const c: any = (cvModule as any)?.default ?? cvModule;
+  console.log('[worker] getCv: modulo importato, cv.Mat?', !!c?.Mat);
   if (!c?.Mat) {
     await new Promise<void>((resolve, reject) => {
       const start = Date.now();
+      let ticks = 0;
       const poll = () => {
-        if (c?.Mat) return resolve();
+        if (c?.Mat) {
+          console.log('[worker] getCv: runtime pronto dopo', Date.now() - start, 'ms');
+          return resolve();
+        }
         if (Date.now() - start > 60000) return reject(new Error('OpenCV init timeout'));
+        if (++ticks % 40 === 0) console.log('[worker] getCv: attendo runtime…', Date.now() - start, 'ms');
         setTimeout(poll, 50);
       };
       if (typeof c?.onRuntimeInitialized !== 'undefined') c.onRuntimeInitialized = () => resolve();
@@ -158,18 +164,23 @@ function warp(
 
 self.onmessage = async (e: MessageEvent) => {
   const { id, type } = e.data;
+  console.log('[worker] ricevuto messaggio', type, id);
   try {
     await getCv();
     if (type === 'detect') {
       const result = detect(e.data.imageData);
+      console.log('[worker] detect completato', id);
       (self as any).postMessage({ id, ok: true, result });
     } else if (type === 'warp') {
+      console.log('[worker] warp start', id, e.data.outW, 'x', e.data.outH, e.data.preset);
       const result = warp(e.data.imageData, e.data.corners, e.data.outW, e.data.outH, e.data.preset);
+      console.log('[worker] warp done', id, result.width, 'x', result.height);
       (self as any).postMessage({ id, ok: true, result }, [result.data.buffer]);
     } else {
       (self as any).postMessage({ id, ok: false, error: `tipo sconosciuto: ${type}` });
     }
   } catch (err: any) {
+    console.error('[worker] errore', type, id, err);
     (self as any).postMessage({ id, ok: false, error: String(err?.message ?? err) });
   }
 };

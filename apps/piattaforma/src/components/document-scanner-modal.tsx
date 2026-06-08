@@ -108,53 +108,64 @@ export function DocumentScannerModal({
   const imgRef = useRef<HTMLImageElement | null>(null);
   const dragging = useRef<HandleKey | null>(null);
 
-  // Carica l'immagine + OpenCV/jscanify e rileva i bordi. Re-esegue al cambio
-  // file (es. "Scatta foto").
+  // Carica l'immagine e rende l'editor SUBITO usabile (ritaglio manuale).
+  // L'auto-detect dei bordi (OpenCV, costoso) gira in BACKGROUND su una copia
+  // ridotta (~800px) per non bloccare il main thread ("pagina non risponde").
   useEffect(() => {
     let cancelled = false;
-    let url: string | null = null;
     (async () => {
       setStatus('loading');
       setErrorMsg(null);
+      let canvas: HTMLCanvasElement;
       try {
-        const canvas = await imageFileToCanvas(activeFile);
-        url = canvas.toDataURL('image/jpeg', 0.92);
-        if (cancelled) return;
-        setSrc({ canvas, url });
-        // Default: bordi pieni (verrà sovrascritto se l'auto-detect riesce).
-        setCorners(boundsCorners(canvas.width, canvas.height));
-        try {
-          const cv = await loadOpenCv();
-          const mod: any = await import('jscanify/client');
-          const Jscanify = mod?.default ?? mod;
-          const scanner = new Jscanify();
-          const mat = cv.imread(canvas);
-          const contour = scanner.findPaperContour(mat);
-          if (contour) {
-            const c = scanner.getCornerPoints(contour);
-            if (c?.topLeftCorner && c?.bottomRightCorner && !cancelled) setCorners(c);
-          }
-          mat.delete();
-          if (!cancelled) setStatus('ready');
-        } catch {
-          // OpenCV non disponibile: l'utente può comunque usare l'originale.
-          if (!cancelled) {
-            setStatus('error');
-            setErrorMsg('Elaborazione non disponibile: puoi caricare l’originale.');
-          }
-        }
+        canvas = await imageFileToCanvas(activeFile);
       } catch {
         if (!cancelled) {
           setStatus('error');
           setErrorMsg('Immagine non leggibile.');
         }
+        return;
+      }
+      if (cancelled) return;
+      setSrc({ canvas, url: canvas.toDataURL('image/jpeg', 0.92) });
+      setCorners(boundsCorners(canvas.width, canvas.height));
+      setStatus('ready'); // usabile subito col ritaglio manuale
+
+      // Auto-detect best-effort in background (non blocca: copia ridotta).
+      await new Promise((r) => setTimeout(r, 30)); // lascia dipingere la UI
+      try {
+        const cv = await loadOpenCv();
+        if (cancelled) return;
+        const mod: any = await import('jscanify/client');
+        const Jscanify = mod?.default ?? mod;
+        const scanner = new Jscanify();
+        const DET = 800;
+        const k = Math.min(1, DET / Math.max(canvas.width, canvas.height));
+        const small = document.createElement('canvas');
+        small.width = Math.max(1, Math.round(canvas.width * k));
+        small.height = Math.max(1, Math.round(canvas.height * k));
+        small.getContext('2d')!.drawImage(canvas, 0, 0, small.width, small.height);
+        const mat = cv.imread(small);
+        const contour = scanner.findPaperContour(mat);
+        if (contour) {
+          const c = scanner.getCornerPoints(contour);
+          if (c?.topLeftCorner && c?.bottomRightCorner && !cancelled) {
+            const up = 1 / k; // riporta in coordinate sorgente
+            setCorners({
+              topLeftCorner: { x: c.topLeftCorner.x * up, y: c.topLeftCorner.y * up },
+              topRightCorner: { x: c.topRightCorner.x * up, y: c.topRightCorner.y * up },
+              bottomRightCorner: { x: c.bottomRightCorner.x * up, y: c.bottomRightCorner.y * up },
+              bottomLeftCorner: { x: c.bottomLeftCorner.x * up, y: c.bottomLeftCorner.y * up },
+            });
+          }
+        }
+        mat.delete();
+      } catch {
+        // Auto-detect non disponibile: resta il ritaglio manuale (nessun blocco).
       }
     })();
     return () => {
       cancelled = true;
-      if (url) {
-        /* dataURL: niente da revocare */
-      }
     };
   }, [activeFile]);
 
@@ -190,6 +201,7 @@ export function DocumentScannerModal({
   const conferma = async () => {
     if (!src || !corners) return;
     setStatus('working');
+    await new Promise((r) => setTimeout(r, 30)); // lascia dipingere "Elaborazione…"
     try {
       const cv = await loadOpenCv();
       const mod: any = await import('jscanify/client');

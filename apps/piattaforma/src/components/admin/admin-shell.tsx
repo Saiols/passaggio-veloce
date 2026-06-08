@@ -3,7 +3,14 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from 'react';
 import { cn } from '@/components/ui';
 import { logoutAction } from '@/app/(auth)/actions';
 import {
@@ -109,6 +116,13 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+// Chiave sessionStorage per conservare lo scroll della sidebar tra le rotte.
+const SIDEBAR_SCROLL_KEY = 'pv-admin-sidebar-scroll';
+
+// useLayoutEffect lato client (ripristina prima del paint → niente salto),
+// useEffect lato server per evitare il warning SSR.
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
 function isItemActive(activePath: string | undefined, pathname: string, href: string): boolean {
   // L'activePath fornito dalla pagina è la fonte primaria (gestisce i casi
   // dinamici tipo /admin/companies/[id] → /admin/broker). Fallback a pathname.
@@ -152,6 +166,23 @@ export function AdminShell({
   })).filter((g) => g.items.length > 0);
 
   const closeDrawer = () => setOpen(false);
+
+  // Conserva la posizione di scroll della sidebar tra una navigazione e l'altra.
+  // La chrome admin è renderizzata dentro ogni page.tsx (non in un layout
+  // persistente), quindi rimonta a ogni cambio rotta e la nav ripartirebbe da
+  // cima. Salviamo lo scrollTop su ogni scroll e lo ripristiniamo al mount,
+  // prima del paint, così non si vede alcun salto.
+  const navRef = useRef<HTMLElement>(null);
+  useIsoLayoutEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    try {
+      const saved = sessionStorage.getItem(SIDEBAR_SCROLL_KEY);
+      if (saved) el.scrollTop = parseInt(saved, 10) || 0;
+    } catch {
+      /* sessionStorage non disponibile: ignora */
+    }
+  }, []);
 
   // Esc per chiudere + lock dello scroll del body quando il drawer è aperto.
   useEffect(() => {
@@ -217,7 +248,17 @@ export function AdminShell({
         <div className="mx-5 h-px shrink-0 bg-white/10" />
 
         {/* Navigazione raggruppata */}
-        <nav className="pv-sidebar-scroll flex-1 overflow-y-auto px-3 py-4">
+        <nav
+          ref={navRef}
+          onScroll={(e) => {
+            try {
+              sessionStorage.setItem(SIDEBAR_SCROLL_KEY, String(e.currentTarget.scrollTop));
+            } catch {
+              /* sessionStorage non disponibile: ignora */
+            }
+          }}
+          className="pv-sidebar-scroll flex-1 overflow-y-auto px-3 py-4"
+        >
           {groups.map((group) => (
             <div key={group.label} className="mb-5 last:mb-0">
               <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6f8cb5]">

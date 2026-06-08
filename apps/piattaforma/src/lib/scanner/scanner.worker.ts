@@ -66,7 +66,10 @@ function findPaperContour(img: any): any {
       maxIdx = i;
     }
   }
-  const maxContour = maxIdx >= 0 ? contours.get(maxIdx) : null;
+  // IMPORTANTE: clona il contorno PRIMA di liberare il MatVector. `contours.get(i)`
+  // condivide memoria col vector: dopo `contours.delete()` leggere `data32S`
+  // restituirebbe memoria liberata (length spazzatura → for loop infinito).
+  const maxContour = maxIdx >= 0 ? contours.get(maxIdx).clone() : null;
   gray.delete();
   blur.delete();
   thresh.delete();

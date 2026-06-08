@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Button } from '@/components/ui';
 import { isImageFile, imageFileToCanvas, canvasToJpegFile, type Preset } from '@/lib/scanner/process';
-import { detectCorners, warpImage, type Corners, type Pt } from '@/lib/scanner/scanner-client';
+import { warpImage, type Corners, type Pt } from '@/lib/scanner/scanner-client';
 
 type HandleKey = keyof Corners;
 
@@ -121,28 +121,10 @@ export function DocumentScannerModal({
       setCorners(boundsCorners(canvas.width, canvas.height));
       setStatus('ready');
 
-      // Auto-detect nel worker su copia ridotta (corner riportati a coord sorgente).
-      try {
-        const DET = 1000;
-        const k = Math.min(1, DET / Math.max(canvas.width, canvas.height));
-        const small = document.createElement('canvas');
-        small.width = Math.max(1, Math.round(canvas.width * k));
-        small.height = Math.max(1, Math.round(canvas.height * k));
-        const sctx = small.getContext('2d')!;
-        sctx.drawImage(canvas, 0, 0, small.width, small.height);
-        const detected = await detectCorners(sctx.getImageData(0, 0, small.width, small.height));
-        if (detected && !cancelled) {
-          const up = 1 / k;
-          setCorners({
-            topLeftCorner: { x: detected.topLeftCorner.x * up, y: detected.topLeftCorner.y * up },
-            topRightCorner: { x: detected.topRightCorner.x * up, y: detected.topRightCorner.y * up },
-            bottomRightCorner: { x: detected.bottomRightCorner.x * up, y: detected.bottomRightCorner.y * up },
-            bottomLeftCorner: { x: detected.bottomLeftCorner.x * up, y: detected.bottomLeftCorner.y * up },
-          });
-        }
-      } catch {
-        // Auto-detect non disponibile: resta il ritaglio manuale.
-      }
+      // Auto-detect bordi DISABILITATO temporaneamente: la pipeline
+      // findPaperContour (Canny/findContours/minAreaRect) si bloccava nel worker.
+      // Si parte dagli angoli ai bordi e si ritaglia a mano; il raddrizzamento
+      // (warp) avviene comunque nel worker alla Conferma.
     })();
     return () => {
       cancelled = true;

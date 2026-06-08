@@ -62,9 +62,13 @@ function parseComponents(
 export function AddressAutocomplete({
   onSelect,
   label = 'Cerca indirizzo',
+  placeholder = 'Via, civico, città…',
+  helpText = "Inizia a digitare e seleziona dall'elenco: compiliamo noi i campi sotto.",
 }: {
   onSelect: (parts: AddressParts) => void;
   label?: string;
+  placeholder?: string;
+  helpText?: string;
 }) {
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<google.maps.places.PlacePrediction[]>([]);
@@ -170,7 +174,7 @@ export function AddressAutocomplete({
         <Input
           type="text"
           autoComplete="off"
-          placeholder="Via, civico, città…"
+          placeholder={placeholder}
           className="pl-10 pr-9"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -218,9 +222,7 @@ export function AddressAutocomplete({
           </ul>
         )}
       </div>
-      <p className="text-[12px] text-pv-slate-500">
-        Inizia a digitare e seleziona dall&apos;elenco: compiliamo noi i campi sotto.
-      </p>
+      {helpText && <p className="text-[12px] text-pv-slate-500">{helpText}</p>}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
 import { docKey } from '@/lib/documenti/richiesti';
 import { useDocumentScanner } from '@/components/document-scanner-modal';
+import { AddressAutocomplete } from '@/components/address-autocomplete';
 import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
@@ -357,6 +358,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
+  const hasMaps = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   // Step Documenti: BlobRef caricate per documento richiesto (chiave = docKey).
   const [documenti, setDocumenti] = useState<Record<string, BlobSlot>>({});
@@ -1196,19 +1198,42 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Field label="Comune" required className="sm:col-span-2">
-                  <Input value={comune} onChange={(e) => setComune(e.target.value)} placeholder="Venezia" />
-                </Field>
-                <Field label="Provincia" required>
-                  <Input
-                    maxLength={2}
-                    value={provincia}
-                    onChange={(e) => setProvincia(e.target.value.toUpperCase())}
-                    placeholder="VE"
+              {hasMaps ? (
+                <div>
+                  <AddressAutocomplete
+                    label="Comune"
+                    placeholder="Cerca il comune…"
+                    helpText="Inizia a digitare e seleziona il comune dall'elenco: niente errori di battitura."
+                    onSelect={(p) => {
+                      if (p.citta) setComune(p.citta);
+                      if (p.provincia) setProvincia(p.provincia);
+                    }}
                   />
-                </Field>
-              </div>
+                  {comune && (
+                    <p className="mt-2 text-[13px] text-pv-slate-700">
+                      Comune selezionato:{' '}
+                      <strong>
+                        {comune}
+                        {provincia && ` (${provincia})`}
+                      </strong>
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Field label="Comune" required className="sm:col-span-2">
+                    <Input value={comune} onChange={(e) => setComune(e.target.value)} placeholder="Venezia" />
+                  </Field>
+                  <Field label="Provincia" required>
+                    <Input
+                      maxLength={2}
+                      value={provincia}
+                      onChange={(e) => setProvincia(e.target.value.toUpperCase())}
+                      placeholder="VE"
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">

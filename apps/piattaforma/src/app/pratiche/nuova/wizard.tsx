@@ -478,8 +478,26 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     try {
       const res = await extractLibrettoAction(ref);
       if (res.ok) {
+        // Se l'OCR non estrae NULLA di utile (né targa, né telaio, né
+        // intestatari) il documento non è un libretto leggibile/corretto:
+        // blocco e richiesta di ricaricare. Niente compilazione manuale: nello
+        // ZIP della pratica devono finire i documenti GIUSTI e leggibili.
+        const vuota =
+          !res.data.targa &&
+          !res.data.telaio &&
+          !(res.data.proprietari && res.data.proprietari.length > 0);
+        if (vuota) {
+          updateVeicolo(idx, {
+            extracting: false,
+            ocr: undefined,
+            ocrError:
+              'Non sono riuscito a leggere i dati da questo documento. Assicurati di caricare il libretto di circolazione corretto, ben inquadrato e leggibile, e riprova.',
+          });
+          return;
+        }
         updateVeicolo(idx, {
           extracting: false,
+          ocrError: null,
           ocr: res.data,
           targa: res.data.targa ?? '',
           telaio: res.data.telaio ?? '',
@@ -490,7 +508,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         });
         // I venditori si rigenerano dall'unione degli intestatari via effect.
       } else {
-        updateVeicolo(idx, { extracting: false, ocrError: res.error });
+        updateVeicolo(idx, { extracting: false, ocr: undefined, ocrError: res.error });
       }
     } catch (err) {
       updateVeicolo(idx, {
@@ -693,6 +711,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     veicoli.every(
       (v) =>
         !!v.libretto.ref &&
+        !!v.ocr && // l'OCR deve aver letto il libretto (no compilazione manuale di un doc illeggibile)
         v.targa.length >= 5 &&
         v.telaio.length >= 11 &&
         v.proprietarioAttuale.length > 0 &&
@@ -851,19 +870,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                   multiplo={multiplo}
                   onFile={(file) => onFileSelected(idx, file)}
                   onChange={(patch) => updateVeicolo(idx, patch)}
-                  onManuale={() =>
-                    updateVeicolo(idx, {
-                      ocr: undefined,
-                      ocrManuale: true,
-                      ocrError: null,
-                      targa: '',
-                      telaio: '',
-                      proprietarioAttuale: '',
-                      dataImmatricolazione: '',
-                      preImm2015: false,
-                      flagComodatoDuso: false,
-                    })
-                  }
                 />
                 {/* Veicolo pre-2015: serve il Certificato di Proprietà (documento
                     del veicolo, caricato qui insieme al libretto). */}
@@ -1286,16 +1292,14 @@ function VeicoloSection({
   multiplo,
   onFile,
   onChange,
-  onManuale,
 }: {
   ordine: number;
   veicolo: VeicoloInput;
   multiplo: boolean;
   onFile: (file: File | undefined) => void;
   onChange: (patch: Partial<VeicoloInput>) => void;
-  onManuale: () => void;
 }) {
-  const hasOcr = !!veicolo.ocr || veicolo.ocrManuale;
+  const hasOcr = !!veicolo.ocr;
   const lib = veicolo.libretto;
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
@@ -1394,13 +1398,8 @@ function VeicoloSection({
         </div>
       )}
       {veicolo.ocrError && (
-        <div className="mt-3 space-y-3">
+        <div className="mt-3">
           <Alert variant="error">{veicolo.ocrError}</Alert>
-          {!veicolo.ocr && !veicolo.ocrManuale && (
-            <Button type="button" variant="secondary" onClick={onManuale}>
-              Inserisci i dati manualmente
-            </Button>
-          )}
         </div>
       )}
 

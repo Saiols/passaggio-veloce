@@ -7,7 +7,7 @@
 
 import cvModule from '@techstark/opencv-js';
 
-console.log('[worker] modulo caricato — build v6 (grayscale+no-transfer)');
+console.log('[worker] modulo caricato — build v7 (readiness onRuntimeInitialized)');
 
 type Pt = { x: number; y: number };
 type Corners = {
@@ -21,24 +21,35 @@ let cv: any = null;
 
 async function getCv(): Promise<any> {
   if (cv) return cv;
-  const c: any = (cvModule as any)?.default ?? cvModule;
-  console.log('[worker] getCv: modulo importato, cv.Mat?', !!c?.Mat);
-  if (!c?.Mat) {
+  let c: any = (cvModule as any)?.default ?? cvModule;
+  console.log('[worker] getCv: importato; isPromise?', c instanceof Promise);
+  if (c instanceof Promise) {
+    c = await c;
+  }
+  // Readiness REALE: il runtime wasm è pronto solo dopo onRuntimeInitialized;
+  // `cv.Mat` esiste prima (→ matFromImageData si bloccava). `getBuildInformation`
+  // è una funzione del runtime, disponibile solo a init completata.
+  const start = Date.now();
+  if (typeof c.getBuildInformation !== 'function') {
     await new Promise<void>((resolve, reject) => {
-      const start = Date.now();
-      let ticks = 0;
-      const poll = () => {
-        if (c?.Mat) {
-          console.log('[worker] getCv: runtime pronto dopo', Date.now() - start, 'ms');
-          return resolve();
-        }
-        if (Date.now() - start > 60000) return reject(new Error('OpenCV init timeout'));
-        if (++ticks % 40 === 0) console.log('[worker] getCv: attendo runtime…', Date.now() - start, 'ms');
-        setTimeout(poll, 50);
+      let resolved = false;
+      const ok = () => {
+        if (resolved) return;
+        resolved = true;
+        console.log('[worker] getCv: runtime pronto dopo', Date.now() - start, 'ms');
+        resolve();
       };
-      if (typeof c?.onRuntimeInitialized !== 'undefined') c.onRuntimeInitialized = () => resolve();
+      c.onRuntimeInitialized = ok;
+      const poll = () => {
+        if (resolved) return;
+        if (typeof c.getBuildInformation === 'function') return ok();
+        if (Date.now() - start > 60000) return reject(new Error('OpenCV init timeout'));
+        setTimeout(poll, 100);
+      };
       poll();
     });
+  } else {
+    console.log('[worker] getCv: runtime già pronto');
   }
   cv = c;
   return cv;

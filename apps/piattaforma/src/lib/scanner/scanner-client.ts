@@ -65,9 +65,12 @@ function call<T>(type: string, payload: Record<string, unknown>, transfer: Trans
   });
 }
 
+// Niente transfer dell'ImageData: lo passiamo per copia (structured clone). È un
+// filo più lento ma esclude problemi di buffer detached/transferable nel worker.
+
 /** Rileva i 4 angoli del documento. Ritorna null se non rilevato. */
 export function detectCorners(imageData: ImageData): Promise<Corners | null> {
-  return call<Corners | null>('detect', { imageData }, [imageData.data.buffer]);
+  return call<Corners | null>('detect', { imageData });
 }
 
 /** Raddrizza (dewarp) + applica il preset. Ritorna l'ImageData elaborata. */
@@ -78,5 +81,5 @@ export function warpImage(
   outH: number,
   preset: Preset,
 ): Promise<ImageData> {
-  return call<ImageData>('warp', { imageData, corners, outW, outH, preset }, [imageData.data.buffer]);
+  return call<ImageData>('warp', { imageData, corners, outW, outH, preset });
 }

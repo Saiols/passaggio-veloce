@@ -7,6 +7,8 @@
 
 import cvModule from '@techstark/opencv-js';
 
+console.log('[worker] modulo caricato — build v6 (grayscale+no-transfer)');
+
 type Pt = { x: number; y: number };
 type Corners = {
   topLeftCorner: Pt;
@@ -190,7 +192,7 @@ self.onmessage = async (e: MessageEvent) => {
       console.log('[worker] warp start', id, e.data.outW, 'x', e.data.outH, e.data.preset);
       const result = warp(e.data.imageData, e.data.corners, e.data.outW, e.data.outH, e.data.preset);
       console.log('[worker] warp done', id, result.width, 'x', result.height);
-      (self as any).postMessage({ id, ok: true, result }, [result.data.buffer]);
+      (self as any).postMessage({ id, ok: true, result });
     } else {
       (self as any).postMessage({ id, ok: false, error: `tipo sconosciuto: ${type}` });
     }

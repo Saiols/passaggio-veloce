@@ -48,15 +48,22 @@ function distance(ax: number, ay: number, bx: number, by: number): number {
 
 // Porting di jscanify.findPaperContour (OpenCV raw, niente DOM).
 function findPaperContour(img: any): any {
+  console.log('[worker] fpc: gray =', img.rows, 'x', img.cols, 'ch', img.channels());
   const gray = new cv.Mat();
-  cv.Canny(img, gray, 50, 200);
+  cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY); // Canny vuole 1 canale
+  console.log('[worker] fpc: cvtColor ok');
+  cv.Canny(gray, gray, 50, 200);
+  console.log('[worker] fpc: canny ok');
   const blur = new cv.Mat();
   cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
+  console.log('[worker] fpc: blur ok');
   const thresh = new cv.Mat();
   cv.threshold(blur, thresh, 0, 255, cv.THRESH_OTSU);
+  console.log('[worker] fpc: threshold ok');
   const contours = new cv.MatVector();
   const hierarchy = new cv.Mat();
   cv.findContours(thresh, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+  console.log('[worker] fpc: findContours ok, n =', contours.size());
   let maxArea = 0;
   let maxIdx = -1;
   for (let i = 0; i < contours.size(); ++i) {
@@ -66,10 +73,10 @@ function findPaperContour(img: any): any {
       maxIdx = i;
     }
   }
-  // IMPORTANTE: clona il contorno PRIMA di liberare il MatVector. `contours.get(i)`
-  // condivide memoria col vector: dopo `contours.delete()` leggere `data32S`
-  // restituirebbe memoria liberata (length spazzatura → for loop infinito).
+  console.log('[worker] fpc: maxIdx', maxIdx, 'area', maxArea);
+  // Clona il contorno PRIMA di liberare il MatVector (get() condivide memoria).
   const maxContour = maxIdx >= 0 ? contours.get(maxIdx).clone() : null;
+  console.log('[worker] fpc: clone', maxContour ? 'ok' : 'null');
   gray.delete();
   blur.delete();
   thresh.delete();
@@ -81,12 +88,15 @@ function findPaperContour(img: any): any {
 // Porting di jscanify.getCornerPoints.
 function getCornerPoints(contour: any): Corners | null {
   const rect = cv.minAreaRect(contour);
+  console.log('[worker] gcp: minAreaRect ok', rect.center?.x, rect.center?.y);
   const cx = rect.center.x;
   const cy = rect.center.y;
   let tl: Pt | undefined, tr: Pt | undefined, bl: Pt | undefined, br: Pt | undefined;
   let tlD = 0, trD = 0, blD = 0, brD = 0;
   const data = contour.data32S as Int32Array;
-  for (let i = 0; i < data.length; i += 2) {
+  const len = Math.min(data.length, 400000); // cap difensivo anti-loop
+  console.log('[worker] gcp: data32S len', data.length, '→ uso', len);
+  for (let i = 0; i < len; i += 2) {
     const x = data[i]!;
     const y = data[i + 1]!;
     const d = distance(x, y, cx, cy);
@@ -105,11 +115,13 @@ function getCornerPoints(contour: any): Corners | null {
 }
 
 function detect(imageData: ImageData): Corners | null {
+  console.log('[worker] detect: matFromImageData', imageData.width, 'x', imageData.height);
   const img = cv.matFromImageData(imageData);
   let corners: Corners | null = null;
   const contour = findPaperContour(img);
   if (contour) {
     corners = getCornerPoints(contour);
+    console.log('[worker] detect: getCornerPoints', corners ? 'ok' : 'null');
     contour.delete();
   }
   img.delete();

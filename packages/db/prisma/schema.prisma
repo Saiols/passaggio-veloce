@@ -750,6 +750,7 @@ model Veicolo {
   ocrProvider          String?
   ocrAt                DateTime?
   documenti            Documento[] @relation("DocumentiVeicolo")
+  venditori            Venditore[] @relation("VeicoloVenditori")
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -761,6 +762,8 @@ model Venditore {
   id                 String        @id @default(uuid()) @db.Uuid
   praticaId          String        @db.Uuid
   pratica            Pratica       @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+  veicoloId          String?       @db.Uuid
+  veicolo            Veicolo?      @relation("VeicoloVenditori", fields: [veicoloId], references: [id], onDelete: SetNull)
   ordine             Int
   nome               String?
   cognome            String?
@@ -779,6 +782,7 @@ model Venditore {
   updatedAt          DateTime      @updatedAt
 
   @@index([praticaId])
+  @@index([veicoloId])
   @@map("venditori")
 }
 

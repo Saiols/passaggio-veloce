@@ -18,11 +18,9 @@ const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Err
 
 function getWorker(): Worker {
   if (worker) return worker;
-  console.log('[scanner] creo worker');
   worker = new Worker(new URL('./scanner.worker.ts', import.meta.url));
   worker.onmessage = (e: MessageEvent) => {
     const { id, ok, result, error } = e.data;
-    console.log('[scanner] ← risposta', id, 'ok=', ok);
     const p = pending.get(id);
     if (!p) return;
     pending.delete(id);
@@ -30,12 +28,8 @@ function getWorker(): Worker {
     else p.reject(new Error(error ?? 'scanner worker error'));
   };
   worker.onerror = (e) => {
-    console.error('[scanner] worker.onerror', e.message, e);
     for (const [, p] of pending) p.reject(new Error(e.message || 'scanner worker crashed'));
     pending.clear();
-  };
-  worker.onmessageerror = (e) => {
-    console.error('[scanner] worker.onmessageerror', e);
   };
   return worker;
 }
@@ -43,14 +37,12 @@ function getWorker(): Worker {
 function call<T>(type: string, payload: Record<string, unknown>, transfer: Transferable[] = []): Promise<T> {
   const w = getWorker();
   const id = ++seq;
-  console.log('[scanner] → invio', type, id, 'transfer=', transfer.length);
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       if (pending.delete(id)) {
-        console.error('[scanner] timeout', type, id);
         reject(new Error(`scanner timeout (${type})`));
       }
-    }, 120000);
+    }, 60000);
     pending.set(id, {
       resolve: (v) => {
         clearTimeout(timer);

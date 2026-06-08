@@ -5,8 +5,6 @@
 
 import { getPerspectiveTransform, mapPoint, type Point } from './homography';
 
-console.log('[worker] modulo caricato — build v8 (puro JS, no OpenCV)');
-
 type Corners = {
   topLeftCorner: Point;
   topRightCorner: Point;
@@ -135,18 +133,14 @@ function applyPreset(data: Uint8ClampedArray, w: number, h: number, preset: Pres
 
 self.onmessage = (e: MessageEvent) => {
   const { id, type } = e.data;
-  console.log('[worker] ricevuto messaggio', type, id);
   try {
     if (type === 'warp') {
-      console.log('[worker] warp start', id, e.data.outW, 'x', e.data.outH, e.data.preset);
       const result = warp(e.data.imageData, e.data.corners, e.data.outW, e.data.outH, e.data.preset);
-      console.log('[worker] warp done', id, result.width, 'x', result.height);
       (self as any).postMessage({ id, ok: true, result });
     } else {
       (self as any).postMessage({ id, ok: false, error: `tipo sconosciuto: ${type}` });
     }
   } catch (err: any) {
-    console.error('[worker] errore', type, id, err);
     (self as any).postMessage({ id, ok: false, error: String(err?.message ?? err) });
   }
 };

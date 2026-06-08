@@ -19,17 +19,6 @@ const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.plugins = [...(config.plugins ?? []), new PrismaPlugin()];
-    } else {
-      // OpenCV.js (@techstark/opencv-js, build emscripten) referenzia moduli
-      // Node (fs/path/crypto) in rami di rilevamento ambiente che non girano
-      // nel browser: forniamo fallback vuoti per il bundle client.
-      config.resolve = config.resolve ?? {};
-      config.resolve.fallback = {
-        ...(config.resolve.fallback ?? {}),
-        fs: false,
-        path: false,
-        crypto: false,
-      };
     }
     return config;
   },

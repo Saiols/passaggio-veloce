@@ -14,12 +14,6 @@ const HANDLE_ORDER: HandleKey[] = [
   'bottomLeftCorner',
 ];
 
-const PRESETS: { value: Preset; label: string }[] = [
-  { value: 'originale', label: 'Originale' },
-  { value: 'colore', label: 'Colore migliorato' },
-  { value: 'bn', label: 'Bianco e nero' },
-];
-
 /** Decisione di routing alla selezione di un file (puro, testabile). */
 export function routeSelection(file: File | null): 'editor' | 'passthrough' | 'noop' {
   if (!file) return 'noop';
@@ -85,10 +79,9 @@ export function DocumentScannerModal({
   onConfirm: (f: File) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [activeFile, setActiveFile] = useState<File>(file);
+  const preset: Preset = 'colore'; // sempre "colore migliorato" (selettore rimosso)
   const [src, setSrc] = useState<{ canvas: HTMLCanvasElement; url: string } | null>(null);
   const [corners, setCorners] = useState<Corners | null>(null);
-  const [preset, setPreset] = useState<Preset>('originale');
   const [status, setStatus] = useState<'loading' | 'ready' | 'working' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [imgW, setImgW] = useState(0); // larghezza renderizzata dell'immagine (per la scala)
@@ -108,7 +101,7 @@ export function DocumentScannerModal({
       setErrorMsg(null);
       let canvas: HTMLCanvasElement;
       try {
-        canvas = await imageFileToCanvas(activeFile);
+        canvas = await imageFileToCanvas(file);
       } catch {
         if (!cancelled) {
           setStatus('error');
@@ -129,7 +122,7 @@ export function DocumentScannerModal({
     return () => {
       cancelled = true;
     };
-  }, [activeFile]);
+  }, [file]);
 
   // Ricalcola la scala quando la finestra cambia dimensione.
   useEffect(() => {
@@ -186,7 +179,7 @@ export function DocumentScannerModal({
       out.width = result.width;
       out.height = result.height;
       out.getContext('2d')!.putImageData(result, 0, 0);
-      const fileOut = await canvasToJpegFile(out, activeFile.name);
+      const fileOut = await canvasToJpegFile(out, file.name);
       onConfirm(fileOut);
     } catch {
       setStatus('ready');
@@ -197,119 +190,98 @@ export function DocumentScannerModal({
   const handlePx = (p: Pt) => ({ left: p.x * scale, top: p.y * scale });
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-pv-navy-900/90">
-      <div className="flex items-center justify-between border-b border-pv-slate-200 bg-white px-4 py-3">
-        <h2 className="text-[15px] font-bold text-pv-navy-900">Ritaglia e migliora</h2>
-        <button onClick={onCancel} className="text-[13px] font-semibold text-pv-slate-500 hover:text-pv-navy-800">
-          Annulla
-        </button>
-      </div>
-
-      {errorMsg && (
-        <div className="bg-white px-4 pt-3">
-          <Alert variant="warning">{errorMsg}</Alert>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-pv-navy-900/90 p-3">
+      <div className="flex h-[90vh] w-[95vw] flex-col overflow-hidden rounded-[16px] bg-white sm:w-[60vw]">
+        <div className="flex items-center justify-between border-b border-pv-slate-200 px-4 py-3">
+          <h2 className="text-[15px] font-bold text-pv-navy-900">Ritaglia e migliora</h2>
+          <button onClick={onCancel} className="text-[13px] font-semibold text-pv-slate-500 hover:text-pv-navy-800">
+            Annulla
+          </button>
         </div>
-      )}
 
-      <div
-        className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
-        onPointerMove={onPointerMove}
-        onPointerUp={() => (dragging.current = null)}
-        onPointerLeave={() => (dragging.current = null)}
-      >
-        {status === 'loading' && !src ? (
-          <p className="text-[13px] text-white/80">Caricamento immagine…</p>
-        ) : src ? (
-          <div className="relative select-none touch-none">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              ref={imgRef}
-              src={src.url}
-              alt="documento"
-              onLoad={syncImgW}
-              draggable={false}
-              className="block max-h-[calc(100dvh-220px)] max-w-full object-contain"
-            />
-            {corners && (
-              <>
-                <svg className="pointer-events-none absolute inset-0 h-full w-full">
-                  <polygon
-                    points={HANDLE_ORDER.map((k) => {
-                      const p = handlePx(corners[k]);
-                      return `${p.left},${p.top}`;
-                    }).join(' ')}
-                    fill="rgba(255,122,0,0.12)"
-                    stroke="#ff7a00"
-                    strokeWidth={2}
-                  />
-                </svg>
-                {HANDLE_ORDER.map((k) => {
-                  const p = handlePx(corners[k]);
-                  return (
-                    <div
-                      key={k}
-                      onPointerDown={(e) => {
-                        (e.target as HTMLElement).setPointerCapture(e.pointerId);
-                        dragging.current = k;
-                      }}
-                      className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border-2 border-pv-orange-500 bg-white/80 shadow"
-                      style={{ left: p.left, top: p.top }}
+        {errorMsg && (
+          <div className="px-4 pt-3">
+            <Alert variant="warning">{errorMsg}</Alert>
+          </div>
+        )}
+
+        <div
+          className="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-3"
+          onPointerMove={onPointerMove}
+          onPointerUp={() => (dragging.current = null)}
+          onPointerLeave={() => (dragging.current = null)}
+        >
+          {status === 'loading' && !src ? (
+            <p className="text-[13px] text-pv-slate-500">Caricamento immagine…</p>
+          ) : src ? (
+            <div className="relative select-none touch-none">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                ref={imgRef}
+                src={src.url}
+                alt="documento"
+                onLoad={syncImgW}
+                draggable={false}
+                className="block object-contain max-h-[calc(90vh-9rem)] max-w-[88vw] sm:max-w-[calc(60vw-3rem)]"
+              />
+              {corners && (
+                <>
+                  <svg className="pointer-events-none absolute inset-0 h-full w-full">
+                    <polygon
+                      points={HANDLE_ORDER.map((k) => {
+                        const p = handlePx(corners[k]);
+                        return `${p.left},${p.top}`;
+                      }).join(' ')}
+                      fill="rgba(255,122,0,0.12)"
+                      stroke="#ff7a00"
+                      strokeWidth={2}
                     />
-                  );
-                })}
-              </>
-            )}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="border-t border-pv-slate-200 bg-white px-4 py-3">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={rotate} disabled={!src || status === 'working'}>
-            Ruota
-          </Button>
-          <div className="flex gap-1">
-            {PRESETS.map((p) => (
-              <button
-                key={p.value}
-                onClick={() => setPreset(p.value)}
-                className={`rounded-[8px] border px-2.5 py-1.5 text-[12px] font-semibold transition ${
-                  preset === p.value
-                    ? 'border-pv-orange-500 bg-pv-orange-500/10 text-pv-orange-600'
-                    : 'border-pv-slate-200 text-pv-slate-600 hover:border-pv-navy-400'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <label className="cursor-pointer rounded-[8px] border border-pv-slate-200 px-2.5 py-1.5 text-[12px] font-semibold text-pv-slate-600 hover:border-pv-navy-400">
-            Scatta foto
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) setActiveFile(f);
-                e.target.value = '';
-              }}
-            />
-          </label>
+                  </svg>
+                  {HANDLE_ORDER.map((k) => {
+                    const p = handlePx(corners[k]);
+                    return (
+                      <div
+                        key={k}
+                        onPointerDown={(e) => {
+                          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                          dragging.current = k;
+                        }}
+                        className="absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full border-2 border-pv-orange-500 bg-white/80 shadow"
+                        style={{ left: p.left, top: p.top }}
+                      />
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          ) : null}
         </div>
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-          <Button variant="secondary" onClick={() => onConfirm(activeFile)} disabled={status === 'working'}>
-            Usa originale
-          </Button>
-          <Button
-            onClick={conferma}
-            disabled={status !== 'ready'}
-            loading={status === 'working'}
-            loadingLabel="Elaborazione…"
+
+        <div className="flex flex-col gap-2 border-t border-pv-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <button
+            onClick={rotate}
+            disabled={!src || status === 'working'}
+            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-pv-slate-200 px-3 py-2 text-[13px] font-semibold text-pv-navy-700 transition hover:border-pv-navy-400 disabled:opacity-50"
           >
-            Conferma
-          </Button>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v5h-5" />
+            </svg>
+            Ruota
+          </button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => onConfirm(file)} disabled={status === 'working'}>
+              Usa originale
+            </Button>
+            <Button
+              onClick={conferma}
+              disabled={status !== 'ready'}
+              loading={status === 'working'}
+              loadingLabel="Elaborazione…"
+            >
+              Conferma
+            </Button>
+          </div>
         </div>
       </div>
     </div>

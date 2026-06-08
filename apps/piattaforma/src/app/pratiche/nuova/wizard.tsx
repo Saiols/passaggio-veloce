@@ -326,6 +326,19 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [venditori, setVenditori] = useState<VenditoreInput[]>([emptyVenditore()]);
   // Accordion step Venditore (solo multiplo): veicolo aperto (default il primo).
   const [veicoloAperto, setVeicoloAperto] = useState<number>(1);
+  // Scroll all'inizio della card del veicolo appena aperto: chiudendosi quella
+  // sopra l'altezza della pagina cambia, quindi senza questo si finirebbe a metà.
+  const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const accordionMontato = useRef(false);
+  useEffect(() => {
+    if (!accordionMontato.current) {
+      accordionMontato.current = true;
+      return;
+    }
+    if (veicoloAperto > 0) {
+      cardRefs.current[veicoloAperto]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [veicoloAperto]);
   const [acquirente, setAcquirente] = useState<Parte>(emptyParte());
 
   // Aggiorna un singolo venditore per indice (update immutabile).
@@ -1002,7 +1015,10 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 return (
                   <div
                     key={ord}
-                    className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]"
+                    ref={(el) => {
+                      cardRefs.current[ord] = el;
+                    }}
+                    className="scroll-mt-4 overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]"
                   >
                     <button
                       type="button"
@@ -1016,7 +1032,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                         {ccPerVeicolo[ord] === 'MISMATCH' && (
                           <span className="text-pv-red-500">⚠ verifica intestatari</span>
                         )}
-                        {gruppo.length} {gruppo.length === 1 ? 'venditore' : 'venditori'}
                         <svg
                           className={`h-4 w-4 transition-transform ${aperto ? 'rotate-180' : ''}`}
                           viewBox="0 0 24 24"

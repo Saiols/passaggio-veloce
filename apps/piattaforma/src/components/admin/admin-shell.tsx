@@ -217,7 +217,7 @@ export function AdminShell({
         <div className="mx-5 h-px shrink-0 bg-white/10" />
 
         {/* Navigazione raggruppata */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 [scrollbar-width:thin]">
+        <nav className="pv-sidebar-scroll flex-1 overflow-y-auto px-3 py-4">
           {groups.map((group) => (
             <div key={group.label} className="mb-5 last:mb-0">
               <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#6f8cb5]">

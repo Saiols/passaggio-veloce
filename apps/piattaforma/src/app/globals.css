@@ -156,3 +156,24 @@ summary {
 .pv-modal-panel {
   animation: pv-modal-scale-in 140ms ease-out;
 }
+
+/* Scrollbar sottile e on-brand per la nav della sidebar admin (fondo navy).
+   Track trasparente + thumb azzurro-PV translucido: indica che si puo'
+   scrollare senza essere invasivo. Si schiarisce leggermente su hover. */
+.pv-sidebar-scroll {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgb(127 155 196 / 0.32) transparent;
+}
+.pv-sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.pv-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pv-sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: rgb(127 155 196 / 0.28);
+  border-radius: 9999px;
+}
+.pv-sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(127 155 196 / 0.5);
+}

@@ -1,205 +1,143 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// Web Worker: TUTTE le operazioni OpenCV (init runtime ~8 MB, detect bordi,
-// warp prospettico, filtri) girano QUI, fuori dal main thread → la UI non si
-// blocca mai ("pagina non risponde"). Comunica via postMessage con ImageData.
-// jscanify usa il DOM (document/cv.imread su elementi) e non gira in un worker:
-// le sue funzioni findPaperContour/getCornerPoints sono portate a OpenCV raw.
+// Web Worker SENZA OpenCV: raddrizzamento prospettico (omografia + campionamento
+// bilineare) e filtri in puro JavaScript su ImageData. Off-main-thread → niente
+// freeze; niente wasm → niente problemi di runtime/readiness.
 
-import cvModule from '@techstark/opencv-js';
+import { getPerspectiveTransform, mapPoint, type Point } from './homography';
 
-console.log('[worker] modulo caricato — build v7 (readiness onRuntimeInitialized)');
+console.log('[worker] modulo caricato — build v8 (puro JS, no OpenCV)');
 
-type Pt = { x: number; y: number };
 type Corners = {
-  topLeftCorner: Pt;
-  topRightCorner: Pt;
-  bottomRightCorner: Pt;
-  bottomLeftCorner: Pt;
+  topLeftCorner: Point;
+  topRightCorner: Point;
+  bottomRightCorner: Point;
+  bottomLeftCorner: Point;
 };
+type Preset = 'originale' | 'colore' | 'bn';
 
-let cv: any = null;
+const MAX_OUT_SIDE = 2000;
 
-async function getCv(): Promise<any> {
-  if (cv) return cv;
-  let c: any = (cvModule as any)?.default ?? cvModule;
-  console.log('[worker] getCv: importato; isPromise?', c instanceof Promise);
-  if (c instanceof Promise) {
-    c = await c;
-  }
-  // Readiness REALE: il runtime wasm è pronto solo dopo onRuntimeInitialized;
-  // `cv.Mat` esiste prima (→ matFromImageData si bloccava). `getBuildInformation`
-  // è una funzione del runtime, disponibile solo a init completata.
-  const start = Date.now();
-  if (typeof c.getBuildInformation !== 'function') {
-    await new Promise<void>((resolve, reject) => {
-      let resolved = false;
-      const ok = () => {
-        if (resolved) return;
-        resolved = true;
-        console.log('[worker] getCv: runtime pronto dopo', Date.now() - start, 'ms');
-        resolve();
-      };
-      c.onRuntimeInitialized = ok;
-      const poll = () => {
-        if (resolved) return;
-        if (typeof c.getBuildInformation === 'function') return ok();
-        if (Date.now() - start > 60000) return reject(new Error('OpenCV init timeout'));
-        setTimeout(poll, 100);
-      };
-      poll();
-    });
-  } else {
-    console.log('[worker] getCv: runtime già pronto');
-  }
-  cv = c;
-  return cv;
-}
-
-function distance(ax: number, ay: number, bx: number, by: number): number {
-  return Math.hypot(ax - bx, ay - by);
-}
-
-// Porting di jscanify.findPaperContour (OpenCV raw, niente DOM).
-function findPaperContour(img: any): any {
-  console.log('[worker] fpc: gray =', img.rows, 'x', img.cols, 'ch', img.channels());
-  const gray = new cv.Mat();
-  cv.cvtColor(img, gray, cv.COLOR_RGBA2GRAY); // Canny vuole 1 canale
-  console.log('[worker] fpc: cvtColor ok');
-  cv.Canny(gray, gray, 50, 200);
-  console.log('[worker] fpc: canny ok');
-  const blur = new cv.Mat();
-  cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-  console.log('[worker] fpc: blur ok');
-  const thresh = new cv.Mat();
-  cv.threshold(blur, thresh, 0, 255, cv.THRESH_OTSU);
-  console.log('[worker] fpc: threshold ok');
-  const contours = new cv.MatVector();
-  const hierarchy = new cv.Mat();
-  cv.findContours(thresh, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
-  console.log('[worker] fpc: findContours ok, n =', contours.size());
-  let maxArea = 0;
-  let maxIdx = -1;
-  for (let i = 0; i < contours.size(); ++i) {
-    const a = cv.contourArea(contours.get(i));
-    if (a > maxArea) {
-      maxArea = a;
-      maxIdx = i;
-    }
-  }
-  console.log('[worker] fpc: maxIdx', maxIdx, 'area', maxArea);
-  // Clona il contorno PRIMA di liberare il MatVector (get() condivide memoria).
-  const maxContour = maxIdx >= 0 ? contours.get(maxIdx).clone() : null;
-  console.log('[worker] fpc: clone', maxContour ? 'ok' : 'null');
-  gray.delete();
-  blur.delete();
-  thresh.delete();
-  contours.delete();
-  hierarchy.delete();
-  return maxContour;
-}
-
-// Porting di jscanify.getCornerPoints.
-function getCornerPoints(contour: any): Corners | null {
-  const rect = cv.minAreaRect(contour);
-  console.log('[worker] gcp: minAreaRect ok', rect.center?.x, rect.center?.y);
-  const cx = rect.center.x;
-  const cy = rect.center.y;
-  let tl: Pt | undefined, tr: Pt | undefined, bl: Pt | undefined, br: Pt | undefined;
-  let tlD = 0, trD = 0, blD = 0, brD = 0;
-  const data = contour.data32S as Int32Array;
-  const len = Math.min(data.length, 400000); // cap difensivo anti-loop
-  console.log('[worker] gcp: data32S len', data.length, '→ uso', len);
-  for (let i = 0; i < len; i += 2) {
-    const x = data[i]!;
-    const y = data[i + 1]!;
-    const d = distance(x, y, cx, cy);
-    if (x < cx && y < cy) {
-      if (d > tlD) { tl = { x, y }; tlD = d; }
-    } else if (x > cx && y < cy) {
-      if (d > trD) { tr = { x, y }; trD = d; }
-    } else if (x < cx && y > cy) {
-      if (d > blD) { bl = { x, y }; blD = d; }
-    } else if (x > cx && y > cy) {
-      if (d > brD) { br = { x, y }; brD = d; }
-    }
-  }
-  if (!tl || !tr || !bl || !br) return null;
-  return { topLeftCorner: tl, topRightCorner: tr, bottomRightCorner: br, bottomLeftCorner: bl };
-}
-
-function detect(imageData: ImageData): Corners | null {
-  console.log('[worker] detect: matFromImageData', imageData.width, 'x', imageData.height);
-  const img = cv.matFromImageData(imageData);
-  let corners: Corners | null = null;
-  const contour = findPaperContour(img);
-  if (contour) {
-    corners = getCornerPoints(contour);
-    console.log('[worker] detect: getCornerPoints', corners ? 'ok' : 'null');
-    contour.delete();
-  }
-  img.delete();
-  return corners;
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
 }
 
 function warp(
-  imageData: ImageData,
+  src: ImageData,
   corners: Corners,
-  outW: number,
-  outH: number,
-  preset: 'originale' | 'colore' | 'bn',
+  outWReq: number,
+  outHReq: number,
+  preset: Preset,
 ): ImageData {
-  const img = cv.matFromImageData(imageData);
-  const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    corners.topLeftCorner.x, corners.topLeftCorner.y,
-    corners.topRightCorner.x, corners.topRightCorner.y,
-    corners.bottomLeftCorner.x, corners.bottomLeftCorner.y,
-    corners.bottomRightCorner.x, corners.bottomRightCorner.y,
-  ]);
-  const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, outW, 0, 0, outH, outW, outH]);
-  const M = cv.getPerspectiveTransform(srcTri, dstTri);
-  const warped = new cv.Mat();
-  cv.warpPerspective(img, warped, M, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
-
-  let finalMat = warped;
-  const extra: any[] = [];
-  if (preset === 'colore') {
-    const adj = new cv.Mat();
-    warped.convertTo(adj, -1, 1.18, 12); // contrasto (alpha) + luminosità (beta)
-    finalMat = adj;
-    extra.push(adj);
-  } else if (preset === 'bn') {
-    const gray = new cv.Mat();
-    cv.cvtColor(warped, gray, cv.COLOR_RGBA2GRAY);
-    const th = new cv.Mat();
-    cv.adaptiveThreshold(gray, th, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 10);
-    const rgba = new cv.Mat();
-    cv.cvtColor(th, rgba, cv.COLOR_GRAY2RGBA);
-    gray.delete();
-    th.delete();
-    finalMat = rgba;
-    extra.push(rgba);
+  // Cap dimensioni output (perf/memoria), proporzioni invariate.
+  let outW = Math.max(1, Math.round(outWReq));
+  let outH = Math.max(1, Math.round(outHReq));
+  const mx = Math.max(outW, outH);
+  if (mx > MAX_OUT_SIDE) {
+    const k = MAX_OUT_SIDE / mx;
+    outW = Math.max(1, Math.round(outW * k));
+    outH = Math.max(1, Math.round(outH * k));
   }
 
-  const out = new ImageData(new Uint8ClampedArray(finalMat.data), finalMat.cols, finalMat.rows);
-  img.delete();
-  srcTri.delete();
-  dstTri.delete();
-  M.delete();
-  warped.delete();
-  for (const m of extra) if (m !== warped) m.delete();
-  return out;
+  // H mappa il rettangolo di destinazione → quadrilatero sorgente (inverse map).
+  const dstRect: Point[] = [
+    { x: 0, y: 0 },
+    { x: outW, y: 0 },
+    { x: outW, y: outH },
+    { x: 0, y: outH },
+  ];
+  const srcQuad: Point[] = [
+    corners.topLeftCorner,
+    corners.topRightCorner,
+    corners.bottomRightCorner,
+    corners.bottomLeftCorner,
+  ];
+  const h = getPerspectiveTransform(dstRect, srcQuad);
+
+  const sw = src.width;
+  const sh = src.height;
+  const sd = src.data;
+  const out = new Uint8ClampedArray(outW * outH * 4);
+
+  for (let dy = 0; dy < outH; dy++) {
+    for (let dx = 0; dx < outW; dx++) {
+      const p = mapPoint(h, dx + 0.5, dy + 0.5);
+      const sx = clamp(p.x, 0, sw - 1);
+      const sy = clamp(p.y, 0, sh - 1);
+      const x0 = Math.floor(sx);
+      const y0 = Math.floor(sy);
+      const x1 = x0 + 1 < sw ? x0 + 1 : x0;
+      const y1 = y0 + 1 < sh ? y0 + 1 : y0;
+      const fx = sx - x0;
+      const fy = sy - y0;
+      const i00 = (y0 * sw + x0) * 4;
+      const i10 = (y0 * sw + x1) * 4;
+      const i01 = (y1 * sw + x0) * 4;
+      const i11 = (y1 * sw + x1) * 4;
+      const o = (dy * outW + dx) * 4;
+      for (let c = 0; c < 3; c++) {
+        const top = sd[i00 + c]! + (sd[i10 + c]! - sd[i00 + c]!) * fx;
+        const bot = sd[i01 + c]! + (sd[i11 + c]! - sd[i01 + c]!) * fx;
+        out[o + c] = top + (bot - top) * fy;
+      }
+      out[o + 3] = 255;
+    }
+  }
+
+  applyPreset(out, outW, outH, preset);
+  return new ImageData(out, outW, outH);
 }
 
-self.onmessage = async (e: MessageEvent) => {
+function applyPreset(data: Uint8ClampedArray, w: number, h: number, preset: Preset): void {
+  if (preset === 'originale') return;
+  if (preset === 'colore') {
+    // contrasto 1.18 + luminosità +12
+    for (let i = 0; i < data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        data[i + c] = clamp((data[i + c]! - 128) * 1.18 + 128 + 12, 0, 255);
+      }
+    }
+    return;
+  }
+  // bn: grayscale + soglia di Otsu (look "scansione")
+  const n = w * h;
+  const gray = new Uint8ClampedArray(n);
+  const hist = new Array<number>(256).fill(0);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const g = (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114) | 0;
+    gray[p] = g;
+    hist[g]!++;
+  }
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i]!;
+  let sumB = 0, wB = 0, maxVar = -1, thresh = 127;
+  for (let i = 0; i < 256; i++) {
+    wB += hist[i]!;
+    if (wB === 0) continue;
+    const wF = n - wB;
+    if (wF === 0) break;
+    sumB += i * hist[i]!;
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > maxVar) {
+      maxVar = between;
+      thresh = i;
+    }
+  }
+  for (let p = 0, i = 0; p < n; p++, i += 4) {
+    const v = gray[p]! > thresh ? 255 : 0;
+    data[i] = v;
+    data[i + 1] = v;
+    data[i + 2] = v;
+    data[i + 3] = 255;
+  }
+}
+
+self.onmessage = (e: MessageEvent) => {
   const { id, type } = e.data;
   console.log('[worker] ricevuto messaggio', type, id);
   try {
-    await getCv();
-    if (type === 'detect') {
-      const result = detect(e.data.imageData);
-      console.log('[worker] detect completato', id);
-      (self as any).postMessage({ id, ok: true, result });
-    } else if (type === 'warp') {
+    if (type === 'warp') {
       console.log('[worker] warp start', id, e.data.outW, 'x', e.data.outH, e.data.preset);
       const result = warp(e.data.imageData, e.data.corners, e.data.outW, e.data.outH, e.data.preset);
       console.log('[worker] warp done', id, result.width, 'x', result.height);

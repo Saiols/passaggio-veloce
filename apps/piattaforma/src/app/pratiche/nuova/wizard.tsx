@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useTransition, useMemo, useEffect } from 'react';
-import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
+import { useState, useTransition, useMemo, useEffect, useRef } from 'react';
+import { Alert, Button, Checkbox, Field, Input, NumberInput, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
@@ -12,7 +12,7 @@ import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
-import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
+import type { LibrettoCircolazioneData, OwnerInfo } from '@/lib/providers/ocr/types';
 import { venditoriCrossCheck } from '@/lib/kyc/match';
 import {
   validaParte,
@@ -100,14 +100,24 @@ function identitaUploading(files: IdentitaFiles): boolean {
   );
 }
 
-function splitNomeCompleto(full: string): { nome: string; cognome: string } {
-  // Il proprietario dal libretto è "COGNOME NOME" (C.2.1 cognome, poi C.2.2
-  // nome): il PRIMO token è il cognome, il resto il nome.
-  const parts = full.trim().split(/\s+/);
-  if (parts.length <= 1) return { nome: '', cognome: parts[0] ?? '' };
-  const cognome = parts[0]!;
-  const nome = parts.slice(1).join(' ');
-  return { nome, cognome };
+// Unione degli intestatari rilevati su TUTTI i veicoli, dedup per nome/ragione
+// sociale. Ogni libretto può avere 2 intestatari (C.2 proprietario + C.3
+// secondo intestatario/utilizzatore). Pura/testabile.
+function aggregaIntestatari(
+  veicoli: { ocr?: LibrettoCircolazioneData }[],
+): OwnerInfo[] {
+  const out: OwnerInfo[] = [];
+  const seen = new Set<string>();
+  for (const v of veicoli) {
+    for (const o of v.ocr?.proprietariInfo ?? []) {
+      const key = o.display.trim().toUpperCase().replace(/\s+/g, ' ');
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        out.push(o);
+      }
+    }
+  }
+  return out;
 }
 
 // docKey del Certificato di Proprietà di un veicolo (pre-2015). Stessa chiave
@@ -358,49 +368,32 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       ? TIPI_SOGGETTO_ACQUIRENTE_MINIVOLTURA
       : TIPI_SOGGETTO_ACQUIRENTE_SEMPLICE;
 
-  // B6: auto-popola i venditori dai proprietari estratti dal primo libretto.
-  // - Se il libretto ha N proprietari (co-intestatari), crea un VenditoreInput
-  //   per ciascuno (split best-effort del nominativo MAIUSCOLO in cognome+nome).
-  // - Non sovrascrive dati già inseriti: agisce solo se i venditori sono ancora
-  //   al default (uno solo, vuoto). L'utente può poi aggiungere/correggere.
-  // Chiamato post-estrazione del veicolo 1 (no effect → evita cascading render).
-  const maybePrefillVenditori = (data: LibrettoCircolazioneData) => {
-    const proprietari =
-      data.proprietari && data.proprietari.length > 0
-        ? data.proprietari
-        : data.proprietarioAttuale
-          ? [data.proprietarioAttuale]
-          : [];
-    if (!proprietari.length) return;
-    setVenditori((prev) => {
-      // Solo se l'utente non ha ancora toccato nulla (un venditore vuoto).
-      const isDefault =
-        prev.length === 1 &&
-        !prev[0]!.isPG &&
-        !prev[0]!.nome.trim() &&
-        !prev[0]!.cognome.trim() &&
-        !prev[0]!.ragioneSociale.trim();
-      if (!isDefault) return prev;
-      // Un solo proprietario: pre-fill il venditore esistente (preserva docId/file).
-      if (proprietari.length === 1) {
-        const { nome, cognome } = splitNomeCompleto(proprietari[0]!);
-        // CF del proprietario dal libretto (C.2.2/C.2.3): pre-compila solo se
-        // non già inserito a mano. La verifica documentale lo confronterà con
-        // l'OCR del documento d'identità.
-        const cf =
-          !prev[0]!.cf.trim() && data.proprietarioCf
-            ? data.proprietarioCf.toUpperCase()
-            : prev[0]!.cf;
-        if (!nome && !cognome && cf === prev[0]!.cf) return prev;
-        return [{ ...prev[0]!, nome, cognome, cf }];
-      }
-      // Più proprietari: un venditore per ciascuno.
-      return proprietari.map((p) => {
-        const { nome, cognome } = splitNomeCompleto(p);
-        return { ...emptyVenditore(), nome, cognome };
-      });
-    });
-  };
+  // Rigenera i venditori dall'UNIONE degli intestatari di TUTTI i veicoli (per
+  // ogni libretto: C.2 proprietario + C.3 secondo intestatario/utilizzatore),
+  // con dati strutturati (azienda → ragione sociale/P.IVA; persona → nome/
+  // cognome/CF). Si attiva solo quando l'insieme degli intestatari CAMBIA
+  // (upload/modifica di un libretto), così non sovrascrive le modifiche fatte a
+  // mano nello step Venditore (dove l'insieme non cambia).
+  const ownersSig = useRef<string>('');
+  useEffect(() => {
+    const owners = aggregaIntestatari(veicoli);
+    const sig = owners.map((o) => o.display).join('|');
+    if (sig === ownersSig.current) return;
+    ownersSig.current = sig;
+    if (!owners.length) return;
+    setVenditori(
+      owners.map((o) => ({
+        ...emptyVenditore(),
+        isPG: o.isPersonaGiuridica,
+        tipoSoggetto: o.isPersonaGiuridica ? 'AZIENDA' : null,
+        nome: o.nome ?? '',
+        cognome: o.cognome ?? '',
+        cf: (o.cf ?? '').toUpperCase(),
+        ragioneSociale: o.ragioneSociale ?? '',
+        piva: o.piva ?? '',
+      })),
+    );
+  }, [veicoli]);
 
   const [submitting, startSubmit] = useTransition();
 
@@ -495,8 +488,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
           preImm2015: res.data.preImm2015,
           flagComodatoDuso: res.data.flagComodatoDuso,
         });
-        // Pre-fill venditori solo dai proprietari del primo veicolo.
-        if (idx === 0) maybePrefillVenditori(res.data);
+        // I venditori si rigenerano dall'unione degli intestatari via effect.
       } else {
         updateVeicolo(idx, { extracting: false, ocrError: res.error });
       }
@@ -714,12 +706,24 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const canStep1 =
     veicoliValidi && !comodatoBloccante && !librettiUploading && !cdpUploading && !cdpMancante;
 
-  // B6: cross-check insiemistico venditori ↔ proprietari del primo libretto.
-  // I proprietari sono tutti gli intestatari estratti dall'OCR (co-intestatari),
-  // con fallback al proprietarioAttuale (campo editabile) se la lista è vuota.
-  const proprietari =
-    veicoli[0]?.ocr?.proprietari ??
-    (veicoli[0]?.proprietarioAttuale ? [veicoli[0].proprietarioAttuale] : []);
+  // Cross-check insiemistico venditori ↔ intestatari. Gli intestatari sono
+  // l'UNIONE (dedup) di tutti i proprietari estratti da TUTTI i libretti
+  // (C.2 + C.3 di ogni veicolo), con fallback al proprietarioAttuale editabile.
+  const proprietari = (() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const v of veicoli) {
+      const lista = v.ocr?.proprietari ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
+      for (const p of lista) {
+        const k = p.trim().toUpperCase().replace(/\s+/g, ' ');
+        if (k && !seen.has(k)) {
+          seen.add(k);
+          out.push(p);
+        }
+      }
+    }
+    return out;
+  })();
   const ccVend = venditoriCrossCheck(
     venditori.map((v) => ({
       isPersonaGiuridica: v.isPG,
@@ -824,14 +828,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               {multiplo && (
                 <div className="mt-4">
                   <Field label="Numero veicoli" required>
-                    <Input
-                      type="number"
+                    <NumberInput
                       min={2}
                       max={50}
+                      integer
                       value={numeroVeicoli}
-                      onChange={(e) =>
-                        changeNumeroVeicoli(Math.max(2, Number(e.target.value) || 2))
-                      }
+                      onChange={(n) => changeNumeroVeicoli(n ?? 2)}
                     />
                   </Field>
                   <p className="mt-1 text-[12px] text-pv-slate-500">

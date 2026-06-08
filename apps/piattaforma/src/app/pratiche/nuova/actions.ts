@@ -671,22 +671,30 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
   }
   collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente");
 
-  // Cross-check insiemistico venditori ↔ intestatari del libretto (server-side,
-  // autoritativo). Gli intestatari arrivano dall'OCR del primo veicolo (tutti i
-  // co-intestatari, con fallback al proprietarioAttuale editabile). MISMATCH
-  // blocca il submit; OK/SCONOSCIUTO proseguono.
-  const ocrProprietari = (() => {
-    const raw = veicoli[0]?.ocrData?.proprietari;
-    if (Array.isArray(raw)) {
-      return raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+  // Cross-check insiemistico venditori ↔ intestatari (server-side, autoritativo).
+  // Gli intestatari sono l'UNIONE (dedup) dei proprietari estratti da TUTTI i
+  // libretti (C.2 + C.3 di ogni veicolo), con fallback al proprietarioAttuale
+  // editabile. MISMATCH blocca il submit; OK/SCONOSCIUTO proseguono.
+  const proprietari = (() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const v of veicoli) {
+      const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
+      const lista = Array.isArray(raw)
+        ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+        : v.proprietarioAttuale
+          ? [v.proprietarioAttuale]
+          : [];
+      for (const p of lista) {
+        const k = p.trim().toUpperCase().replace(/\s+/g, ' ');
+        if (k && !seen.has(k)) {
+          seen.add(k);
+          out.push(p);
+        }
+      }
     }
-    return [];
+    return out;
   })();
-  const proprietari = ocrProprietari.length
-    ? ocrProprietari
-    : veicoli[0]?.proprietarioAttuale
-      ? [veicoli[0].proprietarioAttuale]
-      : [];
   const cc = venditoriCrossCheck(
     venditori.map((v) => ({
       isPersonaGiuridica: v.isPG,

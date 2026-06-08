@@ -77,6 +77,35 @@ describe('parseLibrettoText — carta reale (anonimizzata)', () => {
   });
 });
 
+describe('parseLibrettoText — co-intestatari (C.2 azienda + C.3 persona)', () => {
+  // Caso leasing reale (anonimizzato): C.2 = società proprietaria (P.IVA),
+  // C.3 = utilizzatore persona fisica (CF).
+  const LEASE = `(A) AB123CD
+(B) 18.08.2023
+(C.2.1) ACME LEASING SPA
+(C.2.3) CORSO ORBASSANO 367
+TORINO (TO)
+(08349560014)
+(E) ZFA31200000999999
+(C.3.1) ROSSI
+(C.3.2) MARIO
+NATO IL 22.02.1965 (RSSMRA80A01F205X)
+A MILANO (MI)
+(C.3.3) VIA ROMA 21
+(1) 18.08.2023
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2.1) cognome o ragione sociale`;
+
+  it('estrae entrambi gli intestatari, strutturati', () => {
+    const r = parseLibrettoText(LEASE, 0.9);
+    expect(r.proprietari).toEqual(['ACME LEASING SPA', 'ROSSI MARIO']);
+    expect(r.proprietariInfo).toEqual([
+      { isPersonaGiuridica: true, ragioneSociale: 'ACME LEASING SPA', piva: '08349560014', display: 'ACME LEASING SPA' },
+      { isPersonaGiuridica: false, cognome: 'ROSSI', nome: 'MARIO', cf: 'RSSMRA80A01F205X', display: 'ROSSI MARIO' },
+    ]);
+  });
+});
+
 describe('parseLibrettoText — pre-2015 da (I)', () => {
   it('(I) anteriore al 2015 → preImm2015 true', () => {
     const txt = '(B) 20.06.2009\n(C.2.1) BIANCHI\n(C.2.2) LUCA\n(A) FA123GH\n(1) 10.03.2010';

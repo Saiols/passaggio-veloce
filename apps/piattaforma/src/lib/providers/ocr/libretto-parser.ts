@@ -1,4 +1,4 @@
-import type { LibrettoCircolazioneData } from './types';
+import type { LibrettoCircolazioneData, OwnerInfo } from './types';
 import { isValidCodiceFiscale } from '@/lib/kyc/match';
 
 const TARGA_RE = /\b([A-Z]{2}\d{3}[A-Z]{2})\b/;
@@ -31,6 +31,28 @@ function fieldAfter(text: string, labelPattern: string): string | undefined {
   return v && v.length > 0 ? v : undefined;
 }
 
+/**
+ * Estrae un intestatario dato il prefisso codice ("C\\.2" o "C\\.3").
+ * Se è presente il "nome" (.2) → persona fisica (CF tra .2 e .3); altrimenti →
+ * persona giuridica (P.IVA = 11 cifre nella finestra dopo .1).
+ */
+function parseOwner(data: string, prefix: string): OwnerInfo | undefined {
+  const p1 = fieldAfter(data, `\\(${prefix}\\.1\\)`); // cognome o ragione sociale
+  if (!p1) return undefined;
+  const p2 = fieldAfter(data, `\\(${prefix}\\.2\\)`); // nome (assente per le aziende)
+  const i1 = data.search(new RegExp(`\\(${prefix}\\.1\\)`));
+  if (p2) {
+    const i3 = data.search(new RegExp(`\\(${prefix}\\.3\\)`));
+    const seg = i1 >= 0 ? data.slice(i1, i3 > i1 ? i3 : i1 + 400) : '';
+    const cfM = CF_RE.exec(seg);
+    const cf = cfM && isValidCodiceFiscale(cfM[1]!) ? cfM[1]! : undefined;
+    return { isPersonaGiuridica: false, cognome: p1, nome: p2, cf, display: `${p1} ${p2}`.trim() };
+  }
+  const seg = i1 >= 0 ? data.slice(i1, i1 + 600) : '';
+  const pivaM = /\b(\d{11})\b/.exec(seg);
+  return { isPersonaGiuridica: true, ragioneSociale: p1, piva: pivaM ? pivaM[1] : undefined, display: p1 };
+}
+
 /** Estrae i campi del libretto dal testo OCR. Tutti i campi sono best-effort:
  * un campo non trovato resta undefined (la pre-compilazione è editabile). */
 export function parseLibrettoText(text: string, confidence: number): LibrettoCircolazioneData {
@@ -55,23 +77,14 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
   const acquisto = dateAfter(data, String.raw`\((?:I|1|L)\)`);
   const dataAcquisto = acquisto?.iso;
 
-  // Proprietario attuale: (C.2.1) cognome o ragione sociale + (C.2.2) nome.
-  const cognome = fieldAfter(data, String.raw`\(C\.2\.1\)`);
-  const nome = fieldAfter(data, String.raw`\(C\.2\.2\)`);
-  const intestatario = [cognome, nome].filter(Boolean).join(' ').trim();
-  const proprietarioAttuale = intestatario.length ? intestatario : undefined;
-  const proprietari = proprietarioAttuale ? [proprietarioAttuale] : undefined;
-
-  // Codice fiscale del proprietario: tra parentesi nel segmento tra (C.2.2) e
-  // (C.2.3) (es. "... (SNAFRC94T49F205Y) ..."). Validato col check digit.
-  const c22 = data.search(/\(C\.2\.2\)/);
-  const c23 = data.search(/\(C\.2\.3\)/);
-  let proprietarioCf: string | undefined;
-  if (c22 >= 0) {
-    const seg = data.slice(c22, c23 > c22 ? c23 : c22 + 400);
-    const cfMatch = CF_RE.exec(seg);
-    if (cfMatch && isValidCodiceFiscale(cfMatch[1]!)) proprietarioCf = cfMatch[1]!;
-  }
+  // Intestatari: C.2 (proprietario) + C.3 (secondo intestatario/utilizzatore,
+  // es. nei leasing). Ciascuno può essere azienda o persona.
+  const proprietariInfo = [parseOwner(data, 'C\\.2'), parseOwner(data, 'C\\.3')].filter(
+    (o): o is OwnerInfo => o !== undefined,
+  );
+  const proprietari = proprietariInfo.length ? proprietariInfo.map((o) => o.display) : undefined;
+  const proprietarioAttuale = proprietariInfo[0]?.display;
+  const proprietarioCf = proprietariInfo[0]?.cf;
 
   // pre-2015 = regime Certificato di Proprietà, determinato dalla data di
   // ACQUISTO dell'attuale proprietario (I); fallback alla prima immatricolazione.
@@ -86,6 +99,7 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
     proprietarioAttuale,
     proprietarioCf,
     proprietari,
+    proprietariInfo,
     preImm2015,
     flagComodatoDuso: /COMODATO/.test(data),
     confidenceScore: confidence,

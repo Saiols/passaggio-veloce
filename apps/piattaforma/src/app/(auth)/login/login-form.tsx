@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
-import { Alert, Button, Field, Input } from '@/components/ui';
+import { Alert, Button, Field, Input, PasswordInput } from '@/components/ui';
 import { loginAction, type LoginActionState } from '../actions';
 
 const initialState: LoginActionState = {};
@@ -46,10 +46,9 @@ export function LoginForm() {
         </Field>
 
         <Field label="Password" htmlFor="password" required>
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             required
             autoComplete="current-password"
             placeholder="••••••••"

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { PasswordInput } from '@/components/ui';
 import {
   requestPasswordResetAction,
   confirmPasswordResetAction,
@@ -51,8 +52,7 @@ export function ResetForm({ token }: { token: string | null }) {
   if (token) {
     return (
       <form action={handleConfirm} className="mt-6 space-y-4">
-        <input
-          type="password"
+        <PasswordInput
           name="password"
           required
           minLength={10}

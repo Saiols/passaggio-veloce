@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert, Button } from '@/components/ui';
+import { Alert, Button, PasswordInput } from '@/components/ui';
 import {
   createCrmTeamUserAction,
   updateCrmTeamUserAction,
@@ -523,13 +523,23 @@ function FieldText({
       <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
         {label}
       </span>
-      <input
-        type={type}
-        value={value}
-        required={required}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
-      />
+      {type === 'password' ? (
+        <PasswordInput
+          value={value}
+          required={required}
+          onChange={(e) => onChange(e.target.value)}
+          containerClassName="mt-1"
+          className="w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          required={required}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+        />
+      )}
       {hint && (
         <span className="mt-0.5 block text-[10.5px] text-pv-slate-500">{hint}</span>
       )}

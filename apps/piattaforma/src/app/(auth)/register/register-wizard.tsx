@@ -11,7 +11,7 @@ import {
   registerStep2CompanySchema,
   registerStep4PaymentSchema,
 } from '@/lib/auth/schemas';
-import { Alert, Button, Checkbox, Field, Input, Select } from '@/components/ui';
+import { Alert, Button, Checkbox, Field, Input, PasswordInput, Select } from '@/components/ui';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DocCard } from '@/components/doc-card';
@@ -331,16 +331,14 @@ function AccountStep({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Password" required error={errors.password?.message}>
-          <Input
-            type="password"
+          <PasswordInput
             autoComplete="new-password"
             invalid={!!errors.password}
             {...register('password')}
           />
         </Field>
         <Field label="Conferma password" required error={errors.passwordConfirm?.message}>
-          <Input
-            type="password"
+          <PasswordInput
             autoComplete="new-password"
             invalid={!!errors.passwordConfirm}
             {...register('passwordConfirm')}

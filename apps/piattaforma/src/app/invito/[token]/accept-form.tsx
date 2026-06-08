@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { PasswordInput } from '@/components/ui';
 import { acceptInvitationAction } from '@/app/team/actions';
 
 export function AcceptForm({ token }: { token: string }) {
@@ -29,7 +30,7 @@ export function AcceptForm({ token }: { token: string }) {
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
       <input name="cognome" required placeholder="Cognome"
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
-      <input name="password" type="password" required minLength={8}
+      <PasswordInput name="password" required minLength={8}
         placeholder="Password (min 8, A-z, 0-9)"
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
       {error && <p className="text-sm text-pv-red-500">{error}</p>}

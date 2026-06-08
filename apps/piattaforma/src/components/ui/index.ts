@@ -1,5 +1,6 @@
 export { Button } from './button';
 export { Input } from './input';
+export { PasswordInput } from './password-input';
 export { Select } from './select';
 export { Checkbox } from './checkbox';
 export { Label } from './label';

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import QRCode from 'qrcode';
 import { useRouter } from 'next/navigation';
-import { Alert, Button } from '@/components/ui';
+import { Alert, Button, PasswordInput } from '@/components/ui';
 import {
   start2faSetupAction,
   confirm2faSetupAction,
@@ -104,11 +104,11 @@ export function SicurezzaClient({
           <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
             La tua password
           </span>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+            containerClassName="mt-1"
+            className="w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
           />
         </label>
         {error && <Alert variant="error">{error}</Alert>}

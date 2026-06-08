@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { PasswordInput } from '@/components/ui';
 import { createUserDirectAction } from './actions';
 
 export function CreateUserForm({
@@ -53,13 +54,13 @@ export function CreateUserForm({
         placeholder="Cognome"
         className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
       />
-      <input
-        type="password"
+      <PasswordInput
         name="password"
         required
         minLength={8}
         placeholder="Password iniziale (min 8, A-z, 0-9)"
-        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm sm:col-span-2"
+        className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
+        containerClassName="sm:col-span-2"
       />
       <button
         type="submit"

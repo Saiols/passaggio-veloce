@@ -7,8 +7,21 @@ chatbot_visibility: clients
 > Contenuto curato per il chatbot rivolto agli utenti **loggati** (dealer/broker e
 > agenzie). Operatività della piattaforma: come si fa, documenti necessari, stati,
 > wallet. **Escluso:** margini PV, split interni, costi aziendali, strategia, note CTO.
-> Le fee che il cliente già vede in piattaforma possono essere citate; gli importi delle
-> **penali NON vanno citati in cifra** finché non è risolta l'incoerenza nei documenti.
+> Le fee e le penali che il cliente già vede in piattaforma possono essere citate.
+
+## Registrazione e accesso
+
+- Ci si registra come azienda (dealer o agenzia) con una procedura guidata a 4 step:
+  dati del titolare, dati azienda (P.IVA, Codice SDI, indirizzo), **documenti**, pagamento e
+  condizioni.
+- **Documenti per la registrazione**: carta d'identità (fronte e retro), codice fiscale e
+  **visura camerale degli ultimi 6 mesi**. La verifica è **automatica** (lettura dei
+  documenti); se qualcosa non torna (visura scaduta, codice attività non idoneo, dati non
+  corrispondenti) viene segnalato subito.
+- Dopo la registrazione si **conferma l'email** tramite il link ricevuto.
+- È disponibile l'**autenticazione a due fattori (2FA)** con app authenticator e codici di
+  backup, attivabile da Profilo → Sicurezza.
+- Un'azienda può avere **più utenti**: l'amministratore può invitarli o crearli da Team.
 
 ## Aprire e inviare una pratica (dealer/broker)
 
@@ -60,17 +73,25 @@ Verifica sempre con una visura PRA prima di inviare.
 
 ## Come vengono scelte le agenzie
 
-Non scegli l'agenzia manualmente. Alla conferma, la pratica viene inviata alle agenzie
-partner della zona, ordinate per affidabilità; la **prima agenzia che accetta** la prende
-in carico. Da quel momento segui lo stato della pratica e le notifiche.
+Non scegli l'agenzia manualmente. Alla conferma, la pratica viene distribuita
+automaticamente in più round: prima alle agenzie del **comune**, poi (se nessuna accetta in
+tempo) ai **comuni limitrofi**, infine a tutta la **provincia**. Le agenzie sono ordinate
+per affidabilità (valutazioni reali) e la **prima che accetta** la prende in carico.
+
+Ogni agenzia ha un tempo per rispondere: il **countdown considera solo gli orari di apertura**
+dell'agenzia (non scorre quando è chiusa). Se dopo tutti i round nessuna agenzia accetta, la
+pratica passa al team di Passaggio Veloce che interviene manualmente. Da quel momento segui
+lo stato della pratica e le notifiche.
 
 ## Stati principali della pratica
 
 - **Bozza** — in compilazione o in attesa di revisione manuale.
-- **In attesa (round di distribuzione)** — inviata alle agenzie, in attesa che una accetti.
-- **Accettata / In lavorazione** — un'agenzia l'ha presa in carico e la sta gestendo.
-- **Firmata / Completata** — firma avvenuta in agenzia; scatta la chiusura e la fatturazione.
-- **Annullata** — es. fermo/ipoteca rilevato o problema segnalato.
+- **In attesa (round 1/2/3)** — inviata alle agenzie, in attesa che una accetti.
+- **In escalation** — nessuna agenzia ha accettato dopo i round; la gestisce il team PV.
+- **Accettata** — un'agenzia l'ha presa in carico e la sta lavorando.
+- **Processata** — l'agenzia ha completato la lavorazione; manca la firma del cliente.
+- **Firmata / Completata** — firma avvenuta in agenzia; la pratica si chiude.
+- **Scaduta / Annullata** — countdown esaurito, oppure fermo/ipoteca o problema segnalato.
 
 ## Lato agenzia
 
@@ -83,18 +104,24 @@ in carico. Da quel momento segui lo stato della pratica e le notifiche.
 ## Wallet e payout (broker)
 
 - I compensi delle pratiche si accumulano nel tuo **wallet**.
-- Puoi **richiedere il payout** al raggiungimento della soglia minima; oltre una soglia più
-  alta il payout è **automatico**.
+- Puoi **richiedere il payout** a partire da **€500**; al raggiungimento di **€1.000** il
+  payout parte **automaticamente** (la soglia automatica può essere configurata).
 - Nel wallet vedi saldo pratiche, saldo affiliazione, eventuali penali addebitate e il
   prossimo payout previsto.
+- Il saldo può diventare **negativo** in caso di penali: in tal caso il payout è bloccato
+  finché non reintegri.
 
 ## Documenti fiscali
 
-A pratica completata vengono generati automaticamente i documenti fiscali (PDF e XML
-FatturaPA), scaricabili dalla lista pratiche e dalla sezione Fatturazione, e trasmessi al
-SDI secondo il flusso previsto.
+A pratica completata, i documenti fiscali (fattura di Passaggio Veloce e documento del
+broker) sono gestiti dalla piattaforma secondo il flusso previsto e disponibili dalla
+sezione Fatturazione. (La generazione/trasmissione automatica al SDI è in fase di
+attivazione.)
 
 ## Notifiche
 
-Ricevi notifiche multi-canale (email, SMS, in-app) a ogni passaggio rilevante: invio,
-accettazione, solleciti, firma, payout, addebiti.
+Ricevi notifiche via **email** a ogni passaggio rilevante (invio, accettazione, firma,
+addebiti, escalation, segnalazioni). Le notifiche di servizio sono sempre attive; quelle
+facoltative (solleciti, promemoria countdown, recap affiliazione, inviti a valutare) si
+gestiscono da Profilo → Notifiche, con disiscrizione in un clic dal link in fondo all'email.
+Lo storico delle comunicazioni è in Notifiche.

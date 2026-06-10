@@ -2,12 +2,7 @@
 chatbot_visibility: public
 ---
 
-# Knowledge base — Bot pubblico (visitatori)
-
-> Contenuto curato per il chatbot rivolto ai **visitatori non loggati** del sito.
-> Solo informazioni di pre-vendita sicure. **NIENTE prezzi, fee, margini, split
-> economici, penali in cifre, costi interni o strategia.** Sui costi rimanda
-> sempre all'iscrizione/contatto. Fonte: landing `passaggioveloce.it`.
+# Passaggio Veloce — Domande frequenti
 
 ## Cos'è Passaggio Veloce
 

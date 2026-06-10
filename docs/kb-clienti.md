@@ -2,12 +2,7 @@
 chatbot_visibility: clients
 ---
 
-# Knowledge base — Bot clienti (dealer e agenzie loggati)
-
-> Contenuto curato per il chatbot rivolto agli utenti **loggati** (dealer/broker e
-> agenzie). Operatività della piattaforma: come si fa, documenti necessari, stati,
-> wallet. **Escluso:** margini PV, split interni, costi aziendali, strategia, note CTO.
-> Le fee e le penali che il cliente già vede in piattaforma possono essere citate.
+# Passaggio Veloce — Guida operativa (dealer e agenzie)
 
 ## Registrazione e accesso
 

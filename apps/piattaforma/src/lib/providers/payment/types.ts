@@ -13,7 +13,7 @@ export type ExecutePayoutInput = {
 };
 
 export type PaymentResult =
-  | { ok: true; providerRef: string }
+  | { ok: true; providerRef: string; pending?: boolean }
   | { ok: false; error: string; retryable: boolean };
 
 export interface PaymentProvider {

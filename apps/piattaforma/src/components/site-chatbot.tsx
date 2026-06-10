@@ -16,7 +16,7 @@ import { ChatbotWidget } from './chatbot-widget';
 export async function SiteChatbot({
   posizione,
 }: {
-  posizione: string;
+  posizione?: string;
 }) {
   let bot: { id: string; nome: string; prompt: string } | null = null;
   try {
@@ -25,7 +25,7 @@ export async function SiteChatbot({
         deletedAt: null,
         attivo: true,
         canale: { in: ['SITO', 'TUTTI'] },
-        OR: [{ posizione }, { posizione: null }],
+        ...(posizione ? { OR: [{ posizione }, { posizione: null }] } : {}),
       },
       orderBy: [{ posizione: 'desc' }, { createdAt: 'desc' }],
       select: { id: true, nome: true, prompt: true },

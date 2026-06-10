@@ -2,7 +2,6 @@ import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
-import { SiteChatbot } from '@/components/site-chatbot';
 import { SiteFooter } from '@/components/site-footer';
 import { UtmCapture } from '@/components/utm-capture';
 import { isGatedHost } from '@/lib/landing-gate';
@@ -50,7 +49,6 @@ export default async function HomePage() {
     <main className="flex min-h-screen flex-col bg-white">
       <UtmCapture />
       <SiteHeader />
-      <SiteChatbot posizione="Homepage" />
       <JsonLd
         data={[
           webPageJsonLd({

@@ -20,6 +20,7 @@ import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
 import { randomUUID } from 'node:crypto';
 import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { getRegistroImprese } from '@/lib/providers/registro-imprese';
+import { applySepaMandateToAgency } from '@/lib/providers/payment/stripe-mandate';
 import {
   validateRegistrationDocuments,
   type RegistrationDocInput,
@@ -532,6 +533,28 @@ export async function registerAction(
       // AF-N: se il nuovo iscritto ha un referenteId, notifica al referente
       // (template N22 Referral Signup).
       void notifyReferralSignup(createdCompanyId);
+    }
+
+    // Mandato SEPA via Stripe — SOLO agenzie e SOLO con provider stripe.
+    // Best-effort post-commit (come promo/CRM): un fallimento NON annulla la
+    // registrazione; lascia sepaMandateStatus=FAILED, riparabile lato admin.
+    if (
+      createdCompanyId &&
+      company.type === 'AGENZIA' &&
+      env.PAYMENT_PROVIDER === 'stripe'
+    ) {
+      try {
+        await applySepaMandateToAgency({
+          companyId,
+          iban: payment.iban,
+          name: company.ragioneSociale,
+          email: company.email,
+          ip: signupIpRaw,
+          userAgent: hdrs.get('user-agent'),
+        });
+      } catch (e) {
+        console.warn('[registrazione] setup mandato SEPA errore', (e as Error).message);
+      }
     }
 
     // RegistroImprese (predisposizione swap): lookup best-effort non bloccante.

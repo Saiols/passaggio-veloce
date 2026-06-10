@@ -34,14 +34,20 @@ export function ChatbotWidget({
   const send = async (): Promise<void> => {
     const trimmed = input.trim();
     if (!trimmed || pending) return;
-    setMessages((m) => [...m, { role: 'user', text: trimmed }]);
+    const nextMsgs: ChatMsg[] = [...messages, { role: 'user', text: trimmed }];
+    setMessages(nextMsgs);
     setInput('');
     setPending(true);
+    // Storico multi-turn: ultimi 12 messaggi, mappati al formato API.
+    const history = nextMsgs.slice(-12).map((m) => ({
+      role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
+      content: m.text,
+    }));
     try {
       const res = await fetch(`/api/chatbot/${botId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ messages: history }),
       });
       const data = (await res.json()) as {
         reply?: string;

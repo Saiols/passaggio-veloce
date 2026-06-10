@@ -101,6 +101,17 @@ Difesa anti-leak a due livelli:
 - **Alternativa scartata**: manifest `docs/chatbot-visibility.json`. Il front-matter è
   co-locato col contenuto e più difficile da dimenticare.
 
+> **Aggiornamento 2026-06-10 (post-analisi contenuti docs).** Leggendo i `docs/` reali è
+> emerso che sono **quasi tutti interni** (brief/spec/finanze) — non contengono FAQ
+> pubbliche pronte. Quindi pubblico/clienti **non si estraggono grezzi** dai doc interni:
+> il contenuto sicuro è **curato a mano** in due file dedicati `docs/kb-pubblico.md`
+> (`public`) e `docs/kb-clienti.md` (`clients`); **tutti gli altri `docs/*.md` restano
+> `internal` di default**. Il meccanismo della pipeline non cambia (legge `.md` per tag),
+> cambia solo la *fonte* dei contenuti public/clients. I `.docx`/`.pdf` non sono letti
+> dalla pipeline: i due nuovi brief riservati sono stati convertiti in `.md internal`
+> (`fatturazione-piattaforma.md`, `segnalazioni-penali.md`). Decisione: bot pubblico
+> **senza prezzi** (rimanda all'iscrizione). Aperto: incoerenza importo penale (€25 vs €100).
+
 ### 4.2 Provider LLM — `apps/piattaforma/src/lib/providers/chatbot/`
 
 - `respondAsBot()` **resta invariato** → fallback deterministico.

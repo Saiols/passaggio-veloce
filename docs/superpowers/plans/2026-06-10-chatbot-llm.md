@@ -247,45 +247,41 @@ git commit -m "feat(chatbot): logica pura assemblaggio KB per tier di visibilita
 ## Task 3: Tag dei docs + build script + KB generata + kbForTier + anti-leak
 
 **Files:**
-- Modify: tutti i `docs/*.md` rilevanti (front-matter)
+- Già creati (sessione design): `docs/kb-pubblico.md`, `docs/kb-clienti.md`, `docs/fatturazione-piattaforma.md`, `docs/segnalazioni-penali.md`
 - Create: `apps/piattaforma/scripts/build-chatbot-kb.ts`
 - Create: `apps/piattaforma/src/lib/providers/chatbot/kb/kb.generated.ts` (generato)
 - Create: `apps/piattaforma/src/lib/providers/chatbot/kb/index.ts`
 - Create: `apps/piattaforma/src/lib/providers/chatbot/kb/leak.test.ts`
 - Modify: `apps/piattaforma/package.json` (script)
 
-- [ ] **Step 1: Aggiungi il front-matter `chatbot_visibility` ai docs**
+- [ ] **Step 1: Verifica i file KB curati (già creati) + default internal**
 
-Per ogni file in `docs/*.md`, aggiungi in cima (prima riga del file) un blocco front-matter. Default da applicare in base alla sensibilità:
+> **Cambio di approccio (post-analisi docs, 2026-06-10):** leggendo i contenuti reali è
+> emerso che **i `docs/` sono quasi tutti interni** (brief/spec/finanze) — inclusi
+> `riassunto-progetto.md` e `documento-per-socio.md` che una bozza precedente aveva
+> erroneamente segnato `public`. Quindi pubblico/clienti **non si estraggono grezzi**: i
+> contenuti sono **curati a mano** in due file dedicati. La pipeline (legge `.md` per tag)
+> è invariata; cambia solo da dove arrivano i contenuti public/clients.
 
-| Doc | Visibilità |
-|---|---|
-| `riassunto-progetto.md` | `public` |
-| `documento-per-socio.md` | `public` |
-| `schema-documentale-v7.md` | `clients` |
-| `stack-tecnico.md` | `clients` |
-| `crm-architettura.md` | `internal` |
-| `crm-spec-implementativa.md` | `internal` |
-| `sistema-fatturazione.md` | `internal` |
-| `sistema-penali-broker.md` | `internal` |
-| `sistema-affiliazione.md` | `internal` |
-| `ecosistema-crm-ai.md` | `internal` |
-| `stima-costi.md` | `internal` |
-| `analisi-progetto.md` | `internal` |
-| `bugfix-feature-list.md` | `internal` |
-| `feedback-demo-2026-04-29.md` | `internal` |
-| `piano-implementazione.md` | `internal` |
+Verifica che questi file esistano (creati nella sessione di design):
 
-Esempio (inizio di `docs/riassunto-progetto.md`):
-```markdown
----
-chatbot_visibility: public
----
-# Passaggio Veloce — Riassunto progetto
-...resto invariato...
-```
+| File | `chatbot_visibility` | Contenuto |
+|---|---|---|
+| `docs/kb-pubblico.md` | `public` | FAQ pre-vendita sicure, **niente prezzi** — fonte: landing |
+| `docs/kb-clienti.md` | `clients` | Operatività: aprire/inviare pratica, documenti necessari, stati, wallet/payout, avviso visura PRA |
+| `docs/fatturazione-piattaforma.md` | `internal` | convertito da `FatturazionePiattaforma.docx` |
+| `docs/segnalazioni-penali.md` | `internal` | convertito da `SegnalazioniPenali.docx` |
 
-> Nota: i doc senza front-matter restano `internal` per default (sicuro). La tabella sopra è un punto di partenza prudente: `public`/`clients` solo per ciò che è davvero adatto all'utente finale. In dubbio → lasciare `internal`. La spec dei superpowers (`docs/superpowers/specs/...`, `docs/superpowers/plans/...`) non viene letta dalla pipeline (solo `docs/*.md` di primo livello).
+**Tutti gli altri `docs/*.md` restano `internal` per default** — nessun front-matter
+necessario (la pipeline assegna `internal` in assenza del tag). **NON** taggare i doc
+interni come `public`/`clients`: sono brief/spec/finanze e andrebbero in leak.
+L'esposizione pubblico/clienti passa **solo** dai due file curati sopra.
+
+> Le `.docx`/`.pdf` non vengono lette dalla pipeline (solo `.md`). Le due nuove sono già
+> convertite in `.md internal`; le altre `.docx`/`.pdf` orfane (`TabellaRegimiFiscali`,
+> `Modifiche...Foglio1`) sono interne e a bassa priorità — convertibili in `.md internal`
+> in seguito se serve coprirle nel bot staff. **Da risolvere a monte:** incoerenza importo
+> penale broker (€25 in `segnalazioni-penali.md` vs €100 in `fatturazione-piattaforma.md`/`sistema-penali-broker.md`).
 
 - [ ] **Step 2: Crea il build script**
 
@@ -361,9 +357,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assembleKb, type DocInput } from './assemble';
 
-// Stringhe che NON devono mai comparire nella KB pubblica/clienti
-// (dato interno/finanziario). Aggiornare se cambiano i docs.
-const SENSITIVE = ['margine netto', 'split', 'penale', 'commission'];
+// Stringhe che NON devono mai comparire nella KB PUBBLICA (dato interno/finanziario).
+const SENSITIVE_PUBLIC = ['margine', 'split', 'commission', 'penale', 'payout', '€50', '€25', 'puppeteer'];
+// Per la KB CLIENTI: vietati margini/strategia/dev interni ('commissioni' è invece lecito lato cliente).
+const SENSITIVE_CLIENTS = ['margine', 'split', 'puppeteer', 'stima costi'];
 
 function realDocs(): DocInput[] {
   const dir = join(process.cwd(), '..', '..', 'docs'); // da apps/piattaforma → repo/docs
@@ -372,12 +369,18 @@ function realDocs(): DocInput[] {
     .map((f) => ({ name: f, content: readFileSync(join(dir, f), 'utf8') }));
 }
 
-describe('anti-leak KB pubblica', () => {
-  it('la KB public non contiene stringhe sensibili note', () => {
-    const kb = assembleKb(realDocs());
-    const lower = kb.public.toLowerCase();
-    for (const s of SENSITIVE) {
+describe('anti-leak KB', () => {
+  it('la KB public non contiene termini sensibili', () => {
+    const lower = assembleKb(realDocs()).public.toLowerCase();
+    for (const s of SENSITIVE_PUBLIC) {
       expect(lower, `"${s}" non deve comparire nella KB pubblica`).not.toContain(s);
+    }
+  });
+
+  it('la KB clients non espone margini/strategia/dev interni', () => {
+    const lower = assembleKb(realDocs()).clients.toLowerCase();
+    for (const s of SENSITIVE_CLIENTS) {
+      expect(lower, `"${s}" non deve comparire nella KB clienti`).not.toContain(s);
     }
   });
 });

@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:install": "playwright install chromium",
+    "kb:build": "tsx scripts/build-chatbot-kb.ts",
+    "prebuild": "tsx scripts/build-chatbot-kb.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

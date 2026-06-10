@@ -724,6 +724,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [x] Provider stub `lib/providers/chatbot/` con parser Q&A e matching keyword (sostituibile con LLM reale post-Manychat/WATI)
 - [x] API `POST /api/chatbot/[botId]` per il widget (rate-limit a 1000 char/messaggio)
 - [x] Unit test provider (parseQa + respondAsBot, 6 case)
+- [x] **Chatbot LLM (Haiku 4.5)** — KB auto-estratta dai docs per tier (public/clients/internal, default-safe), montaggio platform-wide (root layout, loggati e non), multi-turn, anti-abuso (rate-limit per-IP + tetto globale su Neon), fallback deterministico fail-open, logging metriche + domande senza risposta (spec `docs/superpowers/specs/2026-06-10-chatbot-llm-design.md`, branch `feat/chatbot-llm`)
 - [ ] Dashboard conversazioni per bot (storico, tagging, escalation umana) — differita a CRM-H
 - [ ] Embed Chatbot WhatsApp/mail (WATI/Manychat) — differito a CRM-H
 

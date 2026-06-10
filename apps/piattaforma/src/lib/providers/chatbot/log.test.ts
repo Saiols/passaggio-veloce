@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const create = vi.fn((_a: unknown) => Promise.resolve({}));
-vi.mock('@pv/db', () => ({ prisma: { chatbotInteraction: { create: (a: unknown) => create(a) } } }));
+const create = vi.fn();
+vi.mock('@pv/db', () => ({ prisma: { chatbotInteraction: { create: (...a: unknown[]) => create(...a) } } }));
 
 import { logInteraction } from './log';
 

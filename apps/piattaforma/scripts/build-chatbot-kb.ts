@@ -15,8 +15,7 @@ const docs: DocInput[] = readdirSync(docsDir)
 
 const kb = assembleKb(docs);
 
-const out = `/* eslint-disable */
-// AUTO-GENERATO da apps/piattaforma/scripts/build-chatbot-kb.ts — NON modificare a mano.
+const out = `// AUTO-GENERATO da apps/piattaforma/scripts/build-chatbot-kb.ts — NON modificare a mano.
 // Rigenera con: pnpm --filter piattaforma kb:build
 export const PUBLIC_KB = ${JSON.stringify(kb.public)};
 export const CLIENTS_KB = ${JSON.stringify(kb.clients)};

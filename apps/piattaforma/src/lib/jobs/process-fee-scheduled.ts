@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { getPayment } from '@/lib/providers/payment';
 import { isPaymentLive } from './payment-live';
+import { feeOutcomeFromResult } from './fee-outcome';
 
 const BATCH_SIZE = 30;
 
@@ -40,24 +41,32 @@ export async function processFeeScheduled(): Promise<ProcessFeeResult> {
       agenziaId: fee.agenziaId,
     });
 
-    if (result.ok) {
+    const outcome = feeOutcomeFromResult(result);
+    if (outcome.status === 'SUCCESS') {
       await prisma.feeAddebito.update({
         where: { id: fee.id },
         data: {
           stato: 'SUCCESS',
-          providerRef: result.providerRef,
+          providerRef: outcome.providerRef,
           executedAt: new Date(),
           errorMessage: null,
         },
       });
       succeeded++;
       // TODO: invia N8_AGENZIA_ADDEBITO — richiede query pratica+agenzia per payload
+    } else if (outcome.status === 'PENDING') {
+      // SEPA in settlement: resta IN_LAVORAZIONE, il webhook payment_intent.*
+      // finalizzerà SUCCESS/FAILED. Salviamo solo il providerRef.
+      await prisma.feeAddebito.update({
+        where: { id: fee.id },
+        data: { providerRef: outcome.providerRef },
+      });
     } else {
       await prisma.feeAddebito.update({
         where: { id: fee.id },
         data: {
-          stato: result.retryable ? 'RETRY' : 'FAILED',
-          errorMessage: result.error,
+          stato: outcome.status,
+          errorMessage: outcome.error,
           executedAt: new Date(),
         },
       });

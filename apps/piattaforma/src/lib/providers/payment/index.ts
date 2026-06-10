@@ -1,6 +1,7 @@
 import 'server-only';
 import { env } from '@/env';
 import { MockPaymentProvider } from './mock';
+import { StripePaymentProvider } from './stripe';
 import type { PaymentProvider } from './types';
 
 export * from './types';
@@ -14,7 +15,8 @@ export function getPayment(): PaymentProvider {
       instance = new MockPaymentProvider();
       break;
     case 'stripe':
-      throw new Error('Stripe payment provider not yet implemented');
+      instance = new StripePaymentProvider();
+      break;
     default:
       throw new Error(`Unknown payment provider: ${env.PAYMENT_PROVIDER}`);
   }

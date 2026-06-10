@@ -36,6 +36,7 @@ export const env = createEnv({
 
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
     STRIPE_SECRET_KEY: z.string().optional(),
+    STRIPE_WEBHOOK_SECRET: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
@@ -65,6 +66,7 @@ export const env = createEnv({
     REGISTRO_IMPRESE_API_KEY: process.env.REGISTRO_IMPRESE_API_KEY,
     PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   emptyStringAsUndefined: true,

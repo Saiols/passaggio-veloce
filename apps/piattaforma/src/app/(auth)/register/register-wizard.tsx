@@ -278,6 +278,7 @@ export function RegisterWizard({
           {step === 4 && (
             <PaymentStep
               defaultValues={data.payment}
+              companyType={data.company?.type}
               onBack={() => setStep(3)}
               onSubmit={handlePayment}
               isSubmitting={isPending}
@@ -719,15 +720,18 @@ function DocumentsStep({
 
 function PaymentStep({
   defaultValues,
+  companyType,
   onBack,
   onSubmit,
   isSubmitting,
 }: {
   defaultValues?: PaymentData;
+  companyType?: 'DEALER' | 'AGENZIA';
   onBack: () => void;
   onSubmit: (data: PaymentData, promoCode: string) => void;
   isSubmitting: boolean;
 }) {
+  const isAgenzia = companyType === 'AGENZIA';
   const {
     register,
     handleSubmit,
@@ -772,8 +776,9 @@ function PaymentStep({
       </Field>
 
       <Alert variant="info">
-        Il mandato SEPA reale verrà attivato in Fase 5 tramite Stripe. Per ora salviamo solo
-        l&apos;accettazione.
+        {isAgenzia
+          ? 'Inserendo l’IBAN e accettando il mandato autorizzi gli addebiti SEPA per gli importi delle pratiche.'
+          : 'L’IBAN sarà usato per accreditare i compensi maturati sulla piattaforma.'}
       </Alert>
 
       <Field label="Codice promozionale (opzionale)">
@@ -806,8 +811,9 @@ function PaymentStep({
       <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
         <Checkbox {...register('sepaMandateAccepted')} className="mt-0.5" />
         <span>
-          Autorizzo Passaggio Veloce a effettuare accrediti automatici sul conto indicato per
-          l’erogazione dei compensi maturati sulla piattaforma.
+          {isAgenzia
+            ? 'Autorizzo Passaggio Veloce S.r.l. ad addebitare il mio conto tramite addebito diretto SEPA (SEPA Direct Debit) per gli importi delle pratiche completate, secondo le condizioni del servizio. Il mandato è revocabile secondo lo standard SDD.'
+            : 'Autorizzo Passaggio Veloce a effettuare accrediti automatici sul conto indicato per l’erogazione dei compensi maturati sulla piattaforma.'}
           <span className="ml-1 text-pv-orange-500" aria-hidden="true">
             •
           </span>

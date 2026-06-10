@@ -217,6 +217,12 @@ enum FeeAddebitoStato {
   ANNULLATO
 }
 
+enum SepaMandateStatus {
+  PENDING
+  ACTIVE
+  FAILED
+}
+
 // ============================================================
 // ENUMS — valutazioni e listini
 // ============================================================
@@ -296,6 +302,19 @@ model Company {
   iban                  String?
   sepaMandateAccepted   Boolean   @default(false)
   sepaMandateAcceptedAt DateTime?
+
+  /// Stripe Customer dell'agenzia (null per dealer/broker).
+  stripeCustomerId String?
+
+  /// PaymentMethod sepa_debit salvato, usato per gli addebiti off_session.
+  stripePaymentMethodId String?
+
+  /// Id del mandato SEPA Stripe (audit legale / dichiarazioni).
+  sepaMandateId String?
+
+  /// Stato del mandato SEPA. PENDING finché Stripe non conferma,
+  /// ACTIVE quando utilizzabile per addebiti, FAILED se il setup fallisce.
+  sepaMandateStatus SepaMandateStatus @default(PENDING)
 
   termsAcceptedAt DateTime?
 

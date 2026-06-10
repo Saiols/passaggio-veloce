@@ -42,7 +42,7 @@ describe('setupSepaMandate', () => {
 
     const r = await setupSepaMandate(input);
 
-    expect(r).toEqual({ ok: true, customerId: 'cus_1', paymentMethodId: 'pm_1', mandateId: 'mandate_1' });
+    expect(r).toEqual({ ok: true, customerId: 'cus_1', paymentMethodId: 'pm_1', mandateId: 'mandate_1', status: 'succeeded' });
     expect(setupIntentsCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         customer: 'cus_1',
@@ -76,7 +76,7 @@ describe('applySepaMandateToAgency', () => {
 
   it('persiste gli id e ritorna ACTIVE quando il setup riesce', async () => {
     customersCreate.mockResolvedValue({ id: 'cus_1' });
-    setupIntentsCreate.mockResolvedValue({ id: 'seti_1', payment_method: 'pm_1', mandate: 'mandate_1' });
+    setupIntentsCreate.mockResolvedValue({ id: 'seti_1', payment_method: 'pm_1', mandate: 'mandate_1', status: 'succeeded' });
 
     const status = await applySepaMandateToAgency(input);
 
@@ -99,6 +99,24 @@ describe('applySepaMandateToAgency', () => {
     expect(companyUpdate).toHaveBeenCalledWith({
       where: { id: 'co-1' },
       data: { sepaMandateStatus: 'FAILED' },
+    });
+  });
+
+  it('marca PENDING quando il SetupIntent non è ancora succeeded', async () => {
+    customersCreate.mockResolvedValue({ id: 'cus_1' });
+    setupIntentsCreate.mockResolvedValue({ id: 'seti_1', payment_method: 'pm_1', mandate: 'mandate_1', status: 'processing' });
+
+    const status = await applySepaMandateToAgency(input);
+
+    expect(status).toBe('PENDING');
+    expect(companyUpdate).toHaveBeenCalledWith({
+      where: { id: 'co-1' },
+      data: {
+        stripeCustomerId: 'cus_1',
+        stripePaymentMethodId: 'pm_1',
+        sepaMandateId: 'mandate_1',
+        sepaMandateStatus: 'PENDING',
+      },
     });
   });
 });

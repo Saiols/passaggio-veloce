@@ -13,7 +13,7 @@ import { headers, cookies } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
 import { parseUtmCookie } from '@/lib/crm/utm';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
-import { anonymizeIp } from '@/lib/net/ip';
+import { anonymizeIp, clientIp } from '@/lib/net/ip';
 import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
 import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
 import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
@@ -549,7 +549,7 @@ export async function registerAction(
           iban: payment.iban,
           name: company.ragioneSociale,
           email: company.email,
-          ip: signupIpRaw,
+          ip: clientIp(signupIpRaw),
           userAgent: hdrs.get('user-agent'),
         });
       } catch (e) {

@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma } from '@pv/db';
+import { env } from '@/env';
 import { getStripe } from './stripe-client';
 import type { ChargeFeeInput, ExecutePayoutInput, PaymentProvider, PaymentResult } from './types';
 
@@ -53,9 +54,13 @@ export class StripePaymentProvider implements PaymentProvider {
           return { ok: true, providerRef: pi.id, pending: true };
         case 'requires_payment_method':
         case 'canceled':
+        case 'requires_action':
+        case 'requires_confirmation':
+          // Stati non-terminali/inattesi per un addebito SEPA off_session: non
+          // chiudiamo il fee come fallito definitivo, lo lasciamo riprovabile.
           return { ok: false, error: `PaymentIntent stato ${pi.status}`, retryable: true };
         default:
-          return { ok: false, error: `PaymentIntent stato ${pi.status}`, retryable: false };
+          return { ok: false, error: `PaymentIntent stato ${pi.status}`, retryable: true };
       }
     } catch (e) {
       return { ok: false, error: (e as Error).message, retryable: isRetryableStripeError(e) };
@@ -66,8 +71,17 @@ export class StripePaymentProvider implements PaymentProvider {
     if (input.importoCent <= 0) {
       return { ok: false, error: 'Importo non valido', retryable: false };
     }
-    // Strada B: bonifico dal conto PV (fuori Stripe). No-op che registra il payout.
-    // Al go-live sostituire con conferma admin o generazione file SEPA XML (pain.001).
+    // Safeguard go-live: con chiavi LIVE il no-op marcherebbe il Payout ESEGUITO e
+    // svuoterebbe il wallet senza alcun bonifico reale. In live rifiutiamo (Payout
+    // FALLITO, visibile) finché Strada B reale (admin manuale / SEPA XML) non è pronta.
+    if (env.STRIPE_SECRET_KEY?.startsWith('sk_live')) {
+      return {
+        ok: false,
+        error: 'Payout reale non implementato (Strada B): eseguire bonifico manuale o file SEPA XML',
+        retryable: false,
+      };
+    }
+    // TEST mode: no-op che registra il payout per validare il flusso (denaro finto).
     console.warn(
       `[stripe] payout Strada B no-op (bonifico manuale): payout=${input.payoutId} importo=${input.importoCent}c`,
     );

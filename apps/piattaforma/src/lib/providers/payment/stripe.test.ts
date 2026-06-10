@@ -9,6 +9,7 @@ vi.mock('./stripe-client', () => ({
   getStripe: () => ({ paymentIntents: { create: paymentIntentsCreate } }),
 }));
 vi.mock('@pv/db', () => ({ prisma: { company: { findUnique: companyFindUnique } } }));
+vi.mock('@/env', () => ({ env: { STRIPE_SECRET_KEY: 'sk_test_x' } }));
 
 import { StripePaymentProvider } from './stripe';
 
@@ -70,5 +71,22 @@ describe('StripePaymentProvider.executePayout', () => {
   it('importo non valido → ok:false non-retryable', async () => {
     const r = await provider.executePayout({ payoutId: 'po-x', importoCent: -1, iban: 'IT60' });
     expect(r).toEqual({ ok: false, error: 'Importo non valido', retryable: false });
+  });
+});
+
+describe('StripePaymentProvider.executePayout — safeguard live', () => {
+  it('con chiave sk_live rifiuta il no-op (Payout non viene falsamente eseguito)', async () => {
+    vi.resetModules();
+    vi.doMock('@/env', () => ({ env: { STRIPE_SECRET_KEY: 'sk_live_abc' } }));
+    vi.doMock('./stripe-client', () => ({ getStripe: () => ({ paymentIntents: { create: vi.fn() } }) }));
+    vi.doMock('@pv/db', () => ({ prisma: { company: { findUnique: vi.fn() } } }));
+    const mod = await import('./stripe');
+    const p = new mod.StripePaymentProvider();
+    const r = await p.executePayout({ payoutId: 'po-live', importoCent: 1000, iban: 'IT60X0542811101000000123456' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/non implementato/i);
+      expect(r.retryable).toBe(false);
+    }
   });
 });

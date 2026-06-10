@@ -12,7 +12,7 @@ export type SetupSepaMandateInput = {
 };
 
 export type SetupSepaMandateResult =
-  | { ok: true; customerId: string; paymentMethodId: string; mandateId: string | null }
+  | { ok: true; customerId: string; paymentMethodId: string; mandateId: string | null; status: string }
   | { ok: false; error: string };
 
 /** Crea Customer + mandato SEPA Direct Debit (server-side). Non scrive sul DB. */
@@ -52,30 +52,34 @@ export async function setupSepaMandate(input: SetupSepaMandateInput): Promise<Se
     }
     const mandateId =
       typeof setupIntent.mandate === 'string' ? setupIntent.mandate : (setupIntent.mandate?.id ?? null);
-    return { ok: true, customerId: customer.id, paymentMethodId, mandateId };
+    return { ok: true, customerId: customer.id, paymentMethodId, mandateId, status: setupIntent.status };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
 }
 
-export type ApplySepaMandateStatus = 'ACTIVE' | 'FAILED';
+export type ApplySepaMandateStatus = 'ACTIVE' | 'PENDING' | 'FAILED';
 
-/** Setup mandato + persistenza su Company. Best-effort dal flusso registrazione (AGENZIA). */
+/** Setup mandato + persistenza su Company. Best-effort dal flusso registrazione (AGENZIA).
+ *  ACTIVE solo se il SetupIntent è `succeeded`: se SEPA resta `processing` segniamo
+ *  PENDING e lasciamo che il webhook `setup_intent.succeeded/setup_failed` riconcili,
+ *  così non si addebita su un mandato non ancora confermato. */
 export async function applySepaMandateToAgency(
   input: SetupSepaMandateInput,
 ): Promise<ApplySepaMandateStatus> {
   const r = await setupSepaMandate(input);
   if (r.ok) {
+    const status: ApplySepaMandateStatus = r.status === 'succeeded' ? 'ACTIVE' : 'PENDING';
     await prisma.company.update({
       where: { id: input.companyId },
       data: {
         stripeCustomerId: r.customerId,
         stripePaymentMethodId: r.paymentMethodId,
         sepaMandateId: r.mandateId,
-        sepaMandateStatus: 'ACTIVE',
+        sepaMandateStatus: status,
       },
     });
-    return 'ACTIVE';
+    return status;
   }
   await prisma.company.update({
     where: { id: input.companyId },

@@ -37,6 +37,15 @@ export const env = createEnv({
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
+
+    CHATBOT_LLM_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((v) => v === 'true'),
+    ANTHROPIC_API_KEY: z.string().optional(),
+    CHATBOT_DAILY_CAP: z.coerce.number().int().positive().default(5000),
+    CHATBOT_RATE_PER_MIN: z.coerce.number().int().positive().default(10),
+    CHATBOT_RATE_PER_DAY_PER_IP: z.coerce.number().int().positive().default(30),
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
@@ -67,6 +76,11 @@ export const env = createEnv({
     PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    CHATBOT_LLM_ENABLED: process.env.CHATBOT_LLM_ENABLED,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+    CHATBOT_DAILY_CAP: process.env.CHATBOT_DAILY_CAP,
+    CHATBOT_RATE_PER_MIN: process.env.CHATBOT_RATE_PER_MIN,
+    CHATBOT_RATE_PER_DAY_PER_IP: process.env.CHATBOT_RATE_PER_DAY_PER_IP,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   emptyStringAsUndefined: true,

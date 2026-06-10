@@ -1491,3 +1491,13 @@ model AtecoAllowedCode {
   @@unique([companyType, code])
   @@map("ateco_allowed_codes")
 }
+
+/// Contatori rate-limit del chatbot (Vercel serverless → store su DB).
+/// key es. "ipmin:<ip>:<minuto>", "ipday:<ip>:<giorno>", "global:<giorno>".
+model ChatbotRateBucket {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@map("chatbot_rate_buckets")
+}

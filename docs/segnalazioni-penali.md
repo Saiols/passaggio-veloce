@@ -61,6 +61,6 @@ Forte incentivo per il broker a verificare sempre lo stato del veicolo prima di 
 - Badge contatore pendenti sempre visibile; alert mail team a ogni nuova segnalazione;
   popup di conferma esplicita prima dell'esecuzione (operazione **non reversibile**).
 
-> **Nota incoerenza (da risolvere):** qui la penale è **€25**; in
-> `fatturazione-piattaforma.md` e `sistema-penali-broker.md` compare **€100**. Allineare
-> prima di alimentare i bot.
+> **Nota (2026-06-10):** **€25 è l'importo di riferimento confermato.**
+> `fatturazione-piattaforma.md` e `sistema-penali-broker.md` sono stati allineati a €25
+> (impatto totale broker −€50: storno compenso €25 + penale €25).

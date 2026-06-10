@@ -18,10 +18,10 @@ La fatturazione è integrata in due punti per ogni profilo:
 
 **2.1 Dashboard KPI**: Fatturato mese corrente (somma €75 lordi verso agenzie); Ricavo
 netto PV mese (€50 lordi/pratica); Somme di terzi in wallet (€25 lordi trattenuti per
-broker); Payout erogati mese; **Penali incassate mese (€100 addebitate a broker)**; Fatture non pagate (alert).
+broker); Payout erogati mese; **Penali incassate mese (€25 addebitate a broker)**; Fatture non pagate (alert).
 
 **2.2 Lista documenti fiscali**: tabella con data, ID pratica, tipo documento (Fattura PV
-€50 / Documento broker €25 / Penale €100), agenzia, broker, importo lordo, stato
+€50 / Documento broker €25 / Penale €25), agenzia, broker, importo lordo, stato
 (Pagata/In attesa/Scaduta), azioni (PDF/XML/mail). Filtri per periodo, tipo, stato,
 agenzia/broker. Export: ZIP selezione, CSV periodo (commercialista), riepilogo mese/anno.
 
@@ -66,5 +66,6 @@ automatico). Storico payout e penali. Pulsante "Richiedi payout" attivo quando w
 
 > ⚠️ Sezione critica: i documenti fiscali generati non devono mai essere persi o corrotti. Priorità alta.
 
-> **Nota incoerenza (da risolvere):** qui la penale broker è indicata a **€100**; in
-> `segnalazioni-penali.md` / brief Segnalazioni è **€25**. Allineare prima di alimentare i bot.
+> **Nota (2026-06-10):** penale broker allineata a **€25** (riferimento confermato
+> `segnalazioni-penali.md` / `SegnalazioniPenali.docx`). Impatto totale broker −€50
+> (storno compenso €25 + penale €25); PV trattiene €25.

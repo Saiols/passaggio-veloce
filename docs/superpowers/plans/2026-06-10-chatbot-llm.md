@@ -280,8 +280,8 @@ L'esposizione pubblico/clienti passa **solo** dai due file curati sopra.
 > Le `.docx`/`.pdf` non vengono lette dalla pipeline (solo `.md`). Le due nuove sono già
 > convertite in `.md internal`; le altre `.docx`/`.pdf` orfane (`TabellaRegimiFiscali`,
 > `Modifiche...Foglio1`) sono interne e a bassa priorità — convertibili in `.md internal`
-> in seguito se serve coprirle nel bot staff. **Da risolvere a monte:** incoerenza importo
-> penale broker (€25 in `segnalazioni-penali.md` vs €100 in `fatturazione-piattaforma.md`/`sistema-penali-broker.md`).
+> in seguito se serve coprirle nel bot staff. **Penale broker allineata a €25** (riferimento
+> `segnalazioni-penali.md`; aggiornati anche `fatturazione-piattaforma.md` e `sistema-penali-broker.md`).
 
 - [ ] **Step 2: Crea il build script**
 

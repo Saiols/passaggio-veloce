@@ -54,8 +54,9 @@ situazione" nel wizard. La pratica resta in bozza e il team la analizza manualme
 Il **fermo amministrativo** e l'**ipoteca** NON sono visibili sul libretto: si verificano
 **solo con una visura PRA** sulla targa (es. su sportello.aci.it). La verifica è
 **responsabilità del broker** prima di caricare la pratica. Se invii una pratica con un
-veicolo gravato da fermo o ipoteca, la pratica viene annullata ed è prevista una **penale**
-oltre alla perdita del compenso di quella pratica. Verifica sempre prima di inviare.
+veicolo gravato da fermo o ipoteca, la pratica viene annullata: **perdi il compenso di €25**
+maturato e ti viene addebitata una **penale di €25** (impatto totale −€50 sul wallet).
+Verifica sempre con una visura PRA prima di inviare.
 
 ## Come vengono scelte le agenzie
 

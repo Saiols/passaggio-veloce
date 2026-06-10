@@ -110,7 +110,7 @@ Difesa anti-leak a due livelli:
 > cambia solo la *fonte* dei contenuti public/clients. I `.docx`/`.pdf` non sono letti
 > dalla pipeline: i due nuovi brief riservati sono stati convertiti in `.md internal`
 > (`fatturazione-piattaforma.md`, `segnalazioni-penali.md`). Decisione: bot pubblico
-> **senza prezzi** (rimanda all'iscrizione). Aperto: incoerenza importo penale (€25 vs €100).
+> **senza prezzi** (rimanda all'iscrizione). Penale broker allineata a **€25** (rif. SegnalazioniPenali).
 
 ### 4.2 Provider LLM — `apps/piattaforma/src/lib/providers/chatbot/`
 

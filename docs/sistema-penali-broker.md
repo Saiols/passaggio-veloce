@@ -3,6 +3,11 @@
 > Sorgente: `docs/PassaggioVeloce SistemaPenaliBroker.docx` (aprile 2025).
 > Owner: CTO Francesco Sioli. Decisioni post-allineamento 2026-05-05.
 > Source-of-truth della feature.
+>
+> **Allineamento 2026-06-10:** importo e modello economico allineati a
+> `segnalazioni-penali.md` (fonte `SegnalazioniPenali.docx`, riferimento confermato):
+> **penale €25** + storno del compenso €25 maturato dal broker = **−€50 totali** per il
+> broker; PV trattiene €25. Sostituisce il precedente €100.
 
 ---
 
@@ -28,7 +33,7 @@ Zero costi operativi PV, zero API PRA, zero attriti d'integrazione.
 | 4 | Wallet negativo | `Wallet.saldoCent` accetta valori negativi. Blocca solo payout, non upload pratiche. |
 | 5 | Finestra segnalazione | Solo pre-firma: stati `ACCETTATA` o `PROCESSATA`. Dopo `FIRMATA` la pratica è chiusa, eventuali contestazioni fuori-piattaforma. |
 | 6 | Soglia alert sospensione | Costante `MAX_PENALI_BEFORE_ALERT = 2`. Configurabile in fase futura. |
-| 7 | Importo penale | Costante runtime `PENALE_BROKER_DEFAULT_CENT = 10000` (€100), configurabile via env o Settings admin (FASE futura). |
+| 7 | Importo penale | Costante runtime `PENALE_BROKER_DEFAULT_CENT = 2500` (€25), configurabile via env o Settings admin (FASE futura). Oltre alla penale, l'azione storna il compenso €25 della pratica → impatto broker **−€50**. |
 
 ---
 
@@ -112,7 +117,8 @@ Puoi verificare lo stato del veicolo con una visura PRA su:
 sportello.aci.it (apre nuova tab)
 
 In caso di pratica inviata con veicolo soggetto a fermo o ipoteca, la pratica
-verrà annullata e ti verrà addebitata una penale di €100,00 lordi dal tuo wallet.
+verrà annullata: perderai il compenso di €25,00 maturato e ti verrà addebitata una
+penale di €25,00 lordi dal wallet (impatto totale −€50,00).
 
 [ ] Confermo di aver verificato quanto sopra e mi assumo piena responsabilità
 
@@ -175,8 +181,9 @@ IP anonimizzato GDPR (es. `192.168.1.x`).
 1. Guard admin platform
 2. Transazione:
    - `Pratica.update`: `stato='ANNULLATA'`, `annullataAt=now`, `segnalazioneStato='CONFERMATA'`, `segnalazioneEsitaAt=now`, `segnalazioneEsitaDaId=adminId`, `penaleAddebitatoCent=PENALE_BROKER_DEFAULT_CENT`
-   - `Wallet.upsert` broker, `saldoCent -= 10000` (può andare negativo)
-   - `TransazioneWallet.create`: `tipo='PENALE_BROKER'`, `importoCent=-10000`, `saldoPostCent=newBalance`, `praticaId`
+   - Storno compenso pratica: se il broker aveva maturato il credito €25 (`CREDITO_PRATICA`) su questa pratica → `TransazioneWallet.create` `tipo='STORNO'`, `importoCent=-2500`
+   - `Wallet.upsert` broker, penale: `saldoCent -= 2500` (può andare negativo)
+   - `TransazioneWallet.create`: `tipo='PENALE_BROKER'`, `importoCent=-2500`, `saldoPostCent=newBalance`, `praticaId`
    - Se esiste `FeeAddebito` schedulato per agenzia su questa pratica → `stato='ANNULLATO'`, no addebito (rimborso preventivo)
 3. Post-commit best-effort:
    - `N17_BROKER_PENALE_ADDEBITATA` al broker
@@ -226,8 +233,8 @@ Aggiunta voce sidebar admin: `Segnalazioni` (con badge count se > 0).
 ## Notifiche (templates)
 
 ### N17_BROKER_PENALE_ADDEBITATA
-- **Subject:** `⚠️ Penale di €100 addebitata — pratica {codicePratica}`
-- **Body:** "La pratica X è stata annullata in seguito a segnalazione di {tipo}. Sono stati detratti €100 dal tuo wallet. Saldo attuale: {saldo}. Se il saldo è negativo dovrai reintegrarlo prima di poter ricevere payout."
+- **Subject:** `⚠️ Penale di €25 addebitata — pratica {codicePratica}`
+- **Body:** "La pratica X è stata annullata in seguito a segnalazione di {tipo}. Hai perso il compenso di €25 e ti sono stati addebitati €25 di penale (impatto totale −€50). Saldo attuale: {saldo}. Se il saldo è negativo dovrai reintegrarlo prima di poter ricevere payout."
 
 ### N18_AGENZIA_SEGNALAZIONE_CONFERMATA
 - **Subject:** `Segnalazione confermata — pratica {codicePratica} annullata`
@@ -262,7 +269,7 @@ Aggiunta voce sidebar admin: `Segnalazioni` (con badge count se > 0).
 **Test E2E:**
 - Broker invia pratica con popup spuntato + log creato
 - Agenzia accetta → segnala fermo
-- Admin conferma → wallet broker -€100, transazione creata, agenzia rimborsata
+- Admin conferma → wallet broker −€50 (storno compenso €25 + penale €25), transazioni create, agenzia rimborsata
 - N17/N18 inviate
 - Wallet saldo negativo blocca payout
 

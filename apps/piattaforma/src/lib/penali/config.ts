@@ -10,9 +10,15 @@ export const PENALI = {
   /**
    * Importo penale addebitato al broker per ogni pratica annullata in seguito
    * a segnalazione confermata (fermo amministrativo / ipoteca / doc non
-   * valido). In cent. €100 default.
+   * valido). In cent. €25 default (rif. docs/segnalazioni-penali.md, 2026-06-10).
+   *
+   * NB: la segnalazione è pre-firma, quindi il compenso €25 della pratica non è
+   * ancora accreditato → il broker lo PERDE (non lo matura), non glielo si
+   * storna dal wallet. Lo storno del compenso scatta solo nell'edge case in cui
+   * il credito fosse già stato accreditato. Impatto complessivo broker: −€50
+   * (€25 penale reale + €25 compenso non maturato).
    */
-  PENALE_BROKER_DEFAULT_CENT: 10_000,
+  PENALE_BROKER_DEFAULT_CENT: 2_500,
 
   /**
    * Soglia ≥ N penali confermate dopo cui scatta l'alert agli admin per

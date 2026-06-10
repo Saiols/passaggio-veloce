@@ -188,25 +188,54 @@ export async function confermaAnnullamentoConPenaleAction(
       const now = new Date();
       const importoPenaleCent = PENALI.PENALE_BROKER_DEFAULT_CENT;
 
-      // Wallet broker (lazy create) → addebito
+      // Wallet broker (lazy create)
       const wallet = await tx.wallet.upsert({
         where: { companyId: pratica.brokerId },
         update: {},
         create: { companyId: pratica.brokerId, saldoCent: 0 },
       });
-      const newSaldo = wallet.saldoCent - importoPenaleCent;
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { saldoCent: newSaldo },
+      let saldo = wallet.saldoCent;
+
+      // Storno del compenso pratica SOLO se già accreditato. Di norma la
+      // segnalazione è pre-firma e il CREDITO_PRATICA non esiste ancora → il
+      // blocco non scatta (il broker semplicemente non matura il compenso).
+      // Difensivo per l'edge case di credito già presente (impatto −€50).
+      const creditoPratica = await tx.transazioneWallet.findFirst({
+        where: {
+          walletId: wallet.id,
+          praticaId: pratica.id,
+          tipo: 'CREDITO_PRATICA',
+        },
       });
+      if (creditoPratica && creditoPratica.importoCent > 0) {
+        saldo -= creditoPratica.importoCent;
+        await tx.transazioneWallet.create({
+          data: {
+            walletId: wallet.id,
+            tipo: 'STORNO',
+            importoCent: -creditoPratica.importoCent,
+            saldoPostCent: saldo,
+            praticaId: pratica.id,
+          },
+        });
+      }
+
+      // Penale broker (può portare il wallet sotto zero)
+      saldo -= importoPenaleCent;
       await tx.transazioneWallet.create({
         data: {
           walletId: wallet.id,
           tipo: 'PENALE_BROKER',
           importoCent: -importoPenaleCent,
-          saldoPostCent: newSaldo,
+          saldoPostCent: saldo,
           praticaId: pratica.id,
         },
+      });
+
+      const newSaldo = saldo;
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { saldoCent: newSaldo },
       });
 
       // Pratica: ANNULLATA + segnalazione CONFERMATA + penale addebitata

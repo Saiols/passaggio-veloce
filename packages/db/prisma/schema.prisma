@@ -1501,3 +1501,16 @@ model ChatbotRateBucket {
 
   @@map("chatbot_rate_buckets")
 }
+
+/// Metriche aggregate del chatbot + domande senza risposta (per migliorare i docs).
+/// Niente PII deliberata, niente trascrizioni complete. Retention ~90 giorni.
+model ChatbotInteraction {
+  id                 String   @id @default(uuid()) @db.Uuid
+  createdAt          DateTime @default(now())
+  tier               String
+  answered           Boolean
+  escalated          Boolean
+  unansweredQuestion String?
+
+  @@map("chatbot_interactions")
+}

@@ -113,7 +113,13 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
     })();
   const dataImmatricolazione = immat?.iso;
 
-  const isRicevutaPra = data.includes(DEALER_MARKER);
+  // Una ricevuta PRA (minivoltura) è "DOCUMENTO NON VALIDO PER LA CIRCOLAZIONE",
+  // a testo libero, SENZA codici armonizzati. Una carta di circolazione può però
+  // riportare l'annotazione di un passaggio ("N. Progressivo PRA" + "Scrittura
+  // Privata del ...") pur restando una carta col proprietario nei codici (C.2.x):
+  // in quel caso NON è una ricevuta PRA e il proprietario va letto da (C.2.1)/(C.2.2),
+  // non interpretato come azienda commerciante.
+  const isRicevutaPra = data.includes(DEALER_MARKER) && !data.includes('(C.2.1)');
 
   let proprietariInfo: OwnerInfo[];
   let dataAcquisto: string | undefined;

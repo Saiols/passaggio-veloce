@@ -176,6 +176,51 @@ Scrittura Privata del 03-02-2026`;
   });
 });
 
+describe('parseLibrettoText — carta di circolazione CON annotazione PRA', () => {
+  // Caso reale (Mod. MC 820 D, anonimizzato): una carta di circolazione VALIDA,
+  // con proprietario in (C.2.x), che riporta anche l'annotazione di un passaggio
+  // ("N. Progressivo PRA" + "Scrittura Privata del ..."). NON è una ricevuta PRA
+  // (quella è "DOCUMENTO NON VALIDO PER LA CIRCOLAZIONE", testo libero, senza
+  // codici armonizzati): il proprietario va letto da (C.2.1)/(C.2.2).
+  const CARTA_CON_PRA = `Mod. MC 820 D
+REPUBBLICA ITALIANA
+CARTA DI CIRCOLAZIONE
+N°
+(A)
+A000000M000
+AB123CD
+(B) 14.02.2012
+(C.2.1) ROSSI
+(C.2.2) MARIA
+(A)
+AB123CD
+NATO IL 09.12.1980 (RSSMRA80A01F205X)
+A MILANO (MI)
+(C.2.3) VIA ROMA 1
+MILANO (MI)
+(E) ZFA31200000999999
+(1) 21.04.2026
+(J) M1
+N. Progressivo PRA 26/F968092T
+Scrittura Privata del 21-04-2026
+Vincoli/Gravami:No
+Foglio 1 di 1
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2.1) cognome o ragione sociale`;
+
+  const r = parseLibrettoText(CARTA_CON_PRA, 0.9);
+
+  it('legge il proprietario da (C.2.1)/(C.2.2), non lo tratta come ricevuta PRA', () => {
+    expect(r.proprietarioAttuale).toBe('ROSSI MARIA');
+    expect(r.proprietari).toEqual(['ROSSI MARIA']);
+  });
+  it('estrae CF, targa e data acquisto dalla carta', () => {
+    expect(r.proprietarioCf).toBe('RSSMRA80A01F205X');
+    expect(r.targa).toBe('AB123CD');
+    expect(r.dataAcquisto).toBe('2026-04-21');
+  });
+});
+
 describe('parseLibrettoText — pre-2015 da (I)', () => {
   it('(I) anteriore al 2015 → preImm2015 true', () => {
     const txt = '(B) 20.06.2009\n(C.2.1) BIANCHI\n(C.2.2) LUCA\n(A) FA123GH\n(1) 10.03.2010';

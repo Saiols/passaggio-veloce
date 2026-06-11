@@ -1,6 +1,7 @@
 import 'server-only';
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { auth } from '@/auth';
+import { uploadRequiresAuth } from '@/lib/blob/upload-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,11 +21,15 @@ export async function POST(request: Request): Promise<Response> {
     const json = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => {
-        // Fase di generazione token: la richiesta porta i cookie di sessione.
-        const session = await auth();
-        if (!session?.user) {
-          throw new Error('Non autenticato');
+      onBeforeGenerateToken: async (pathname) => {
+        // I documenti KYC di registrazione si caricano PRIMA che l'account
+        // esista (nessuna sessione): quello scope è esente da auth. Tutto il
+        // resto (es. allegati pratica) richiede una sessione valida.
+        if (uploadRequiresAuth(pathname)) {
+          const session = await auth();
+          if (!session?.user) {
+            throw new Error('Non autenticato');
+          }
         }
         return {
           allowedContentTypes: ACCEPTED_MIME,

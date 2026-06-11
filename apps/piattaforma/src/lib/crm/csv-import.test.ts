@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseContactsCsv, parseCsvLine } from './csv-import';
+import { parseContactsCsv, parseCsvLine, detectDelimiter } from './csv-import';
 
 // Header reale dei file scraping rivenditori (es. "313 riv TRENTINO ALTO ADIGE.csv"):
 // quotato, capitalizzato, accentato, colonne diverse, niente `cat`.
@@ -8,6 +8,14 @@ const REAL_CSV = [
   '"Auto-Center Trento","Via Bolzano, 12/E","Trento","TN","38121","+39 0461 993490","","","TRENTINO ALTO ADIGE"',
   '"Bosetti Auto","Via Alto Adige, 216","Trento","TN","38121","+39 0461 825777","info@bosetti.it","","TRENTINO ALTO ADIGE"',
 ].join('\n');
+
+// Formato EFFETTIVO dei file scaricati: separatore `;` (default Excel italiano),
+// campi NON quotati, con virgole DENTRO i campi (es. "Via Bolzano, 12/E").
+const REAL_CSV_SEMICOLON = [
+  'Nome;Indirizzo;Città;Provincia;CAP;Telefono;Email;Network;Regione',
+  'Auto-Center Trento;Via Bolzano, 12/E;Trento;TN;38121;+39 0461 993490;;;TRENTINO ALTO ADIGE',
+  'Bosetti Auto;Via Alto Adige, 216;Trento;TN;38121;+39 0461 825777;info@bosetti.it;;TRENTINO ALTO ADIGE',
+].join('\r\n');
 
 describe('parseContactsCsv — file reale (header quotato/italiano/senza cat)', () => {
   it('riconosce nome/telefono/città nonostante virgolette, accenti e nomi alias', () => {
@@ -41,6 +49,45 @@ describe('parseContactsCsv — file reale (header quotato/italiano/senza cat)', 
     const r = parseContactsCsv(REAL_CSV);
     if (!r.ok) throw new Error('parse fallito');
     expect(r.rows[1]!.email).toBe('info@bosetti.it');
+  });
+});
+
+describe('parseContactsCsv — separatore punto e virgola (Excel IT, campi non quotati)', () => {
+  it('rileva il `;` come delimitatore e mappa le colonne', () => {
+    const r = parseContactsCsv(REAL_CSV_SEMICOLON);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.rows).toHaveLength(2);
+    const a = r.rows[0]!;
+    expect(a.nome).toBe('Auto-Center Trento');
+    expect(a.tel).toBe('+39 0461 993490');
+    expect(a.citta).toBe('Trento');
+    expect(a.cap).toBe('38121');
+    expect(a.regione).toBe('TRENTINO ALTO ADIGE');
+    // virgola interna al campo NON quotato deve restare nel valore
+    expect(a.indirizzo).toBe('Via Bolzano, 12/E');
+    expect(a.email).toBeNull();
+  });
+
+  it('seconda riga: email valorizzata e minuscola', () => {
+    const r = parseContactsCsv(REAL_CSV_SEMICOLON);
+    if (!r.ok) throw new Error('parse fallito');
+    expect(r.rows[1]!.email).toBe('info@bosetti.it');
+  });
+});
+
+describe('detectDelimiter', () => {
+  it('rileva `;` su header Excel italiano', () => {
+    expect(detectDelimiter('Nome;Indirizzo;Telefono')).toBe(';');
+  });
+  it('rileva `,` su header quotato a virgole', () => {
+    expect(detectDelimiter('"Nome","Indirizzo","Telefono"')).toBe(',');
+  });
+  it('rileva tab su header TSV', () => {
+    expect(detectDelimiter('Nome\tIndirizzo\tTelefono')).toBe('\t');
+  });
+  it('default `,` su singola colonna senza delimitatori', () => {
+    expect(detectDelimiter('Nome')).toBe(',');
   });
 });
 

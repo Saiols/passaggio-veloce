@@ -1,6 +1,7 @@
 /**
  * Parsing robusto del CSV di import contatti CRM. Logica **pura** (niente DB /
  * auth / Next) → testabile in isolamento. Gestisce:
+ * - delimitatore auto-rilevato: `,`, `;` (default Excel italiano) o tab;
  * - header quotato (`"Nome","Telefono",…`) tramite lo stesso parser delle righe;
  * - nomi colonna con alias italiano/varianti e accenti (`Telefono`→tel, `Città`→citta);
  * - BOM iniziale;
@@ -40,8 +41,12 @@ export type CsvParseResult =
       rowErrors: { line: number; message: string }[];
     };
 
-/** CSV line parser tollerante di virgolette doppie e virgole interne. */
-export function parseCsvLine(line: string): string[] {
+/**
+ * CSV line parser tollerante di virgolette doppie e delimitatori interni.
+ * Il delimitatore è parametrico (default `,`) per supportare i CSV con `;`
+ * tipici di Excel italiano e i TSV.
+ */
+export function parseCsvLine(line: string, delimiter = ','): string[] {
   const out: string[] = [];
   let cur = '';
   let inQuotes = false;
@@ -54,7 +59,7 @@ export function parseCsvLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (c === ',' && !inQuotes) {
+    } else if (c === delimiter && !inQuotes) {
       out.push(cur);
       cur = '';
     } else {
@@ -63,6 +68,27 @@ export function parseCsvLine(line: string): string[] {
   }
   out.push(cur);
   return out;
+}
+
+/** Delimitatori candidati, in ordine di preferenza in caso di parità. */
+const CANDIDATE_DELIMITERS = [',', ';', '\t'] as const;
+
+/**
+ * Rileva il delimitatore di un CSV dall'header: sceglie quello che produce
+ * più colonne (rispettando le virgolette, perché riusa `parseCsvLine`). Così
+ * `Nome;Indirizzo;Tel` → `;`, `"Nome","Tel"` → `,`, `A\tB` → tab. Default `,`.
+ */
+export function detectDelimiter(headerLine: string): string {
+  let best = ',';
+  let bestCount = 0;
+  for (const d of CANDIDATE_DELIMITERS) {
+    const count = parseCsvLine(headerLine, d).length;
+    if (count > bestCount) {
+      bestCount = count;
+      best = d;
+    }
+  }
+  return best;
 }
 
 /** Normalizza un nome colonna: senza accenti, trim, minuscolo. */
@@ -110,8 +136,8 @@ const FONTE_SET = new Set<string>([
 ]);
 
 /** Risolve l'header in una mappa { campo canonico → indice colonna }. */
-function resolveHeader(headerLine: string): Record<string, number> {
-  const cells = parseCsvLine(headerLine).map(normalizeKey);
+function resolveHeader(headerLine: string, delimiter: string): Record<string, number> {
+  const cells = parseCsvLine(headerLine, delimiter).map(normalizeKey);
   const map: Record<string, number> = {};
   for (const [canonical, aliases] of Object.entries(COLUMN_ALIASES)) {
     const idx = cells.findIndex((c) => aliases.includes(c));
@@ -137,7 +163,8 @@ export function parseContactsCsv(
     return { ok: false, error: 'CSV vuoto o senza header' };
   }
 
-  const col = resolveHeader(lines[0]!);
+  const delimiter = detectDelimiter(lines[0]!);
+  const col = resolveHeader(lines[0]!, delimiter);
   if (col.nome === undefined) {
     return {
       ok: false,
@@ -157,7 +184,7 @@ export function parseContactsCsv(
   const rowErrors: { line: number; message: string }[] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const cells = parseCsvLine(lines[i]!);
+    const cells = parseCsvLine(lines[i]!, delimiter);
     const get = (canonical: string): string => {
       const j = col[canonical];
       return j !== undefined ? (cells[j] ?? '').trim() : '';

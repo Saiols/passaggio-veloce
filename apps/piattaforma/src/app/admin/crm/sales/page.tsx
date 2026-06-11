@@ -8,7 +8,6 @@ import {
   canManageSalesAgent,
   canManageCrmCampaign,
 } from '@/lib/auth/permissions';
-import { CrmTabs } from '../tabs';
 import { CrmSalesClient } from './client';
 
 export default async function AdminCrmSalesPage() {
@@ -16,7 +15,7 @@ export default async function AdminCrmSalesPage() {
   if (!session?.user) redirect('/login');
   if (!canViewSales(session.user.role)) {
     return (
-      <AppShell session={session} activePath="/admin/crm">
+      <AppShell session={session} activePath="/admin/crm/sales">
         <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
           <Alert variant="info" title="Sezione riservata">
             La gestione Sales CRM è riservata a Admin/AD/CTO/Sales Manager.
@@ -72,7 +71,7 @@ export default async function AdminCrmSalesPage() {
   }));
 
   return (
-    <AppShell session={session} activePath="/admin/crm">
+    <AppShell session={session} activePath="/admin/crm/sales">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
@@ -86,8 +85,6 @@ export default async function AdminCrmSalesPage() {
             outbound. La chiamata AI reale arriva con CRM-H (account Vapi).
           </p>
         </header>
-
-        <CrmTabs active="sales" />
 
         <CrmSalesClient
           agents={agentsSerializable}

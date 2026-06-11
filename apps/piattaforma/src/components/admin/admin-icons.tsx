@@ -125,6 +125,35 @@ export function IconCrm({ className }: AdminIconProps) {
   );
 }
 
+export function IconSales({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <path d="m3 11 15-4v10L3 13z" />
+      <path d="M11 15.5a2.5 2.5 0 0 1-4.9.5" />
+      <line x1="18" y1="9" x2="21" y2="8" />
+      <line x1="18" y1="13" x2="21" y2="14" />
+    </Svg>
+  );
+}
+
+export function IconChatbot({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M8 9h8M8 13h5" />
+    </Svg>
+  );
+}
+
+export function IconPermessi({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M12 3l8 3v5c0 4.5-3.2 8.6-8 10-4.8-1.4-8-5.5-8-10V6l8-3z" />
+      <path d="m9 12 2 2 4-4" />
+    </Svg>
+  );
+}
+
 export function IconAffiliazioni({ className }: AdminIconProps) {
   return (
     <Svg className={className}>

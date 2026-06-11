@@ -8,7 +8,6 @@ import {
   canManageCrmTeamUser,
   creatableCrmRoles,
 } from '@/lib/auth/permissions';
-import { CrmTabs } from '../tabs';
 import { CrmUsersClient } from './client';
 
 export default async function AdminCrmUtentiPage() {
@@ -16,7 +15,7 @@ export default async function AdminCrmUtentiPage() {
   if (!session?.user) redirect('/login');
   if (!canViewCrmTeamUsers(session.user.role)) {
     return (
-      <AppShell session={session} activePath="/admin/crm">
+      <AppShell session={session} activePath="/admin/crm/utenti">
         <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
           <Alert variant="info" title="Sezione riservata">
             La gestione utenti team CRM è riservata ai ruoli admin/AD/CTO/Sales
@@ -72,7 +71,7 @@ export default async function AdminCrmUtentiPage() {
   const allowedRoles = creatableCrmRoles(session.user.role);
 
   return (
-    <AppShell session={session} activePath="/admin/crm">
+    <AppShell session={session} activePath="/admin/crm/utenti">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
@@ -87,8 +86,6 @@ export default async function AdminCrmUtentiPage() {
             <strong>/admin/utenti</strong>.
           </p>
         </header>
-
-        <CrmTabs active="utenti" />
 
         <CrmUsersClient
           users={rows}

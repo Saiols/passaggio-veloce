@@ -4,7 +4,6 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { canViewChatbot, canManageChatbot } from '@/lib/auth/permissions';
-import { CrmTabs } from '../tabs';
 import { CrmChatbotClient } from './client';
 
 export default async function AdminCrmChatbotPage() {
@@ -12,7 +11,7 @@ export default async function AdminCrmChatbotPage() {
   if (!session?.user) redirect('/login');
   if (!canViewChatbot(session.user.role)) {
     return (
-      <AppShell session={session} activePath="/admin/crm">
+      <AppShell session={session} activePath="/admin/crm/chatbot">
         <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
           <Alert variant="info" title="Sezione riservata">
             La configurazione Chatbot è riservata a Admin / AD / CTO.
@@ -43,7 +42,7 @@ export default async function AdminCrmChatbotPage() {
   }));
 
   return (
-    <AppShell session={session} activePath="/admin/crm">
+    <AppShell session={session} activePath="/admin/crm/chatbot">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
@@ -58,8 +57,6 @@ export default async function AdminCrmChatbotPage() {
             WhatsApp/mail (WATI/Manychat) arriva con CRM-H.
           </p>
         </header>
-
-        <CrmTabs active="chatbot" />
 
         <CrmChatbotClient
           bots={botsSerializable}

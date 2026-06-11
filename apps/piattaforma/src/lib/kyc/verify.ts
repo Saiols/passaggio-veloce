@@ -81,7 +81,9 @@ export async function verifyRegistrationKyc(
   }
 
   // Regole di mismatch (solo se i dati necessari sono leggibili).
-  if (visura.dataEmissione) {
+  // Il controllo sull'età della visura vale SOLO per i broker (DEALER): le agenzie
+  // sono spesso imprese storiche e possono presentare una visura più datata.
+  if (args.company.type === 'DEALER' && visura.dataEmissione) {
     const age = isVisuraDateValid(visura.dataEmissione, VISURA_MAX_AGE_MONTHS, now);
     if (!age.ok) failures.push({ rule: 'VISURA_SCADUTA', doc: 'VISURA', message: age.error });
   }

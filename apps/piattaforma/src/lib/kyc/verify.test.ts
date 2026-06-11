@@ -23,11 +23,20 @@ describe('verifyRegistrationKyc', () => {
     expect(r.passed).toBe(true);
   });
 
-  it('blocca visura scaduta (>5 mesi)', async () => {
+  it('blocca visura scaduta (>5 mesi) per i broker (DEALER)', async () => {
     const deps = { ...goodDeps, getVisuraData: async () => ({ ...(await goodDeps.getVisuraData(fakeInput)), dataEmissione: '2025-12-01' }) };
     const r = await verifyRegistrationKyc({ files, company, allowedAteco: allowed, now }, deps);
     expect(r.passed).toBe(false);
     if (!r.passed) expect(r.failures.some((f) => f.rule === 'VISURA_SCADUTA')).toBe(true);
+  });
+
+  it('NON applica il controllo data emissione alle AGENZIE (solo broker): visura vecchia ammessa', async () => {
+    const agenziaCompany = { ...company, type: 'AGENZIA' as const };
+    const agenziaAllowed = [{ companyType: 'AGENZIA' as const, code: '4511', active: true }];
+    // Visura emessa molto oltre i 5 mesi: per un'agenzia non deve bloccare.
+    const deps = { ...goodDeps, getVisuraData: async () => ({ ...(await goodDeps.getVisuraData(fakeInput)), dataEmissione: '2024-12-13' }) };
+    const r = await verifyRegistrationKyc({ files, company: agenziaCompany, allowedAteco: agenziaAllowed, now }, deps);
+    expect(r.passed).toBe(true);
   });
 
   it('blocca ATECO non idoneo', async () => {

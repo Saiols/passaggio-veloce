@@ -56,20 +56,34 @@ export function parseVisuraText(text: string): VisuraData {
  * da "Codice fiscale: XXX". Si lavora su una finestra che parte dalla sezione
  * amministratori, così il primo CF della finestra è quello dell'amministratore
  * (i CF dei soci stanno in una sezione precedente).
+ *
+ * Per le IMPRESE INDIVIDUALI non esiste la sezione "Amministratori": il legale
+ * rappresentante è il "Titolare" (sezione "Titolari di cariche o qualifiche",
+ * carica "Titolare Firmatario"); il suo CF coincide con quello dell'impresa.
  */
 function parseAmministratore(text: string): VisuraData['amministratore'] {
   const startIdx = (() => {
-    const a = text.search(/Elenco amministratori/i);
-    if (a >= 0) return a;
-    const b = text.search(/\bAmministratori\b/);
-    return b >= 0 ? b : 0;
+    // Ordine: prima le sezioni "amministratori" (società di capitale/persone),
+    // poi il "Titolare Firmatario" delle imprese individuali. Si ancora alla
+    // sezione di dettaglio (non all'indice), così la finestra contiene nome+CF.
+    for (const re of [
+      /Elenco amministratori/i,
+      /\bAmministratori\b/,
+      /Titolare Firmatario/i,
+      /Titolari di cariche/i,
+    ]) {
+      const i = text.search(re);
+      if (i >= 0) return i;
+    }
+    return 0;
   })();
   const region = text.slice(startIdx, startIdx + 1500);
 
   // Carica (case-sensitive: nelle visure è "Amministratore Unico" maiuscolo) seguita
-  // dal nome in MAIUSCOLO, fino a "Rappresentante"/"Nato"/"Codice fiscale".
+  // dal nome in MAIUSCOLO, fino a "Rappresentante"/"Nato"/"Codice fiscale". Le varianti
+  // "Titolare …" (più lunghe prima) coprono le imprese individuali.
   const caricaRe =
-    /(?:Amministratore Unico|Amministratore Delegato|Consigliere Delegato|Amministratore|Presidente del Consiglio[^\n]{0,40}|Presidente|Liquidatore|Socio Amministratore)\s+([A-ZÀ-Ù'’]{2,}(?:\s+[A-ZÀ-Ù'’]{2,}){1,3}?)\s+(?:Rappresentante|Nato|Nata|Codice fiscale)/;
+    /(?:Amministratore Unico|Amministratore Delegato|Consigliere Delegato|Amministratore|Presidente del Consiglio[^\n]{0,40}|Presidente|Liquidatore|Socio Amministratore|Titolare Firmatario|Titolare di impresa individuale|Titolare)\s+([A-ZÀ-Ù'’]{2,}(?:\s+[A-ZÀ-Ù'’]{2,}){1,3}?)\s+(?:Rappresentante|Nato|Nata|Codice fiscale)/;
   const m = caricaRe.exec(region);
   let nome: string | undefined;
   let cognome: string | undefined;

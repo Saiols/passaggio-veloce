@@ -49,3 +49,39 @@ describe('parseVisuraText (formato InfoCamere reale)', () => {
     expect(r.rawText).toBe('testo vuoto');
   });
 });
+
+// Fixture realistico per IMPRESA INDIVIDUALE (estratto e ridotto dalla visura
+// reale "AGENZIA CORSICO"): qui non c'è la sezione "Amministratori" ma "Titolari
+// di cariche o qualifiche" con il "Titolare Firmatario" (COGNOME NOME), e il CF
+// del titolare coincide col CF dell'impresa.
+const IMPRESA_INDIVIDUALE = [
+  'viene esposto un estratto delle informazioni presenti in visura che non puo essere considerato esaustivo',
+  "VISURA ORDINARIA DELL'IMPRESA AGENZIA CORSICO PRATICHE AUTOMOBILISTICHE E AMMINISTRATIVE DI CIAVARELLA ANTONIO",
+  'DATI ANAGRAFICI Codice fiscale e n.iscr. al Registro Imprese CVRNTN59R31D643G Partita IVA 06199680155',
+  'Forma giuridica impresa individuale Data iscrizione 16/02/1983',
+  'Titolare di impresa individuale CIAVARELLA ANTONIO ATTIVITA Stato attivita attiva',
+  'Codice ATECO 82.99.4 Codice NACE 82.99',
+  'Documento n . T 585392977 estratto dal Registro Imprese in data 13/12/2024',
+  'informazioni costitutive Denominazione: AGENZIA CORSICO PRATICHE AUTOMOBILISTICHE E AMMINISTRATIVE DI CIAVARELLA ANTONIO Data fondazione: 05/06/1981',
+  '3 Titolari di cariche o qualifiche Titolare Firmatario CIAVARELLA ANTONIO Registro Imprese Archivio ufficiale della CCIAA',
+  'AGENZIA CORSICO PRATICHE AUTOMOBILISTICHE E AMMINISTRATIVE DI CIAVARELLA ANTONIO Codice Fiscale CVRNTN59R31D643G',
+  'Titolare Firmatario CIAVARELLA ANTONIO Nato a FOGGIA (FG) il 31/10/1959 Codice fiscale: CVRNTN59R31D643G residenza BUCCINASCO (MI) VIA ANDREA SOLARI 1 CAP 20090 carica titolare firmatario',
+  'Classificazione ATECORI 2007-2022 Codice: 45.11.01 - commercio all ingrosso e al dettaglio di autovetture',
+].join(' ');
+
+describe('parseVisuraText (impresa individuale: titolare al posto dell\'amministratore)', () => {
+  it('estrae il titolare (nome+cognome+CF) dalla sezione "Titolari di cariche"', () => {
+    const r = parseVisuraText(IMPRESA_INDIVIDUALE);
+    expect(r.amministratore?.cognome).toBe('CIAVARELLA');
+    expect(r.amministratore?.nome).toBe('ANTONIO');
+    expect(r.amministratore?.codiceFiscale).toBe('CVRNTN59R31D643G');
+  });
+
+  it('estrae P.IVA, data emissione e ATECO anche per l\'impresa individuale', () => {
+    const r = parseVisuraText(IMPRESA_INDIVIDUALE);
+    expect(r.partitaIva).toBe('06199680155');
+    expect(r.dataEmissione).toBe('2024-12-13');
+    expect(r.atecoCodes).toContain('82.99.4');
+    expect(r.atecoCodes).toContain('45.11.01');
+  });
+});

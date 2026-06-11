@@ -10,6 +10,7 @@ import {
   canDeleteCrmContact,
   canBulkImportCrm,
 } from '@/lib/auth/permissions';
+import { parseContactsCsv } from '@/lib/crm/csv-import';
 
 export type CrmContactResult =
   | { ok: true; id: string }
@@ -276,15 +277,16 @@ export type CsvImportResult =
   | { ok: false; error: string };
 
 /**
- * Bulk import da CSV. Formato atteso (header obbligatorio):
- * nome,cat,tel,wa,email,piva,indirizzo,citta,cap,regione,status,fonte
- *
- * - Riga senza `nome`/`cat`/`tel` → saltata
- * - Riga con email duplicata → saltata (no overwrite massivo, evitare incidenti)
- * - Errori per riga restituiti come stringhe
+ * Bulk import da CSV. Parsing robusto (vedi `lib/crm/csv-import.ts`):
+ * - header quotato + nomi colonna con alias/accenti (es. `Nome`, `Telefono`, `Città`);
+ * - obbligatorie solo **nome** e **telefono**; la categoria, se assente nel file,
+ *   usa `defaultCat` (BROKER per le liste rivenditori);
+ * - riga con email duplicata → saltata (no overwrite massivo, evitare incidenti);
+ * - errori per riga restituiti come stringhe.
  */
 export async function bulkImportCrmContactsAction(
   csvText: string,
+  defaultCat: 'BROKER' | 'AGENZIA' = 'BROKER',
 ): Promise<CsvImportResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -292,124 +294,53 @@ export async function bulkImportCrmContactsAction(
     return { ok: false, error: 'Non hai i permessi per importare CSV' };
   }
 
-  const lines = csvText.replace(/﻿/, '').split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) {
-    return { ok: false, error: 'CSV vuoto o senza header' };
-  }
-  const header = lines[0]!.split(',').map((h) => h.trim().toLowerCase());
-  const idxOf = (col: string): number => header.indexOf(col);
-  const required = ['nome', 'cat', 'tel'];
-  for (const r of required) {
-    if (idxOf(r) < 0) {
-      return { ok: false, error: `Colonna obbligatoria mancante: ${r}` };
-    }
-  }
+  const parsed = parseContactsCsv(csvText, defaultCat);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  const errors: string[] = [];
+  const errors: string[] = parsed.rowErrors.map((e) => e.message);
   let created = 0;
-  let skipped = 0;
+  let skipped = parsed.rowErrors.length;
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]!);
-    const get = (col: string): string => {
-      const j = idxOf(col);
-      return j >= 0 ? (cols[j] ?? '').trim() : '';
-    };
-    const nome = get('nome');
-    const catRaw = get('cat').toUpperCase();
-    const tel = get('tel');
-    if (!nome || !tel) {
-      skipped++;
-      errors.push(`Riga ${i + 1}: nome o telefono mancante`);
-      continue;
-    }
-    if (catRaw !== 'BROKER' && catRaw !== 'AGENZIA') {
-      skipped++;
-      errors.push(`Riga ${i + 1}: cat deve essere BROKER o AGENZIA`);
-      continue;
-    }
-    const email = get('email').toLowerCase();
-    if (email) {
+  for (const row of parsed.rows) {
+    // Dedup per email (no overwrite massivo). Email vuota → nessun dedup.
+    if (row.email) {
       const dup = await prisma.crmContact.findFirst({
-        where: { email, deletedAt: null },
+        where: { email: row.email, deletedAt: null },
         select: { id: true },
       });
       if (dup) {
         skipped++;
-        errors.push(`Riga ${i + 1}: email "${email}" già presente — salto`);
+        errors.push(`Riga ${row.line}: email "${row.email}" già presente — salto`);
         continue;
       }
     }
 
-    const statusRaw = get('status') || 'S0';
-    const fonteRaw = get('fonte') || 'CSV_INIZIALE';
-
     try {
       await prisma.crmContact.create({
         data: {
-          nome,
-          cat: catRaw as 'BROKER' | 'AGENZIA',
-          tel,
-          wa: get('wa') || null,
-          email: email || null,
-          piva: get('piva') || null,
-          indirizzo: get('indirizzo') || null,
-          citta: get('citta') || null,
-          cap: get('cap') || null,
-          regione: get('regione') || null,
-          status: statusRaw as
-            | 'S0'
-            | 'S1'
-            | 'S2'
-            | 'S3'
-            | 'S4'
-            | 'S5'
-            | 'S6'
-            | 'S7'
-            | 'S8'
-            | 'S9'
-            | 'S10',
-          fonte: fonteRaw as
-            | 'CSV_INIZIALE'
-            | 'ISCRIZIONE_DIRETTA'
-            | 'REFERRAL'
-            | 'ALTRO',
+          nome: row.nome,
+          cat: row.cat,
+          tel: row.tel,
+          wa: row.wa,
+          email: row.email,
+          piva: row.piva,
+          indirizzo: row.indirizzo,
+          citta: row.citta,
+          cap: row.cap,
+          regione: row.regione,
+          status: row.status,
+          fonte: row.fonte,
         },
       });
       created++;
     } catch (err) {
       skipped++;
       errors.push(
-        `Riga ${i + 1}: errore creazione (${(err as Error).message.slice(0, 80)})`,
+        `Riga ${row.line}: errore creazione (${(err as Error).message.slice(0, 80)})`,
       );
     }
   }
 
   revalidatePath('/admin/crm/contatti');
   return { ok: true, created, skipped, errors: errors.slice(0, 25) };
-}
-
-/** CSV line parser tollerante di virgolette doppie e virgole interne. */
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]!;
-    if (c === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (c === ',' && !inQuotes) {
-      out.push(cur);
-      cur = '';
-    } else {
-      cur += c;
-    }
-  }
-  out.push(cur);
-  return out;
 }

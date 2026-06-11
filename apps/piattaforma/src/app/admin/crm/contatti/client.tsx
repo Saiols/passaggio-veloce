@@ -398,13 +398,14 @@ function CsvImportButton({ onComplete }: { onComplete: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
+  const [defaultCat, setDefaultCat] = useState<'BROKER' | 'AGENZIA'>('BROKER');
 
   const handleFile = (file: File): void => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = String(e.target?.result ?? '');
       startTransition(async () => {
-        const res = await bulkImportCrmContactsAction(text);
+        const res = await bulkImportCrmContactsAction(text, defaultCat);
         if (!res.ok) {
           setResult(res.error);
           return;
@@ -432,14 +433,26 @@ function CsvImportButton({ onComplete }: { onComplete: () => void }) {
           e.target.value = '';
         }}
       />
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => inputRef.current?.click()}
-        disabled={pending}
-      >
-        {pending ? 'Import…' : '↑ Import CSV'}
-      </Button>
+      <div className="inline-flex items-center gap-2">
+        <select
+          value={defaultCat}
+          onChange={(e) => setDefaultCat(e.target.value as 'BROKER' | 'AGENZIA')}
+          disabled={pending}
+          title="Categoria assegnata ai contatti del file senza colonna 'cat'"
+          className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-2 py-1.5 text-[12.5px] font-semibold text-pv-slate-700 focus:border-pv-navy-700 focus:outline-none"
+        >
+          <option value="BROKER">Rivenditori</option>
+          <option value="AGENZIA">Agenzie</option>
+        </select>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          disabled={pending}
+        >
+          {pending ? 'Import…' : '↑ Import CSV'}
+        </Button>
+      </div>
       {result && (
         <div
           role="dialog"

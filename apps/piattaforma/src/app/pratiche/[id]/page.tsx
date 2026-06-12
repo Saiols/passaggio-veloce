@@ -255,11 +255,6 @@ export default async function PraticaDetailPage({
                       &ldquo;{pratica.valutazione.note}&rdquo;
                     </p>
                   )}
-                  {pratica.valutazione.segnalazioneAbuso && (
-                    <p className="mt-1 text-[12px] font-bold uppercase tracking-wider text-pv-red-500">
-                      Segnalata per abuso prezzo
-                    </p>
-                  )}
                 </div>
               </div>
             </Card>

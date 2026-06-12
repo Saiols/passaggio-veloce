@@ -53,6 +53,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
           { href: '/dashboard', label: 'Dashboard' },
           { href: '/inbox', label: 'Inbox' },
           { href: '/pratiche', label: 'Pratiche attive' },
+          { href: '/feedback', label: 'Feedback' },
           { href: '/orari', label: 'Orari' },
           { href: '/wallet', label: 'Wallet' },
           { href: '/addebiti', label: 'Addebiti' },

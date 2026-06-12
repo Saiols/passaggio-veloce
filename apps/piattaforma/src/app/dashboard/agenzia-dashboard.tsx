@@ -102,7 +102,7 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
         <StatCard label="In arrivo" value={inArrivo} hint="Da accettare/rifiutare" icon={<InboxIcon />} accent="orange" />
         <StatCard label="Accettate" value={inCorso} hint="In corso di completamento" icon={<PlayIcon />} accent="navy" />
         <StatCard label="Firmate / mese" value={firmateMese} icon={<CheckIcon />} accent="green" />
-        <StatCard label="Rating" value={ratingValue} hint={ratingHint} icon={<StarIcon />} accent="navy" />
+        <StatCard label="Rating" value={ratingValue} hint={ratingHint} icon={<StarIcon />} accent="navy" href="/feedback" />
       </div>
 
       {prossimiAddebiti.length > 0 && (

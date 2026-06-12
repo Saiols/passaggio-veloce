@@ -5,7 +5,7 @@ import { formatRelative, formatCurrencyCent } from '@/lib/format';
 import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
 
 export async function AgenziaDashboard({ companyId }: { companyId: string }) {
-  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, listino, prossimiAddebiti] = await Promise.all([
+  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, prossimiAddebiti] = await Promise.all([
     prisma.praticaAssegnazione.count({
       where: { agenziaId: companyId, esito: 'PENDING' },
     }),
@@ -37,11 +37,12 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
         },
       },
     }),
+    // LISTINI DISABILITATI (feature nascosta 2026-06-12) — riattivare insieme a /profilo/listino:
     // A1: presenza listino per banner "Pubblica il tuo listino"
-    prisma.listino.findFirst({
-      where: { agenziaId: companyId },
-      select: { id: true, formato: true },
-    }),
+    // prisma.listino.findFirst({
+    //   where: { agenziaId: companyId },
+    //   select: { id: true, formato: true },
+    // }),
     prisma.feeAddebito.findMany({
       where: { agenziaId: companyId, stato: 'SCHEDULED', scheduledAt: { not: null } },
       orderBy: { scheduledAt: 'asc' },
@@ -69,6 +70,7 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
         </h1>
       </header>
 
+      {/* LISTINI DISABILITATI (feature nascosta 2026-06-12) — banner "Pubblica il tuo listino", riattivare insieme a /profilo/listino:
       {!listino && (
         <div className="mb-6 rounded-[16px] border-[1.5px] border-pv-orange-500/40 bg-pv-orange-50/40 p-5 shadow-[var(--pv-shadow-card)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -94,6 +96,7 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
           </div>
         </div>
       )}
+      */}
 
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="In arrivo" value={inArrivo} hint="Da accettare/rifiutare" icon={<InboxIcon />} accent="orange" />

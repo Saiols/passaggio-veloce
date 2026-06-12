@@ -2172,12 +2172,11 @@ async function main() {
     dealerId: string,
     stelle: number,
     note: string | null,
-    segnalazioneAbuso: boolean,
   ) {
     const exists = await prisma.valutazione.findFirst({ where: { praticaId } });
     if (exists) return false;
     await prisma.valutazione.create({
-      data: { praticaId, agenziaId, dealerId, stelle, note, segnalazioneAbuso },
+      data: { praticaId, agenziaId, dealerId, stelle, note },
     });
     return true;
   }
@@ -2194,7 +2193,7 @@ async function main() {
 
   let totalValutazioni = 0;
 
-  // Demo Pratiche Auto Snc: 12 valutazioni 4-5 stelle + 1 con segnalazioneAbuso
+  // Demo Pratiche Auto Snc: 13 valutazioni 4-5 stelle
   if (demoPraticheComp) {
     const pratiche = pratichePerAgenzia.get(demoPraticheComp.id) ?? [];
     const notePosite = [
@@ -2220,11 +2219,10 @@ async function main() {
         p.brokerId,
         stelle,
         notePosite[i % notePosite.length] ?? null,
-        false,
       );
       if (ok) { created++; totalValutazioni++; }
     }
-    // 1 valutazione con segnalazioneAbuso (cerca una pratica ancora senza valutazione)
+    // 13ª valutazione normale (cerca una pratica ancora senza valutazione)
     for (const p of pratiche) {
       const exists = await prisma.valutazione.findFirst({ where: { praticaId: p.id } });
       if (!exists) {
@@ -2233,14 +2231,13 @@ async function main() {
           demoPraticheComp.id,
           p.brokerId,
           4,
-          'Inizialmente in ritardo, poi risolto. Segnalo comportamento non corretto nella prima fase.',
-          true,
+          'Inizialmente in ritardo, poi risolto nei tempi.',
         );
         totalValutazioni++;
         break;
       }
     }
-    console.log(`  · valutazioni Demo Pratiche Auto Snc: ~${created} create (target 12+1 abuso)`);
+    console.log(`  · valutazioni Demo Pratiche Auto Snc: ~${created} create (target 13)`);
   }
 
   // Agenzie attive aggiuntive: 2-8 valutazioni mix 3-5 stelle
@@ -2275,7 +2272,6 @@ async function main() {
         p.brokerId,
         Math.min(stelle, 5),
         noteMix[i % noteMix.length] ?? null,
-        false,
       );
       if (ok) { created++; totalValutazioni++; }
     }
@@ -2306,7 +2302,6 @@ async function main() {
         p.brokerId,
         stelle,
         noteNeg[i % noteNeg.length] ?? null,
-        false,
       );
       if (ok) { created++; totalValutazioni++; }
     }

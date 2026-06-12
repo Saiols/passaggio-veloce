@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Alert, Button, Card, Checkbox } from '@/components/ui';
+import { Alert, Button, Card } from '@/components/ui';
 import { submitValutazioneAction } from '../actions';
 
 type Props = {
@@ -13,7 +13,6 @@ export function ValutazioneForm({ praticaId, agenziaNome }: Props) {
   const [stelle, setStelle] = useState<number>(0);
   const [hover, setHover] = useState<number>(0);
   const [note, setNote] = useState('');
-  const [abuso, setAbuso] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +27,6 @@ export function ValutazioneForm({ praticaId, agenziaNome }: Props) {
     fd.append('praticaId', praticaId);
     fd.append('stelle', String(stelle));
     if (note.trim()) fd.append('note', note.trim());
-    if (abuso) fd.append('segnalazioneAbuso', 'true');
 
     startTransition(async () => {
       const result = await submitValutazioneAction(fd);
@@ -102,18 +100,6 @@ export function ValutazioneForm({ praticaId, agenziaNome }: Props) {
           {note.length}/500
         </p>
       </div>
-
-      <label className="mt-2 flex items-start gap-2 text-[13px] text-pv-slate-700">
-        <Checkbox
-          checked={abuso}
-          onChange={(e) => setAbuso(e.target.checked)}
-          className="mt-0.5"
-        />
-        <span>
-          Segnalazione abuso prezzo: ho riscontrato un prezzo chiaramente fuori mercato.
-          L&apos;admin prenderà in esame la pratica.
-        </span>
-      </label>
 
       <div className="mt-5 flex justify-end">
         <Button

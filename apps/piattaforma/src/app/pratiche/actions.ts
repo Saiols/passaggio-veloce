@@ -487,9 +487,6 @@ const valutazioneSchema = z.object({
   praticaId: z.string().uuid(),
   stelle: z.coerce.number().int().min(1).max(5),
   note: z.string().trim().max(500).optional(),
-  segnalazioneAbuso: z
-    .preprocess((v) => v === 'true' || v === 'on' || v === true, z.boolean())
-    .default(false),
 });
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -511,7 +508,7 @@ export async function submitValutazioneAction(formData: FormData): Promise<Actio
       error: first ? `${first.path.join('.')}: ${first.message}` : 'Dati non validi',
     };
   }
-  const { praticaId, stelle, note, segnalazioneAbuso } = parsed.data;
+  const { praticaId, stelle, note } = parsed.data;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -532,7 +529,6 @@ export async function submitValutazioneAction(formData: FormData): Promise<Actio
           dealerId,
           stelle,
           note: note ?? null,
-          segnalazioneAbuso,
         },
       });
     });

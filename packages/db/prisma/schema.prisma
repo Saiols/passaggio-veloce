@@ -1055,9 +1055,8 @@ model Valutazione {
   dealerId String  @db.Uuid
   dealer   Company @relation("ValutazioniDealer", fields: [dealerId], references: [id])
 
-  stelle            Int // 1..5
-  note              String?
-  segnalazioneAbuso Boolean @default(false)
+  stelle Int // 1..5
+  note   String?
 
   createdAt DateTime @default(now())
 

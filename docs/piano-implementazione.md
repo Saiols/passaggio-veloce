@@ -395,7 +395,7 @@
 
 - [ ] Notifica al dealer post-firma per valutare (form già visibile sul detail FIRMATA, manca la push proattiva)
 - [x] Form 5 stelle + note opzionali (client component con hover preview)
-- [x] Segnalazione abuso prezzo nelle note (flag `segnalazioneAbuso` in `Valutazione`)
+- [x] ~~Segnalazione abuso prezzo nelle note (flag `segnalazioneAbuso` in `Valutazione`)~~ **RIMOSSA (giu-2026)**: UI e logica eliminate, colonna `segnalazioneAbuso` droppata via migration.
 - [x] Calcolo rating medio agenzia (`attachRating` con GROUP BY on-demand)
 - [x] Soglia minima 5 valutazioni (`RANKING.MIN_RATINGS_FOR_RANK`)
 - [x] Integrazione rating nell'algoritmo distribuzione (`rankCandidates` in `avviaRound`)
@@ -433,7 +433,7 @@
 - [ ] Assegnazione manuale pratica in escalation a partner di fiducia (UI)
 - [ ] Ricerca avanzata utenti + sospensione/blocco
 - [ ] Osservatorio Prezzi (richiede Fase 8)
-- [ ] Gestione segnalazioni abusi (lista `Valutazione.segnalazioneAbuso=true`)
+- [~] ~~Gestione segnalazioni abusi (lista `Valutazione.segnalazioneAbuso=true`)~~ **CANCELLATA (giu-2026)**: feature segnalazione abuso prezzo rimossa.
 - [ ] Report finanziari
 - [ ] Configurazione parametri (N agenzie per invio, timeout giorni, soglie wallet)
 - [ ] Log di sistema / audit

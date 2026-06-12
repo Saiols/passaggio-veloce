@@ -60,9 +60,21 @@ export function QuickActionButton({
       type="button"
       onClick={onClick}
       disabled={pending}
-      className="animate-pulse-soft relative z-20 inline-flex items-center rounded-full bg-pv-navy-600 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-pv-navy-700 disabled:opacity-50 disabled:animate-none"
+      aria-busy={pending || undefined}
+      className="animate-pulse-soft relative z-20 inline-flex items-center gap-1.5 rounded-full bg-pv-navy-600 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-pv-navy-700 disabled:opacity-50 disabled:animate-none"
     >
-      {pending ? '…' : c.label}
+      {pending && (
+        <svg
+          className="h-3 w-3 animate-spin"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+          <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      )}
+      <span>{pending ? 'Invio…' : c.label}</span>
     </button>
   );
 }

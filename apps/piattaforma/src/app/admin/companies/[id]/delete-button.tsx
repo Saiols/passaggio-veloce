@@ -79,8 +79,10 @@ export function DeleteCompanyButton({
           variant="danger"
           onClick={handleDelete}
           disabled={pending || confirmText.trim() !== ragioneSociale.trim()}
+          loading={pending}
+          loadingLabel="Eliminazione…"
         >
-          {pending ? 'Eliminazione…' : 'Elimina'}
+          Elimina
         </Button>
         <Button
           type="button"

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { InlineSpinner } from '@/components/ui';
 import {
   reactivateCompanyAction,
   reactivateUserAction,
@@ -160,18 +161,24 @@ export function SuspendButton({
                   type="button"
                   onClick={submit}
                   disabled={pending}
+                  aria-busy={pending || undefined}
                   className={
-                    'rounded-[10px] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50 ' +
+                    'inline-flex items-center justify-center gap-2 rounded-[10px] px-3 py-1.5 text-[13px] font-semibold text-white disabled:opacity-50 ' +
                     (dialog === 'reactivate'
                       ? 'bg-pv-green-500 hover:brightness-95'
                       : 'bg-pv-red-500 hover:brightness-95')
                   }
                 >
-                  {pending
-                    ? '…'
-                    : dialog === 'reactivate'
-                      ? 'Riattiva'
-                      : 'Sospendi'}
+                  {pending && <InlineSpinner className="h-4 w-4" />}
+                  <span>
+                    {pending
+                      ? dialog === 'reactivate'
+                        ? 'Riattivazione…'
+                        : 'Sospensione…'
+                      : dialog === 'reactivate'
+                        ? 'Riattiva'
+                        : 'Sospendi'}
+                  </span>
                 </button>
               </div>
             </div>

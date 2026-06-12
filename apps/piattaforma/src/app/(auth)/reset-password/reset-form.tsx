@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { PasswordInput } from '@/components/ui';
+import { InlineSpinner, PasswordInput } from '@/components/ui';
 import {
   requestPasswordResetAction,
   confirmPasswordResetAction,
@@ -63,9 +63,11 @@ export function ResetForm({ token }: { token: string | null }) {
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          aria-busy={pending || undefined}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {pending ? 'Salvataggio…' : 'Imposta password'}
+          {pending && <InlineSpinner className="h-4 w-4" />}
+          <span>{pending ? 'Salvataggio…' : 'Imposta password'}</span>
         </button>
       </form>
     );
@@ -93,9 +95,11 @@ export function ResetForm({ token }: { token: string | null }) {
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        aria-busy={pending || undefined}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
       >
-        {pending ? 'Invio…' : 'Invia link'}
+        {pending && <InlineSpinner className="h-4 w-4" />}
+        <span>{pending ? 'Invio…' : 'Invia link'}</span>
       </button>
     </form>
   );

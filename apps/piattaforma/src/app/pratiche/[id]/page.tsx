@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma, type PraticaTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
+import { Alert, Button, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
 import {
   markFirmaAvvenutaAction,
@@ -149,32 +149,32 @@ export default async function PraticaDetailPage({
           <div className="flex flex-wrap gap-2">
             {canProcessata && (
               <form action={processataBound}>
-                <Button
-                  type="submit"
+                <SubmitButton
                   size="sm"
                   className="animate-pulse-soft"
+                  loadingLabel="Aggiornamento…"
                 >
                   Pratica processata
-                </Button>
+                </SubmitButton>
               </form>
             )}
             {canFirma && (
               <form action={firmaBound}>
-                <Button
-                  type="submit"
+                <SubmitButton
                   size="sm"
                   className="animate-pulse-soft"
+                  loadingLabel="Aggiornamento…"
                 >
                   Firma avvenuta
-                </Button>
+                </SubmitButton>
               </form>
             )}
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && (
               <form action={annullaBound}>
-                <Button type="submit" size="sm" variant="danger">
+                <SubmitButton size="sm" variant="danger" loadingLabel="Annullamento…">
                   Annulla pratica
-                </Button>
+                </SubmitButton>
               </form>
             )}
             {pratica.documenti.length > 0 && (

@@ -69,8 +69,10 @@ export function ResetAssistentePassword({ userId }: { userId: string }) {
         variant="danger"
         onClick={handleReset}
         disabled={pending}
+        loading={pending}
+        loadingLabel="Generazione…"
       >
-        {pending ? 'Generazione…' : 'Genera nuova password'}
+        Genera nuova password
       </Button>
     </div>
   );

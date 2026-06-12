@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Button, StatusChip, type PraticaStato } from '@/components/ui';
+import { StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from './actions';
 
@@ -119,14 +119,14 @@ export default async function InboxPage() {
                     </Link>
                     <div className="flex gap-2 sm:shrink-0">
                       <form action={acceptBound}>
-                        <Button type="submit" size="sm">
+                        <SubmitButton size="sm" loadingLabel="Conferma…">
                           Accetta
-                        </Button>
+                        </SubmitButton>
                       </form>
                       <form action={rejectBound}>
-                        <Button type="submit" size="sm" variant="secondary">
+                        <SubmitButton size="sm" variant="secondary" loadingLabel="Rifiuto…">
                           Rifiuta
-                        </Button>
+                        </SubmitButton>
                       </form>
                     </div>
                   </li>

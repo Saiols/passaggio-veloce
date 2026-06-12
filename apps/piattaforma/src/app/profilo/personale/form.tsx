@@ -93,8 +93,8 @@ export function ProfiloPersonaleForm({
       )}
 
       <div className="flex justify-end">
-        <Button type="submit" size="md" disabled={pending}>
-          {pending ? 'Salvataggio…' : 'Salva modifiche'}
+        <Button type="submit" size="md" disabled={pending} loading={pending} loadingLabel="Salvataggio…">
+          Salva modifiche
         </Button>
       </div>
     </form>

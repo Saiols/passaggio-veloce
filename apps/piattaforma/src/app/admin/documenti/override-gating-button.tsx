@@ -1,6 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
+import { InlineSpinner } from '@/components/ui';
 import { overrideGatingAction } from './actions';
 
 export function OverrideGatingButton({ documentoId }: { documentoId: string }) {
@@ -23,9 +24,11 @@ export function OverrideGatingButton({ documentoId }: { documentoId: string }) {
       type="button"
       onClick={onClick}
       disabled={pending}
-      className="rounded-[8px] border border-pv-orange-500/40 bg-pv-orange-50 px-2 py-1 text-[11px] font-semibold text-pv-orange-500 hover:brightness-95 disabled:opacity-50"
+      aria-busy={pending || undefined}
+      className="inline-flex items-center justify-center gap-1 rounded-[8px] border border-pv-orange-500/40 bg-pv-orange-50 px-2 py-1 text-[11px] font-semibold text-pv-orange-500 hover:brightness-95 disabled:opacity-50"
     >
-      {pending ? '…' : 'Forza PASSED'}
+      {pending && <InlineSpinner className="h-3 w-3" />}
+      <span>{pending ? 'Forza…' : 'Forza PASSED'}</span>
     </button>
   );
 }

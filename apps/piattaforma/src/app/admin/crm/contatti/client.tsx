@@ -449,8 +449,10 @@ function CsvImportButton({ onComplete }: { onComplete: () => void }) {
           size="sm"
           onClick={() => inputRef.current?.click()}
           disabled={pending}
+          loading={pending}
+          loadingLabel="Import…"
         >
-          {pending ? 'Import…' : '↑ Import CSV'}
+          ↑ Import CSV
         </Button>
       </div>
       {result && (

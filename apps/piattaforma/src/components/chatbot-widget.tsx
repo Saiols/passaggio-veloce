@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { InlineSpinner } from '@/components/ui';
 
 type ChatMsg = {
   role: 'bot' | 'user';
@@ -172,10 +173,11 @@ export function ChatbotWidget({
             <button
               type="submit"
               disabled={pending || !input.trim()}
-              className="rounded-[10px] bg-pv-navy-700 px-3 py-2 text-[13px] font-bold text-white transition hover:bg-pv-navy-800 disabled:opacity-50"
+              aria-busy={pending || undefined}
+              className="inline-flex items-center justify-center rounded-[10px] bg-pv-navy-700 px-3 py-2 text-[13px] font-bold text-white transition hover:bg-pv-navy-800 disabled:opacity-50"
               aria-label="Invia messaggio"
             >
-              ↑
+              {pending ? <InlineSpinner className="h-4 w-4" /> : '↑'}
             </button>
           </form>
         </div>

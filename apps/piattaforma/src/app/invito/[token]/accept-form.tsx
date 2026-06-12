@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { PasswordInput } from '@/components/ui';
+import { InlineSpinner, PasswordInput } from '@/components/ui';
 import { acceptInvitationAction } from '@/app/team/actions';
 
 export function AcceptForm({ token }: { token: string }) {
@@ -34,9 +34,10 @@ export function AcceptForm({ token }: { token: string }) {
         placeholder="Password (min 8, A-z, 0-9)"
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
       {error && <p className="text-sm text-pv-red-500">{error}</p>}
-      <button type="submit" disabled={pending}
-        className="w-full rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-        {pending ? 'Creazione…' : 'Crea il mio account'}
+      <button type="submit" disabled={pending} aria-busy={pending || undefined}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+        {pending && <InlineSpinner className="h-4 w-4" />}
+        <span>{pending ? 'Creazione…' : 'Crea il mio account'}</span>
       </button>
     </form>
   );

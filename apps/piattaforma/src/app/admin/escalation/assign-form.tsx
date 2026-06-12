@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { InlineSpinner } from '@/components/ui';
 import { assegnaEscalationAction } from './actions';
 
 type Agenzia = {
@@ -58,9 +59,11 @@ export function AssignForm({
         type="button"
         onClick={handle}
         disabled={pending}
-        className="rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        aria-busy={pending || undefined}
+        className="inline-flex items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
       >
-        {pending ? 'Assegnazione…' : 'Assegna'}
+        {pending && <InlineSpinner className="h-4 w-4" />}
+        <span>{pending ? 'Assegnazione…' : 'Assegna'}</span>
       </button>
       {error && <p className="basis-full text-xs text-pv-red-500">{error}</p>}
     </div>

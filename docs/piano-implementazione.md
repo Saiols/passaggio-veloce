@@ -407,6 +407,8 @@
 
 ## FASE 8 - Raccolta Listini e Osservatorio Prezzi
 
+> ⚠️ **STATO (giugno 2026): FEATURE SOSPESA.** Il modulo Listini / Osservatorio Prezzi è stato disattivato e nascosto dall'app (UI e route `/profilo/listino` e `/admin/listini` disabilitate, codice commentato). Documentazione conservata per eventuale riattivazione futura. Da NON proporre come funzione disponibile.
+
 - [ ] Popup post-registrazione agenzia (non bloccante, skippabile)
 - [ ] Sezione profilo agenzia sempre accessibile
 - [ ] Modalità upload PDF/Word listino
@@ -803,7 +805,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ### A · Fattibile ORA — nessuna dipendenza esterna
 
-**A1. ✅ DONE — Listini & Osservatorio Prezzi (FASE 8 intera)**
+**A1. ✅ DONE — Listini & Osservatorio Prezzi (FASE 8 intera)** — ⚠️ **SOSPESA (giugno 2026): modulo disattivato e nascosto dall'app, route rese 404, codice commentato. Da NON proporre come funzione disponibile.**
 - `/profilo/listino` con toggle Form strutturato / Upload PDF (toggle button)
   - Form: prezzoBaseTrapasso, prezzoMinivoltura, maggiorazione pre-2015, sconto lotto massivo, province coperte (sigle CSV)
   - Upload: PDF/JPG/PNG (max 10MB), province coperte, riusa StorageProvider esistente

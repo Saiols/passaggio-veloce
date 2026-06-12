@@ -118,6 +118,9 @@ Il broker carica i documenti di **entrambe le parti** (venditore e acquirente).
 | **Minivoltura massiva (lotto)** | **15 EUR per veicolo** | 15 EUR per veicolo | 0 EUR |
 
 ### 3.2 Listino agenzie
+
+> ⚠️ **STATO (giugno 2026): FEATURE SOSPESA.** Il modulo Listini / Osservatorio Prezzi è attualmente disattivato e nascosto dall'app (UI e route disabilitate). Documentazione conservata per eventuale riattivazione futura. Da NON proporre come funzione disponibile.
+
 Le agenzie applicano un listino fisso mediamente **100 EUR superiore** alla tariffa standard per il trapasso netto. Il cliente paga di piu ma ottiene la corsia preferenziale con il codice pratica. Va comunicato chiaramente:
 - Alle agenzie all'iscrizione
 - Al cliente finale tramite il broker/dealer
@@ -217,6 +220,9 @@ Il mockup introduce per la prima volta la dashboard admin con:
 - Dettaglio singolo utente
 
 ### Admin Osservatorio Prezzi (nuovo - da mockup listino/roadmap)
+
+> ⚠️ **STATO (giugno 2026): FEATURE SOSPESA.** Il modulo Listini / Osservatorio Prezzi è attualmente disattivato e nascosto dall'app (UI e route disabilitate). Documentazione conservata per eventuale riattivazione futura. Da NON proporre come funzione disponibile.
+
 - Listini caricati (conteggio)
 - Province coperte
 - Media nazionale prezzo trapasso netto
@@ -277,6 +283,8 @@ Se il dealer segnala nelle note che l'agenzia ha applicato prezzi superiori o ha
 ---
 
 ## 9. Raccolta Listini e Database Prezzi (nuovo - da Visione Strategica)
+
+> ⚠️ **STATO (giugno 2026): FEATURE SOSPESA.** Il modulo Listini / Osservatorio Prezzi è attualmente disattivato e nascosto dall'app (UI e route disabilitate). Documentazione conservata per eventuale riattivazione futura. Da NON proporre come funzione disponibile.
 
 ### 9.1 Raccolta volontaria
 - **Popup post-registrazione:** appare una sola volta al primo login, non bloccante, skippabile

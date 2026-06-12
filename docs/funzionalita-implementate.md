@@ -71,7 +71,7 @@ chatbot_visibility: internal
 - **[CLIENTI] 2FA** (`lib/auth/totp.ts`): TOTP (Google Authenticator/Authy/1Password) + **10 backup code** (mostrati una sola volta). Setup/disable in `/profilo/sicurezza`.
 - **Rate limit login**: 5 tentativi falliti per (IP anonimizzato+email) → blocco 15 min.
 - **[CLIENTI] Team**: ADMIN_AZIENDA invita UTENTE_AZIENDA (`/invito/{token}`, scadenza 7gg) o crea utente diretto (subito ACTIVE). Reset password genera password leggibile.
-- **[CLIENTI] Profilo**: dati personali; dati azienda (solo ADMIN_AZIENDA; **P.IVA e SDI non modificabili** → supporto); sicurezza; **listino prezzi (solo agenzia)**; preferenze notifiche.
+- **[CLIENTI] Profilo**: dati personali; dati azienda (solo ADMIN_AZIENDA; **P.IVA e SDI non modificabili** → supporto); sicurezza; ~~**listino prezzi (solo agenzia)**~~ _(⚠️ SOSPESA giu-2026: modulo disattivato e nascosto)_; preferenze notifiche.
 - **[CLIENTI] Orari agenzia** (`/orari`): fino a 2 fasce/giorno; **influenzano il countdown** delle pratiche. Chiusure straordinarie.
 - **Stato account**: `UserStatus` PENDING/ACTIVE/SUSPENDED; `Company.suspendedAt` (sospensione reversibile) ≠ `deletedAt` (eliminazione, dati cancellati ~90gg GDPR).
 
@@ -88,7 +88,7 @@ chatbot_visibility: internal
   - 🚩 **N5_BROKER_PAYOUT definito ma non inviato** (§0.5).
 - **[CLIENTI] Preferenze + unsubscribe** (`/profilo/notifiche`, `/unsubscribe`): transazionali sempre attive; **facoltative** (N3, N7, N25, N31) opt-out + unsubscribe one-click via token in footer email.
 - **[CLIENTI] Storico notifiche** (`/notifiche`): ultime 50 con stato/canale/subject.
-- **[CLIENTI] Dashboard**: broker (conteggi per stato, ultime 5 pratiche, saldo wallet, banner valuta-agenzia); agenzia (in arrivo/in corso/firmate mese, rating, prossimi addebiti, banner listino).
+- **[CLIENTI] Dashboard**: broker (conteggi per stato, ultime 5 pratiche, saldo wallet, banner valuta-agenzia); agenzia (in arrivo/in corso/firmate mese, rating, prossimi addebiti). _(Banner "Pubblica il tuo listino" rimosso — feature SOSPESA giu-2026.)_
 - **[PUBBLICO] Guide pubbliche** (`/guide`): "Come fare il passaggio di proprietà", "Costi passaggio di proprietà", "Documenti necessari". Pagine `/privacy`, `/termini`, `/cookie`.
 
 ---

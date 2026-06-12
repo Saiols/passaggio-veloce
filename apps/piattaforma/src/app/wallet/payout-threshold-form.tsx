@@ -64,8 +64,8 @@ export function PayoutThresholdForm({
           </span>
         </div>
       </label>
-      <Button type="submit" size="sm" disabled={pending}>
-        {pending ? 'Salvataggio…' : 'Salva soglia'}
+      <Button type="submit" size="sm" disabled={pending} loading={pending} loadingLabel="Salvataggio…">
+        Salva soglia
       </Button>
       {error && (
         <p className="basis-full text-[11px] text-pv-red-500">{error}</p>

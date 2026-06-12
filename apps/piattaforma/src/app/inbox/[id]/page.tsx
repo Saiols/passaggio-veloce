@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Button, Card, StatusChip, type PraticaStato } from '@/components/ui';
+import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from '../actions';
 
@@ -101,9 +101,9 @@ export default async function InboxDetailPage({
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <form action={acceptBound}>
-                  <Button type="submit" size="md">
+                  <SubmitButton size="md" loadingLabel="Conferma in corso…">
                     Accetta pratica
-                  </Button>
+                  </SubmitButton>
                 </form>
                 <form action={rejectBound} className="flex flex-col gap-2">
                   <input
@@ -113,9 +113,9 @@ export default async function InboxDetailPage({
                     placeholder="Nota rifiuto (opzionale)"
                     className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
                   />
-                  <Button type="submit" size="md" variant="secondary">
+                  <SubmitButton size="md" variant="secondary" loadingLabel="Rifiuto in corso…">
                     Rifiuta
-                  </Button>
+                  </SubmitButton>
                 </form>
               </div>
             </div>

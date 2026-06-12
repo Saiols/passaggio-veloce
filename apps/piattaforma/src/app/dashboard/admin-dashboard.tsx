@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { Alert, Button, StatCard } from '@/components/ui';
+import { Alert, StatCard, SubmitButton } from '@/components/ui';
 import { runDistribuzioneTickAction } from '@/app/admin/actions';
 
 type TickBanner = {
@@ -36,9 +36,9 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
           </h1>
         </div>
         <form action={runDistribuzioneTickAction}>
-          <Button type="submit" size="md" variant="secondary">
+          <SubmitButton size="md" variant="secondary" loadingLabel="Esecuzione…">
             Tick distribuzione
-          </Button>
+          </SubmitButton>
         </form>
       </header>
 

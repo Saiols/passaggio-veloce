@@ -94,7 +94,7 @@ Riferimento: `docs/Modifiche Passaggio Veloce  - Foglio1.pdf`.
 7. Search ricerca inline senza "filtra".
 8. Inbox: pulsanti Accetta/Rifiuta direttamente sulla riga, non più navigazione al detail.
 9. I "round" non vanno mostrati all'agenzia (info interna admin/CTO).
-10. Profilo agenzia: casella per upload listino prezzi (uso interno, non visibile a clienti).
+10. Profilo agenzia: casella per upload listino prezzi (uso interno, non visibile a clienti). — ⚠️ SOSPESA giu-2026 (modulo disattivato e nascosto).
 11. (vedi §1) Costo non visibile a ogni pratica; è sempre 75 € (25 broker / 50 noi).
 12. (duplicato di 8) Accetta/rifiuta nel quadretto richiesta.
 
@@ -168,7 +168,7 @@ Riferimento: `docs/Modifiche Passaggio Veloce  - Foglio1.pdf`.
 | C-07 | Wallet agenzie (oggi inesistente, solo per affiliazioni) | nuovo `WalletAgenzia` + payout flow | FASE 13 + 5.2 | |
 | C-08 | Documenti CI venditore/acquirente nel wizard step 2 (non più step separato) | ridisegno wizard | FASE 3.3 / 3.4 | |
 | C-09 | Tech interpreta flag dal libretto via OCR/IA, niente selezione manuale | gating IA + wizard | FASE 3.2 / 3.3 | dipende da Document AI vero |
-| C-10 | Listino prezzi caricabile dal profilo agenzia (interno, non pubblico) | profilo agenzia + storage doc | FASE 8 (lean) | |
+| C-10 | Listino prezzi caricabile dal profilo agenzia (interno, non pubblico) — ⚠️ SOSPESA giu-2026 | profilo agenzia + storage doc | FASE 8 (lean) | |
 | C-11 | Admin dati venditore/acquirente in gestione pratiche e in escalation | UI `admin/pratiche`, `admin/escalation` (dati già in DB) | FASE 9 | |
 
 ### 3.4 P3 — Feature nuove (servono spec dedicate)

@@ -51,7 +51,7 @@ Il cliente finale paga +100 EUR all'agenzia per la corsia preferenziale (solo tr
 - Addebito automatico a firma o al giorno 20
 - 8 tipi di notifiche email (invio, accettazione, solleciti, firma, payout, auto-addebito)
 - Sistema valutazione agenzie (5 stelle post-firma, impatto su algoritmo distribuzione)
-- Raccolta volontaria listini prezzi (popup opzionale post-registrazione)
+- Raccolta volontaria listini prezzi (popup opzionale post-registrazione) — ⚠️ **SOSPESA giu-2026** (modulo disattivato e nascosto)
 - Pannello admin (utenti, pratiche, monitoring, osservatorio prezzi interno)
 
 ---

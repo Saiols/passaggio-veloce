@@ -1,3 +1,16 @@
+import { notFound } from 'next/navigation';
+
+// ============================================================================
+// LISTINI DISABILITATI (feature nascosta 2026-06-12)
+// Route /profilo/listino resa non invocabile: restituisce 404 (notFound).
+// Tutto il codice originale è conservato commentato qui sotto: per riattivare,
+// rimuovere lo stub seguente e questo wrapper di commento.
+// ============================================================================
+export default function ListinoProfiloPage() {
+  notFound();
+}
+
+/* ===== CODICE ORIGINALE (riattivare) =======================================
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
@@ -151,3 +164,4 @@ function BenchmarkRow({
     </div>
   );
 }
+============================================================================ */

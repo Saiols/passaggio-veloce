@@ -125,6 +125,7 @@ export default async function ProfiloPage() {
             </Card>
           )}
 
+          {/* LISTINI DISABILITATI (feature nascosta 2026-06-12) — card "Listino prezzi" agenzia, riattivare insieme a /profilo/listino:
           {company?.type === 'AGENZIA' && (
             <Card>
               <div className="flex items-start justify-between gap-3">
@@ -145,6 +146,7 @@ export default async function ProfiloPage() {
               </div>
             </Card>
           )}
+          */}
 
           <Card>
             <div className="flex items-start justify-between gap-3">

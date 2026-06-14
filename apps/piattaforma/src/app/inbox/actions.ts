@@ -83,7 +83,15 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
           },
         },
         agenziaAssegnata: {
-          select: { ragioneSociale: true, citta: true, email: true, telefono: true },
+          select: {
+            ragioneSociale: true,
+            indirizzo: true,
+            cap: true,
+            citta: true,
+            provincia: true,
+            email: true,
+            telefono: true,
+          },
         },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
@@ -104,7 +112,10 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
                 : full.veicoli[0].targa
               : null,
           agenziaNome: agenzia.ragioneSociale,
+          agenziaIndirizzo: agenzia.indirizzo,
+          agenziaCap: agenzia.cap,
           agenziaCitta: agenzia.citta,
+          agenziaProvincia: agenzia.provincia,
           agenziaEmail: agenzia.email,
           agenziaTelefono: agenzia.telefono,
           nomeBroker: brokerUser.nome,

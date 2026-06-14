@@ -93,7 +93,7 @@ lo stato della pratica e le notifiche.
 - Ricevi solo pratiche **complete e già verificate** dalla tua provincia.
 - Decidi quali **accettare** in base ai tuoi orari di apertura.
 - Lavori la pratica, fissi l'appuntamento per la firma e, a firma avvenuta, la flagghi come completata.
-- Il pagamento delle commissioni è automatizzato (a circa 20 giorni dalla firma).
+- L'addebito della fee di piattaforma è automatico e avviene **al momento della firma** (addebito immediato tramite mandato SEPA).
 - Un sistema di **ranking trasparente** basato sulle valutazioni reali influenza la distribuzione delle pratiche.
 
 ## Wallet e payout (broker)

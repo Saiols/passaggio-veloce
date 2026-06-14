@@ -7,6 +7,7 @@ import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +70,7 @@ export default async function DocumentoFiscaleDetailPage({
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;
   const negativa = doc.importoLordoCent < 0;
+  const isBrokerEmittente = doc.tipo === 'DOC_BROKER' && doc.emittenteCompanyId === cid;
 
   return (
     <AppShell session={session} activePath="/fatturazione">
@@ -126,6 +128,31 @@ export default async function DocumentoFiscaleDetailPage({
             </div>
           </dl>
         </Card>
+
+        {doc.tipo === 'DOC_BROKER' && (
+          <Card className="mb-5">
+            <h2 className="text-[14px] font-bold text-pv-navy-800">Trasmissione SDI</h2>
+            <p className="mt-1 text-[13px] text-pv-slate-600">
+              {doc.trasmessoSdiAt ? (
+                <>
+                  Trasmesso allo SDI il{' '}
+                  <span className="font-semibold text-pv-navy-900">{formatDate(doc.trasmessoSdiAt)}</span>.
+                </>
+              ) : (
+                'Non ancora trasmesso allo SDI.'
+              )}
+            </p>
+            {isBrokerEmittente && !doc.trasmessoSdiAt && (
+              <div className="mt-3">
+                <SegnaTrasmessoButton documentoId={doc.id} />
+                <p className="mt-2 text-[11px] text-pv-slate-500">
+                  Scarica il PDF e trasmetti il documento allo SDI tramite il tuo gestionale, poi
+                  segnalo qui come trasmesso.
+                </p>
+              </div>
+            )}
+          </Card>
+        )}
 
         <Card>
           <h2 className="text-[14px] font-bold text-pv-navy-800">Riferimenti</h2>

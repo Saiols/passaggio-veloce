@@ -12,6 +12,8 @@ import {
 } from '../actions';
 import { SegnalaProblemaButton } from './segnala-button';
 import { ValutazioneForm } from './valutazione-form';
+import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
+import { GuidaStepCard } from './guida-step-card';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
 export default async function PraticaDetailPage({
@@ -106,6 +108,14 @@ export default async function PraticaDetailPage({
   // economica). Per agenzie e broker, prima della firma non viene mostrato.
   const showFee = pratica.firmaAvvenutaAt !== null;
 
+  const ruolo: GuidaRuolo =
+    companyType === 'AGENZIA' ? 'AGENZIA' : companyType === 'DEALER' ? 'DEALER' : 'ALTRO';
+  const guida = guidaStep({
+    stato: pratica.stato as PraticaStato,
+    ruolo,
+    hasValutazione: !!pratica.valutazione,
+  });
+
   return (
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -147,28 +157,6 @@ export default async function PraticaDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canProcessata && (
-              <form action={processataBound}>
-                <SubmitButton
-                  size="sm"
-                  className="animate-pulse-soft"
-                  loadingLabel="Aggiornamento…"
-                >
-                  Pratica processata
-                </SubmitButton>
-              </form>
-            )}
-            {canFirma && (
-              <form action={firmaBound}>
-                <SubmitButton
-                  size="sm"
-                  className="animate-pulse-soft"
-                  loadingLabel="Aggiornamento…"
-                >
-                  Firma avvenuta
-                </SubmitButton>
-              </form>
-            )}
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && (
               <form action={annullaBound}>
@@ -187,6 +175,25 @@ export default async function PraticaDetailPage({
             )}
           </div>
         </header>
+
+        <GuidaStepCard
+          guida={guida}
+          cta={
+            guida.cta === 'processata' && canProcessata ? (
+              <form action={processataBound}>
+                <SubmitButton size="sm" className="animate-pulse-soft" loadingLabel="Aggiornamento…">
+                  Pratica processata
+                </SubmitButton>
+              </form>
+            ) : guida.cta === 'firma' && canFirma ? (
+              <form action={firmaBound}>
+                <SubmitButton size="sm" className="animate-pulse-soft" loadingLabel="Aggiornamento…">
+                  Firma avvenuta
+                </SubmitButton>
+              </form>
+            ) : null
+          }
+        />
 
         {pratica.flagSegnalata && pratica.segnalazioneStato === 'RICEVUTA' && (
           <div className="mb-5">

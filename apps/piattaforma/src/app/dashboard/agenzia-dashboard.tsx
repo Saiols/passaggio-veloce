@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { StatCard, StatusChip, type PraticaStato } from '@/components/ui';
+import { Alert, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatRelative, formatCurrencyCent } from '@/lib/format';
 import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
 
@@ -69,6 +69,30 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
           Pratiche da gestire
         </h1>
       </header>
+
+      {(inArrivo > 0 || inCorso > 0) && (
+        <div className="mb-6">
+          <Alert variant={inArrivo > 0 ? 'warning' : 'info'} title="Cosa fare ora">
+            {inArrivo > 0 && (
+              <>
+                <strong>{inArrivo}</strong> in attesa di risposta —{' '}
+                <Link href="/inbox" className="font-semibold underline">
+                  vai all&apos;inbox →
+                </Link>
+                {inCorso > 0 ? ' · ' : ''}
+              </>
+            )}
+            {inCorso > 0 && (
+              <>
+                <strong>{inCorso}</strong> accettate da completare —{' '}
+                <Link href="/pratiche" className="font-semibold underline">
+                  gestisci →
+                </Link>
+              </>
+            )}
+          </Alert>
+        </div>
+      )}
 
       {/* LISTINI DISABILITATI (feature nascosta 2026-06-12) — banner "Pubblica il tuo listino", riattivare insieme a /profilo/listino:
       {!listino && (

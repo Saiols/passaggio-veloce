@@ -12,22 +12,17 @@ import {
 } from '../actions';
 import { SegnalaProblemaButton } from './segnala-button';
 import { ValutazioneForm } from './valutazione-form';
+import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
+import { GuidaStepCard } from './guida-step-card';
+import { PraticaToasts } from './pratica-toasts';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
 export default async function PraticaDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
-    firmata?: string;
-    processata?: string;
-    annullata?: string;
-    error?: string;
-  }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -106,6 +101,14 @@ export default async function PraticaDetailPage({
   // economica). Per agenzie e broker, prima della firma non viene mostrato.
   const showFee = pratica.firmaAvvenutaAt !== null;
 
+  const ruolo: GuidaRuolo =
+    companyType === 'AGENZIA' ? 'AGENZIA' : companyType === 'DEALER' ? 'DEALER' : 'ALTRO';
+  const guida = guidaStep({
+    stato: pratica.stato as PraticaStato,
+    ruolo,
+    hasValutazione: !!pratica.valutazione,
+  });
+
   return (
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -147,28 +150,6 @@ export default async function PraticaDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canProcessata && (
-              <form action={processataBound}>
-                <SubmitButton
-                  size="sm"
-                  className="animate-pulse-soft"
-                  loadingLabel="Aggiornamento…"
-                >
-                  Pratica processata
-                </SubmitButton>
-              </form>
-            )}
-            {canFirma && (
-              <form action={firmaBound}>
-                <SubmitButton
-                  size="sm"
-                  className="animate-pulse-soft"
-                  loadingLabel="Aggiornamento…"
-                >
-                  Firma avvenuta
-                </SubmitButton>
-              </form>
-            )}
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && (
               <form action={annullaBound}>
@@ -188,6 +169,25 @@ export default async function PraticaDetailPage({
           </div>
         </header>
 
+        <GuidaStepCard
+          guida={guida}
+          cta={
+            guida.cta === 'processata' && canProcessata ? (
+              <form action={processataBound}>
+                <SubmitButton size="sm" className="animate-pulse-soft" loadingLabel="Aggiornamento…">
+                  Pratica processata
+                </SubmitButton>
+              </form>
+            ) : guida.cta === 'firma' && canFirma ? (
+              <form action={firmaBound}>
+                <SubmitButton size="sm" className="animate-pulse-soft" loadingLabel="Aggiornamento…">
+                  Firma avvenuta
+                </SubmitButton>
+              </form>
+            ) : null
+          }
+        />
+
         {pratica.flagSegnalata && pratica.segnalazioneStato === 'RICEVUTA' && (
           <div className="mb-5">
             <Alert variant="warning" title="Segnalazione in verifica">
@@ -197,32 +197,7 @@ export default async function PraticaDetailPage({
             </Alert>
           </div>
         )}
-        {sp.firmata && (
-          <div className="mb-5">
-            <Alert variant="success" title="Firma registrata">
-              Credito accreditato al broker, auto-addebito programmato.
-            </Alert>
-          </div>
-        )}
-        {sp.processata && (
-          <div className="mb-5">
-            <Alert variant="success" title="Pratica processata">
-              Il broker è stato avvisato. Manca solo la firma del cliente.
-            </Alert>
-          </div>
-        )}
-        {sp.annullata && (
-          <div className="mb-5">
-            <Alert variant="info" title="Pratica annullata">
-              Tutte le assegnazioni pending sono state chiuse.
-            </Alert>
-          </div>
-        )}
-        {sp.error && (
-          <div className="mb-5">
-            <Alert variant="error">{sp.error}</Alert>
-          </div>
-        )}
+        <PraticaToasts />
 
         {canValutare && pratica.agenziaAssegnata && (
           <div className="mb-5">

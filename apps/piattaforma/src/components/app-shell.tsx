@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { cn } from '@/components/ui';
+import { cn, ToastProvider } from '@/components/ui';
 import { NavBadge } from '@/components/nav-badge';
 import { logoutAction } from '@/app/(auth)/actions';
 import { DemoBanner } from '@/components/demo-banner';
@@ -160,7 +160,9 @@ export function AppShell({
       </header>
       </div>
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1">
+        <ToastProvider>{children}</ToastProvider>
+      </main>
 
       <footer className="border-t border-pv-slate-200 bg-white">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-5 py-4 text-[12px] text-pv-slate-500 sm:flex-row sm:items-center sm:px-6">

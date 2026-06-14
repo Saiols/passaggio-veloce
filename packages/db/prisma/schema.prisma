@@ -1119,8 +1119,10 @@ model DocumentoFiscale {
 
   emittenteCompanyId String?  @db.Uuid
   emittenteCompany   Company? @relation("DocumentiEmessi", fields: [emittenteCompanyId], references: [id])
-  destinatarioCompanyId String  @db.Uuid
-  destinatarioCompany   Company @relation("DocumentiRicevuti", fields: [destinatarioCompanyId], references: [id])
+  // Nullable: PV non è una Company (per i DOC_BROKER il destinatario è PV) → si
+  // usa lo snapshot `datiDestinatario`. Per FATTURA_PV è valorizzato (agenzia).
+  destinatarioCompanyId String?  @db.Uuid
+  destinatarioCompany   Company? @relation("DocumentiRicevuti", fields: [destinatarioCompanyId], references: [id])
 
   // Snapshot immutabili dei dati fiscali al momento dell'emissione.
   datiEmittente    Json

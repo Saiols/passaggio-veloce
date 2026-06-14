@@ -402,7 +402,9 @@ async function nextCodicePratica(): Promise<string> {
   return `PV-${CURRENT_YEAR}-${n}`;
 }
 
-export async function submitNuovaPraticaAction(formData: FormData): Promise<void> {
+export async function submitNuovaPraticaAction(
+  formData: FormData,
+): Promise<{ ok: true; id: string }> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.companyType !== 'DEALER') {
@@ -1045,5 +1047,8 @@ export async function submitNuovaPraticaAction(formData: FormData): Promise<void
 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');
-  redirect(`/pratiche/${pratica.id}`);
+  // Navigazione lato client nel wizard (router.push), non redirect qui: il
+  // redirect da Server Action causava il fallimento del fetch RSC della
+  // soft-navigation ("This page couldn't load"), risolto solo al reload.
+  return { ok: true as const, id: pratica.id };
 }

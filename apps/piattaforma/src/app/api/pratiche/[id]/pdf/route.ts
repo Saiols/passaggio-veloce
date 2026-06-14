@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
 import { streamToBuffer } from '@/lib/documenti/zip';
+import { appendToFilename } from '@/lib/documenti/filename';
 import { buildPraticaPdf, type PdfEntry } from '@/lib/documenti/pdf';
 
 export const runtime = 'nodejs';
@@ -25,6 +26,7 @@ export async function GET(
       codicePratica: true,
       brokerId: true,
       agenziaAssegnataId: true,
+      veicoli: { select: { targa: true } },
       documenti: {
         where: { deletedAt: null },
         select: {
@@ -82,7 +84,13 @@ export async function GET(
     return NextResponse.json({ error: 'no_files' }, { status: 404 });
   }
 
-  const filename = `${pratica.codicePratica ?? pratica.id}.pdf`;
+  // Targa solo se la pratica ha un unico veicolo (il PDF unisce tutti i doc).
+  const bundleTarga =
+    pratica.veicoli.length === 1 ? (pratica.veicoli[0]?.targa ?? null) : null;
+  const filename = appendToFilename(
+    `${pratica.codicePratica ?? pratica.id}.pdf`,
+    bundleTarga,
+  );
   const headers = new Headers();
   headers.set('Content-Type', 'application/pdf');
   headers.set('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);

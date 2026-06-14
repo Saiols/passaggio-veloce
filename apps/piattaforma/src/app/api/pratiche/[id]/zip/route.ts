@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
 import { buildPraticaZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
+import { appendToFilename } from '@/lib/documenti/filename';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ export async function GET(
       codicePratica: true,
       brokerId: true,
       agenziaAssegnataId: true,
+      veicoli: { select: { targa: true } },
       documenti: {
         where: { deletedAt: null },
         select: {
@@ -32,6 +34,7 @@ export async function GET(
           owner: true,
           storageKey: true,
           originalFilename: true,
+          veicolo: { select: { targa: true } },
         },
       },
     },
@@ -56,6 +59,11 @@ export async function GET(
     return NextResponse.json({ error: 'no_documents' }, { status: 404 });
   }
 
+  // Targa dell'unico veicolo della pratica (fallback per i doc non legati a un
+  // veicolo specifico); null se la pratica ha più veicoli.
+  const bundleTarga =
+    pratica.veicoli.length === 1 ? (pratica.veicoli[0]?.targa ?? null) : null;
+
   const storage = getStorage();
   const entries: ZipEntry[] = [];
   for (let i = 0; i < pratica.documenti.length; i++) {
@@ -63,7 +71,11 @@ export async function GET(
     try {
       const file = await storage.get(doc.storageKey);
       const buffer = await streamToBuffer(file.stream);
-      entries.push({ name: zipEntryName(doc, i), buffer });
+      const targa = doc.veicolo?.targa ?? bundleTarga;
+      entries.push({
+        name: zipEntryName(doc, i, { codicePratica: pratica.codicePratica, targa }),
+        buffer,
+      });
     } catch (err) {
       if (err instanceof StorageNotFoundError) continue;
       throw err;
@@ -75,7 +87,10 @@ export async function GET(
   }
 
   const zipBuffer = await buildPraticaZip(entries);
-  const filename = `${pratica.codicePratica ?? pratica.id}.zip`;
+  const filename = appendToFilename(
+    `${pratica.codicePratica ?? pratica.id}.zip`,
+    bundleTarga,
+  );
   const headers = new Headers();
   headers.set('Content-Type', 'application/zip');
   headers.set('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);

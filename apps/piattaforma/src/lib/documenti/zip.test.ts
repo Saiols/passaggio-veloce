@@ -23,6 +23,26 @@ describe('zipEntryName', () => {
       zipEntryName({ tipo: 'LIBRETTO_CIRCOLAZIONE', owner: null, originalFilename: 'libretto' }, 2),
     ).toBe('3-LIBRETTO_CIRCOLAZIONE.bin');
   });
+
+  it('aggiunge numero pratica e targa quando forniti', () => {
+    expect(
+      zipEntryName(
+        { tipo: 'CI_FRONTE', owner: 'VENDITORE', originalFilename: 'scan.jpg' },
+        0,
+        { codicePratica: 'PV-2026-00042', targa: 'AB123CD' },
+      ),
+    ).toBe('1-CI_FRONTE-VENDITORE - PV-2026-00042 - AB123CD.jpg');
+  });
+
+  it('omette la targa se assente', () => {
+    expect(
+      zipEntryName(
+        { tipo: 'CI_FRONTE', owner: null, originalFilename: 'scan.jpg' },
+        0,
+        { codicePratica: 'PV-2026-00042', targa: null },
+      ),
+    ).toBe('1-CI_FRONTE - PV-2026-00042.jpg');
+  });
 });
 
 describe('buildPraticaZip', () => {

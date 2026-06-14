@@ -5,9 +5,21 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
+import { computeFees } from '@/lib/pricing';
 import { CopyLinkButton } from './copy-link-button';
 import { getRendimento } from '@/app/wallet/rendimento';
 import { RendimentoChart } from '@/app/wallet/rendimento-chart';
+
+// Righe della tabella commissioni affiliazione, una per tipo pratica gestito.
+// Gli importi sono DERIVATI da computeFees (lib/pricing) così restano allineati
+// ai prezzi reali: costo affiliazione per veicolo, diviso 50/50 se la pratica
+// ha due referral (broker + agenzia).
+const COMMISSIONI_TABELLA = [
+  { label: 'Passaggio di proprietà semplice', tipo: 'SEMPLICE', multiplo: false },
+  { label: 'Passaggio di proprietà semplice multiplo', tipo: 'SEMPLICE', multiplo: true },
+  { label: 'Minivoltura singola', tipo: 'MINIVOLTURA', multiplo: false },
+  { label: 'Minivoltura multipla', tipo: 'MINIVOLTURA', multiplo: true },
+] as const;
 
 export default async function AffiliazionePage() {
   const session = await auth();
@@ -211,22 +223,34 @@ export default async function AffiliazionePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
-              <tr>
-                <td className="py-2 font-semibold text-pv-navy-800">
-                  Passaggio di proprietà privato
-                </td>
-                <td className="py-2">10,00 €</td>
-                <td className="py-2">5,00 €</td>
-              </tr>
-              <tr>
-                <td className="py-2 font-semibold text-pv-navy-800">
-                  Minivolture multiple
-                </td>
-                <td className="py-2">5,00 € × N veicoli</td>
-                <td className="py-2">2,50 € × N veicoli</td>
-              </tr>
+              {COMMISSIONI_TABELLA.map((r) => {
+                const base = computeFees({
+                  tipo: r.tipo,
+                  numeroVeicoli: 1,
+                }).costoAffiliazioneTotaleCent;
+                const suffix = r.multiplo ? ' × N veicoli' : '';
+                return (
+                  <tr key={r.label}>
+                    <td className="py-2 font-semibold text-pv-navy-800">
+                      {r.label}
+                    </td>
+                    <td className="py-2">
+                      {formatCurrencyCent(base)}
+                      {suffix}
+                    </td>
+                    <td className="py-2">
+                      {formatCurrencyCent(Math.floor(base / 2))}
+                      {suffix}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          <p className="mt-3 text-[11.5px] text-pv-slate-500">
+            La commissione è per veicolo; se sulla stessa pratica hai referral sia
+            sul broker sia sull&apos;agenzia, l&apos;importo è diviso 50/50.
+          </p>
         </Card>
 
         <Card className="mt-6">

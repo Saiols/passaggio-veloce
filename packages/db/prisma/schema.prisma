@@ -400,6 +400,14 @@ model Company {
   // futuro, per rilevare visure scadute lato admin.
   visuraCameraleData DateTime? @db.Date
 
+  // Fatturazione (FT-A)
+  regimeFiscale         RegimeFiscale @default(ORDINARIO)
+  // Registro progressivo dei documenti emessi PER CONTO di questo broker (DOC_BROKER)
+  numeratoreFiscaleAnno Int?
+  numeratoreFiscaleNum  Int?
+  documentiEmessi   DocumentoFiscale[] @relation("DocumentiEmessi")
+  documentiRicevuti DocumentoFiscale[] @relation("DocumentiRicevuti")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -622,6 +630,7 @@ model Pratica {
   transazioni             TransazioneWallet[]
   feeAddebiti             FeeAddebito[]
   valutazione             Valutazione?
+  documentiFiscali        DocumentoFiscale[]
   commissioniAffiliazione CommissioneAffiliazione[]
   dichiarazioniBroker     BrokerDichiarazione[]
 
@@ -912,6 +921,7 @@ model Payout {
   providerRef          String? // riferimento Stripe Payout (post-integrazione)
 
   transazioni TransazioneWallet[]
+  documentoFiscale DocumentoFiscale?
 
   @@index([walletId, stato])
   @@map("payouts")
@@ -1062,6 +1072,96 @@ model Valutazione {
 
   @@index([agenziaId])
   @@map("valutazioni")
+}
+
+// ============================================================
+// MODELS — fatturazione (FT-A)
+// ============================================================
+
+enum RegimeFiscale {
+  ORDINARIO
+  FORFETTARIO
+  PRIVATO
+}
+
+enum DocumentoFiscaleTipo {
+  FATTURA_PV
+  DOC_BROKER
+  PENALE_BROKER
+  NOTA_VARIAZIONE
+}
+
+enum FatturaPaTipo {
+  TD01
+  TD06
+  TD04
+  TD05
+}
+
+enum DocumentoFiscaleStatoPagamento {
+  IN_ATTESA
+  PAGATA
+  SCADUTA
+  STORNATA
+}
+
+model DocumentoFiscale {
+  id String @id @default(uuid()) @db.Uuid
+
+  tipo          DocumentoFiscaleTipo
+  fatturaPaTipo FatturaPaTipo?
+
+  // Riferimenti: FATTURA_PV → pratica; DOC_BROKER → payout; NOTA_VARIAZIONE → originale
+  praticaId String?  @db.Uuid
+  pratica   Pratica? @relation(fields: [praticaId], references: [id])
+  payoutId  String?  @unique @db.Uuid
+  payout    Payout?  @relation(fields: [payoutId], references: [id])
+
+  emittenteCompanyId String?  @db.Uuid
+  emittenteCompany   Company? @relation("DocumentiEmessi", fields: [emittenteCompanyId], references: [id])
+  // Nullable: PV non è una Company (per i DOC_BROKER il destinatario è PV) → si
+  // usa lo snapshot `datiDestinatario`. Per FATTURA_PV è valorizzato (agenzia).
+  destinatarioCompanyId String?  @db.Uuid
+  destinatarioCompany   Company? @relation("DocumentiRicevuti", fields: [destinatarioCompanyId], references: [id])
+
+  // Snapshot immutabili dei dati fiscali al momento dell'emissione.
+  datiEmittente    Json
+  datiDestinatario Json
+
+  numeroProgressivo Int
+  anno              Int
+
+  importoLordoCent    Int // negativo per NOTA_VARIAZIONE (TD04)
+  imponibileCent      Int?
+  ivaCent             Int?
+  aliquotaIvaPct      Int?
+  ritenutaAccontoCent Int?
+
+  statoPagamento DocumentoFiscaleStatoPagamento @default(IN_ATTESA)
+  trasmessoSdiAt DateTime?
+  trasmessoSdiBy String?  @db.Uuid
+
+  pdfStorageKey String?
+  xmlStorageKey String?
+  pdfHash       String?
+
+  feeAddebitoId       String? @db.Uuid
+  transazioneWalletId String? @unique @db.Uuid
+
+  notaVariazionePerId  String?            @db.Uuid
+  notaVariazionePer    DocumentoFiscale?  @relation("NoteVariazione", fields: [notaVariazionePerId], references: [id])
+  notaVariazioneFiglie DocumentoFiscale[] @relation("NoteVariazione")
+
+  emessoAt       DateTime  @default(now())
+  inviatoEmailAt DateTime?
+
+  @@unique([emittenteCompanyId, anno, numeroProgressivo, tipo])
+  @@index([praticaId])
+  @@index([payoutId])
+  @@index([destinatarioCompanyId, statoPagamento])
+  @@index([emittenteCompanyId, anno])
+  @@index([emessoAt])
+  @@map("documenti_fiscali")
 }
 
 // ============================================================

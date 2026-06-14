@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { getPayment } from '@/lib/providers/payment';
 import { isPaymentLive } from './payment-live';
+import { createDocBroker } from '@/lib/fatturazione/engine';
 
 const BATCH_SIZE = 20;
 
@@ -88,6 +89,8 @@ export async function processPayouts(): Promise<ProcessPayoutsResult> {
         });
       });
       succeeded++;
+      // FT-A: documento broker (conto terzi) aggregato al payout (best-effort).
+      await createDocBroker({ payoutId: payout.id }).catch(() => undefined);
     } else {
       await prisma.payout.update({
         where: { id: payout.id },

@@ -15,6 +15,7 @@ import {
   notifyPayoutThresholdCrossed,
 } from '@/lib/affiliazione/notifications';
 import { onPraticaFirmata } from '@/lib/crm/sync';
+import { createFatturaPv } from '@/lib/fatturazione/engine';
 import { env } from '@/env';
 
 /**
@@ -164,6 +165,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   const agenziaId = session.user.companyId!;
 
   let accreditiResult: AccreditoEseguito[] = [];
+  let feeAgenziaCentFattura = 0;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -197,6 +199,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       const now = new Date();
       // Addebito istantaneo: dovuto subito (niente programmazione nel futuro).
       const autoAddebitoAt = now;
+      feeAgenziaCentFattura = pratica.feeAgenziaCent;
 
       await tx.pratica.update({
         where: { id: praticaId },
@@ -265,6 +268,13 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   // CRM-G: avanzamento stato CRM del broker (S7→S8 prima volta, S8→S9
   // ricorrente). Best-effort, non blocca il flusso firma.
   void onPraticaFirmata(praticaId);
+
+  // FT-A: genera la fattura PV verso l'agenzia (best-effort, non blocca la firma).
+  void createFatturaPv({
+    praticaId,
+    agenziaId,
+    feeAgenziaCent: feeAgenziaCentFattura,
+  }).catch(() => undefined);
 
   // AF-N: notifiche affiliazione post-firma (N23 prima pratica del referral,
   // N24 soglia payout attraversata). Best-effort, non blocca il flusso.

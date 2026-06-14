@@ -80,15 +80,23 @@ export default async function DocumentoFiscaleDetailPage({
           ← Tutte le fatture
         </Link>
 
-        <header className="mb-6">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            {labelTipoDocumento(doc.tipo)}
-            {doc.fatturaPaTipo ? ` · ${doc.fatturaPaTipo}` : ''}
-          </p>
-          <h1 className="mt-1 text-[26px] font-extrabold tracking-tight text-pv-navy-900">
-            N° {numeroDocumento(doc)}
-          </h1>
-          <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              {labelTipoDocumento(doc.tipo)}
+              {doc.fatturaPaTipo ? ` · ${doc.fatturaPaTipo}` : ''}
+            </p>
+            <h1 className="mt-1 text-[26px] font-extrabold tracking-tight text-pv-navy-900">
+              N° {numeroDocumento(doc)}
+            </h1>
+            <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
+          </div>
+          <a
+            href={`/api/fatturazione/${doc.id}/pdf`}
+            className="shrink-0 rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+          >
+            Scarica PDF
+          </a>
         </header>
 
         <Card className="mb-5">

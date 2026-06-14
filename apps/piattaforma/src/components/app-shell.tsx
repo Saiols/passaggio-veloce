@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { cn } from '@/components/ui';
+import { NavBadge } from '@/components/nav-badge';
 import { logoutAction } from '@/app/(auth)/actions';
 import { DemoBanner } from '@/components/demo-banner';
 import { AdminShell } from '@/components/admin/admin-shell';
@@ -149,6 +150,7 @@ export function AppShell({
                     )}
                   >
                     {l.label}
+                    {l.href === '/inbox' && <NavBadge />}
                   </Link>
                 </li>
               );

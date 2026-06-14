@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui';
+import { PENALI } from '@/lib/penali/config';
 
 /**
  * Popup di responsabilità broker (Sistema Penali Broker — SP-A release 2026-05).
@@ -99,7 +100,10 @@ export function DichiarazionePopup({
         <div className="mb-5 rounded-[12px] border border-pv-amber-500/40 bg-pv-amber-50 px-4 py-3 text-[12.5px] text-pv-navy-800">
           In caso di pratica inviata con veicolo soggetto a fermo o ipoteca,
           la pratica verrà annullata e ti verrà addebitata una penale di{' '}
-          <strong>€100,00 lordi</strong> dal tuo wallet.
+          <strong>
+            €{(PENALI.PENALE_BROKER_DEFAULT_CENT / 100).toFixed(2).replace('.', ',')} lordi
+          </strong>{' '}
+          dal tuo wallet.
         </div>
 
         <label className="mb-5 flex cursor-pointer items-start gap-3 rounded-[12px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-4 py-3 transition-colors hover:bg-pv-slate-100">

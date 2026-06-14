@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Alert, Button, Checkbox, Field, Input, NumberInput, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
@@ -395,6 +396,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   }, [veicoli]);
 
   const [submitting, startSubmit] = useTransition();
+  const router = useRouter();
 
   // Sistema Penali Broker — SP-A: popup di responsabilità mostrato come step
   // finale prima del submit. Il broker deve spuntare il checkbox prima di
@@ -696,7 +698,8 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     fd.append('dichiarazionePopupVersion', PENALI.POPUP_VERSION);
 
     startSubmit(async () => {
-      await submitNuovaPraticaAction(fd);
+      const res = await submitNuovaPraticaAction(fd);
+      if (res?.ok) router.push(`/pratiche/${res.id}`);
     });
   };
 

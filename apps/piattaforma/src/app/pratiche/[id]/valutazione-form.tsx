@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { Alert, Button, Card } from '@/components/ui';
+import { useRouter } from 'next/navigation';
+import { Alert, Button, Card, useToast } from '@/components/ui';
 import { submitValutazioneAction } from '../actions';
 
 type Props = {
@@ -15,6 +16,8 @@ export function ValutazioneForm({ praticaId, agenziaNome }: Props) {
   const [note, setNote] = useState('');
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const toast = useToast();
 
   const display = hover || stelle;
 
@@ -30,7 +33,12 @@ export function ValutazioneForm({ praticaId, agenziaNome }: Props) {
 
     startTransition(async () => {
       const result = await submitValutazioneAction(fd);
-      if (!result.ok) setError(result.error);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      toast('Valutazione inviata', 'success');
+      router.refresh();
     });
   };
 

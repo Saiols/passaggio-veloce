@@ -1,6 +1,7 @@
 export { Button } from './button';
 export { SubmitButton } from './submit-button';
 export { InlineSpinner } from './inline-spinner';
+export { ToastProvider, useToast } from './toast';
 export { Input } from './input';
 export { PasswordInput } from './password-input';
 export {

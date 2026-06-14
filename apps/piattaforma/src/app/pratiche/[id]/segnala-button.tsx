@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert, Button } from '@/components/ui';
+import { Alert, Button, useToast } from '@/components/ui';
 import {
   segnalaPraticaAction,
   type SegnalazioneTipo,
@@ -22,6 +22,7 @@ const TIPI: { value: SegnalazioneTipo; label: string }[] = [
  */
 export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [tipo, setTipo] = useState<SegnalazioneTipo>('FERMO_AMMINISTRATIVO');
   const [nota, setNota] = useState('');
@@ -54,6 +55,7 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
       }
       setOpen(false);
       setNota('');
+      toast('Segnalazione inviata', 'success');
       router.refresh();
     });
   };

@@ -14,22 +14,15 @@ import { SegnalaProblemaButton } from './segnala-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
+import { PraticaToasts } from './pratica-toasts';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
 export default async function PraticaDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
-    firmata?: string;
-    processata?: string;
-    annullata?: string;
-    error?: string;
-  }>;
 }) {
   const { id } = await params;
-  const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
 
@@ -204,32 +197,7 @@ export default async function PraticaDetailPage({
             </Alert>
           </div>
         )}
-        {sp.firmata && (
-          <div className="mb-5">
-            <Alert variant="success" title="Firma registrata">
-              Credito accreditato al broker, auto-addebito programmato.
-            </Alert>
-          </div>
-        )}
-        {sp.processata && (
-          <div className="mb-5">
-            <Alert variant="success" title="Pratica processata">
-              Il broker è stato avvisato. Manca solo la firma del cliente.
-            </Alert>
-          </div>
-        )}
-        {sp.annullata && (
-          <div className="mb-5">
-            <Alert variant="info" title="Pratica annullata">
-              Tutte le assegnazioni pending sono state chiuse.
-            </Alert>
-          </div>
-        )}
-        {sp.error && (
-          <div className="mb-5">
-            <Alert variant="error">{sp.error}</Alert>
-          </div>
-        )}
+        <PraticaToasts />
 
         {canValutare && pratica.agenziaAssegnata && (
           <div className="mb-5">

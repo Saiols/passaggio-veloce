@@ -23,7 +23,10 @@ export type N2BrokerAccettataPayload = {
   codicePratica: string;
   targa: string | null;
   agenziaNome: string;
+  agenziaIndirizzo: string | null;
+  agenziaCap: string | null;
   agenziaCitta: string | null;
+  agenziaProvincia: string | null;
   agenziaEmail: string;
   agenziaTelefono: string | null;
   nomeBroker: string;
@@ -199,10 +202,20 @@ export function tplN1BrokerInvio(p: N1BrokerInvioPayload): NotificaContent {
 
 export function tplN2BrokerAccettata(p: N2BrokerAccettataPayload): NotificaContent {
   const subject = `Pratica ${p.codicePratica} accettata da ${p.agenziaNome}`;
+  // Riga città: "CAP Città (PROV)" senza parti vuote.
+  const cittaRiga = [
+    p.agenziaCap,
+    p.agenziaCitta,
+    p.agenziaProvincia ? `(${p.agenziaProvincia})` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const indirizzoCompleto = [p.agenziaIndirizzo, cittaRiga].filter(Boolean).join(', ');
   const text =
     `Ciao ${p.nomeBroker},\n` +
     `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} è stata accettata ` +
     `da ${p.agenziaNome}${p.agenziaCitta ? ` (${p.agenziaCitta})` : ''}.\n` +
+    `${indirizzoCompleto ? `Indirizzo: ${indirizzoCompleto}\n` : ''}` +
     `Contatti: ${p.agenziaEmail}${p.agenziaTelefono ? ` · ${p.agenziaTelefono}` : ''}`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Pratica accettata 🎉</h1>
@@ -213,7 +226,8 @@ export function tplN2BrokerAccettata(p: N2BrokerAccettataPayload): NotificaConte
     </p>
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
       <strong>Contatti agenzia</strong><br>
-      ${p.agenziaCitta ? `${p.agenziaCitta}<br>` : ''}
+      ${p.agenziaIndirizzo ? `${p.agenziaIndirizzo}<br>` : ''}
+      ${cittaRiga ? `${cittaRiga}<br>` : ''}
       Email: <a href="mailto:${p.agenziaEmail}" style="color:#0054a6">${p.agenziaEmail}</a>
       ${p.agenziaTelefono ? `<br>Tel: ${p.agenziaTelefono}` : ''}
     </div>

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, type Prisma, type DocumentoFiscaleTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Card } from '@/components/ui';
+import { Alert, Card, StatCard } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
@@ -58,6 +58,19 @@ export default async function AdminFatturazionePage({
     include: { pratica: { select: { id: true, codicePratica: true } } },
   });
 
+  // KPI (rispetta i filtri correnti). Dati documentali; la P&L definitiva è del commercialista.
+  const kpi = await prisma.documentoFiscale.groupBy({
+    by: ['tipo'],
+    where,
+    _count: { _all: true },
+    _sum: { imponibileCent: true, ivaCent: true, importoLordoCent: true },
+  });
+  const byTipo = (t: DocumentoFiscaleTipo) => kpi.find((k) => k.tipo === t);
+  const fpv = byTipo('FATTURA_PV');
+  const dbk = byTipo('DOC_BROKER');
+  const ncr = byTipo('NOTA_VARIAZIONE');
+  const exportQs = new URLSearchParams({ ...(qTrim ? { q: qTrim } : {}), ...(tipoFilter ? { tipo: tipoFilter } : {}) }).toString();
+
   return (
     <AppShell session={session} activePath="/admin/fatturazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -67,6 +80,40 @@ export default async function AdminFatturazionePage({
             Fatturazione
           </h1>
         </header>
+
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatCard
+            label="Fatture PV"
+            value={fpv?._count._all ?? 0}
+            hint={`Tot ${formatCurrencyCent((fpv?._sum.imponibileCent ?? 0) + (fpv?._sum.ivaCent ?? 0))} · imp. ${formatCurrencyCent(fpv?._sum.imponibileCent ?? 0)}`}
+            accent="navy"
+          />
+          <StatCard
+            label="Documenti broker"
+            value={dbk?._count._all ?? 0}
+            hint={formatCurrencyCent(dbk?._sum.importoLordoCent ?? 0)}
+            accent="slate"
+          />
+          <StatCard
+            label="Note di credito"
+            value={ncr?._count._all ?? 0}
+            hint={formatCurrencyCent(ncr?._sum.importoLordoCent ?? 0)}
+            accent="red"
+          />
+        </div>
+        <p className="mb-4 text-[11px] text-pv-slate-500">
+          Aggregati documentali (rispettano i filtri). La separazione contabile definitiva è a
+          cura del commercialista.
+        </p>
+
+        <div className="mb-3 flex justify-end">
+          <a
+            href={`/api/admin/fatturazione/export${exportQs ? `?${exportQs}` : ''}`}
+            className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+          >
+            Esporta CSV
+          </a>
+        </div>
 
         <form className="mb-5 flex flex-wrap gap-2" action="/admin/fatturazione" method="get">
           <input

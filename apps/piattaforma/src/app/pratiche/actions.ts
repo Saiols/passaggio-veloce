@@ -17,16 +17,6 @@ import {
 import { onPraticaFirmata } from '@/lib/crm/sync';
 import { env } from '@/env';
 
-const AUTO_ADDEBITO_DAYS = 20;
-const AUTO_ADDEBITO_DEMO_MINUTES = 5;
-
-function computeAutoAddebitoAt(now: Date): Date {
-  if (env.DEMO_MODE) {
-    return new Date(now.getTime() + AUTO_ADDEBITO_DEMO_MINUTES * 60_000);
-  }
-  return new Date(now.getTime() + AUTO_ADDEBITO_DAYS * 86_400_000);
-}
-
 /**
  * AF-N: notifiche affiliazione post-firma. Per ogni accredit eseguito:
  *  - N24 al referente se il saldo wallet ha attraversato la soglia payout
@@ -205,7 +195,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       }
 
       const now = new Date();
-      const autoAddebitoAt = computeAutoAddebitoAt(now);
+      // Addebito istantaneo: dovuto subito (niente programmazione nel futuro).
+      const autoAddebitoAt = now;
 
       await tx.pratica.update({
         where: { id: praticaId },
@@ -239,9 +230,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         });
       }
 
-      // Fee addebito schedulato (Stripe reale in Fase 5)
-      // scheduledAt = autoAddebitoAt: il job process-fee-scheduled processa solo
-      // FeeAddebito con scheduledAt <= now, rispettando il countdown 5min DEMO / 20gg prod.
+      // Fee addebito istantaneo (Stripe reale in Fase 5): scheduledAt = now, così
+      // il job process-fee-scheduled lo prende al primo giro, senza attese.
       if (pratica.feeAgenziaCent > 0) {
         await tx.feeAddebito.create({
           data: {

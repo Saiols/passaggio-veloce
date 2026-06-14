@@ -7,6 +7,7 @@ import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +70,7 @@ export default async function DocumentoFiscaleDetailPage({
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;
   const negativa = doc.importoLordoCent < 0;
+  const isBrokerEmittente = doc.tipo === 'DOC_BROKER' && doc.emittenteCompanyId === cid;
 
   return (
     <AppShell session={session} activePath="/fatturazione">
@@ -80,15 +82,23 @@ export default async function DocumentoFiscaleDetailPage({
           ← Tutte le fatture
         </Link>
 
-        <header className="mb-6">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            {labelTipoDocumento(doc.tipo)}
-            {doc.fatturaPaTipo ? ` · ${doc.fatturaPaTipo}` : ''}
-          </p>
-          <h1 className="mt-1 text-[26px] font-extrabold tracking-tight text-pv-navy-900">
-            N° {numeroDocumento(doc)}
-          </h1>
-          <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              {labelTipoDocumento(doc.tipo)}
+              {doc.fatturaPaTipo ? ` · ${doc.fatturaPaTipo}` : ''}
+            </p>
+            <h1 className="mt-1 text-[26px] font-extrabold tracking-tight text-pv-navy-900">
+              N° {numeroDocumento(doc)}
+            </h1>
+            <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
+          </div>
+          <a
+            href={`/api/fatturazione/${doc.id}/pdf`}
+            className="shrink-0 rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+          >
+            Scarica PDF
+          </a>
         </header>
 
         <Card className="mb-5">
@@ -118,6 +128,31 @@ export default async function DocumentoFiscaleDetailPage({
             </div>
           </dl>
         </Card>
+
+        {doc.tipo === 'DOC_BROKER' && (
+          <Card className="mb-5">
+            <h2 className="text-[14px] font-bold text-pv-navy-800">Trasmissione SDI</h2>
+            <p className="mt-1 text-[13px] text-pv-slate-600">
+              {doc.trasmessoSdiAt ? (
+                <>
+                  Trasmesso allo SDI il{' '}
+                  <span className="font-semibold text-pv-navy-900">{formatDate(doc.trasmessoSdiAt)}</span>.
+                </>
+              ) : (
+                'Non ancora trasmesso allo SDI.'
+              )}
+            </p>
+            {isBrokerEmittente && !doc.trasmessoSdiAt && (
+              <div className="mt-3">
+                <SegnaTrasmessoButton documentoId={doc.id} />
+                <p className="mt-2 text-[11px] text-pv-slate-500">
+                  Scarica il PDF e trasmetti il documento allo SDI tramite il tuo gestionale, poi
+                  segnalo qui come trasmesso.
+                </p>
+              </div>
+            )}
+          </Card>
+        )}
 
         <Card>
           <h2 className="text-[14px] font-bold text-pv-navy-800">Riferimenti</h2>

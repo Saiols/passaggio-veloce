@@ -14,6 +14,7 @@ import { SegnalaProblemaButton } from './segnala-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
+import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import { PraticaToasts } from './pratica-toasts';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
@@ -51,6 +52,10 @@ export default async function PraticaDetailPage({
         orderBy: { createdAt: 'asc' },
       },
       valutazione: true,
+      documentiFiscali: {
+        select: { id: true, tipo: true, numeroProgressivo: true, anno: true, importoLordoCent: true },
+        orderBy: { emessoAt: 'desc' },
+      },
       veicoli: { orderBy: { ordine: 'asc' } },
       venditori: { orderBy: { ordine: 'asc' } },
     },
@@ -198,6 +203,29 @@ export default async function PraticaDetailPage({
           </div>
         )}
         <PraticaToasts />
+
+        {pratica.documentiFiscali.length > 0 && (
+          <Card className="mb-5">
+            <h2 className="text-[15px] font-bold text-pv-navy-800">Documenti fiscali</h2>
+            <ul className="mt-2 divide-y divide-pv-slate-100 text-[13px]">
+              {pratica.documentiFiscali.map((d) => (
+                <li key={d.id} className="flex items-center justify-between py-2">
+                  <Link
+                    href={`/fatturazione/${d.id}`}
+                    className="font-semibold text-pv-navy-600 hover:underline"
+                  >
+                    {labelTipoDocumento(d.tipo)} · N° {numeroDocumento(d)}
+                  </Link>
+                  <span
+                    className={d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}
+                  >
+                    {formatCurrencyCent(d.importoLordoCent)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {canValutare && pratica.agenziaAssegnata && (
           <div className="mb-5">

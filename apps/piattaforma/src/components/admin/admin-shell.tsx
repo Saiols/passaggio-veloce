@@ -78,6 +78,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: IconDashboard },
       { href: '/admin/dashboard', label: 'Finanze', icon: IconFinance, adminOnly: true },
+      { href: '/admin/fatturazione', label: 'Fatture', icon: IconFinance, adminOnly: true },
     ],
   },
   {

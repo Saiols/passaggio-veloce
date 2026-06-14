@@ -248,8 +248,11 @@ export default async function AffiliazionePage() {
             </tbody>
           </table>
           <p className="mt-3 text-[11.5px] text-pv-slate-500">
-            La commissione è per veicolo; se sulla stessa pratica hai referral sia
-            sul broker sia sull&apos;agenzia, l&apos;importo è diviso 50/50.
+            La commissione è per veicolo. Il bonus di una pratica è fisso (max
+            10€ per il passaggio semplice, 5€ per la minivoltura): lo prendi
+            intero se sei l&apos;unico affiliante coinvolto, oppure diviso 50/50
+            con un altro affiliante se il broker e l&apos;agenzia della pratica
+            sono stati portati da due affilianti diversi.
           </p>
         </Card>
 

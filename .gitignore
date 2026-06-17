@@ -47,6 +47,9 @@ packages/db/prisma/migrations/dev.db*
 next-env.d.ts
 .superpowers/
 
+# Vercel CLI (link locale: projectId/orgId, non versionare)
+.vercel/
+
 # Provider locali (dev)
 uploads/
 .dev-emails/

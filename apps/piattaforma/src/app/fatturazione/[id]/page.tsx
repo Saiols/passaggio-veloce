@@ -93,12 +93,22 @@ export default async function DocumentoFiscaleDetailPage({
             </h1>
             <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
           </div>
-          <a
-            href={`/api/fatturazione/${doc.id}/pdf`}
-            className="shrink-0 rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-          >
-            Scarica PDF
-          </a>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={`/api/fatturazione/${doc.id}/pdf`}
+              className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+            >
+              Scarica PDF
+            </a>
+            {doc.fatturaPaTipo && (
+              <a
+                href={`/api/fatturazione/${doc.id}/xml`}
+                className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+              >
+                Scarica XML
+              </a>
+            )}
+          </div>
         </header>
 
         <Card className="mb-5">

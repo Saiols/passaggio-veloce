@@ -1,18 +1,23 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { labelTipoDocumento } from '@/lib/fatturazione/format';
+import { numeroDocumento } from '@/lib/fatturazione/format';
 import { descrizioneDocumento } from '@/lib/fatturazione/descrizione';
-import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
-import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { toFatturaPaInput } from '@/lib/fatturazione/xml-mapper';
+import { buildFatturaPaXml } from '@/lib/fatturazione/xml-fatturapa';
+import { pvEmittente, type DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const TIPI_XML = ['TD01', 'TD06', 'TD04'] as const;
+type TipoXml = (typeof TIPI_XML)[number];
+
 /**
- * GET /api/fatturazione/[id]/pdf — scarica il PDF del documento fiscale.
- * Access control identico al dettaglio: admin, oppure la company dell'utente
- * è emittente o destinatario del documento.
+ * GET /api/fatturazione/[id]/xml — scarica l'XML FatturaPA del documento.
+ * Disponibile solo per i documenti con `fatturaPaTipo` valorizzato (TD01/TD06/
+ * TD04): i compensi a broker PRIVATO e le penali non generano XML SDI.
+ * Access control identico al PDF: admin, oppure emittente/destinatario.
  */
 export async function GET(
   _req: Request,
@@ -54,30 +59,35 @@ export async function GET(
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
+  if (!doc.fatturaPaTipo || !(TIPI_XML as readonly string[]).includes(doc.fatturaPaTipo)) {
+    return NextResponse.json({ error: 'xml-non-disponibile' }, { status: 404 });
+  }
+
   const { descrizione, riferimento } = descrizioneDocumento(doc);
 
-  const pdfBytes = await buildDocumentoPdf({
-    tipo: doc.tipo,
-    fatturaPaTipo: doc.fatturaPaTipo,
+  const input = toFatturaPaInput({
+    fatturaPaTipo: doc.fatturaPaTipo as TipoXml,
+    numero: numeroDocumento(doc),
     numeroProgressivo: doc.numeroProgressivo,
-    anno: doc.anno,
-    emessoAt: doc.emessoAt,
+    data: doc.emessoAt,
     emittente: doc.datiEmittente as unknown as DatiFiscali,
     destinatario: doc.datiDestinatario as unknown as DatiFiscali,
+    emittenteIsPv: doc.emittenteCompanyId == null,
     imponibileCent: doc.imponibileCent,
     ivaCent: doc.ivaCent,
     aliquotaIvaPct: doc.aliquotaIvaPct,
-    importoLordoCent: doc.importoLordoCent,
     descrizione,
-    riferimento,
+    causale: riferimento ? riferimento.slice(0, 200) : null,
+    pv: pvEmittente(),
   });
 
-  const filename = `${labelTipoDocumento(doc.tipo).replace(/\s+/g, '-').toLowerCase()}-${doc.numeroProgressivo}-${doc.anno}.pdf`;
+  const xml = buildFatturaPaXml(input);
+  const filename = `IT${input.idTrasmittente.idCodice}_${input.progressivoInvio}.xml`;
 
-  return new Response(pdfBytes as BlobPart, {
+  return new Response(xml, {
     status: 200,
     headers: {
-      'Content-Type': 'application/pdf',
+      'Content-Type': 'application/xml; charset=utf-8',
       'Content-Disposition': `attachment; filename="${filename}"`,
       'Cache-Control': 'private, no-store',
     },

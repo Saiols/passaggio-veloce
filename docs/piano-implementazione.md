@@ -338,7 +338,7 @@
 **Bundle FT-A — Schema + iscrizione** _(schema FATTO; wizard fiscale/OTP/seed DA FARE)_
 - [x] Migrazione `RegimeFiscale` enum + estensione `Company` (numeratore fiscale annuale, OTP, accettazione clausola delega, regime fiscale) — migration `fatturazione_ft_a`
 - [x] Migrazione `DocumentoFiscale` (modello + enum: tipo, FatturaPaTipo, statoPagamento) — migration `fatturazione_ft_a` + `fattura_destinatario_nullable`
-- [ ] Wizard broker: step "Dati fiscali" obbligatorio (regime, P.IVA condizionale, indirizzo, IBAN, checkbox delega esplicito) — **NON ancora** (regime non raccolto in registrazione)
+- [~] Wizard broker: **regimeFiscale RACCOLTO** in registrazione (Step Azienda, solo DEALER, ORDINARIO/FORFETTARIO; persistito su Company) — 2026-06-17. Restano: P.IVA condizionale per PRIVATO + checkbox delega esplicito
 - [ ] Wizard agenzia: validazione "SDI OR PEC obbligatori" + step OTP SMS verifica — **NON ancora**
 - [ ] Provider OTP (mock dev → Twilio prod swap-ready) — **NON ancora**
 - [ ] Aggiornamento `seed.ts` con regime fiscale per utenti test — **NON ancora**

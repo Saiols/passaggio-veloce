@@ -35,25 +35,40 @@ export const registerStep1AccountSchema = z
     path: ['passwordConfirm'],
   });
 
-export const registerStep2CompanySchema = z.object({
-  type: z.enum(['DEALER', 'AGENZIA'], {
-    message: 'Seleziona il tipo di azienda',
-  }),
-  ragioneSociale: z.string().min(2, 'Ragione sociale obbligatoria'),
-  partitaIva: partitaIvaSchema,
-  codiceSdi: z
-    .string()
-    .trim()
-    .regex(/^[A-Za-z0-9]{7}$/, 'Codice SDI: 7 caratteri alfanumerici'),
-  pec: pecSchema,
-  email: z.string().email('Email aziendale non valida'),
-  telefono: z.string().trim().min(8, 'Numero di telefono obbligatorio'),
-  indirizzo: z.string().min(2, 'Indirizzo obbligatorio'),
-  civico: z.string().trim().min(1, 'Civico obbligatorio'),
-  citta: z.string().min(2, 'Città obbligatoria'),
-  cap: capSchema,
-  provincia: z.string().length(2, 'Provincia (2 lettere)'),
-});
+export const registerStep2CompanySchema = z
+  .object({
+    type: z.enum(['DEALER', 'AGENZIA'], {
+      message: 'Seleziona il tipo di azienda',
+    }),
+    ragioneSociale: z.string().min(2, 'Ragione sociale obbligatoria'),
+    partitaIva: partitaIvaSchema,
+    codiceSdi: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9]{7}$/, 'Codice SDI: 7 caratteri alfanumerici'),
+    pec: pecSchema,
+    email: z.string().email('Email aziendale non valida'),
+    telefono: z.string().trim().min(8, 'Numero di telefono obbligatorio'),
+    indirizzo: z.string().min(2, 'Indirizzo obbligatorio'),
+    civico: z.string().trim().min(1, 'Civico obbligatorio'),
+    citta: z.string().min(2, 'Città obbligatoria'),
+    cap: capSchema,
+    provincia: z.string().length(2, 'Provincia (2 lettere)'),
+    // Regime fiscale del broker (FT-A): determina il tipo di documento emesso per
+    // suo conto (TD01 ordinario, TD06 forfettario). Richiesto solo per i DEALER
+    // (sono i "broker" che maturano compensi); per le agenzie è irrilevante.
+    // Self-registration espone ORDINARIO/FORFETTARIO (PRIVATO non ha visura → admin-set).
+    regimeFiscale: z.enum(['ORDINARIO', 'FORFETTARIO', 'PRIVATO']).optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.type === 'DEALER' && !d.regimeFiscale) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Seleziona il regime fiscale',
+        path: ['regimeFiscale'],
+      });
+    }
+  });
 
 // Step 3 (documenti KYC): i file (CI fronte/retro, CF, visura) sono gestiti
 // fuori da Zod (FormData). La data emissione visura non è più richiesta a mano:

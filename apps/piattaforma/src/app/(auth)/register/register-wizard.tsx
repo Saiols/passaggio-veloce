@@ -395,6 +395,7 @@ function CompanyStep({
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors, isValid },
   } = useForm<CompanyData>({
     resolver: zodResolver(registerStep2CompanySchema),
@@ -403,6 +404,10 @@ function CompanyStep({
       : defaultValues,
     mode: 'onChange',
   });
+
+  // Il regime fiscale si chiede solo ai DEALER (i "broker" che maturano compensi):
+  // determina il tipo di documento emesso per loro conto (TD01/TD06).
+  const isDealer = (forcedCompanyType ?? watch('type')) === 'DEALER';
 
   const applyAddress = (p: AddressParts) => {
     const opts = { shouldValidate: true, shouldDirty: true } as const;
@@ -445,6 +450,23 @@ function CompanyStep({
       <Field label="PEC" required error={errors.pec?.message}>
         <Input type="email" invalid={!!errors.pec} {...register('pec')} />
       </Field>
+
+      {isDealer && (
+        <Field
+          label="Regime fiscale"
+          required
+          error={errors.regimeFiscale?.message}
+          hint="Determina come vengono emessi i documenti dei tuoi compensi (con o senza IVA)."
+        >
+          <Select invalid={!!errors.regimeFiscale} {...register('regimeFiscale')} defaultValue="">
+            <option value="" disabled>
+              Seleziona...
+            </option>
+            <option value="ORDINARIO">Ordinario (con IVA 22%)</option>
+            <option value="FORFETTARIO">Forfettario (senza IVA, L. 190/2014)</option>
+          </Select>
+        </Field>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Email aziendale" required error={errors.email?.message}>

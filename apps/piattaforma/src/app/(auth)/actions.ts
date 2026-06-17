@@ -421,6 +421,9 @@ export async function registerAction(
           type: company.type,
           ragioneSociale: company.ragioneSociale,
           partitaIva: company.partitaIva,
+          // Regime fiscale del broker (FT-A). I DEALER lo scelgono in registrazione;
+          // per le agenzie resta il default di colonna (ORDINARIO, irrilevante).
+          regimeFiscale: company.regimeFiscale ?? undefined,
           codiceSdi: company.codiceSdi || null,
           pec: company.pec,
           email: company.email,

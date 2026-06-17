@@ -68,6 +68,7 @@ const validPayload = {
     citta: 'Roma',
     cap: '00100',
     provincia: 'RM',
+    regimeFiscale: 'ORDINARIO',
   },
   payment: { iban: 'IT60X0542811101000000123456', sepaMandateAccepted: true, termsAccepted: true },
 };

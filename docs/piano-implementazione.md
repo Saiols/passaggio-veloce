@@ -33,7 +33,7 @@
 - [ ] Definizione competitor diretti e posizionamento
 
 ### 0.2 Blocchi legali/fiscali
-- [!] Validazione commercialista modello fatturazione delegata (vedi `docs/sistema-fatturazione.md` §9: split forfettario 55+20, TD01/TD06/ricevuta privato, IVA, ritenuta d'acconto, somme di terzi, numerazione progressiva)
+- [x] Validazione commercialista modello fatturazione delegata — **CONFERMATO 2026-06-17** (split forfettario 55+20, TD01/TD06/ricevuta privato, IVA forfettario, numerazione progressiva). Sblocca FT-D XML (fatto). Resta gated solo l'account provider SDI (A-Cube).
 - [x] Definizione fallback se nessuna delle 5 agenzie accetta la pratica (vedi §0.5)
 - [ ] Redazione T&C con clausola limitazione responsabilità + autorizzazione SEPA
 - [ ] Informativa privacy GDPR (dati sensibili CI/CF/visura)
@@ -331,37 +331,42 @@
 
 **Modello adottato:** fatturazione delegata stile Booking/Airbnb. PV emette per conto del broker, broker trasmette allo SDI.
 
-**Bundle FT-A — Schema + iscrizione**
-- [ ] Migrazione `RegimeFiscale` enum + estensione `Company` (numeratore fiscale annuale, OTP, accettazione clausola delega, regime fiscale)
-- [ ] Migrazione `DocumentoFiscale` (modello + 4 enum: tipo, FatturaPaTipo, statoPagamento)
-- [ ] Wizard broker: step "Dati fiscali" obbligatorio (regime, P.IVA condizionale, indirizzo, IBAN, checkbox delega esplicito)
-- [ ] Wizard agenzia: validazione "SDI OR PEC obbligatori" + step OTP SMS verifica
-- [ ] Provider OTP (mock dev → Twilio prod swap-ready)
-- [ ] Aggiornamento `seed.ts` con regime fiscale per utenti test
+> **STATO 2026-06-17 (in deploy su `main`):** commercialista ha **confermato il modello fiscale** (split, TD01/TD06/TD04, IVA forfettario, no-XML privato). IMPLEMENTATI: FT-A schema/engine, FT-B, FT-C (KPI+CSV), **FT-D parte nostra** (PDF, segna-trasmesso, **generatore XML FatturaPA**, mapper, route download XML, adapter provider+mock).
+> **Provider deciso:** **A-Cube** = motore d'integrazione (via adapter, gated su account) + **Fatture in Cloud** = strumento manuale. La **trasmissione SDI reale resta gated** sull'account A-Cube.
+> **Restano (parte nostra):** raccolta dati fiscali + OTP in registrazione (FT-A wizard), notifiche N26-30 + cron (FT-C), QR nel PDF, FT-E.
 
-**Bundle FT-B — Generazione PDF + lista lato agenzia/broker**
-- [ ] `lib/fatturazione/generate.ts` orchestrator + `pdf.ts` (template con logo, dati emittente/destinatario, importi, QR placeholder) — riusa `pdf-lib` (no Chromium per coerenza serverless Vercel)
-- [ ] `lib/fatturazione/numerator.ts` con SELECT FOR UPDATE per numerazione progressiva atomica
-- [ ] Hook in `completaPratica`: split dinamico per regime broker, generazione 1 (minivoltura) o 2 (trapasso) `DocumentoFiscale` post-firma
-- [ ] Sezione `/fatturazione` agenzia: dashboard + lista + filtri base + download PDF
-- [ ] Sezione `/fatturazione` broker: lista doc broker emessi + stato SDI manuale
-- [ ] Icone PDF inline in `/pratiche` per agenzia e broker
+**Bundle FT-A — Schema + iscrizione** _(schema FATTO; wizard fiscale/OTP/seed DA FARE)_
+- [x] Migrazione `RegimeFiscale` enum + estensione `Company` (numeratore fiscale annuale, OTP, accettazione clausola delega, regime fiscale) — migration `fatturazione_ft_a`
+- [x] Migrazione `DocumentoFiscale` (modello + enum: tipo, FatturaPaTipo, statoPagamento) — migration `fatturazione_ft_a` + `fattura_destinatario_nullable`
+- [ ] Wizard broker: step "Dati fiscali" obbligatorio (regime, P.IVA condizionale, indirizzo, IBAN, checkbox delega esplicito) — **NON ancora** (regime non raccolto in registrazione)
+- [ ] Wizard agenzia: validazione "SDI OR PEC obbligatori" + step OTP SMS verifica — **NON ancora**
+- [ ] Provider OTP (mock dev → Twilio prod swap-ready) — **NON ancora**
+- [ ] Aggiornamento `seed.ts` con regime fiscale per utenti test — **NON ancora**
 
-**Bundle FT-C — Admin panel + KPI + export**
-- [ ] Sezione `/admin/fatturazione` con 3 tab (KPI / Lista / Somme di terzi)
-- [ ] Endpoint export ZIP/CSV background con notifica al completamento
-- [ ] Notifiche `N26/N27/N28` cablate con allegato PDF
-- [ ] Cron `N29` (fatture non pagate >15gg) + `N30` (doc non trasmessi >30gg)
+**Bundle FT-B — Generazione PDF + lista lato agenzia/broker** _(FATTO)_
+- [x] Engine `lib/fatturazione/` (`calcolo`/`numerazione`/`engine`) + `pdf.ts` PDF on-the-fly (pdf-lib, no Chromium) servito da `GET /api/fatturazione/[id]/pdf`
+- [~] Numerazione progressiva per emittente/anno (idempotente per pratica/payout via aggregate + `prossimoNumero`; non SELECT FOR UPDATE letterale)
+- [x] Hook in `completaPratica`/payout: split dinamico per regime, `FATTURA_PV` alla firma + `DOC_BROKER` aggregato al payout (best-effort)
+- [x] Sezione `/fatturazione` agenzia + broker (dettaglio documento, ricerca, access-control)
+- [x] Blocco "Documenti fiscali" nel dettaglio pratica (download PDF)
 
-**Bundle FT-D — XML FatturaPA + integrazione SDI** _(bloccato B1 + SDI provider)_
-- [ ] `lib/fatturazione/xml-fatturapa.ts` con generazione XSD-compliant
-- [ ] Validazione XML schema ufficiale Agenzia Entrate
-- [ ] QR code verifica autenticità nel PDF
-- [ ] Toggle "Segna come trasmesso allo SDI" lato broker (manuale)
-- [ ] Eventuale integrazione SDI provider per fatture PV verso agenzie (Aruba o equivalente)
+**Bundle FT-C — Admin panel + KPI + export** _(KPI+lista+CSV FATTO; notifiche/cron DA FARE)_
+- [x] Sezione `/admin/fatturazione` con KPI (StatCard per tipo) + lista + filtri/ricerca
+- [~] Export **CSV** `GET /api/admin/fatturazione/export` (on-the-fly, separatore `;`); ZIP background non fatto
+- [ ] Notifiche `N26/N27/N28` cablate con allegato PDF — **NON ancora**
+- [ ] Cron `N29` (fatture non pagate >15gg) + `N30` (doc non trasmessi >30gg) — **NON ancora**
+
+**Bundle FT-D — XML FatturaPA + integrazione SDI** _(parte nostra FATTO; trasmissione live gated A-Cube)_
+- [x] `lib/fatturazione/xml-fatturapa.ts` generazione XSD-compliant (FPR12, TD01/TD06/TD04, per-conto-terzi `SoggettoEmittente TZ`, Natura `N2.2` forfettario)
+- [x] `lib/fatturazione/xml-mapper.ts` + helper `descrizione.ts` + `GET /api/fatturazione/[id]/xml` (on-the-fly) + bottone "Scarica XML"
+- [x] Adapter `lib/fatturazione/provider/` (`FatturazioneProvider` + `MockFatturazioneProvider` + selezione via env, **A-Cube swap-ready**)
+- [x] Toggle "Segna come trasmesso allo SDI" lato broker (manuale)
+- [~] Validazione XML contro XSD ufficiale → demandata al provider (no validatore runtime in-app)
+- [ ] QR code verifica autenticità nel PDF — **NON ancora**
+- [ ] `AcubeFatturazioneProvider` reale (emetti/stato/webhook) + campi DB `idSdiProvider`/`statoSdi` — **gated su account A-Cube**
 
 **Bundle FT-E — Note di variazione + casi speciali** _(bloccato B1)_
-- [ ] Workflow nota di credito / nota di debito (TD04/TD05)
+- [~] Engine `createNotaCredito` (TD04, importi negativi, storna l'originale) presente; trigger/UI admin non cablati
 - [ ] Pratica `ANNULLATA` post-emissione → genera automaticamente nota di credito
 - [ ] Penale broker → eventuale documento separato (post-decisione commercialista — vedi `sistema-fatturazione.md` §6.4)
 
@@ -938,7 +943,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 | # | Blocco | Stato | Impatto | Owner |
 |---|--------|-------|---------|-------|
-| B1 | Validazione commercialista modello fatturazione delegata (`sistema-fatturazione.md` §9) | Aperto | Blocca Fase 5 (XML/IVA), UI fattibile in parallelo | Andrea + Commercialista |
+| B1 | Validazione commercialista modello fatturazione delegata (`sistema-fatturazione.md` §9) | **Confermato 2026-06-17** | Sbloccata FT-D XML (fatta); resta gated solo l'account provider SDI (A-Cube) | Andrea + Commercialista |
 | B2 | Fallback 5 agenzie non accettano | Proposta in §0.5, da validare | Sblocca Fase 4.1 una volta approvato | Alberto + Andrea |
 | B3 | Naming definitivo | Risolto: **Passaggio Veloce** | — | — |
 | B4 | CTO socio fondatore | Risolto: **Francesco Sioli** | — | — |

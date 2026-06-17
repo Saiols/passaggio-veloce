@@ -476,11 +476,11 @@ export async function submitNuovaPraticaAction(
     );
   }
 
-  // Schema Documentale v7 (SD-B): l'engine deterministic verifica che la
-  // combinazione di variabili compilate dal broker non porti a BLOCCO
-  // (comodato attivo, permesso scaduto, visura > 6 mesi). Se INPUT_INCOMPLETO
-  // o BLOCCO, redirect con motivo. Server-side è la fonte autoritativa, il
-  // wizard usa lo stesso engine per UI in tempo reale.
+  // Schema Documentale v7 (SD-B): l'engine deterministic calcola la lista
+  // documenti richiesti dalla combinazione di variabili compilate dal broker.
+  // Il comodato d'uso non è più ostativo. Se INPUT_INCOMPLETO (o BLOCCO, kind
+  // generico riservato a blocchi futuri), redirect con motivo. Server-side è la
+  // fonte autoritativa, il wizard usa lo stesso engine per UI in tempo reale.
   const esitoSchema = calcolaDocumentiRichiesti({
     veicoli: veicoli.map((v, i) => ({
       ordine: i + 1,

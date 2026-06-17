@@ -154,18 +154,15 @@ describe('calcolaDocumentiRichiesti — flag speciali', () => {
   });
 });
 
-describe('calcolaDocumentiRichiesti — comodato / input incompleto', () => {
-  it('comodato attivo → BLOCCO', () => {
+describe('calcolaDocumentiRichiesti — comodato non ostativo / input incompleto', () => {
+  it('comodato attivo NON blocca più la pratica → OK', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({ veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: true }] }),
     );
-    expect(r.kind).toBe('BLOCCO');
-    if (r.kind !== 'BLOCCO') return;
-    expect(r.motivo.toLowerCase()).toContain('comodato');
-    expect(r.soluzione.toLowerCase()).toContain('revocato');
+    expect(r.kind).toBe('OK');
   });
 
-  it('comodato attivo su un veicolo qualsiasi (multi) → BLOCCO', () => {
+  it('comodato attivo su un veicolo qualsiasi (multi) → OK', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
         veicoli: [
@@ -174,7 +171,7 @@ describe('calcolaDocumentiRichiesti — comodato / input incompleto', () => {
         ],
       }),
     );
-    expect(r.kind).toBe('BLOCCO');
+    expect(r.kind).toBe('OK');
   });
 
   it('input incompleto: tipo soggetto venditore mancante', () => {

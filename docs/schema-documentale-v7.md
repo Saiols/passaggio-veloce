@@ -40,9 +40,8 @@ Determinare deterministicamente la **lista esatta di documenti richiesti** per o
    ├── ≥ 2015: nessun documento extra
    └── < 2015: + Certificato di Proprietà (CdP)
 
-2. Comodato d'uso attivo:
-   ├── No: procede normalmente
-   └── Sì: + documento di revoca → BLOCCO finché PRA non aggiornato
+2. Comodato d'uso: NON ostativo
+   └── rilevato dall'OCR come informazione, non blocca la pratica e non richiede revoca
 
 3. Tipo venditore (chi è):
    ├── Privato → passaggio standard
@@ -202,7 +201,7 @@ export type EsitoSchemaDocumentale =
 export function calcolaDocumentiRichiesti(p: Partial<Pratica>): EsitoSchemaDocumentale {
   // 1. BLOCCHI immediati
   if (p.fermoDichiarato) return { kind: 'BLOCCO', ... };
-  if (p.comodatoAttivo) return { kind: 'BLOCCO', ... }; // finché non revocato
+  // Comodato d'uso: NON più ostativo — rilevato come info, non genera BLOCCO
   if (p.venditoreTipoSoggetto === 'STRANIERO_EXTRA_UE' &&
       isExpired(p.venditorePermessoData)) return { kind: 'BLOCCO', ... };
   if (p.acquirenteTipoSoggetto === 'STRANIERO_EXTRA_UE' &&
@@ -358,7 +357,7 @@ Server action `richiediRevisioneManualeAction(praticaId, motivo, note)`:
 - Documenti successione: lo schema cita 4 documenti — verifica con notaio se "Atto accettazione eredità" + "Dichiarazione qualità erede" sono entrambi necessari o ridondanti
 - Procura notarile: forma minima accettata? PDF + firma digitale → ammesso?
 - Visura ≤ 6 mesi: 6 mesi solari o 180 giorni esatti?
-- Comodato d'uso: la "revoca PRA" è documento ufficiale? Forma standard?
+- ~~Comodato d'uso: la "revoca PRA" è documento ufficiale?~~ RISOLTO: il comodato non è più ostativo, nessun documento di revoca richiesto.
 - "Operatore auto" → MINI VOLTURA: serve attestazione iscrizione albo dealer?
 
 > Tutte da validare con commercialista/legale in B-LEGAL prima del go-live.

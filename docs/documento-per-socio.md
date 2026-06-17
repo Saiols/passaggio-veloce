@@ -14,7 +14,7 @@ Il flusso e' questo:
 
 1. **Il dealer si registra** con i dati dell'azienda e dell'amministratore, caricando documenti (CI, CF, visura camerale)
 2. **Apre una nuova pratica** caricando il libretto di circolazione in PDF
-3. **L'intelligenza artificiale legge il libretto**, estrae i dati e segnala se serve rimuovere il comodato d'uso o caricare il certificato di proprieta (per veicoli acquistati prima del 10/2015)
+3. **L'intelligenza artificiale legge il libretto**, estrae i dati (incluso l'eventuale comodato d'uso, a titolo informativo) e segnala se serve caricare il certificato di proprieta (per veicoli acquistati prima del 10/2015)
 4. **Il dealer carica i documenti di identita** delle parti (CI, CF, visura, eventuale permesso di soggiorno, procura notarile). Puo segnalare se e' un "mini passaggio" (rivenditore che si intesta il veicolo)
 5. **Seleziona un'agenzia su mappa**, cercando per provincia, e invia la pratica
 6. **L'agenzia riceve la pratica**, scarica i documenti, la prende in carico e manda una notifica al dealer
@@ -30,7 +30,7 @@ L'idea di base mi piace: il problema e' reale, il passaggio di proprieta in Ital
 ## 2. Cosa mi convince
 
 - **La nicchia e' giusta.** E' un settore specifico, burocratico e poco innovato. Chi riesce a semplificarlo crea valore vero
-- **L'IA sul libretto e' l'elemento differenziante.** Leggere automaticamente il libretto e guidare l'utente su cosa serve (comodato d'uso, certificato di proprieta) e' il tipo di automazione che fa risparmiare tempo e riduce gli errori
+- **L'IA sul libretto e' l'elemento differenziante.** Leggere automaticamente il libretto e guidare l'utente su cosa serve (es. certificato di proprieta) e' il tipo di automazione che fa risparmiare tempo e riduce gli errori
 - **Il modello marketplace ha senso.** Connettere dealer e agenzie crea un effetto rete: piu agenzie ci sono, piu dealer vengono attratti, e viceversa
 - **Il flusso a step e' intuitivo.** Libretto -> documenti -> selezione agenzia -> invio: e' chiaro e guidato
 

@@ -720,13 +720,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         v.proprietarioAttuale.length > 0 &&
         /^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione),
     );
-  const comodatoBloccante = veicoli.some((v) => v.flagComodatoDuso);
   // Gate per lasciare lo step 1 (Tipo & veicoli).
   // Veicoli pre-2015: il Certificato di Proprietà va caricato qui (step veicolo).
   const cdpUploading = veicoli.some((v, i) => v.preImm2015 && documenti[cdpDocKey(i + 1)]?.uploading);
   const cdpMancante = veicoli.some((v, i) => v.preImm2015 && !documenti[cdpDocKey(i + 1)]?.ref);
   const canStep1 =
-    veicoliValidi && !comodatoBloccante && !librettiUploading && !cdpUploading && !cdpMancante;
+    veicoliValidi && !librettiUploading && !cdpUploading && !cdpMancante;
 
   // Cross-check insiemistico venditori ↔ intestatari PER VEICOLO: i venditori del
   // veicolo i devono coincidere con gli intestatari del libretto i (C.2 + C.3),
@@ -990,11 +989,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               </div>
             ))}
 
-            {comodatoBloccante && (
-              <Alert variant="error">
-                Uno o più veicoli risultano in comodato d&apos;uso: rimuovi il comodato in agenzia prima di poter procedere.
-              </Alert>
-            )}
             <div className="flex justify-end">
               <Button disabled={!canStep1} onClick={() => setStep(2)}>
                 Avanti
@@ -1400,13 +1394,6 @@ function VeicoloSection({
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
         {multiplo ? `Veicolo ${ordine}` : 'Veicolo'}
       </h2>
-      {veicolo.flagComodatoDuso && (
-        <div className="mb-4">
-          <Alert variant="error">
-            Veicolo in comodato d&apos;uso: è obbligatorio recarsi in agenzia per farlo revocare prima di procedere. Non è possibile creare la pratica con un veicolo in comodato.
-          </Alert>
-        </div>
-      )}
       <Field label="Libretto di circolazione (PDF/JPG/PNG)" required>
         <div className="flex flex-col gap-2 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
           <span className="truncate text-pv-slate-700">
@@ -1539,16 +1526,6 @@ function VeicoloSection({
                   onChange={(e) => onChange({ preImm2015: e.target.checked })}
                 />
                 Pre-2015 (richiede certificato di proprietà)
-              </label>
-              <label className="flex items-center gap-2 text-[13px] text-pv-slate-700">
-                <Checkbox
-                  checked={veicolo.flagComodatoDuso}
-                  disabled={veicolo.ocr?.flagComodatoDuso === true}
-                  onChange={(e) =>
-                    onChange({ flagComodatoDuso: e.target.checked })
-                  }
-                />
-                Comodato d&apos;uso rilevato
               </label>
             </div>
           </div>

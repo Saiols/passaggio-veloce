@@ -8,11 +8,13 @@
  * richiesti, BLOCCO con motivo, REVISIONE_MANUALE con motivo).
  *
  * Albero decisionale:
- *  - Lato VENDITORE: anno immatricolazione, comodato, tipo soggetto,
+ *  - Lato VENDITORE: anno immatricolazione, tipo soggetto,
  *    flag procura, flag successione
  *  - Lato ACQUIRENTE: tipo soggetto, flag minore
- *  - BLOCCHI: comodato attivo (revoca PRA), permesso scaduto, visura
- *    azienda > 6 mesi
+ *
+ * Nota: il comodato d'uso NON è più ostativo (non genera BLOCCO). La validità
+ * temporale di visura/permesso e la corrispondenza documenti↔soggetto sono
+ * verificate via OCR nello step parte (lib/kyc/parte-docs), non qui.
  */
 
 export type TipoSoggetto =
@@ -151,20 +153,12 @@ export function calcolaDocumentiRichiesti(
     return { kind: 'INPUT_INCOMPLETO', mancanti };
   }
 
-  // 1. BLOCCHI immediati
-  if (input.veicoli.some((v) => v.flagComodatoDuso)) {
-    return {
-      kind: 'BLOCCO',
-      motivo: 'Comodato d\'uso attivo sul veicolo',
-      soluzione:
-        'Il comodato deve essere revocato al PRA prima del passaggio. Riprovare dopo la revoca.',
-    };
-  }
-  // Nota: la validità temporale di visura (≤6 mesi) e permesso (non scaduto) e
-  // la corrispondenza dei documenti col soggetto sono ora verificate nello step
-  // parte via OCR (lib/kyc/parte-docs), non più qui da date inserite a mano.
+  // Nota: il comodato d'uso non è più ostativo. La validità temporale di visura
+  // (≤6 mesi) e permesso (non scaduto) e la corrispondenza dei documenti col
+  // soggetto sono verificate nello step parte via OCR (lib/kyc/parte-docs), non
+  // qui da date inserite a mano. L'engine emette solo la lista documenti.
 
-  // 2. Costruzione lista documenti richiesti
+  // Costruzione lista documenti richiesti
   const out: DocumentoRichiesto[] = [];
 
   // Per ogni veicolo: libretto (sempre) + CdP se pre-2015

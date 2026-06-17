@@ -21,8 +21,7 @@ chatbot_visibility: clients
 ## Aprire e inviare una pratica (dealer/broker)
 
 1. Crea una nuova pratica e carica il **libretto di circolazione**.
-2. Compila i dati del veicolo (targa, telaio, anno di immatricolazione) e dichiara la
-   situazione (es. comodato d'uso, eventuale fermo).
+2. Compila i dati del veicolo (targa, telaio, anno di immatricolazione).
 3. Indica il **tipo di venditore** e il **tipo di acquirente** (privato, straniero,
    azienda) ed eventuali flag (procura, successione, acquirente minorenne).
 4. Carica i documenti richiesti — il wizard ti mostra **la lista esatta** in base alle tue
@@ -47,7 +46,6 @@ La lista dipende dal caso. Regole principali:
 - **Azienda/società**: **visura camerale rilasciata negli ultimi 6 mesi** + CI dell'amministratore fronte/retro.
 
 **Casi speciali**
-- **Comodato d'uso attivo**: serve il documento di **revoca**; la pratica resta bloccata finché il PRA non è aggiornato.
 - **Vendita tramite procuratore**: atto di procura notarile + CI del procuratore + CI del venditore.
 - **Veicolo da successione**: certificato di morte + atto di accettazione eredità +
   dichiarazione di qualità di erede + CI dell'erede.

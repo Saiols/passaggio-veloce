@@ -34,7 +34,7 @@ La piattaforma e' un **broker digitale** che connette dealer/commercianti con ag
 - Upload del libretto di circolazione (PDF)
 - **IA legge il libretto** ed estrae i dati (targa, telaio, ecc.)
 - Se necessario, segnala:
-  - Rimozione comodato d'uso
+  - Presenza comodato d'uso (informativo, non bloccante)
   - Necessita certificato di proprieta (veicolo pre-10/2015)
 
 ### 2.3 Step 2 - Caricamento Documenti Identita (Broker)

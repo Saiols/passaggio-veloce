@@ -953,4 +953,4 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | B8 | Validazioni AF1–AF5 sistema affiliazione (fiscale + CRM + anti-collusione + cap durata + mini voltura) | Aperto | Blocca Fase 13 | Alberto + Andrea + Commercialista + CTO |
 | B9 | Dubbi 1-6 release post-demo 2026-05 (vedi `bugfix-feature-list.md` §"Dubbi aperti") | Risolto in `bugfix-feature-list.md` §"Decisioni prese" | — | — |
 | B10 | Validazione legale clausole popup penale + wallet negativo (vedi `sistema-penali-broker.md` §"Punti di accordo legale") | Aperto | Blocca prod-launch sistema penali | Legale + Alberto |
-| B11 | Validazione legale documenti successione/procura/comodato (vedi `schema-documentale-v7.md` §"Punti aperti") | Aperto | Blocca prod-launch schema documentale | Notaio + Legale + Alberto |
+| B11 | Validazione legale documenti successione/procura (vedi `schema-documentale-v7.md` §"Punti aperti") — comodato non più ostativo, escluso | Aperto | Blocca prod-launch schema documentale | Notaio + Legale + Alberto |

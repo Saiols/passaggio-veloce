@@ -96,9 +96,12 @@ const residenzaOk = !acquirenteResidenzaDiversa || acquirenteIndirizzoResidenza.
 
 Quando manca, "Avanti" disabilitato + hint inline (Alert) coerente con lo step.
 
-**Server (`actions.ts`)** — autoritativo. Se il payload indica residenza diversa
-ma l'indirizzo è vuoto → `redirect('/pratiche/nuova?error=...')`. Nessuna
-validazione di contenuto oltre la presenza.
+**Nessun check server-side** (a differenza della delega): non si invia un flag
+separato, solo la stringa indirizzo quando valorizzata. Il caso limite "No +
+indirizzo vuoto" (bypass del gate client) degrada in modo **benigno** a `null`
+= "stesso del documento", uno stato valido e innocuo (nessun dato rotto, nessun
+documento legale mancante). Il gate client basta per il requisito "obbligatorio
+se No".
 
 ## Submit + persistenza
 

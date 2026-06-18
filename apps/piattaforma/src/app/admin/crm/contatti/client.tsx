@@ -429,10 +429,7 @@ function AddContactsMenu({
       {importing && (
         <CsvImportDialog
           onClose={() => setImporting(false)}
-          onComplete={() => {
-            setImporting(false);
-            onImported();
-          }}
+          onComplete={() => onImported()}
         />
       )}
     </div>

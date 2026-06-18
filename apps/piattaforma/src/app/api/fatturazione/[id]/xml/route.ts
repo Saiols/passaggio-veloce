@@ -6,6 +6,7 @@ import { descrizioneDocumento } from '@/lib/fatturazione/descrizione';
 import { toFatturaPaInput } from '@/lib/fatturazione/xml-mapper';
 import { buildFatturaPaXml } from '@/lib/fatturazione/xml-fatturapa';
 import { pvEmittente, type DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -88,7 +89,7 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': attachmentContentDisposition(filename),
       'Cache-Control': 'private, no-store',
     },
   });

@@ -2,6 +2,7 @@ import 'server-only';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import { prisma } from '@pv/db';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
+import { winAnsiSafe } from '@/lib/pdf/winansi';
 
 /** Rappresentazione compatta delle targhe dei veicoli di una pratica. */
 function formatTargaVeicoli(veicoli?: { targa: string | null }[]): string {
@@ -114,7 +115,9 @@ export async function generateRendicontoPDF(
     yPos: number,
     opts: { font?: PDFFont; size?: number; color?: ReturnType<typeof rgb> } = {},
   ): void => {
-    p.drawText(text, {
+    // StandardFont = solo WinAnsi/CP1252: i dati anagrafici reali possono avere
+    // caratteri fuori da quel set (vedi winAnsiSafe) che romperebbero drawText.
+    p.drawText(winAnsiSafe(text), {
       x,
       y: yPos,
       size: opts.size ?? 10,

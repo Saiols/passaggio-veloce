@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf
 import type { DocumentoFiscaleTipo, FatturaPaTipo } from '@pv/db';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from './format';
+import { winAnsiSafe } from '@/lib/pdf/winansi';
 import type { DatiFiscali } from './pv-emittente';
 
 /**
@@ -70,7 +71,10 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
     y: number,
     opts: { font?: PDFFont; size?: number; color?: ReturnType<typeof rgb> } = {},
   ): void => {
-    p.drawText(t, {
+    // Lo StandardFont supporta solo WinAnsi/CP1252: i dati anagrafici reali
+    // possono contenere caratteri fuori da quel set (vedi winAnsiSafe), che
+    // altrimenti farebbero lanciare drawText con «WinAnsi cannot encode …».
+    p.drawText(winAnsiSafe(t), {
       x,
       y,
       size: opts.size ?? 10,

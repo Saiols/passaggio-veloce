@@ -4,6 +4,7 @@ import { prisma } from '@pv/db';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { descrizioneDocumento } from '@/lib/fatturazione/descrizione';
 import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
+import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 
 export const runtime = 'nodejs';
@@ -78,7 +79,7 @@ export async function GET(
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': attachmentContentDisposition(filename),
       'Cache-Control': 'private, no-store',
     },
   });

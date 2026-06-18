@@ -5,22 +5,13 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
-import { computeGiorniResidui, countdownLevel, type CountdownLevel } from '@/lib/pratiche/countdown';
 import { groupFeeByMonth, type FeeRow } from '@/lib/fee/recap';
 
 export const dynamic = 'force-dynamic';
 
-const LEVEL_BADGE: Record<CountdownLevel, string> = {
-  none: 'bg-pv-slate-100 text-pv-slate-500',
-  ok: 'bg-pv-green-50 text-pv-green-500',
-  warn: 'bg-pv-amber-50 text-pv-amber-500',
-  urgent: 'bg-pv-amber-50 text-pv-orange-500',
-  overdue: 'bg-pv-red-50 text-pv-red-500',
-};
-
 function statoLabel(s: string): string {
   switch (s) {
-    case 'SCHEDULED': return 'Programmato';
+    case 'SCHEDULED': return 'In coda';
     case 'IN_LAVORAZIONE': return 'In lavorazione';
     case 'SUCCESS': return 'Addebitato';
     case 'FAILED': return 'Fallito';
@@ -68,11 +59,6 @@ export default async function AddebitiPage() {
     },
   });
 
-  const upcoming = fees
-    .filter((f) => f.stato === 'SCHEDULED' && f.scheduledAt)
-    .map((f) => ({ fee: f, giorni: computeGiorniResidui(f.scheduledAt, now) }))
-    .sort((a, b) => (a.giorni ?? 0) - (b.giorni ?? 0));
-
   const rows: StoricoRow[] = fees.map((f) => {
     const veicoli = f.pratica?.veicoli ?? [];
     const targa0 = veicoli[0]?.targa ?? null;
@@ -91,10 +77,12 @@ export default async function AddebitiPage() {
   });
   const groups = groupFeeByMonth(rows);
 
-  const totaleAnno = rows
-    .filter((r) => r.refDate.getUTCFullYear() === now.getUTCFullYear())
+  const rowsAnno = rows.filter((r) => r.refDate.getUTCFullYear() === now.getUTCFullYear());
+  const totaleAnno = rowsAnno.reduce((s, r) => s + r.importoCent, 0);
+  const countAnno = rowsAnno.length;
+  const totaleMese = rowsAnno
+    .filter((r) => r.refDate.getUTCMonth() === now.getUTCMonth())
     .reduce((s, r) => s + r.importoCent, 0);
-  const totaleSchedulato = upcoming.reduce((s, u) => s + u.fee.importoCent, 0);
 
   return (
     <AppShell session={session} activePath="/addebiti">
@@ -107,44 +95,15 @@ export default async function AddebitiPage() {
             Addebiti
           </h1>
           <p className="mt-1 text-[14px] text-pv-slate-500">
-            Le fee delle pratiche gestite e gli auto-addebiti programmati al giorno 20.
+            Le fee delle pratiche gestite, addebitate automaticamente alla firma.
           </p>
         </header>
 
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          <StatCard label="Programmati" value={String(upcoming.length)} hint="In attesa di addebito" accent="orange" />
-          <StatCard label="Totale programmato" value={formatCurrencyCent(totaleSchedulato)} accent="navy" />
+          <StatCard label={`Addebiti ${now.getUTCFullYear()}`} value={String(countAnno)} hint="Pratiche addebitate" accent="navy" />
           <StatCard label={`Totale ${now.getUTCFullYear()}`} value={formatCurrencyCent(totaleAnno)} accent="green" />
+          <StatCard label="Questo mese" value={formatCurrencyCent(totaleMese)} accent="orange" />
         </div>
-
-        {upcoming.length > 0 && (
-          <Card className="mb-5">
-            <h2 className="text-[15px] font-bold text-pv-navy-800">Prossimi addebiti</h2>
-            <ul className="mt-3 divide-y divide-pv-slate-200 text-[13px]">
-              {upcoming.map(({ fee, giorni }) => {
-                const level = countdownLevel(giorni);
-                return (
-                  <li key={fee.id} className="flex items-center justify-between py-3">
-                    <div className="min-w-0">
-                      <Link href={`/pratiche/${fee.praticaId}`} className="font-mono font-semibold text-pv-navy-800 hover:underline">
-                        {fee.pratica?.codicePratica ?? '—'}
-                      </Link>
-                      <p className="text-[11px] text-pv-slate-500">
-                        Addebito previsto {formatDate(fee.scheduledAt)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-pv-navy-800">{formatCurrencyCent(fee.importoCent)}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${LEVEL_BADGE[level]}`}>
-                        {giorni === null ? '—' : giorni < 0 ? `scaduto ${-giorni}g` : `${giorni}g`}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
-        )}
 
         <Card>
           <h2 className="text-[15px] font-bold text-pv-navy-800">Storico per mese</h2>

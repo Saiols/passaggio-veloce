@@ -668,7 +668,7 @@ function Timeline({
     { label: 'Accettata', at: pratica.accettataAt },
     { label: 'Processata', at: pratica.processataAt },
     { label: 'Firma avvenuta', at: pratica.firmaAvvenutaAt },
-    { label: 'Auto-addebito giorno 20', at: pratica.autoAddebitoAt },
+    { label: 'Fee addebitata', at: pratica.autoAddebitoAt },
     { label: 'Scaduta', at: pratica.scadutaAt },
     { label: 'Annullata', at: pratica.annullataAt },
   ].filter((s) => s.at);

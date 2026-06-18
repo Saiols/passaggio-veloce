@@ -69,7 +69,7 @@ export function CookieBanner() {
         {!customizing ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-bold text-pv-navy-900">🍪 Cookie e privacy</p>
+              <p className="text-[14px] font-bold text-pv-navy-900">Cookie e privacy</p>
               <p className="mt-1 text-[12.5px] text-pv-slate-700">
                 Usiamo cookie tecnici per il login e il funzionamento della piattaforma
                 (sempre attivi). Per analytics e marketing chiediamo il tuo consenso.
@@ -111,7 +111,7 @@ export function CookieBanner() {
         ) : (
           <div>
             <p className="text-[14px] font-bold text-pv-navy-900">
-              🍪 Personalizza cookie
+              Personalizza cookie
             </p>
             <ul className="mt-3 space-y-2 text-[12.5px]">
               <li className="flex items-start justify-between gap-3 rounded-[10px] bg-pv-slate-50 px-3 py-2">

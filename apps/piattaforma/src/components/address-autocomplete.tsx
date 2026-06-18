@@ -82,6 +82,10 @@ export function AddressAutocomplete({
   const placesRef = useRef<google.maps.PlacesLibrary | null>(null);
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // Alla selezione impostiamo `query` col testo dell'indirizzo scelto: questo
+  // flag fa saltare la ricerca conseguente, altrimenti l'effetto su [query]
+  // rifarebbe l'autocomplete e riaprirebbe il dropdown su ciò che hai appena scelto.
+  const skipNextSearchRef = useRef(false);
 
   // Carica la libreria places una volta.
   useEffect(() => {
@@ -99,6 +103,11 @@ export function AddressAutocomplete({
   // Fetch suggerimenti (debounced). Lo setState è nel callback async del timeout,
   // non sincrono nel corpo dell'effect.
   useEffect(() => {
+    if (skipNextSearchRef.current) {
+      // query impostata da una selezione: nessuna nuova ricerca, dropdown resta chiuso.
+      skipNextSearchRef.current = false;
+      return;
+    }
     const id = window.setTimeout(async () => {
       const q = query.trim();
       const lib = placesRef.current;
@@ -139,6 +148,7 @@ export function AddressAutocomplete({
   }, []);
 
   const handleSelect = async (pred: google.maps.places.PlacePrediction) => {
+    skipNextSearchRef.current = true;
     setQuery(pred.text?.toString() ?? '');
     setSuggestions([]);
     setOpen(false);

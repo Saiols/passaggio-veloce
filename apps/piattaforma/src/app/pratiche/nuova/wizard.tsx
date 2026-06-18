@@ -1419,25 +1419,6 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                 lista doc obbligatori per il broker, raggruppati per parte/veicolo. */}
             <SchemaDocumentalePreview esito={esitoSchema} />
 
-            {/* SD-C: il broker può richiedere revisione manuale del team
-                anche se l'engine è BLOCCO o se la situazione non è coperta. */}
-            <div className="rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4 text-[12.5px] text-pv-slate-700">
-              <p className="font-semibold text-pv-navy-800">
-                Non trovi la tua situazione qui sopra?
-              </p>
-              <p className="mt-1">
-                Possiamo analizzarla manualmente e darti istruzioni precise
-                entro 24-48h.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowRevisione(true)}
-                className="mt-2 text-[12.5px] font-semibold text-pv-navy-700 underline hover:text-pv-navy-800"
-              >
-                Richiedi revisione manuale →
-              </button>
-            </div>
-
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
               <Button variant="secondary" onClick={() => setStep(3)} disabled={submitting}>
                 Indietro

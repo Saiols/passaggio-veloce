@@ -926,6 +926,7 @@ export async function submitNuovaPraticaAction(
             : null,
           preImm2015: v.preImm2015,
           flagComodatoDuso: v.flagComodatoDuso,
+          flagDelegaVendita: v.flagDelegaVendita,
           ocrData: (v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined,
           ocrProvider: env.OCR_PROVIDER,
           ocrAt: now,

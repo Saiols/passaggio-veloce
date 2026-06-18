@@ -1009,7 +1009,16 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                   veicolo={v}
                   multiplo={multiplo}
                   onFile={(file) => onFileSelected(idx, file)}
-                  onChange={(patch) => updateVeicolo(idx, patch)}
+                  onChange={(patch) => {
+                    // Delega → No: scarta gli allegati delega/procura già
+                    // caricati per questo veicolo (niente blob orfani né slot
+                    // stantii trascinati nel submit).
+                    if (patch.flagDelegaVendita === false) {
+                      uploadDocumento(delegatoDocKey(idx + 1), null);
+                      uploadDocumento(procuraDelegaDocKey(idx + 1), null);
+                    }
+                    updateVeicolo(idx, patch);
+                  }}
                 />
                 {/* Veicolo pre-2015: serve il Certificato di Proprietà (documento
                     del veicolo, caricato qui insieme al libretto). */}

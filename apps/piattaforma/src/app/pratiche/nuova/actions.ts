@@ -372,6 +372,7 @@ const submitSchema = z.object({
   acquirentePIVA: z.string().trim().max(11).optional(),
   acquirenteTelefono: z.string().trim().max(30).optional(),
   acquirenteEmail: z.string().trim().max(120).optional(),
+  acquirenteIndirizzoResidenza: z.string().trim().max(250).optional(),
 
   // Flag
   flagCointestazione: formBool.default(false),
@@ -885,6 +886,7 @@ export async function submitNuovaPraticaAction(
       acquirentePIVA: d.acquirenteIsPG ? d.acquirentePIVA : null,
       acquirenteTelefono: d.acquirenteTelefono || null,
       acquirenteEmail: d.acquirenteEmail?.toLowerCase() || null,
+      acquirenteIndirizzoResidenza: d.acquirenteIndirizzoResidenza || null,
 
       flagCointestazione: d.flagCointestazione,
       flagMinivoltura: d.tipo === 'MINIVOLTURA',

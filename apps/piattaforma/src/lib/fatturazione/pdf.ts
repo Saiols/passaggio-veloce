@@ -217,7 +217,7 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
   // ─── Footer ──────────────────────────────────────────────────────
   text(
     page,
-    'Rappresentazione conservabile del documento generata da Passaggio Veloce. Non sostituisce il file XML trasmesso allo SDI.',
+    'Rappresentazione conservabile del documento generata da Passaggio Veloce. Non sostituisce il documento fiscale emesso allo SdI dal commercialista.',
     MARGIN,
     MARGIN - 10,
     { size: 8, color: SLATE_500 },

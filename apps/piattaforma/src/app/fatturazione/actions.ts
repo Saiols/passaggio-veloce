@@ -7,29 +7,36 @@ import { prisma } from '@pv/db';
 export type SegnaTrasmessoResult = { ok: true } | { ok: false; error: string };
 
 /**
- * FT-D: il broker segna come "trasmesso allo SDI" un proprio documento
- * (compenso intermediazione, DOC_BROKER). Operazione manuale finché la
- * trasmissione automatica SDI non è validata col commercialista (B1).
- * Consentita solo all'emittente del documento.
+ * L'admin di PV segna un documento fiscale come "gestito dal commercialista":
+ * il commercialista scarica PDF/XML ed emette il documento allo SdI in autonomia
+ * (fuori piattaforma). Questo NON trasmette nulla — è solo un flag di tracciamento
+ * interno per sapere cosa è già stato emesso vs in attesa. Consentito solo
+ * all'amministratore di piattaforma; idempotente.
+ *
+ * NB: le colonne DB restano `trasmessoSdiAt`/`trasmessoSdiBy` (nessuna migration);
+ * il loro significato è "segnato come gestito dal commercialista".
  */
 export async function segnaTrasmessoSdiAction(documentoId: string): Promise<SegnaTrasmessoResult> {
   const session = await auth();
-  if (!session?.user?.companyId) {
+  if (!session?.user) {
     return { ok: false, error: 'Non autorizzato.' };
+  }
+  if (session.user.role !== 'ADMIN_PIATTAFORMA') {
+    return { ok: false, error: 'Operazione consentita solo all’amministratore.' };
   }
 
   const doc = await prisma.documentoFiscale.findUnique({
     where: { id: documentoId },
-    select: { id: true, tipo: true, emittenteCompanyId: true, trasmessoSdiAt: true },
+    select: { id: true, fatturaPaTipo: true, trasmessoSdiAt: true },
   });
   if (!doc) {
     return { ok: false, error: 'Documento non trovato.' };
   }
-  if (doc.tipo !== 'DOC_BROKER' || doc.emittenteCompanyId !== session.user.companyId) {
-    return { ok: false, error: 'Operazione non consentita su questo documento.' };
+  if (!doc.fatturaPaTipo) {
+    return { ok: false, error: 'Documento senza emissione fiscale elettronica.' };
   }
   if (doc.trasmessoSdiAt) {
-    return { ok: true }; // idempotente: già trasmesso
+    return { ok: true }; // idempotente: già segnato come gestito
   }
 
   await prisma.documentoFiscale.update({
@@ -39,5 +46,6 @@ export async function segnaTrasmessoSdiAction(documentoId: string): Promise<Segn
 
   revalidatePath(`/fatturazione/${doc.id}`);
   revalidatePath('/fatturazione');
+  revalidatePath('/admin/fatturazione');
   return { ok: true };
 }

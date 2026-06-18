@@ -70,7 +70,6 @@ export default async function DocumentoFiscaleDetailPage({
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;
   const negativa = doc.importoLordoCent < 0;
-  const isBrokerEmittente = doc.tipo === 'DOC_BROKER' && doc.emittenteCompanyId === cid;
 
   return (
     <AppShell session={session} activePath="/fatturazione">
@@ -139,25 +138,25 @@ export default async function DocumentoFiscaleDetailPage({
           </dl>
         </Card>
 
-        {doc.tipo === 'DOC_BROKER' && (
+        {doc.fatturaPaTipo && (
           <Card className="mb-5">
-            <h2 className="text-[14px] font-bold text-pv-navy-800">Trasmissione SDI</h2>
+            <h2 className="text-[14px] font-bold text-pv-navy-800">Emissione fiscale</h2>
             <p className="mt-1 text-[13px] text-pv-slate-600">
               {doc.trasmessoSdiAt ? (
                 <>
-                  Trasmesso allo SDI il{' '}
+                  Gestito dal commercialista il{' '}
                   <span className="font-semibold text-pv-navy-900">{formatDate(doc.trasmessoSdiAt)}</span>.
                 </>
               ) : (
-                'Non ancora trasmesso allo SDI.'
+                'In attesa di gestione dal commercialista.'
               )}
             </p>
-            {isBrokerEmittente && !doc.trasmessoSdiAt && (
+            {isAdmin && !doc.trasmessoSdiAt && (
               <div className="mt-3">
                 <SegnaTrasmessoButton documentoId={doc.id} />
                 <p className="mt-2 text-[11px] text-pv-slate-500">
-                  Scarica il PDF e trasmetti il documento allo SDI tramite il tuo gestionale, poi
-                  segnalo qui come trasmesso.
+                  Il commercialista scarica PDF e XML ed emette il documento allo SdI in autonomia
+                  (fuori piattaforma). Segnalo qui come gestito una volta emesso.
                 </p>
               </div>
             )}

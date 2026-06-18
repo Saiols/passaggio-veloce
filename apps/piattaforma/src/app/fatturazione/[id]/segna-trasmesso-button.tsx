@@ -6,8 +6,9 @@ import { Alert, Button, useToast } from '@/components/ui';
 import { segnaTrasmessoSdiAction } from '../actions';
 
 /**
- * FT-D: bottone visibile al broker emittente di un DOC_BROKER non ancora
- * trasmesso. Marca il documento come trasmesso allo SDI (operazione manuale).
+ * Bottone visibile solo all'admin di PV: marca il documento come "gestito dal
+ * commercialista" (emesso/trasmesso allo SdI fuori piattaforma). Non trasmette
+ * nulla, è solo tracciamento interno.
  */
 export function SegnaTrasmessoButton({ documentoId }: { documentoId: string }) {
   const router = useRouter();
@@ -23,7 +24,7 @@ export function SegnaTrasmessoButton({ documentoId }: { documentoId: string }) {
         setError(res.error);
         return;
       }
-      toast('Documento segnato come trasmesso allo SDI', 'success');
+      toast('Documento segnato come gestito dal commercialista', 'success');
       router.refresh();
     });
   };
@@ -38,7 +39,7 @@ export function SegnaTrasmessoButton({ documentoId }: { documentoId: string }) {
         loading={pending}
         loadingLabel="Aggiornamento…"
       >
-        Segna come trasmesso allo SDI
+        Segna come gestito dal commercialista
       </Button>
       {error && <Alert variant="error">{error}</Alert>}
     </div>

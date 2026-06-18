@@ -204,7 +204,7 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
             <th className="py-2">Tipo</th>
             <th className="py-2">Pratiche</th>
             <th className="py-2 text-right">Totale</th>
-            <th className="py-2">SDI</th>
+            <th className="py-2">Stato</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
@@ -224,7 +224,7 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
                 {formatCurrencyCent(d.importoLordoCent)}
               </td>
               <td className="py-2 text-[12px] text-pv-slate-500">
-                {d.trasmessoSdiAt ? 'Trasmesso' : 'Non trasmesso'}
+                {d.trasmessoSdiAt ? 'Gestito' : 'In attesa'}
               </td>
             </tr>
           ))}

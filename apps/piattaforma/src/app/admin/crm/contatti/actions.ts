@@ -268,6 +268,43 @@ export async function deleteCrmContactAction(
   return { ok: true };
 }
 
+export async function updateCrmContactStatusAction(
+  id: string,
+  status: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canEditCrmContact(session.user.role)) {
+    return { ok: false, error: 'Non hai i permessi per modificare contatti CRM' };
+  }
+
+  const STATI = [
+    'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10',
+  ] as const;
+  if (!STATI.includes(status as (typeof STATI)[number])) {
+    return { ok: false, error: 'Stato non valido' };
+  }
+
+  // SALES può modificare solo i propri assegnati (decisione 7)
+  if (session.user.role === 'SALES') {
+    const target = await prisma.crmContact.findUnique({
+      where: { id },
+      select: { assignedToId: true },
+    });
+    if (!target || target.assignedToId !== session.user.id) {
+      return { ok: false, error: 'Puoi modificare solo i contatti a te assegnati' };
+    }
+  }
+
+  await prisma.crmContact.update({
+    where: { id },
+    data: { status: status as (typeof STATI)[number] },
+  });
+
+  revalidatePath('/admin/crm/contatti');
+  return { ok: true };
+}
+
 // ════════════════════════════════════════════════════════
 // CSV Import / Export
 // ════════════════════════════════════════════════════════

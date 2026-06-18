@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildDocumentoPdf, type DocumentoPdfInput } from './pdf';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { buildDocumentoPdf, wrapText, type DocumentoPdfInput } from './pdf';
 import type { DatiFiscali } from './pv-emittente';
 
 const PV: DatiFiscali = {
@@ -75,5 +76,44 @@ describe('buildDocumentoPdf — robustezza encoding', () => {
     const input = baseInput({ descrizione: 'Totale 1.234,56 € compenso' });
     const bytes = await buildDocumentoPdf(input);
     expect(bytes.length).toBeGreaterThan(500);
+  });
+
+  it('genera il PDF con descrizione e riferimento molto lunghi (wrap, no overflow)', async () => {
+    const input = baseInput({
+      descrizione:
+        'Servizio di intermediazione per passaggio di proprieta di autoveicolo usato con pratica completa',
+      riferimento:
+        'Payout del 17/06/2026 - pratiche: PV-2026-00042, PV-2026-00043, PV-2026-00044, PV-2026-00045',
+    });
+    const bytes = await buildDocumentoPdf(input);
+    expect(bytes.length).toBeGreaterThan(500);
+  });
+});
+
+describe('wrapText', () => {
+  it('spezza il testo lungo in piu righe entro la larghezza massima', async () => {
+    const pdf = await PDFDocument.create();
+    const helv = await pdf.embedFont(StandardFonts.Helvetica);
+    const maxWidth = 170;
+    const testo = 'Servizio di intermediazione per passaggio di proprieta';
+    const lines = wrapText(testo, helv, 10, maxWidth);
+
+    expect(lines.length).toBeGreaterThan(1);
+    for (const l of lines) {
+      expect(helv.widthOfTextAtSize(l, 10)).toBeLessThanOrEqual(maxWidth);
+    }
+    expect(lines.join(' ')).toBe(testo); // nessuna parola persa o duplicata
+  });
+
+  it('tiene su una sola riga un testo corto', async () => {
+    const pdf = await PDFDocument.create();
+    const helv = await pdf.embedFont(StandardFonts.Helvetica);
+    expect(wrapText('Penale', helv, 10, 200)).toEqual(['Penale']);
+  });
+
+  it('non restituisce mai un array vuoto', async () => {
+    const pdf = await PDFDocument.create();
+    const helv = await pdf.embedFont(StandardFonts.Helvetica);
+    expect(wrapText('', helv, 10, 200)).toEqual(['']);
   });
 });

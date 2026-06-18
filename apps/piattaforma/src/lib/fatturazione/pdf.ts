@@ -53,6 +53,28 @@ function indirizzoLinea(d: DatiFiscali): string {
     .join(', ');
 }
 
+/**
+ * Spezza un testo in righe che stanno entro `maxWidth` punti, misurando con il
+ * font reale (così la descrizione lunga non sovrasta la colonna importi). La
+ * misura usa il testo già reso WinAnsi-safe per restare coerente col disegno.
+ */
+export function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = winAnsiSafe(text).split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of words) {
+    const trial = cur ? `${cur} ${w}` : w;
+    if (cur && font.widthOfTextAtSize(trial, size) > maxWidth) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = trial;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length > 0 ? lines : [''];
+}
+
 export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const tipoLabel = labelTipoDocumento(input.tipo);
@@ -159,7 +181,7 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
   page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 1, color: NAVY_700 });
   y -= 16;
 
-  text(page, input.descrizione, MARGIN, y, { size: 10, color: SLATE_700 });
+  // Importi allineati alla PRIMA riga della descrizione.
   text(page, formatCurrencyCent(input.imponibileCent ?? input.importoLordoCent), colImp, y, { size: 10 });
   text(
     page,
@@ -173,9 +195,23 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
     size: 10,
     color: totaleColor,
   });
+
+  // Descrizione: a capo entro lo spazio fino alla colonna IMPONIBILE (con gap).
+  const DESC_LH = 12;
+  const descLines = wrapText(input.descrizione, helv, 10, colImp - MARGIN - 12);
+  descLines.forEach((line, i) => {
+    text(page, line, MARGIN, y - i * DESC_LH, { size: 10, color: SLATE_700 });
+  });
+  y -= (descLines.length - 1) * DESC_LH;
+
   if (input.riferimento) {
     y -= 13;
-    text(page, input.riferimento, MARGIN, y, { size: 8.5, color: SLATE_500 });
+    // Anche il riferimento (es. payout con più pratiche) va a capo a tutta larghezza.
+    const refLines = wrapText(input.riferimento, helv, 8.5, PAGE_W - MARGIN * 2);
+    refLines.forEach((line, i) => {
+      text(page, line, MARGIN, y - i * 11, { size: 8.5, color: SLATE_500 });
+    });
+    y -= (refLines.length - 1) * 11;
   }
   y -= 14;
   page.drawLine({ start: { x: MARGIN, y }, end: { x: PAGE_W - MARGIN, y }, thickness: 0.5, color: SLATE_200 });
@@ -218,14 +254,18 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
     y -= 12;
   }
 
-  // ─── Footer ──────────────────────────────────────────────────────
-  text(
-    page,
-    'Rappresentazione conservabile del documento generata da Passaggio Veloce. Non sostituisce il documento fiscale emesso allo SdI dal commercialista.',
-    MARGIN,
-    MARGIN - 10,
-    { size: 8, color: SLATE_500 },
-  );
+  // ─── Footer (centrato, una frase per riga) ───────────────────────
+  const drawCentered = (line: string, yy: number, size: number): void => {
+    const w = helv.widthOfTextAtSize(winAnsiSafe(line), size);
+    text(page, line, (PAGE_W - w) / 2, yy, { size, color: SLATE_500 });
+  };
+  const footerLines = [
+    'Rappresentazione conservabile del documento generata da Passaggio Veloce.',
+    'Non sostituisce il documento fiscale emesso allo SdI dal commercialista.',
+  ];
+  footerLines.forEach((line, i) => {
+    drawCentered(line, MARGIN - 10 + (footerLines.length - 1 - i) * 10, 8);
+  });
 
   return await pdf.save();
 }

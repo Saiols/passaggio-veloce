@@ -326,6 +326,8 @@ function labelDocumento(t: string): string {
     VISURA_CAMERALE: 'Visura camerale',
     CERTIFICATO_PROPRIETA: 'Certificato di proprietà',
     ALTRO: 'Altro',
+    DELEGA_VENDITA: 'Procura a vendere',
+    DOCUMENTO_DELEGATO: 'Documento delegato',
   };
   return map[t] ?? t;
 }

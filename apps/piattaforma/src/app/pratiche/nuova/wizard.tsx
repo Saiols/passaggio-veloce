@@ -132,6 +132,7 @@ type VeicoloInput = {
   dataImmatricolazione: string;
   preImm2015: boolean;
   flagComodatoDuso: boolean;
+  flagDelegaVendita: boolean;
 };
 
 function emptyVeicolo(): VeicoloInput {
@@ -148,6 +149,7 @@ function emptyVeicolo(): VeicoloInput {
     dataImmatricolazione: '',
     preImm2015: false,
     flagComodatoDuso: false,
+    flagDelegaVendita: false,
   };
 }
 
@@ -1527,6 +1529,35 @@ function VeicoloSection({
                 />
                 Pre-2015 (richiede certificato di proprietà)
               </label>
+            </div>
+            <div className="pt-2 sm:col-span-2">
+              <p className="mb-2 text-[13px] font-semibold text-pv-navy-800">
+                C&apos;è una delega/procura notarile a vendere?
+              </p>
+              <div className="inline-flex overflow-hidden rounded-[10px] border border-pv-slate-300">
+                <button
+                  type="button"
+                  onClick={() => onChange({ flagDelegaVendita: false })}
+                  className={`px-5 py-2 text-[13px] font-semibold transition ${
+                    !veicolo.flagDelegaVendita
+                      ? 'bg-pv-navy-800 text-white'
+                      : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+                  }`}
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChange({ flagDelegaVendita: true })}
+                  className={`border-l border-pv-slate-300 px-5 py-2 text-[13px] font-semibold transition ${
+                    veicolo.flagDelegaVendita
+                      ? 'bg-pv-navy-800 text-white'
+                      : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+                  }`}
+                >
+                  Sì
+                </button>
+              </div>
             </div>
           </div>
         </div>

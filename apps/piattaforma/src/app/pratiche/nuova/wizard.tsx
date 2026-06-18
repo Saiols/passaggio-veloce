@@ -17,6 +17,11 @@ import {
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import { intestatariPerVeicolo, crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
+  delegatoDocKey,
+  procuraDelegaDocKey,
+  delegaDocsComplete,
+} from './delega-docs';
+import {
   validaParte,
   type ParteDati,
   type OcrParte,
@@ -607,6 +612,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
       dataImmatricolazione: v.dataImmatricolazione || null,
       preImm2015: v.preImm2015,
       flagComodatoDuso: v.flagComodatoDuso,
+      flagDelegaVendita: v.flagDelegaVendita,
       ocrData: v.ocr ?? null,
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
@@ -652,8 +658,11 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     fd.append('acquirenteEmail', acquirente.email);
 
     // Documenti richiesti (step Documenti) come slot DOC__<docKey> (BlobRef).
+    // Eccezione: i due allegati delega/procura usano la propria chiave DELEGA_*
+    // (non passano per l'engine documenti richiesti).
     for (const [key, slot] of Object.entries(documenti)) {
-      if (slot.ref) blobRefs[`DOC__${key}`] = slot.ref;
+      if (!slot.ref) continue;
+      blobRefs[key.startsWith('DELEGA_') ? key : `DOC__${key}`] = slot.ref;
     }
 
     // Schema Documentale v7 (SD-B): tipo soggetto acquirente.
@@ -852,9 +861,47 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     </div>
   );
 
+  // Allegati delega/procura a vendere per un veicolo (solo se flag = Sì).
+  // Due UploadCard riusate (stessa grafica + scanner). Nessun OCR.
+  const renderDelegaDocs = (ord: number) => {
+    const veic = veicoli[ord - 1];
+    if (!veic?.flagDelegaVendita) return null;
+    const kDel = delegatoDocKey(ord);
+    const kProc = procuraDelegaDocKey(ord);
+    return (
+      <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+        <h3 className="mb-1 text-[14px] font-bold text-pv-navy-800">
+          Delega a vendere
+        </h3>
+        <p className="mb-4 text-[12.5px] text-pv-slate-500">
+          Allega il documento del delegato e la procura notarile a vendere
+          (obbligatori).
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <UploadCard
+            label="Documento del delegato"
+            slot={documenti[kDel]}
+            onSelect={(file) => uploadDocumento(kDel, file)}
+            onRemove={() => uploadDocumento(kDel, null)}
+          />
+          <UploadCard
+            label="Procura notarile a vendere"
+            slot={documenti[kProc]}
+            onSelect={(file) => uploadDocumento(kProc, file)}
+            onRemove={() => uploadDocumento(kProc, null)}
+          />
+        </div>
+      </div>
+    );
+  };
+
   // Gate per lasciare lo step 2 (Venditore): ogni venditore valido + identità
   // presente (BlobRef) + nessun upload in corso + verifica documentale OK
   // (fail-closed) + nessun mismatch insiemistico.
+  const delegaCompleta = delegaDocsComplete(veicoli, (k) => {
+    const s = documenti[k];
+    return !!s?.ref && !s.uploading;
+  });
   const canStep2 =
     venditori.every(
       (v, i) =>
@@ -862,7 +909,9 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
         identitaPresente(v.docId, v.identita) &&
         !identitaUploading(v.identita) &&
         verdettiVenditori[i]!.ok,
-    ) && ccVend !== 'MISMATCH';
+    ) &&
+    ccVend !== 'MISMATCH' &&
+    delegaCompleta;
 
   // Gate per lasciare lo step 3 (Acquirente): parte valida + identità (BlobRef)
   // pronta + nessun upload in corso + verifica documentale OK (fail-closed).
@@ -1070,6 +1119,7 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                             + Aggiungi co-intestatario
                           </Button>
                         </div>
+                        {renderDelegaDocs(ord)}
                       </div>
                     )}
                   </div>
@@ -1099,9 +1149,16 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                     + Aggiungi venditore (co-intestatario)
                   </Button>
                 </div>
+                {renderDelegaDocs(1)}
               </>
             )}
 
+            {!delegaCompleta && (
+              <Alert variant="error">
+                Per i veicoli con delega/procura a vendere, carica sia il documento
+                del delegato sia la procura notarile prima di procedere.
+              </Alert>
+            )}
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
               <Button variant="secondary" onClick={() => setStep(1)}>
                 Indietro

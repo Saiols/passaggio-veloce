@@ -17,6 +17,11 @@ import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { crossCheckPerVeicolo } from './venditori-per-veicolo';
+import {
+  delegaDocsComplete,
+  delegatoDocKey,
+  procuraDelegaDocKey,
+} from './delega-docs';
 import { extractVisura } from '@/lib/kyc/visura-parser';
 import { parsePermessoText } from '@/lib/kyc/extract-permesso';
 import {
@@ -282,6 +287,7 @@ const veicoloSchema = z.object({
     .nullable(),
   preImm2015: z.boolean().default(false),
   flagComodatoDuso: z.boolean().default(false),
+  flagDelegaVendita: z.boolean().default(false),
   // Snapshot OCR opzionale (così com'è arrivato dall'estrazione, pre-correzione).
   ocrData: z.record(z.string(), z.unknown()).optional().nullable(),
 });
@@ -509,6 +515,18 @@ export async function submitNuovaPraticaAction(
     redirect(
       `/pratiche/nuova?error=${encodeURIComponent(
         `Dati incompleti: ${esitoSchema.mancanti.join(', ')}`,
+      )}`,
+    );
+  }
+
+  // Delega/procura a vendere: se il broker ha selezionato Sì per un veicolo,
+  // entrambi gli allegati sono obbligatori (solo presenza, nessuna validazione
+  // di contenuto). Server-side è la fonte autoritativa.
+  const delegaCompleta = delegaDocsComplete(veicoli, (k) => !!getRef(k));
+  if (!delegaCompleta) {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        'Per i veicoli con delega/procura a vendere servono il documento del delegato e la procura notarile.',
       )}`,
     );
   }
@@ -827,6 +845,25 @@ export async function submitNuovaPraticaAction(
     put: refToPut(cand.ref),
   }));
 
+  // Delega/procura a vendere: due allegati per veicolo con flag (presenza già
+  // verificata sopra). Nessun OCR/gating: solo persistenza, linkati al veicolo.
+  const delegaUploads = veicoli.flatMap((v, i) => {
+    if (!v.flagDelegaVendita) return [];
+    const ord = i + 1;
+    return [
+      {
+        veicoloOrdine: ord,
+        tipo: 'DOCUMENTO_DELEGATO' as const,
+        put: refToPut(getRef(delegatoDocKey(ord))!),
+      },
+      {
+        veicoloOrdine: ord,
+        tipo: 'DELEGA_VENDITA' as const,
+        put: refToPut(getRef(procuraDelegaDocKey(ord))!),
+      },
+    ];
+  });
+
   // Crea la pratica in BOZZA + i veicoli + i libretti in un'unica transazione.
   // L'apertura del round 1 avviene subito dopo tramite l'engine di
   // distribuzione (gestisce selezione agenzie + countdown).
@@ -921,6 +958,27 @@ export async function submitNuovaPraticaAction(
           ocrProvider: env.OCR_PROVIDER,
           ocrData: ocrSnapshot,
           ocrAt: now,
+          gatingStato: 'PASSED',
+        },
+      });
+    }
+
+    // Delega/procura a vendere: righe Documento linkate al veicolo (no OCR,
+    // gating non applicabile → PASSED). veicoloIdByOrdine è già popolata sopra.
+    for (const u of delegaUploads) {
+      await tx.documento.create({
+        data: {
+          tipo: u.tipo,
+          owner: 'VENDITORE',
+          praticaId: created.id,
+          veicoloId: veicoloIdByOrdine.get(u.veicoloOrdine) ?? null,
+          storageKey: u.put.storageKey,
+          storageProvider: u.put.storageProvider,
+          mimeType: u.put.mimeType,
+          sizeBytes: u.put.sizeBytes,
+          originalFilename: u.put.originalFilename,
+          uploadedById: userId,
+          ocrStato: 'NONE',
           gatingStato: 'PASSED',
         },
       });

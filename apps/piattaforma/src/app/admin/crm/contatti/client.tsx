@@ -2,14 +2,17 @@
 
 import { useState, useTransition, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { Alert, Button } from '@/components/ui';
 import {
   createCrmContactAction,
   updateCrmContactAction,
   deleteCrmContactAction,
   bulkImportCrmContactsAction,
+  updateCrmContactStatusAction,
   type CrmContactInput,
 } from './actions';
+import { buildContactsQuery } from './query';
 
 type ContactRow = {
   id: string;
@@ -65,7 +68,8 @@ type Filters = {
   status: string;
   regione: string;
   assigned: string;
-  sort: 'urgente' | 'recente' | 'nome';
+  sort: 'recente' | 'nome';
+  preset: string;
 };
 
 const REGIONI = [
@@ -127,12 +131,20 @@ export function CrmContactsClient({
   salesUsers,
   currentUserRole,
   currentUserId,
+  page,
+  totalPages,
+  total,
+  pageSize,
   filters,
 }: {
   contacts: ContactRow[];
   salesUsers: SalesUser[];
   currentUserRole: string;
   currentUserId: string;
+  page: number;
+  totalPages: number;
+  total: number;
+  pageSize: number;
   filters: Filters;
 }) {
   const router = useRouter();
@@ -143,16 +155,21 @@ export function CrmContactsClient({
   const canBulk = ROLE_CAN_BULK.includes(currentUserRole);
 
   const updateFilter = (key: keyof Filters, value: string): void => {
-    const params = new URLSearchParams();
     const next = { ...filters, [key]: value };
-    if (next.q) params.set('q', next.q);
-    if (next.cat) params.set('cat', next.cat);
-    if (next.status) params.set('status', next.status);
-    if (next.regione) params.set('regione', next.regione);
-    if (next.assigned) params.set('assigned', next.assigned);
-    if (next.sort && next.sort !== 'urgente') params.set('sort', next.sort);
-    const qs = params.toString();
+    // Filtro status singolo e chip preset sono mutuamente esclusivi.
+    if (key === 'status' && value) next.preset = '';
+    if (key === 'preset' && value) next.status = '';
+    const qs = buildContactsQuery({ ...next, page: 1 });
     router.push(qs ? `${pathname}?${qs}` : pathname);
+  };
+
+  const toggleUrgenti = (): void => {
+    updateFilter('preset', filters.preset === 'urgenti' ? '' : 'urgenti');
+  };
+
+  const pageHref = (n: number): string => {
+    const qs = buildContactsQuery({ ...filters, page: n });
+    return qs ? `${pathname}?${qs}` : pathname;
   };
 
   const clearFilters = (): void => {
@@ -223,10 +240,21 @@ export function CrmContactsClient({
           onChange={(e) => updateFilter('sort', e.target.value)}
           className="rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
         >
-          <option value="urgente">🔴 Più urgenti</option>
-          <option value="recente">Più recenti</option>
+          <option value="recente">Ultimo contatto</option>
           <option value="nome">Nome A→Z</option>
         </select>
+        <button
+          type="button"
+          onClick={toggleUrgenti}
+          className={
+            'rounded-[10px] border-[1.5px] px-3 py-2 text-[13px] font-semibold transition ' +
+            (filters.preset === 'urgenti'
+              ? 'border-pv-red-500 bg-pv-red-50 text-pv-red-500'
+              : 'border-pv-slate-300 bg-white text-pv-slate-700 hover:bg-pv-slate-50')
+          }
+        >
+          🔴 Urgenti
+        </button>
         <button
           type="button"
           onClick={clearFilters}
@@ -249,10 +277,82 @@ export function CrmContactsClient({
           Nessun contatto trovato.
         </div>
       ) : (
-        <div className="space-y-2">
-          {contacts.map((c) => (
-            <ContactCard key={c.id} contact={c} onClick={() => setEditing(c)} />
-          ))}
+        <div className="overflow-x-auto rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
+          <table className="w-full min-w-[820px] text-left text-[13px]">
+            <thead>
+              <tr className="border-b border-pv-slate-200 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                <th className="px-4 py-3">Azienda</th>
+                <th className="px-4 py-3">Tipo</th>
+                <th className="px-4 py-3">Città</th>
+                <th className="px-4 py-3">Telefono</th>
+                <th className="px-4 py-3">Assegnato</th>
+                <th className="px-4 py-3">Ultimo contatto</th>
+                <th className="px-4 py-3">Stato</th>
+                <th className="px-4 py-3 text-right">Dettaglio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {contacts.map((c) => (
+                <tr
+                  key={c.id}
+                  className="border-b border-pv-slate-100 last:border-0 hover:bg-pv-slate-50"
+                >
+                  <td className="px-4 py-2.5 font-semibold text-pv-navy-900">{c.nome}</td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">
+                    {c.cat === 'BROKER' ? 'Broker' : 'Agenzia'}
+                  </td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">
+                    {c.citta ?? '—'}
+                    {c.regione ? ` (${c.regione})` : ''}
+                  </td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">{c.tel}</td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">
+                    {c.assignedToName ?? '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">
+                    {c.lastContactAt
+                      ? new Date(c.lastContactAt).toLocaleDateString('it-IT')
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <StatusSelect
+                      contact={c}
+                      currentUserRole={currentUserRole}
+                      currentUserId={currentUserId}
+                    />
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(c)}
+                      className="rounded-[8px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-1 text-[12.5px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                    >
+                      Apri
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[12.5px] text-pv-slate-500">
+            {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} di {total}
+          </p>
+          <div className="flex items-center gap-1">
+            <PageLink href={pageHref(page - 1)} disabled={page <= 1} label="‹ Prec" />
+            <span className="px-2 text-[12.5px] font-semibold text-pv-slate-700">
+              {page} / {totalPages}
+            </span>
+            <PageLink
+              href={pageHref(page + 1)}
+              disabled={page >= totalPages}
+              label="Succ ›"
+            />
+          </div>
         </div>
       )}
 
@@ -279,115 +379,83 @@ export function CrmContactsClient({
 }
 
 // ════════════════════════════════════════════════════════
-// Contact Card
+// Status inline select (salvataggio immediato)
 // ════════════════════════════════════════════════════════
-function ContactCard({
-  contact: c,
-  onClick,
+function StatusSelect({
+  contact,
+  currentUserRole,
+  currentUserId,
 }: {
   contact: ContactRow;
-  onClick: () => void;
+  currentUserRole: string;
+  currentUserId: string;
 }) {
-  const initials = c.nome
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
-  const palette = [
-    'bg-pv-navy-700',
-    'bg-pv-orange-500',
-    'bg-pv-green-500',
-    'bg-pv-amber-500',
-    'bg-purple-600',
-    'bg-pv-red-500',
-  ];
-  const bg = palette[c.nome.charCodeAt(0) % palette.length];
+  const [value, setValue] = useState(contact.status);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const disabled =
+    currentUserRole === 'SALES' && contact.assignedToId !== currentUserId;
 
-  const pixels: { kind: string; label: string }[] = [];
-  if (c.linkAperto) pixels.push({ kind: 'yes', label: '🔗 link aperto' });
-  else if (c.linkInviato) pixels.push({ kind: 'partial', label: '🔗 link inviato' });
-  if (c.videoMin > 0) pixels.push({ kind: 'yes', label: `▶ ${c.videoMin}' video` });
-  if (c.iscrizioneComp) pixels.push({ kind: 'yes', label: '✅ iscritto' });
-  else if (c.iscrizioneInit)
-    pixels.push({ kind: 'partial', label: '⚡ iscrizione avviata' });
-
-  const obiezioniTags = c.obiezioni
-    ? c.obiezioni
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
+  const onChange = (next: string): void => {
+    const prev = value;
+    setValue(next); // ottimistico
+    startTransition(async () => {
+      const res = await updateCrmContactStatusAction(contact.id, next);
+      if (!res.ok) {
+        setValue(prev); // revert
+        alert(res.error);
+        return;
+      }
+      router.refresh();
+    });
+  };
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-4 rounded-[12px] border border-pv-slate-200 bg-white px-4 py-3 text-left transition-all hover:border-pv-navy-700 hover:shadow-[var(--pv-shadow-card)]"
+    <select
+      value={value}
+      disabled={disabled || pending}
+      onChange={(e) => onChange(e.target.value)}
+      title={STATI_LABEL[value] ?? value}
+      className={
+        'rounded-full px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wider disabled:opacity-60 ' +
+        (STATI_COLOR[value] ?? 'bg-pv-slate-100 text-pv-slate-700')
+      }
     >
-      <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[13px] font-bold text-white ${bg}`}
-      >
-        {initials}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[14px] font-semibold text-pv-navy-900">{c.nome}</div>
-        <div className="text-[12px] text-pv-slate-500">
-          {c.cat === 'BROKER' ? 'Broker' : 'Agenzia'} ·{' '}
-          {c.citta ?? '—'}
-          {c.regione ? `, ${c.regione}` : ''} · {c.tel}
-        </div>
-        {pixels.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {pixels.map((p, i) => (
-              <span
-                key={i}
-                className={
-                  'rounded-full px-2 py-0.5 text-[10.5px] font-semibold ' +
-                  (p.kind === 'yes'
-                    ? 'bg-pv-green-50 text-pv-green-500'
-                    : 'bg-pv-amber-50 text-pv-amber-500')
-                }
-              >
-                {p.label}
-              </span>
-            ))}
-          </div>
-        )}
-        {obiezioniTags.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {obiezioniTags.map((t, i) => (
-              <span
-                key={i}
-                className="rounded-full bg-pv-slate-100 px-2 py-0.5 text-[10.5px] text-pv-slate-700"
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <span
-          className={
-            'rounded-full px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider ' +
-            (STATI_COLOR[c.status] ?? 'bg-pv-slate-100 text-pv-slate-700')
-          }
-        >
-          {c.status} · {STATI_LABEL[c.status] ?? c.status}
-        </span>
-        {c.assignedToName && (
-          <span className="text-[11px] text-pv-slate-500">
-            {c.assignedToName}
-          </span>
-        )}
-        {c.lastContactAt && (
-          <span className="text-[11px] text-pv-slate-500">
-            {new Date(c.lastContactAt).toLocaleDateString('it-IT')}
-          </span>
-        )}
-      </div>
-    </button>
+      {Object.entries(STATI_LABEL).map(([k, l]) => (
+        <option key={k} value={k}>
+          {k} — {l}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// Pagination link
+// ════════════════════════════════════════════════════════
+function PageLink({
+  href,
+  disabled,
+  label,
+}: {
+  href: string;
+  disabled: boolean;
+  label: string;
+}) {
+  if (disabled) {
+    return (
+      <span className="rounded-[8px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-3 py-1 text-[12.5px] font-semibold text-pv-slate-400">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      className="rounded-[8px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-1 text-[12.5px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+    >
+      {label}
+    </Link>
   );
 }
 

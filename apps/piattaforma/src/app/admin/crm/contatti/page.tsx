@@ -27,7 +27,9 @@ type SearchParams = {
   status?: (typeof STATI)[number] | '';
   regione?: string;
   assigned?: string;
-  sort?: 'urgente' | 'recente' | 'nome';
+  sort?: 'recente' | 'nome';
+  preset?: 'urgenti' | '';
+  page?: string;
 };
 
 export default async function AdminCrmPipelinePage({
@@ -63,7 +65,9 @@ export default async function AdminCrmPipelinePage({
     ];
   }
   if (sp.cat) where.cat = sp.cat;
-  if (sp.status && STATI.includes(sp.status as (typeof STATI)[number])) {
+  if (sp.preset === 'urgenti') {
+    where.status = { in: ['S6', 'S5', 'S4', 'S3'] };
+  } else if (sp.status && STATI.includes(sp.status as (typeof STATI)[number])) {
     where.status = sp.status as (typeof STATI)[number];
   }
   if (sp.regione) where.regione = sp.regione;
@@ -75,25 +79,26 @@ export default async function AdminCrmPipelinePage({
   }
 
   // Sort
-  const sort = sp.sort ?? 'urgente';
-  // Engine fa orderBy semplice su date / nome; "urgente" lo ordiniamo lato client
-  // perché PostgreSQL non ha un facile ranking per S6→S5→S4→...
-  const orderBy: Prisma.CrmContactOrderByWithRelationInput =
-    sort === 'recente'
-      ? { lastContactAt: 'desc' }
-      : sort === 'nome'
-        ? { nome: 'asc' }
-        : { createdAt: 'desc' };
+  const sort = sp.sort ?? 'recente';
+  const orderBy: Prisma.CrmContactOrderByWithRelationInput[] =
+    sort === 'nome'
+      ? [{ nome: 'asc' }]
+      : [{ lastContactAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }];
 
-  const [allContacts, salesUsers, statsCounts] = await Promise.all([
+  const PAGE_SIZE = 25;
+  const page = Math.max(1, Number(sp.page) || 1);
+
+  const [pageContacts, total, salesUsers, statsCounts] = await Promise.all([
     prisma.crmContact.findMany({
       where,
       orderBy,
-      take: 500,
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
       include: {
         assignedTo: { select: { id: true, nome: true, cognome: true } },
       },
     }),
+    prisma.crmContact.count({ where }),
     prisma.user.findMany({
       where: {
         role: { in: ['SALES_MANAGER', 'SALES'] },
@@ -102,7 +107,6 @@ export default async function AdminCrmPipelinePage({
       select: { id: true, nome: true, cognome: true },
       orderBy: [{ nome: 'asc' }, { cognome: 'asc' }],
     }),
-    // Conteggi globali (no filtri user) per le stat cards
     prisma.crmContact.groupBy({
       by: ['status'],
       where: { deletedAt: null },
@@ -110,25 +114,7 @@ export default async function AdminCrmPipelinePage({
     }),
   ]);
 
-  // Sort "urgente" applicato lato server in memoria (lista già limitata)
-  if (sort === 'urgente') {
-    const URGENCY: Record<string, number> = {
-      S6: 0,
-      S5: 1,
-      S4: 2,
-      S3: 3,
-      S1: 4,
-      S0: 5,
-      S7: 6,
-      S2: 7,
-      S8: 8,
-      S9: 9,
-      S10: 10,
-    };
-    allContacts.sort(
-      (a, b) => (URGENCY[a.status] ?? 99) - (URGENCY[b.status] ?? 99),
-    );
-  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const counts = Object.fromEntries(
     statsCounts.map((s) => [s.status, s._count._all]),
@@ -157,7 +143,7 @@ export default async function AdminCrmPipelinePage({
   ];
 
   // Serializza ai client component (Date → string ISO)
-  const contacts = allContacts.map((c) => ({
+  const contacts = pageContacts.map((c) => ({
     ...c,
     assignedToName: c.assignedTo
       ? `${c.assignedTo.nome} ${c.assignedTo.cognome}`.trim()
@@ -210,6 +196,10 @@ export default async function AdminCrmPipelinePage({
           }))}
           currentUserRole={session.user.role ?? ''}
           currentUserId={session.user.id ?? ''}
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          pageSize={PAGE_SIZE}
           filters={{
             q: sp.q ?? '',
             cat: sp.cat ?? '',
@@ -217,6 +207,7 @@ export default async function AdminCrmPipelinePage({
             regione: sp.regione ?? '',
             assigned: sp.assigned ?? '',
             sort: sort,
+            preset: sp.preset ?? '',
           }}
         />
       </div>

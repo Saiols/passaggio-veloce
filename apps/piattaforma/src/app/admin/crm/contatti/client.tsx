@@ -262,13 +262,12 @@ export function CrmContactsClient({
         >
           Reset
         </button>
-        <div className="ml-auto flex gap-2">
-          {canBulk && (
-            <CsvImportButton onComplete={() => router.refresh()} />
-          )}
-          <Button size="sm" onClick={() => setCreating(true)}>
-            + Nuovo contatto
-          </Button>
+        <div className="ml-auto">
+          <AddContactsMenu
+            canBulk={canBulk}
+            onNew={() => setCreating(true)}
+            onImported={() => router.refresh()}
+          />
         </div>
       </div>
 
@@ -379,6 +378,68 @@ export function CrmContactsClient({
 }
 
 // ════════════════════════════════════════════════════════
+// Menu unico "+ Aggiungi contatti" (Nuovo / Importa CSV)
+// ════════════════════════════════════════════════════════
+function AddContactsMenu({
+  canBulk,
+  onNew,
+  onImported,
+}: {
+  canBulk: boolean;
+  onNew: () => void;
+  onImported: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  return (
+    <div className="relative">
+      <Button size="sm" onClick={() => setOpen((o) => !o)}>
+        + Aggiungi contatti
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-[12px] border border-pv-slate-200 bg-white py-1 shadow-[var(--pv-shadow-card-lg)]">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onNew();
+              }}
+              className="block w-full px-4 py-2 text-left text-[13px] font-semibold text-pv-navy-800 hover:bg-pv-slate-50"
+            >
+              Nuovo contatto
+            </button>
+            {canBulk && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setImporting(true);
+                }}
+                className="block w-full px-4 py-2 text-left text-[13px] font-semibold text-pv-navy-800 hover:bg-pv-slate-50"
+              >
+                Importa da CSV
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {importing && (
+        <CsvImportDialog
+          onClose={() => setImporting(false)}
+          onComplete={() => {
+            setImporting(false);
+            onImported();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
 // Status inline select (salvataggio immediato)
 // ════════════════════════════════════════════════════════
 function StatusSelect({
@@ -460,9 +521,15 @@ function PageLink({
 }
 
 // ════════════════════════════════════════════════════════
-// CSV Import button + dialog
+// CSV Import dialog (categoria + file)
 // ════════════════════════════════════════════════════════
-function CsvImportButton({ onComplete }: { onComplete: () => void }) {
+function CsvImportDialog({
+  onClose,
+  onComplete,
+}: {
+  onClose: () => void;
+  onComplete: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
@@ -489,65 +556,71 @@ function CsvImportButton({ onComplete }: { onComplete: () => void }) {
   };
 
   return (
-    <>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) handleFile(f);
-          e.target.value = '';
-        }}
-      />
-      <div className="inline-flex items-center gap-2">
-        <select
-          value={defaultCat}
-          onChange={(e) => setDefaultCat(e.target.value as 'BROKER' | 'AGENZIA')}
-          disabled={pending}
-          title="Categoria assegnata ai contatti del file senza colonna 'cat'"
-          className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-2 py-1.5 text-[12.5px] font-semibold text-pv-slate-700 focus:border-pv-navy-700 focus:outline-none"
-        >
-          <option value="BROKER">Rivenditori</option>
-          <option value="AGENZIA">Agenzie</option>
-        </select>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-          disabled={pending}
-          loading={pending}
-          loadingLabel="Import…"
-        >
-          ↑ Import CSV
-        </Button>
-      </div>
-      {result && (
-        <div
-          role="dialog"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-pv-navy-900/40 px-4"
-          onClick={() => setResult(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-[16px] bg-white p-5 shadow-[var(--pv-shadow-card-lg)]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-[15px] font-bold text-pv-navy-900">
-              Esito import CSV
-            </h3>
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-pv-navy-900/40 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-[16px] bg-white p-5 shadow-[var(--pv-shadow-card-lg)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFile(f);
+            e.target.value = '';
+          }}
+        />
+        <h3 className="text-[15px] font-bold text-pv-navy-900">Importa contatti da CSV</h3>
+        {result ? (
+          <>
             <pre className="mt-3 whitespace-pre-wrap rounded-[10px] bg-pv-slate-50 px-3 py-2 text-[12px] text-pv-slate-700">
               {result}
             </pre>
             <div className="mt-4 flex justify-end">
-              <Button size="sm" onClick={() => setResult(null)}>
+              <Button size="sm" onClick={onClose}>
                 Chiudi
               </Button>
             </div>
-          </div>
-        </div>
-      )}
-    </>
+          </>
+        ) : (
+          <>
+            <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
+              Categoria per le righe senza colonna &quot;cat&quot;
+              <select
+                value={defaultCat}
+                onChange={(e) => setDefaultCat(e.target.value as 'BROKER' | 'AGENZIA')}
+                disabled={pending}
+                className="mt-1 block w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+              >
+                <option value="BROKER">Rivenditori</option>
+                <option value="AGENZIA">Agenzie</option>
+              </select>
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={onClose} disabled={pending}>
+                Annulla
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={pending}
+                loading={pending}
+                loadingLabel="Import…"
+              >
+                Scegli file CSV
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

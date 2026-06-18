@@ -21,6 +21,7 @@ import {
   procuraDelegaDocKey,
   delegaDocsComplete,
 } from './delega-docs';
+import { formatIndirizzo } from './acquirente-indirizzo';
 import {
   validaParte,
   type ParteDati,
@@ -364,6 +365,11 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
   const [acquirenteIdentita, setAcquirenteIdentita] = useState<IdentitaFiles>({});
 
+  // Residenza acquirente: domanda "uguale al documento?" (default Sì = false) +
+  // indirizzo alternativo quando il broker risponde No (stringa formattata).
+  const [acquirenteResidenzaDiversa, setAcquirenteResidenzaDiversa] = useState(false);
+  const [acquirenteIndirizzoResidenza, setAcquirenteIndirizzoResidenza] = useState('');
+
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
   const hasMaps = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -656,6 +662,9 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
     }
     fd.append('acquirenteTelefono', acquirente.telefono);
     fd.append('acquirenteEmail', acquirente.email);
+    if (acquirenteResidenzaDiversa && acquirenteIndirizzoResidenza.trim()) {
+      fd.append('acquirenteIndirizzoResidenza', acquirenteIndirizzoResidenza.trim());
+    }
 
     // Documenti richiesti (step Documenti) come slot DOC__<docKey> (BlobRef).
     // Eccezione: i due allegati delega/procura usano la propria chiave DELEGA_*
@@ -915,11 +924,14 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
 
   // Gate per lasciare lo step 3 (Acquirente): parte valida + identità (BlobRef)
   // pronta + nessun upload in corso + verifica documentale OK (fail-closed).
+  const residenzaOk =
+    !acquirenteResidenzaDiversa || acquirenteIndirizzoResidenza.trim().length > 0;
   const canStep3 =
     parteValida(acquirente) &&
     identitaPresente(acquirenteDocId, acquirenteIdentita) &&
     !identitaUploading(acquirenteIdentita) &&
-    verdettoAcquirente.ok;
+    verdettoAcquirente.ok &&
+    residenzaOk;
 
   // Schema Documentale v7 (SD-B): blocca il submit se l'engine non torna OK
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
@@ -1235,6 +1247,71 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
               }
             />
 
+            <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+              <p className="mb-2 text-[14px] font-semibold text-pv-navy-800">
+                L&apos;indirizzo di residenza è lo stesso indicato nel documento?
+              </p>
+              <div className="inline-flex overflow-hidden rounded-[10px] border border-pv-slate-300">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAcquirenteResidenzaDiversa(false);
+                    setAcquirenteIndirizzoResidenza('');
+                  }}
+                  className={`px-5 py-2 text-[13px] font-semibold transition ${
+                    !acquirenteResidenzaDiversa
+                      ? 'bg-pv-navy-800 text-white'
+                      : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+                  }`}
+                >
+                  Sì
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAcquirenteResidenzaDiversa(true)}
+                  className={`border-l border-pv-slate-300 px-5 py-2 text-[13px] font-semibold transition ${
+                    acquirenteResidenzaDiversa
+                      ? 'bg-pv-navy-800 text-white'
+                      : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+                  }`}
+                >
+                  No
+                </button>
+              </div>
+
+              {acquirenteResidenzaDiversa && (
+                <div className="mt-4">
+                  <p className="mb-2 text-[12.5px] text-pv-slate-500">
+                    Indica la residenza attuale dell&apos;acquirente: l&apos;agenzia
+                    intesterà il passaggio a questo indirizzo.
+                  </p>
+                  {hasMaps ? (
+                    <>
+                      <AddressAutocomplete
+                        label="Nuovo indirizzo di residenza"
+                        placeholder="Via, civico, città…"
+                        helpText="Inizia a digitare e seleziona dall'elenco."
+                        onSelect={(p) => setAcquirenteIndirizzoResidenza(formatIndirizzo(p))}
+                      />
+                      {acquirenteIndirizzoResidenza && (
+                        <p className="mt-2 text-[13px] text-pv-slate-700">
+                          Indirizzo selezionato: <strong>{acquirenteIndirizzoResidenza}</strong>
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <Field label="Nuovo indirizzo di residenza" required>
+                      <Input
+                        value={acquirenteIndirizzoResidenza}
+                        onChange={(e) => setAcquirenteIndirizzoResidenza(e.target.value)}
+                        placeholder="Via Roma 12, 20100 Milano (MI)"
+                      />
+                    </Field>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Verifica documentale OCR (fail-closed): finché ci sono problemi
                 l'acquirente non supera il gate "Avanti". */}
             {!verdettoAcquirente.ok && (
@@ -1245,6 +1322,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
                     <li key={i}>{p}</li>
                   ))}
                 </ul>
+              </Alert>
+            )}
+
+            {acquirenteResidenzaDiversa && !acquirenteIndirizzoResidenza.trim() && (
+              <Alert variant="error">
+                Inserisci il nuovo indirizzo di residenza dell&apos;acquirente per procedere.
               </Alert>
             )}
 

@@ -108,6 +108,9 @@ enum DocumentoTipo {
   ALTRO
   PASSAPORTO
   PATENTE
+  // Delega/procura a vendere (allegati pratica, no engine/gating)
+  DELEGA_VENDITA
+  DOCUMENTO_DELEGATO
 }
 
 // Schema Documentale v7: tipologia di soggetto (venditore o acquirente).
@@ -774,6 +777,7 @@ model Veicolo {
   dataImmatricolazione DateTime?
   preImm2015           Boolean   @default(false)
   flagComodatoDuso     Boolean   @default(false)
+  flagDelegaVendita    Boolean   @default(false)
   ocrData              Json?
   ocrProvider          String?
   ocrAt                DateTime?

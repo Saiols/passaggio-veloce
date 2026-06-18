@@ -347,6 +347,12 @@ export default async function PraticaDetailPage({
                       email={pratica.acquirenteEmail}
                     />
                   )}
+                  {pratica.acquirenteIndirizzoResidenza && (
+                    <p className="mt-1.5 text-[12px] text-pv-slate-700">
+                      <span className="font-semibold">Residenza (diversa dal documento):</span>{' '}
+                      {pratica.acquirenteIndirizzoResidenza}
+                    </p>
+                  )}
                 </div>
               </div>
               {(pratica.flagCointestazione || pratica.flagMinivoltura || pratica.flagProcura) && (

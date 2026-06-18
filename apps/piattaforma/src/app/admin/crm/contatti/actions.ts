@@ -11,6 +11,7 @@ import {
   canBulkImportCrm,
 } from '@/lib/auth/permissions';
 import { parseContactsCsv } from '@/lib/crm/csv-import';
+import { normalizePhone } from '@/lib/crm/phone';
 
 export type CrmContactResult =
   | { ok: true; id: string }
@@ -201,6 +202,28 @@ export async function createCrmContactAction(
     };
   }
 
+  // Anti-duplicato: blocca se esiste già un contatto non eliminato con la stessa
+  // email o lo stesso telefono (normalizzato). Niente overwrite: si modifica
+  // l'esistente dalla scheda. Il telefono normalizzato si confronta in memoria
+  // (nessuna colonna dedicata).
+  const emailNorm = parsed.data.email ? parsed.data.email.trim().toLowerCase() : '';
+  const telNorm = normalizePhone(parsed.data.tel);
+  const candidates = await prisma.crmContact.findMany({
+    where: { deletedAt: null },
+    select: { email: true, tel: true },
+  });
+  const isDup = candidates.some(
+    (c) =>
+      (emailNorm !== '' && c.email === emailNorm) ||
+      (telNorm !== '' && normalizePhone(c.tel) === telNorm),
+  );
+  if (isDup) {
+    return {
+      ok: false,
+      error: 'Esiste già un contatto con questa email o questo telefono.',
+    };
+  }
+
   const created = await prisma.crmContact.create({
     data: dataFromInput(parsed.data),
     select: { id: true },
@@ -338,18 +361,32 @@ export async function bulkImportCrmContactsAction(
   let created = 0;
   let skipped = parsed.rowErrors.length;
 
+  // Dedup contro gli esistenti (email + telefono normalizzato), caricati una
+  // volta sola; i Set si aggiornano man mano per intercettare anche i duplicati
+  // interni allo stesso file. Niente overwrite: nel dubbio si salta.
+  const existing = await prisma.crmContact.findMany({
+    where: { deletedAt: null },
+    select: { email: true, tel: true },
+  });
+  const emailSet = new Set(
+    existing.map((c) => c.email).filter((e): e is string => !!e),
+  );
+  const telSet = new Set(
+    existing.map((c) => normalizePhone(c.tel)).filter((t) => t !== ''),
+  );
+
   for (const row of parsed.rows) {
-    // Dedup per email (no overwrite massivo). Email vuota → nessun dedup.
-    if (row.email) {
-      const dup = await prisma.crmContact.findFirst({
-        where: { email: row.email, deletedAt: null },
-        select: { id: true },
-      });
-      if (dup) {
-        skipped++;
-        errors.push(`Riga ${row.line}: email "${row.email}" già presente — salto`);
-        continue;
-      }
+    // Dedup per email e per telefono normalizzato (no overwrite massivo).
+    if (row.email && emailSet.has(row.email)) {
+      skipped++;
+      errors.push(`Riga ${row.line}: email "${row.email}" già presente — salto`);
+      continue;
+    }
+    const telNorm = normalizePhone(row.tel);
+    if (telNorm !== '' && telSet.has(telNorm)) {
+      skipped++;
+      errors.push(`Riga ${row.line}: telefono "${row.tel}" già presente — salto`);
+      continue;
     }
 
     try {
@@ -370,6 +407,8 @@ export async function bulkImportCrmContactsAction(
         },
       });
       created++;
+      if (row.email) emailSet.add(row.email);
+      if (telNorm !== '') telSet.add(telNorm);
     } catch (err) {
       skipped++;
       errors.push(

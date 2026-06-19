@@ -126,6 +126,22 @@ const STATI_COLOR: Record<string, string> = {
 const ROLE_CAN_DELETE = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
 const ROLE_CAN_BULK = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
 
+/** Chip colorato per distinguere a colpo d'occhio broker e agenzie. */
+function CatBadge({ cat }: { cat: 'BROKER' | 'AGENZIA' }) {
+  const isBroker = cat === 'BROKER';
+  return (
+    <span
+      className={
+        'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider ' +
+        (isBroker ? 'bg-blue-50 text-blue-700' : 'bg-pv-orange-50 text-pv-orange-500')
+      }
+    >
+      <span className={'h-1.5 w-1.5 rounded-full ' + (isBroker ? 'bg-blue-500' : 'bg-pv-orange-500')} />
+      {isBroker ? 'Broker' : 'Agenzia'}
+    </span>
+  );
+}
+
 export function CrmContactsClient({
   contacts,
   salesUsers,
@@ -297,8 +313,8 @@ export function CrmContactsClient({
                   className="border-b border-pv-slate-100 last:border-0 hover:bg-pv-slate-50"
                 >
                   <td className="px-4 py-2.5 font-semibold text-pv-navy-900">{c.nome}</td>
-                  <td className="px-4 py-2.5 text-pv-slate-700">
-                    {c.cat === 'BROKER' ? 'Broker' : 'Agenzia'}
+                  <td className="px-4 py-2.5">
+                    <CatBadge cat={c.cat} />
                   </td>
                   <td className="px-4 py-2.5 text-pv-slate-700">
                     {c.citta ?? '—'}
@@ -596,7 +612,7 @@ function CsvImportDialog({
                 disabled={pending}
                 className="mt-1 block w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
               >
-                <option value="BROKER">Rivenditori</option>
+                <option value="BROKER">Broker</option>
                 <option value="AGENZIA">Agenzie</option>
               </select>
             </label>
@@ -705,10 +721,13 @@ function ContactModal({
         className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-[16px] bg-white shadow-[var(--pv-shadow-card-lg)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
-          <h2 className="text-[16px] font-extrabold text-pv-navy-900">
-            {isCreate ? 'Nuovo contatto' : contact!.nome}
-          </h2>
+        <header className="flex items-center justify-between gap-3 border-b border-pv-slate-200 px-5 py-4">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <h2 className="truncate text-[16px] font-extrabold text-pv-navy-900">
+              {isCreate ? 'Nuovo contatto' : contact!.nome}
+            </h2>
+            {!isCreate && <CatBadge cat={contact!.cat} />}
+          </div>
           <button
             type="button"
             onClick={onClose}

@@ -5,7 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
-import { formatRelative } from '@/lib/format';
+import { formatRelative, formatDate, formatCurrencyCent } from '@/lib/format';
 import { GestioneSegnalazione } from './gestione-form';
 
 const TIPO_LABEL: Record<string, string> = {
@@ -30,19 +30,33 @@ export default async function AdminSegnalazioniPage() {
     );
   }
 
-  const pratiche = await prisma.pratica.findMany({
-    where: { flagSegnalata: true, segnalazioneStato: 'RICEVUTA' },
-    orderBy: { segnalataAt: 'asc' },
-    include: {
-      broker: {
-        select: { id: true, ragioneSociale: true, telefono: true, email: true },
+  const [pendenti, storico] = await Promise.all([
+    prisma.pratica.findMany({
+      where: { flagSegnalata: true, segnalazioneStato: 'RICEVUTA' },
+      orderBy: { segnalataAt: 'asc' },
+      include: {
+        broker: {
+          select: { id: true, ragioneSociale: true, telefono: true, email: true },
+        },
+        agenziaAssegnata: {
+          select: { id: true, ragioneSociale: true, telefono: true, email: true },
+        },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
-      agenziaAssegnata: {
-        select: { id: true, ragioneSociale: true, telefono: true, email: true },
+    }),
+    // Storico (sola lettura): segnalazioni già gestite. Filtra per stato perché
+    // su "respinta" flagSegnalata torna false.
+    prisma.pratica.findMany({
+      where: { segnalazioneStato: { in: ['CONFERMATA', 'RESPINTA'] } },
+      orderBy: { segnalazioneEsitaAt: 'desc' },
+      take: 50,
+      include: {
+        broker: { select: { ragioneSociale: true } },
+        agenziaAssegnata: { select: { ragioneSociale: true } },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
-      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
-    },
-  });
+    }),
+  ]);
 
   return (
     <AppShell session={session} activePath="/admin/segnalazioni">
@@ -61,13 +75,13 @@ export default async function AdminSegnalazioniPage() {
           </p>
         </header>
 
-        {pratiche.length === 0 ? (
+        {pendenti.length === 0 ? (
           <Alert variant="success" title="Nessuna segnalazione attiva">
             Tutte le segnalazioni sono state gestite.
           </Alert>
         ) : (
           <div className="space-y-4">
-            {pratiche.map((p) => (
+            {pendenti.map((p) => (
               <Card
                 key={p.id}
                 className="border-pv-amber-500/40 bg-pv-amber-50/40"
@@ -130,6 +144,72 @@ export default async function AdminSegnalazioniPage() {
               </Card>
             ))}
           </div>
+        )}
+
+        {storico.length > 0 && (
+          <section className="mt-8">
+            <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
+              Storico segnalazioni gestite
+            </h2>
+            <div className="overflow-x-auto rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
+              <table className="w-full min-w-[760px] text-left text-[13px]">
+                <thead className="border-b border-pv-slate-200 bg-pv-slate-50 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Pratica</th>
+                    <th className="px-4 py-3">Tipo</th>
+                    <th className="px-4 py-3 hidden md:table-cell">Broker</th>
+                    <th className="px-4 py-3 hidden md:table-cell">Agenzia</th>
+                    <th className="px-4 py-3">Esito</th>
+                    <th className="px-4 py-3 text-right">Gestita</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pv-slate-100">
+                  {storico.map((p) => {
+                    const confermata = p.segnalazioneStato === 'CONFERMATA';
+                    return (
+                      <tr key={p.id} className="hover:bg-pv-slate-50">
+                        <td className="px-4 py-2.5">
+                          <Link
+                            href={`/pratiche/${p.id}`}
+                            className="font-mono font-semibold text-pv-navy-700 hover:underline"
+                          >
+                            {p.codicePratica ?? '—'}
+                          </Link>
+                          <span className="ml-2 text-pv-slate-500">{p.veicoli[0]?.targa ?? '—'}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-pv-slate-700">
+                          {TIPO_LABEL[p.tipoSegnalazione ?? 'ALTRO']}
+                        </td>
+                        <td className="px-4 py-2.5 hidden text-pv-slate-700 md:table-cell">
+                          {p.broker.ragioneSociale}
+                        </td>
+                        <td className="px-4 py-2.5 hidden text-pv-slate-700 md:table-cell">
+                          {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span
+                            className={
+                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ' +
+                              (confermata
+                                ? 'bg-pv-red-50 text-pv-red-500'
+                                : 'bg-pv-slate-100 text-pv-slate-700')
+                            }
+                          >
+                            {confermata
+                              ? `Penale${p.penaleAddebitatoCent ? ' ' + formatCurrencyCent(p.penaleAddebitatoCent) : ''}`
+                              : 'Respinta'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-pv-slate-500">
+                          {p.segnalazioneEsitaAt ? formatDate(p.segnalazioneEsitaAt) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
         )}
       </div>
     </AppShell>

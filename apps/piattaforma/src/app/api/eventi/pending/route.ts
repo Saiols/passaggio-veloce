@@ -16,21 +16,26 @@ export async function GET(): Promise<Response> {
     return NextResponse.json({ eventi: [] }, { headers: { 'Cache-Control': 'private, no-store' } });
   }
 
-  const eventi = await prisma.eventoPratica.findMany({
-    where: { targetCompanyId: companyId, seenAt: null },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-    select: {
-      id: true,
-      tipo: true,
-      titolo: true,
-      testo: true,
-      ctaLabel: true,
-      ctaHref: true,
-      praticaId: true,
-      createdAt: true,
-    },
-  });
-
-  return NextResponse.json({ eventi }, { headers: { 'Cache-Control': 'private, no-store' } });
+  try {
+    const eventi = await prisma.eventoPratica.findMany({
+      where: { targetCompanyId: companyId, seenAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        tipo: true,
+        titolo: true,
+        testo: true,
+        ctaLabel: true,
+        ctaHref: true,
+        praticaId: true,
+        createdAt: true,
+      },
+    });
+    return NextResponse.json({ eventi }, { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch {
+    // Resiliente: se la tabella non esiste ancora (migration prod non applicata)
+    // o qualsiasi errore DB, degrada a "nessun evento" invece di 500.
+    return NextResponse.json({ eventi: [] }, { headers: { 'Cache-Control': 'private, no-store' } });
+  }
 }

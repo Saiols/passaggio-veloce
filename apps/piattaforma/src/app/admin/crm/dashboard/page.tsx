@@ -74,6 +74,7 @@ export default async function AdminCrmDashboardPage() {
     salesAgentCount,
     campagneAttive,
     contactsByStato,
+    contactsByStatoCat,
     contactsLast6m,
   ] = await Promise.all([
     prisma.crmContact.count({ where: { deletedAt: null } }),
@@ -92,6 +93,11 @@ export default async function AdminCrmDashboardPage() {
     }),
     prisma.crmContact.groupBy({
       by: ['status'],
+      where: { deletedAt: null },
+      _count: { _all: true },
+    }),
+    prisma.crmContact.groupBy({
+      by: ['status', 'cat'],
       where: { deletedAt: null },
       _count: { _all: true },
     }),
@@ -128,6 +134,21 @@ export default async function AdminCrmDashboardPage() {
     const pct = totaleContatti > 0 ? (count / totaleContatti) * 100 : 0;
     return { stato: s, label: STATI_LABEL[s] ?? s, count, pct };
   });
+
+  // ─── Raggiungimento obiettivo per categoria (contattati / iscritti) ────
+  const obiettivo = (cat: 'BROKER' | 'AGENZIA') => {
+    const rows = contactsByStatoCat.filter((r) => r.cat === cat);
+    const tot = rows.reduce((a, r) => a + r._count._all, 0);
+    const nonContattati = rows
+      .filter((r) => r.status === 'S0')
+      .reduce((a, r) => a + r._count._all, 0);
+    const iscritti = rows
+      .filter((r) => r.status === 'S7' || r.status === 'S8' || r.status === 'S9')
+      .reduce((a, r) => a + r._count._all, 0);
+    return { tot, contattati: tot - nonContattati, iscritti };
+  };
+  const obBroker = obiettivo('BROKER');
+  const obAgenzie = obiettivo('AGENZIA');
 
   // ─── Sezione Dati Economici (gated) ────────────────────────────────
   let financials: {
@@ -240,6 +261,34 @@ export default async function AdminCrmDashboardPage() {
             icon="📣"
             tone="green"
           />
+        </section>
+
+        {/* Raggiungimento obiettivo (contattati / iscritti per categoria) */}
+        <section className="mt-6 rounded-[12px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+          <h2 className="text-[14px] font-bold text-pv-navy-900">Raggiungimento obiettivo</h2>
+          <p className="text-[11.5px] text-pv-slate-500">
+            Quota di broker e agenzie contattati e iscritti sul totale dei lead.
+          </p>
+          <div className="mt-4 grid gap-6 sm:grid-cols-2">
+            {[
+              { titolo: 'Broker', m: obBroker, dot: 'bg-blue-500', bar: 'bg-blue-500' },
+              { titolo: 'Agenzie', m: obAgenzie, dot: 'bg-pv-orange-500', bar: 'bg-pv-orange-500' },
+            ].map(({ titolo, m, dot, bar }) => (
+              <div key={titolo}>
+                <p className="flex items-center gap-2 text-[12.5px] font-bold text-pv-navy-900">
+                  <span className={'h-2 w-2 rounded-full ' + dot} />
+                  {titolo}
+                  <span className="ml-auto text-[11.5px] font-normal text-pv-slate-500">
+                    {m.tot.toLocaleString('it-IT')} lead
+                  </span>
+                </p>
+                <div className="mt-3 space-y-3">
+                  <ObiettivoBar label="Contattati" value={m.contattati} tot={m.tot} barClass={bar} />
+                  <ObiettivoBar label="Iscritti" value={m.iscritti} tot={m.tot} barClass={bar} />
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* 2 grafici affiancati */}
@@ -390,6 +439,37 @@ function FinanceCard({
         {value}
       </p>
       {hint && <p className="text-[10.5px] text-pv-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+function ObiettivoBar({
+  label,
+  value,
+  tot,
+  barClass,
+}: {
+  label: string;
+  value: number;
+  tot: number;
+  barClass: string;
+}) {
+  const pct = tot > 0 ? (value / tot) * 100 : 0;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-[12px]">
+        <span className="text-pv-slate-600">{label}</span>
+        <span className="shrink-0 text-pv-slate-500">
+          {value.toLocaleString('it-IT')}/{tot.toLocaleString('it-IT')} ·{' '}
+          <span className="font-bold text-pv-navy-900">{pct.toFixed(1)}%</span>
+        </span>
+      </div>
+      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-pv-slate-100">
+        <div
+          className={'h-full transition-all ' + barClass}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
+      </div>
     </div>
   );
 }

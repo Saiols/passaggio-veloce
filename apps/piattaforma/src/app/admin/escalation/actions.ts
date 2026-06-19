@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification } from '@/lib/notifiche';
+import { emitEventoPratica } from '@/lib/eventi/emit';
+import { eventoPraticaAssegnata } from '@/lib/eventi/pratica-eventi';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
 
 export type AssignResult = { ok: true } | { ok: false; error: string };
@@ -126,6 +128,22 @@ export async function assegnaEscalationAction(
       });
     } catch {
       // swallow notification errors — assegnazione già avvenuta
+    }
+
+    // Evento in-app (modale) per l'agenzia assegnata.
+    if (notificaData.codicePratica) {
+      try {
+        await emitEventoPratica(
+          prisma,
+          eventoPraticaAssegnata({
+            praticaId,
+            agenziaId,
+            codicePratica: notificaData.codicePratica,
+          }),
+        );
+      } catch {
+        // best-effort
+      }
     }
 
     revalidatePath('/admin/escalation');

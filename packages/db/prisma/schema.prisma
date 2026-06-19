@@ -1238,6 +1238,33 @@ model NotificaInviata {
   @@map("notifiche_inviate")
 }
 
+/// Evento in-app di una pratica, mostrato come modale istantanea alla CONTROPARTE
+/// (broker <-> agenzia). Feed separato dal log email `NotificaInviata`. Riferimenti
+/// soft (scalari, niente FK) per restare una tabella isolata: `praticaId` può
+/// puntare a una pratica eliminata, `targetCompanyId` è l'azienda che deve vedere
+/// la modale. `tipo` è una costante app-level (lib/eventi/tipi.ts) — niente enum.
+model EventoPratica {
+  id String @id @default(uuid()) @db.Uuid
+
+  praticaId       String? @db.Uuid
+  targetCompanyId String  @db.Uuid
+
+  tipo     String
+  titolo   String
+  testo    String
+  ctaLabel String?
+  ctaHref  String?
+
+  seenAt       DateTime?
+  seenByUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  @@index([targetCompanyId, seenAt])
+  @@index([praticaId])
+  @@map("eventi_pratica")
+}
+
 // ============================================================
 // ENUMS — CRM (release CRM-A 2026-05-06)
 // Spec: docs/crm-spec-implementativa.md

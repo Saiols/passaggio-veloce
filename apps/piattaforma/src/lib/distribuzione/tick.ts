@@ -11,6 +11,8 @@ import {
   sendNotifications,
   type N6AgenziaNuovaPayload,
 } from '@/lib/notifiche';
+import { emitEventiPratica, emitEventoPratica } from '@/lib/eventi/emit';
+import { eventoNuovaPratica, eventoPraticaEscalation } from '@/lib/eventi/pratica-eventi';
 
 const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
   1: DISTRIBUZIONE.T1_HOURS,
@@ -286,6 +288,20 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
   }));
 
   await sendNotifications(inputs);
+
+  // Eventi in-app (modale "nuova pratica") per ogni agenzia selezionata.
+  await emitEventiPratica(
+    prisma,
+    assegnazioni
+      .filter((a) => a.pratica.codicePratica)
+      .map((a) =>
+        eventoNuovaPratica({
+          praticaId: a.praticaId,
+          agenziaId: a.agenzia.id,
+          codicePratica: a.pratica.codicePratica!,
+        }),
+      ),
+  ).catch(() => undefined);
 }
 
 async function emitEscalationNotifications(praticaId: string): Promise<void> {
@@ -340,6 +356,18 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
         nomeBroker: brokerUser.nome,
       },
     });
+  }
+
+  // Evento in-app (modale) per il broker: nessuna agenzia disponibile.
+  if (pratica.codicePratica) {
+    await emitEventoPratica(
+      prisma,
+      eventoPraticaEscalation({
+        praticaId,
+        brokerId: pratica.broker.id,
+        codicePratica: pratica.codicePratica,
+      }),
+    ).catch(() => undefined);
   }
 }
 

@@ -6,6 +6,8 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { sendNotification, getAdminEmails } from '@/lib/notifiche';
+import { emitEventiPratica } from '@/lib/eventi/emit';
+import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { PENALI } from './config';
 
 export type SegnalazioneTipo =
@@ -330,6 +332,32 @@ export async function confermaAnnullamentoConPenaleAction(
     }
   } catch {
     // best-effort
+  }
+
+  // Eventi in-app (modale): penale per il broker, segnalazione confermata per l'agenzia.
+  if (payload) {
+    try {
+      await emitEventiPratica(prisma, [
+        eventoPraticaPenale({
+          praticaId,
+          targetCompanyId: payload.brokerCompanyId,
+          codicePratica: payload.codicePratica,
+          ruolo: 'broker',
+        }),
+        ...(payload.agenziaCompanyId
+          ? [
+              eventoPraticaPenale({
+                praticaId,
+                targetCompanyId: payload.agenziaCompanyId,
+                codicePratica: payload.codicePratica,
+                ruolo: 'agenzia',
+              }),
+            ]
+          : []),
+      ]);
+    } catch {
+      // best-effort
+    }
   }
 
   revalidatePath('/admin/segnalazioni');

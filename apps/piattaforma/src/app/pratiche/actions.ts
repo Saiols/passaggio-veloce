@@ -16,6 +16,12 @@ import {
 } from '@/lib/affiliazione/notifications';
 import { onPraticaFirmata } from '@/lib/crm/sync';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
+import { emitEventoPratica } from '@/lib/eventi/emit';
+import {
+  eventoPraticaLavorata,
+  eventoPraticaFirmata,
+  eventoPraticaAnnullata,
+} from '@/lib/eventi/pratica-eventi';
 import { env } from '@/env';
 
 /**
@@ -145,6 +151,16 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
           nomeBroker: brokerUser.nome,
         },
       }).catch(() => undefined);
+    }
+    if (full?.codicePratica) {
+      await emitEventoPratica(
+        prisma,
+        eventoPraticaLavorata({
+          praticaId,
+          brokerId: full.broker.id,
+          codicePratica: full.codicePratica,
+        }),
+      ).catch(() => undefined);
     }
   } catch {
     // best-effort
@@ -367,6 +383,16 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           },
         }).catch(() => undefined);
       }
+      if (full.codicePratica) {
+        await emitEventoPratica(
+          prisma,
+          eventoPraticaFirmata({
+            praticaId,
+            brokerId: full.broker.id,
+            codicePratica: full.codicePratica,
+          }),
+        ).catch(() => undefined);
+      }
     }
 
     // N12: notifica ai referenti per ogni commissione affiliazione accreditata.
@@ -475,6 +501,26 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
     });
   } catch (err) {
     redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
+  }
+
+  // Se la pratica era già accettata, l'agenzia assegnata vede l'annullamento.
+  try {
+    const p = await prisma.pratica.findUnique({
+      where: { id: praticaId },
+      select: { agenziaAssegnataId: true, codicePratica: true },
+    });
+    if (p?.agenziaAssegnataId && p.codicePratica) {
+      await emitEventoPratica(
+        prisma,
+        eventoPraticaAnnullata({
+          praticaId,
+          agenziaId: p.agenziaAssegnataId,
+          codicePratica: p.codicePratica,
+        }),
+      );
+    }
+  } catch {
+    // best-effort
   }
 
   revalidatePath('/dashboard');

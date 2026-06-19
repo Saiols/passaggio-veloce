@@ -240,3 +240,79 @@ export function IconLogout({ className }: AdminIconProps) {
     </Svg>
   );
 }
+
+// ── Icone area agenzia ────────────────────────────────────────────
+
+export function IconInbox({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </Svg>
+  );
+}
+
+export function IconWallet({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+      <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+      <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+    </Svg>
+  );
+}
+
+export function IconAddebiti({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </Svg>
+  );
+}
+
+export function IconFattura({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <path d="M14 2v5h5" />
+      <path d="M8 9h2M8 13h8M8 17h6" />
+    </Svg>
+  );
+}
+
+export function IconFeedback({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </Svg>
+  );
+}
+
+export function IconOrari({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15 14" />
+    </Svg>
+  );
+}
+
+export function IconNotifiche({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </Svg>
+  );
+}
+
+export function IconProfilo({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="10" r="3" />
+      <path d="M6.5 19a6 6 0 0 1 11 0" />
+    </Svg>
+  );
+}

@@ -6,6 +6,8 @@ import { NavBadge } from '@/components/nav-badge';
 import { logoutAction } from '@/app/(auth)/actions';
 import { DemoBanner } from '@/components/demo-banner';
 import { AdminShell } from '@/components/admin/admin-shell';
+import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
+import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
 
 export type AppShellSession = {
   user: {
@@ -116,6 +118,22 @@ export function AppShell({
     );
   }
 
+  // Le agenzie usano la stessa chrome a sidebar (troppe voci per la top-bar).
+  // Dealer/broker restano sulla top-bar storica.
+  if (session.user.companyType === 'AGENZIA') {
+    const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7);
+    return (
+      <AgenziaShell
+        session={session}
+        activePath={activePath}
+        buildSha={buildSha}
+        demoBanner={<DemoBanner isAdmin={false} />}
+      >
+        {children}
+      </AgenziaShell>
+    );
+  }
+
   const links = navForRole(session.user.role, session.user.companyType);
 
   return (
@@ -163,7 +181,10 @@ export function AppShell({
       </div>
 
       <main className="flex-1">
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <EventoPraticaWatcher />
+          {children}
+        </ToastProvider>
       </main>
 
       <footer className="border-t border-pv-slate-200 bg-white">

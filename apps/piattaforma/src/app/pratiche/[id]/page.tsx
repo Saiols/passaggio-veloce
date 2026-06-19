@@ -29,16 +29,22 @@ export default async function PraticaDetailPage({
 
   const companyType = session.user.companyType;
   const companyId = session.user.companyId;
+  // Lo staff di piattaforma (admin/assistente) vede qualsiasi pratica per id.
+  // Broker/agenzia vedono solo le proprie (per company). Niente sentinella
+  // '__none__' nei filtri: brokerId/agenziaAssegnataId sono colonne uuid e
+  // castare '__none__' farebbe lanciare Postgres ("invalid input syntax for
+  // type uuid") → 500 sul dettaglio per gli admin (companyId null).
+  const isStaff =
+    session.user.role === 'ADMIN_PIATTAFORMA' || session.user.role === 'ASSISTENTE';
+  if (!isStaff && !companyId) notFound();
 
   const pratica = await prisma.pratica.findFirst({
     where: {
       id,
       deletedAt: null,
-      OR: [
-        { brokerId: companyId ?? '__none__' },
-        { agenziaAssegnataId: companyId ?? '__none__' },
-        ...(session.user.role === 'ADMIN_PIATTAFORMA' ? [{}] : []),
-      ],
+      ...(isStaff
+        ? {}
+        : { OR: [{ brokerId: companyId! }, { agenziaAssegnataId: companyId! }] }),
     },
     include: {
       broker: { select: { ragioneSociale: true, citta: true, provincia: true } },

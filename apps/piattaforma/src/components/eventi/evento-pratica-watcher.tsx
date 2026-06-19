@@ -87,7 +87,7 @@ export function EventoPraticaWatcher() {
 
   const current = queue[0];
 
-  const dismiss = useCallback((id: string) => {
+  const markSeen = useCallback((id: string) => {
     handledRef.current.add(id);
     setQueue((prev) => prev.filter((e) => e.id !== id));
     void fetch('/api/eventi/seen', {
@@ -97,21 +97,33 @@ export function EventoPraticaWatcher() {
     }).catch(() => undefined);
   }, []);
 
+  // "Chiudi" (o Esc / click sull'overlay): marca visto E rinfresca la pagina
+  // corrente, così lo stato mostrato (es. dettaglio pratica) si allinea al nuovo
+  // evento anche quando l'utente è già sulla pagina e non usa la CTA.
+  const closeCurrent = useCallback(
+    (id: string) => {
+      markSeen(id);
+      router.refresh();
+    },
+    [markSeen, router],
+  );
+
   // Esc chiude l'evento corrente.
   useEffect(() => {
     if (!current) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') dismiss(current.id);
+      if (e.key === 'Escape') closeCurrent(current.id);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [current, dismiss]);
+  }, [current, closeCurrent]);
 
   if (!current) return null;
 
+  // La CTA naviga (dati freschi sulla destinazione): basta marcare visto + push.
   const onCta = () => {
     const href = current.ctaHref;
-    dismiss(current.id);
+    markSeen(current.id);
     if (href) router.push(href);
   };
 
@@ -119,7 +131,7 @@ export function EventoPraticaWatcher() {
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div
         aria-hidden="true"
-        onClick={() => dismiss(current.id)}
+        onClick={() => closeCurrent(current.id)}
         className="absolute inset-0 bg-pv-navy-900/60 backdrop-blur-[2px]"
       />
       <div
@@ -148,7 +160,7 @@ export function EventoPraticaWatcher() {
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
-            onClick={() => dismiss(current.id)}
+            onClick={() => closeCurrent(current.id)}
             className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-pv-slate-700 transition-colors hover:bg-pv-slate-50"
           >
             Chiudi

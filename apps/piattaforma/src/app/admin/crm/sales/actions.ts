@@ -10,6 +10,7 @@ import {
   canViewSales,
   canManageCrmCampaign,
 } from '@/lib/auth/permissions';
+import { regioneVarianti } from '@/lib/crm/regione';
 
 // ════════════════════════════════════════════════════════
 // SALES AGENT
@@ -175,16 +176,19 @@ export async function createCampaignAction(
   const regione = emptyToUndef(d.regione);
   if (cat) where.cat = cat;
   if (stato) where.status = stato;
-  if (regione) where.regione = regione;
+  // Regione: match tollerante (case/formato) perché i dati importati sono
+  // disomogenei (es. "VENETO" vs "Veneto", "TRENTINO ALTO ADIGE").
+  if (regione) where.regione = { in: regioneVarianti(regione) };
 
-  const matchingContacts = await prisma.crmContact.findMany({
-    where,
-    select: { id: true },
-  });
+  // Qualsiasi errore (DB/validazione) diventa un risultato leggibile nel modale,
+  // mai un throw non gestito che farebbe "page not load".
+  try {
+    const matchingContacts = await prisma.crmContact.findMany({
+      where,
+      select: { id: true },
+    });
 
-  // Transazione: create campagna + bulk-create assegnazioni
-  const created = await prisma.$transaction(async (tx) => {
-    const camp = await tx.crmCampaign.create({
+    const created = await prisma.crmCampaign.create({
       data: {
         nome: d.nome,
         agentId: d.agentId,
@@ -202,20 +206,26 @@ export async function createCampaignAction(
       },
       select: { id: true },
     });
-    if (matchingContacts.length > 0) {
-      await tx.crmCampaignAssegnazione.createMany({
-        data: matchingContacts.map((c) => ({
-          campaignId: camp.id,
-          contactId: c.id,
-        })),
+
+    // Bulk assegnazioni FUORI da una transazione interattiva e a batch: con
+    // decine di migliaia di contatti una singola insert in una tx da 5s è
+    // fragile. Sono additive e idempotenti (skipDuplicates).
+    for (let i = 0; i < matchingContacts.length; i += 5000) {
+      const batch = matchingContacts.slice(i, i + 5000);
+      await prisma.crmCampaignAssegnazione.createMany({
+        data: batch.map((c) => ({ campaignId: created.id, contactId: c.id })),
         skipDuplicates: true,
       });
     }
-    return camp;
-  });
 
-  revalidatePath('/admin/crm/sales');
-  return { ok: true, id: created.id, assegnati: matchingContacts.length };
+    revalidatePath('/admin/crm/sales');
+    return { ok: true, id: created.id, assegnati: matchingContacts.length };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : 'Errore nel lancio della campagna',
+    };
+  }
 }
 
 export async function updateCampaignAction(

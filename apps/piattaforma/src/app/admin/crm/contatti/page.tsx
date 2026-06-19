@@ -4,6 +4,7 @@ import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, StatCard } from '@/components/ui';
 import { canViewCrm } from '@/lib/auth/permissions';
+import { regioneVarianti } from '@/lib/crm/regione';
 import { CrmTabs } from '../tabs';
 import { CrmContactsClient } from './client';
 
@@ -70,7 +71,9 @@ export default async function AdminCrmPipelinePage({
   } else if (sp.status && STATI.includes(sp.status as (typeof STATI)[number])) {
     where.status = sp.status as (typeof STATI)[number];
   }
-  if (sp.regione) where.regione = sp.regione;
+  // Match tollerante: i dati import hanno regioni in forme diverse (case,
+  // trattino/spazio) — vedi lib/crm/regione.
+  if (sp.regione) where.regione = { in: regioneVarianti(sp.regione) };
   if (sp.assigned) where.assignedToId = sp.assigned;
 
   // SALES vede solo i contatti a lui assegnati (decisione 7)

@@ -16,6 +16,7 @@ import {
 } from '@/lib/affiliazione/notifications';
 import { onPraticaFirmata } from '@/lib/crm/sync';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
+import { fatturaPvAttachment } from '@/lib/fatturazione/documento-pdf';
 import { emitEventoPratica } from '@/lib/eventi/emit';
 import {
   eventoPraticaLavorata,
@@ -285,8 +286,12 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   // ricorrente). Best-effort, non blocca il flusso firma.
   void onPraticaFirmata(praticaId);
 
-  // FT-A: genera la fattura PV verso l'agenzia (best-effort, non blocca la firma).
-  void createFatturaPv({
+  // FT-A: genera la fattura PV verso l'agenzia. ATTESA (era fire-and-forget):
+  // il PDF della fattura va allegato alla N8, quindi deve esistere prima di
+  // costruire l'allegato. Resta best-effort — la firma è già committata, un
+  // errore qui non blocca nulla e la N8 partirà comunque (eventualmente senza
+  // allegato).
+  await createFatturaPv({
     praticaId,
     agenziaId,
     feeAgenziaCent: feeAgenziaCentFattura,
@@ -368,20 +373,26 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
 
       const agenziaUser = full.agenziaAssegnata?.users[0];
       if (full.agenziaAssegnata && agenziaUser && full.autoAddebitoAt) {
-        await sendNotification({
-          tipo: 'N8_AGENZIA_ADDEBITO',
-          target: {
-            email: full.agenziaAssegnata.email,
-            userId: agenziaUser.id,
-            companyId: full.agenziaAssegnata.id,
+        // Allega il PDF della fattura PV all'addebito. Best-effort: se la
+        // fattura non c'è (fee 0) o il PDF fallisce, si invia senza allegato.
+        const fatturaPdf = await fatturaPvAttachment(praticaId).catch(() => null);
+        await sendNotification(
+          {
+            tipo: 'N8_AGENZIA_ADDEBITO',
+            target: {
+              email: full.agenziaAssegnata.email,
+              userId: agenziaUser.id,
+              companyId: full.agenziaAssegnata.id,
+            },
+            payload: {
+              codicePratica: full.codicePratica ?? '—',
+              feeCent: full.feeAgenziaCent,
+              autoAddebitoAt: full.autoAddebitoAt,
+              nomeAgenzia: full.agenziaAssegnata.ragioneSociale,
+            },
           },
-          payload: {
-            codicePratica: full.codicePratica ?? '—',
-            feeCent: full.feeAgenziaCent,
-            autoAddebitoAt: full.autoAddebitoAt,
-            nomeAgenzia: full.agenziaAssegnata.ragioneSociale,
-          },
-        }).catch(() => undefined);
+          fatturaPdf ? { attachments: [fatturaPdf] } : undefined,
+        ).catch(() => undefined);
       }
       if (full.codicePratica) {
         await emitEventoPratica(

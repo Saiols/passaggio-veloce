@@ -1,7 +1,7 @@
 import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { env } from '@/env';
-import { getEmail } from '@/lib/providers/email';
+import { getEmail, type EmailAttachment } from '@/lib/providers/email';
 import { isOptionalTipo, shouldSend } from './preferences';
 import { unsubscribeFooterLine } from './layout';
 import {
@@ -206,7 +206,10 @@ function render(input: SendInput): NotificaContent {
  * Fire-and-log: errori provider non bloccano il flusso chiamante, ma sono
  * registrati nella riga NotificaInviata (stato=FAILED + errorMessage).
  */
-export async function sendNotification(input: SendInput): Promise<void> {
+export async function sendNotification(
+  input: SendInput,
+  opts?: { attachments?: EmailAttachment[] },
+): Promise<void> {
   const content = render(input);
   const payload: Prisma.InputJsonValue = JSON.parse(JSON.stringify(input.payload));
 
@@ -276,6 +279,7 @@ export async function sendNotification(input: SendInput): Promise<void> {
       html,
       text,
       tag: input.tipo,
+      ...(opts?.attachments?.length ? { attachments: opts.attachments } : {}),
     });
 
     if (result.ok) {

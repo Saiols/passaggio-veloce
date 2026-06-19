@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { labelTipoDocumento } from '@/lib/fatturazione/format';
-import { descrizioneDocumento } from '@/lib/fatturazione/descrizione';
 import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
+import {
+  documentoPdfInclude,
+  documentoPdfInput,
+  documentoPdfFilename,
+} from '@/lib/fatturazione/documento-pdf';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
-import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,19 +29,7 @@ export async function GET(
 
   const doc = await prisma.documentoFiscale.findUnique({
     where: { id },
-    include: {
-      pratica: { select: { codicePratica: true } },
-      payout: {
-        select: {
-          eseguitoAt: true,
-          transazioni: {
-            where: { tipo: 'CREDITO_PRATICA' },
-            select: { pratica: { select: { codicePratica: true } } },
-          },
-        },
-      },
-      notaVariazionePer: { select: { numeroProgressivo: true, anno: true } },
-    },
+    include: documentoPdfInclude,
   });
   if (!doc) {
     return NextResponse.json({ error: 'not-found' }, { status: 404 });
@@ -55,25 +45,8 @@ export async function GET(
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
-  const { descrizione, riferimento } = descrizioneDocumento(doc);
-
-  const pdfBytes = await buildDocumentoPdf({
-    tipo: doc.tipo,
-    fatturaPaTipo: doc.fatturaPaTipo,
-    numeroProgressivo: doc.numeroProgressivo,
-    anno: doc.anno,
-    emessoAt: doc.emessoAt,
-    emittente: doc.datiEmittente as unknown as DatiFiscali,
-    destinatario: doc.datiDestinatario as unknown as DatiFiscali,
-    imponibileCent: doc.imponibileCent,
-    ivaCent: doc.ivaCent,
-    aliquotaIvaPct: doc.aliquotaIvaPct,
-    importoLordoCent: doc.importoLordoCent,
-    descrizione,
-    riferimento,
-  });
-
-  const filename = `${labelTipoDocumento(doc.tipo).replace(/\s+/g, '-').toLowerCase()}-${doc.numeroProgressivo}-${doc.anno}.pdf`;
+  const pdfBytes = await buildDocumentoPdf(documentoPdfInput(doc));
+  const filename = documentoPdfFilename(doc);
 
   return new Response(pdfBytes as BlobPart, {
     status: 200,

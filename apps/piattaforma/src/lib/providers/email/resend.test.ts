@@ -52,6 +52,45 @@ describe('ResendEmailProvider', () => {
     expect(sendMock.mock.calls[1]![0].text).toBe('plain');
   });
 
+  it('non passa attachments se assenti o vuoti', async () => {
+    sendMock.mockResolvedValue({ data: { id: 'em_1' }, error: null });
+    await make().send({ to: 'a@b.it', subject: 's', html: '<p/>' });
+    expect(sendMock.mock.calls[0]![0]).not.toHaveProperty('attachments');
+    await make().send({ to: 'a@b.it', subject: 's', html: '<p/>', attachments: [] });
+    expect(sendMock.mock.calls[1]![0]).not.toHaveProperty('attachments');
+  });
+
+  it('converte il contenuto Uint8Array in Buffer e propaga filename + contentType', async () => {
+    sendMock.mockResolvedValue({ data: { id: 'em_1' }, error: null });
+    await make().send({
+      to: 'a@b.it',
+      subject: 's',
+      html: '<p/>',
+      attachments: [
+        { filename: 'fattura-1-2026.pdf', content: new Uint8Array([1, 2, 3]), contentType: 'application/pdf' },
+      ],
+    });
+    const att = sendMock.mock.calls[0]![0].attachments;
+    expect(att).toHaveLength(1);
+    expect(att[0].filename).toBe('fattura-1-2026.pdf');
+    expect(att[0].contentType).toBe('application/pdf');
+    expect(Buffer.isBuffer(att[0].content)).toBe(true);
+    expect([...att[0].content]).toEqual([1, 2, 3]);
+  });
+
+  it('lascia invariato un contenuto stringa (base64) e omette contentType se assente', async () => {
+    sendMock.mockResolvedValue({ data: { id: 'em_1' }, error: null });
+    await make().send({
+      to: 'a@b.it',
+      subject: 's',
+      html: '<p/>',
+      attachments: [{ filename: 'doc.pdf', content: 'YmFzZTY0' }],
+    });
+    const att = sendMock.mock.calls[0]![0].attachments;
+    expect(att[0].content).toBe('YmFzZTY0');
+    expect(att[0]).not.toHaveProperty('contentType');
+  });
+
   it('mappa error Resend in {ok:false, error}', async () => {
     sendMock.mockResolvedValue({
       data: null,

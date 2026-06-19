@@ -34,6 +34,17 @@ export class ResendEmailProvider implements EmailProvider {
         ...(input.tag
           ? { tags: [{ name: 'categoria', value: sanitizeTagValue(input.tag) }] }
           : {}),
+        ...(input.attachments?.length
+          ? {
+              attachments: input.attachments.map((a) => ({
+                filename: a.filename,
+                // L'SDK accetta string (base64) o Buffer: i Uint8Array (es.
+                // output di pdf-lib) vanno convertiti in Buffer.
+                content: typeof a.content === 'string' ? a.content : Buffer.from(a.content),
+                ...(a.contentType ? { contentType: a.contentType } : {}),
+              })),
+            }
+          : {}),
       });
 
       if (error) {

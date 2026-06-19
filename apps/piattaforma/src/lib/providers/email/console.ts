@@ -22,6 +22,9 @@ export class ConsoleEmailProvider implements EmailProvider {
         `  subject:    ${input.subject}`,
         input.tag ? `  tag:        ${input.tag}` : null,
         input.replyTo ? `  reply-to:   ${input.replyTo}` : null,
+        input.attachments?.length
+          ? `  attachments: ${input.attachments.map((a) => a.filename).join(', ')}`
+          : null,
         banner,
         input.text ? `  text:\n${indent(input.text)}` : '  (html only)',
         '',

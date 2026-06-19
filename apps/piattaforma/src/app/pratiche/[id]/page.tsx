@@ -16,6 +16,7 @@ import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import { PraticaToasts } from './pratica-toasts';
+import { BackButton } from './back-button';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
 export default async function PraticaDetailPage({
@@ -123,12 +124,16 @@ export default async function PraticaDetailPage({
   return (
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <Link
-          href={backHref}
-          className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
-        >
-          ← Tutte le pratiche
-        </Link>
+        {isStaff ? (
+          <BackButton />
+        ) : (
+          <Link
+            href={backHref}
+            className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
+          >
+            ← Tutte le pratiche
+          </Link>
+        )}
 
         <header className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

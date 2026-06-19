@@ -316,3 +316,14 @@ export function IconProfilo({ className }: AdminIconProps) {
     </Svg>
   );
 }
+
+export function IconContatti({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="2.5" />
+      <path d="M5.2 17a4 4 0 0 1 7.6 0" />
+      <path d="M16 9.5h3M16 13.5h3" />
+    </Svg>
+  );
+}

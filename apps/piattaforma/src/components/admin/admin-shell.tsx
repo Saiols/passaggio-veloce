@@ -10,6 +10,7 @@ import {
   IconAudit,
   IconBroker,
   IconChatbot,
+  IconContatti,
   IconCrm,
   IconDashboard,
   IconEscalation,
@@ -80,10 +81,11 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'CRM',
     items: [
+      { href: '/admin/crm/dashboard', label: 'Dashboard', icon: IconDashboard },
       { href: '/admin/crm/contatti', label: 'Contatti', icon: IconCrm },
+      { href: '/admin/crm/contatti-operativi', label: 'Acquirenti/venditori', icon: IconContatti },
       { href: '/admin/crm/sales', label: 'Sales', icon: IconSales },
       { href: '/admin/crm/chatbot', label: 'Chatbot', icon: IconChatbot },
-      { href: '/admin/crm/dashboard', label: 'Dashboard', icon: IconDashboard },
       { href: '/admin/crm/utenti', label: 'Utenti team', icon: IconUtenti },
       { href: '/admin/crm/permessi', label: 'Permessi', icon: IconPermessi },
     ],

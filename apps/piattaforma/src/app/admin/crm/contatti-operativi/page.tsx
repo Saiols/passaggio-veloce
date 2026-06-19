@@ -4,7 +4,6 @@ import { StatCard } from '@/components/ui';
 import { TextSearchFilter } from '@/components/text-search-filter';
 import { formatRelative } from '@/lib/format';
 import { buildCatalogoContatti } from '@/lib/catalogo-contatti';
-import { CrmTabs } from '../tabs';
 
 type SearchParams = { q?: string };
 
@@ -33,15 +32,15 @@ export default async function AdminCRMContattiOperativiPage({
     : '/api/admin/contatti/export';
 
   return (
-    <AppShell session={session!} activePath="/admin/crm/contatti">
+    <AppShell session={session!} activePath="/admin/crm/contatti-operativi">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-              Admin
+              Admin · CRM
             </p>
             <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-              CRM
+              Acquirenti / venditori
             </h1>
             <p className="mt-1 text-[13px] text-pv-slate-500">
               Catalogo dedupli­cato dei venditori/acquirenti emersi dalle pratiche.
@@ -54,8 +53,6 @@ export default async function AdminCRMContattiOperativiPage({
             Esporta CSV
           </a>
         </header>
-
-        <CrmTabs active="operativi" />
 
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <StatCard label="Contatti totali" value={contatti.length} accent="navy" />

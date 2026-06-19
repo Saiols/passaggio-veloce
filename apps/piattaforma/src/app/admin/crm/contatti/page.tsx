@@ -2,10 +2,9 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, StatCard } from '@/components/ui';
+import { Alert } from '@/components/ui';
 import { canViewCrm } from '@/lib/auth/permissions';
 import { regioneVarianti } from '@/lib/crm/regione';
-import { CrmTabs } from '../tabs';
 import { CrmContactsClient } from './client';
 
 const STATI = [
@@ -111,7 +110,7 @@ export default async function AdminCrmPipelinePage({
       orderBy: [{ nome: 'asc' }, { cognome: 'asc' }],
     }),
     prisma.crmContact.groupBy({
-      by: ['status'],
+      by: ['status', 'cat'],
       where: { deletedAt: null },
       _count: { _all: true },
     }),
@@ -119,30 +118,24 @@ export default async function AdminCrmPipelinePage({
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const counts = Object.fromEntries(
-    statsCounts.map((s) => [s.status, s._count._all]),
-  ) as Record<string, number>;
-  const totale = statsCounts.reduce((acc, s) => acc + s._count._all, 0);
-
+  // Riepilogo per metrica con split broker/agenzia (oltre al totale globale).
+  const sumFor = (statuses: readonly string[], cat?: 'BROKER' | 'AGENZIA'): number =>
+    statsCounts
+      .filter((r) => statuses.includes(r.status) && (!cat || r.cat === cat))
+      .reduce((acc, r) => acc + r._count._all, 0);
+  const metric = (label: string, statuses: readonly string[]) => ({
+    label,
+    total: sumFor(statuses),
+    broker: sumFor(statuses, 'BROKER'),
+    agenzia: sumFor(statuses, 'AGENZIA'),
+  });
   const stats = [
-    { label: 'Totale', value: totale, accent: 'navy' as const },
-    {
-      label: 'Da contattare',
-      value: (counts.S0 ?? 0) + (counts.S1 ?? 0),
-      accent: 'orange' as const,
-    },
-    {
-      label: 'Interessati',
-      value: (counts.S3 ?? 0) + (counts.S5 ?? 0),
-      accent: 'green' as const,
-    },
-    {
-      label: 'Iscritti',
-      value: (counts.S7 ?? 0) + (counts.S8 ?? 0) + (counts.S9 ?? 0),
-      accent: 'navy' as const,
-    },
-    { label: 'Attivi', value: counts.S9 ?? 0, accent: 'green' as const },
-    { label: 'Churned', value: counts.S10 ?? 0, accent: 'slate' as const },
+    metric('Totale', STATI),
+    metric('Da contattare', ['S0', 'S1']),
+    metric('Interessati', ['S3', 'S5']),
+    metric('Iscritti', ['S7', 'S8', 'S9']),
+    metric('Attivi', ['S9']),
+    metric('Churned', ['S10']),
   ];
 
   // Serializza ai client component (Date → string ISO)
@@ -171,22 +164,21 @@ export default async function AdminCrmPipelinePage({
             Admin · CRM
           </p>
           <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            Pipeline lead
+            Contatti
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            Contatti pre-iscrizione lavorati dal team commerciale. Funnel S0 → S10.
+            Lead pre-iscrizione lavorati dal team commerciale. Funnel S0 → S10.
           </p>
         </header>
 
-        <CrmTabs active="pipeline" />
-
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {stats.map((s) => (
-            <StatCard
+            <CategoryStatCard
               key={s.label}
               label={s.label}
-              value={s.value}
-              accent={s.accent}
+              total={s.total}
+              broker={s.broker}
+              agenzia={s.agenzia}
             />
           ))}
         </div>
@@ -215,5 +207,41 @@ export default async function AdminCrmPipelinePage({
         />
       </div>
     </AppShell>
+  );
+}
+
+/** Card riepilogo: valore globale + split Broker (blu) / Agenzie (arancio). */
+function CategoryStatCard({
+  label,
+  total,
+  broker,
+  agenzia,
+}: {
+  label: string;
+  total: number;
+  broker: number;
+  agenzia: number;
+}) {
+  return (
+    <div className="rounded-[14px] border border-pv-slate-200 bg-white p-4 shadow-[var(--pv-shadow-card)]">
+      <p className="text-[10.5px] font-bold uppercase tracking-wider text-pv-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 text-[26px] font-extrabold leading-none tracking-tight text-pv-navy-900">
+        {total.toLocaleString('it-IT')}
+      </p>
+      <div className="mt-3 flex items-center gap-4 border-t border-pv-slate-100 pt-2.5 text-[12px]">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-blue-500" />
+          <span className="text-pv-slate-500">Broker</span>
+          <span className="font-bold text-pv-navy-900">{broker.toLocaleString('it-IT')}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-pv-orange-500" />
+          <span className="text-pv-slate-500">Agenzie</span>
+          <span className="font-bold text-pv-navy-900">{agenzia.toLocaleString('it-IT')}</span>
+        </span>
+      </div>
+    </div>
   );
 }

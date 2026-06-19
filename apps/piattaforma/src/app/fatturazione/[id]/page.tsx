@@ -8,6 +8,7 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { SegnaTrasmessoButton } from './segna-trasmesso-button';
+import { BackButton } from '@/components/back-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,12 +75,16 @@ export default async function DocumentoFiscaleDetailPage({
   return (
     <AppShell session={session} activePath="/fatturazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <Link
-          href="/fatturazione"
-          className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline"
-        >
-          ← Tutte le fatture
-        </Link>
+        {isAdmin ? (
+          <BackButton fallbackHref="/admin/fatturazione" />
+        ) : (
+          <Link
+            href="/fatturazione"
+            className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 hover:underline"
+          >
+            ← Tutte le fatture
+          </Link>
+        )}
 
         <header className="mb-6 flex items-start justify-between gap-4">
           <div>

@@ -135,10 +135,10 @@ export default async function AdminPratichePage({
                           Apri pratica {p.codicePratica ?? 'in bozza'}
                         </span>
                       </Link>
-                      <span className="relative z-10">{p.codicePratica ?? 'BOZZA'}</span>
+                      <span>{p.codicePratica ?? 'BOZZA'}</span>
                     </td>
                     <td className="px-5 py-3">
-                      <span className="relative z-10">
+                      <span>
                         {p.veicoli[0]?.targa
                           ? p.veicoli.length > 1
                             ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
@@ -147,25 +147,25 @@ export default async function AdminPratichePage({
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
-                      <span className="relative z-10">{p.broker.ragioneSociale}</span>
+                      <span>{p.broker.ragioneSociale}</span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
-                      <span className="relative z-10">
+                      <span>
                         {p.agenziaAssegnata?.ragioneSociale ?? '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      <span className="relative z-10">
+                      <span>
                         <StatusChip stato={p.stato as PraticaStato} />
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 lg:table-cell">
-                      <span className="relative z-10">
+                      <span>
                         {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right text-pv-slate-500">
-                      <span className="relative z-10">
+                      <span>
                         {formatRelative(p.submittedAt ?? p.createdAt)}
                       </span>
                     </td>

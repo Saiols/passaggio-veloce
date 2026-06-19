@@ -197,10 +197,10 @@ export default async function PratichePage({
                           Apri pratica {p.codicePratica ?? 'in bozza'}
                         </span>
                       </Link>
-                      <span className="relative z-10">{p.codicePratica ?? 'BOZZA'}</span>
+                      <span>{p.codicePratica ?? 'BOZZA'}</span>
                     </td>
                     <td className="px-5 py-3 font-semibold text-pv-slate-900">
-                      <span className="relative z-10">
+                      <span>
                         {p.veicoli[0]?.targa
                           ? p.veicoli.length > 1
                             ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
@@ -209,17 +209,17 @@ export default async function PratichePage({
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 sm:table-cell">
-                      <span className="relative z-10">{p.veicoli[0]?.proprietarioAttuale ?? '—'}</span>
+                      <span>{p.veicoli[0]?.proprietarioAttuale ?? '—'}</span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
-                      <span className="relative z-10">
+                      <span>
                         {companyType === 'AGENZIA'
                           ? p.broker.ragioneSociale
                           : p.agenziaAssegnata?.ragioneSociale ?? '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      <span className="relative z-10 inline-flex items-center gap-2">
+                      <span className="inline-flex items-center gap-2">
                         <StatusChip
                           stato={p.stato as PraticaStato}
                           viewerRole={companyType === 'AGENZIA' ? 'AGENZIA' : 'BROKER'}
@@ -243,12 +243,12 @@ export default async function PratichePage({
                       </span>
                     </td>
                     <td className="px-5 py-3 hidden text-pv-slate-700 lg:table-cell">
-                      <span className="relative z-10">
+                      <span>
                         {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right text-pv-slate-500">
-                      <span className="relative z-10">
+                      <span>
                         {formatRelative(p.submittedAt ?? p.createdAt)}
                       </span>
                     </td>

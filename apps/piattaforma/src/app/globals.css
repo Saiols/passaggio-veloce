@@ -108,13 +108,9 @@ body {
    visibile durante l'animazione (e con reduced-motion vale la shadow inline). */
 @keyframes pv-pulse-modal {
   0%, 100% {
-    transform: scale(1);
     box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 0 rgb(255 122 0 / 0.55);
   }
   50% {
-    /* zoom leggero dei bordi (origine al centro → resta nella stessa posizione),
-       in sincrono con l'alone arancione. */
-    transform: scale(1.03);
     box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 14px rgb(255 122 0 / 0);
   }
 }
@@ -138,26 +134,27 @@ body {
   animation: pv-pulse-cta 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Contro-scala del contenuto: annulla lo zoom del pannello (pv-pulse-modal)
-   così a "respirare" sono solo i bordi/cornice, mentre testo e bottoni restano
-   di dimensione fissa. Stessa durata/easing → ai keyframe il prodotto è 1. */
-@keyframes pv-pulse-modal-content {
+/* Cornice decorativa che "respira": un elemento SEPARATO senza testo (vedi
+   EventoPraticaWatcher), quindi scalarlo NON applica alcuna transform al
+   contenuto → il testo resta perfettamente fermo (niente shimmer). Solo i bordi
+   ingrandiscono e tornano allo stato originale, in sincrono con l'alone. */
+@keyframes pv-pulse-frame {
   0%, 100% {
     transform: scale(1);
   }
   50% {
-    transform: scale(0.970874); /* 1 / 1.03 */
+    transform: scale(1.04);
   }
 }
 
-.animate-pulse-modal-content {
-  animation: pv-pulse-modal-content 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.animate-pulse-frame {
+  animation: pv-pulse-frame 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-modal,
   .animate-pulse-cta,
-  .animate-pulse-modal-content {
+  .animate-pulse-frame {
     animation: none;
   }
 }

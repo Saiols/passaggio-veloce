@@ -138,61 +138,63 @@ export function EventoPraticaWatcher() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="evento-pratica-titolo"
-        className="animate-pulse-modal relative w-full max-w-md rounded-[16px] border-2 border-pv-orange-500/40 bg-white p-6 shadow-[0_24px_60px_rgba(10,15,31,0.35)]"
+        className="animate-pulse-modal relative w-full max-w-md rounded-[16px] bg-white p-6 shadow-[0_24px_60px_rgba(10,15,31,0.35)]"
       >
-        {/* Counter-scale: i bordi della modale zoomano (pv-pulse-modal) ma il
-            contenuto resta di dimensione fissa grazie alla scala inversa, con
-            la stessa tempistica. */}
-        <div className="animate-pulse-modal-content">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pv-orange-500">
-            Aggiornamento pratica
+        {/* Cornice arancione decorativa che "respira": elemento SEPARATO senza
+            testo → scalarlo non applica alcuna transform al contenuto, quindi il
+            testo resta perfettamente fermo (niente shimmer). pointer-events-none
+            così non intercetta i click. */}
+        <div
+          aria-hidden="true"
+          className="animate-pulse-frame pointer-events-none absolute inset-0 rounded-[16px] border-2 border-pv-orange-500/50"
+        />
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pv-orange-500">
+          Aggiornamento pratica
+        </p>
+        <h2
+          id="evento-pratica-titolo"
+          className="mt-1.5 text-[19px] font-extrabold leading-tight text-pv-navy-900"
+        >
+          {current.titolo}
+        </h2>
+        <p className="mt-2 text-[14px] leading-relaxed text-pv-slate-600">{current.testo}</p>
+
+        {queue.length > 1 && (
+          <p className="mt-3 text-[12px] font-semibold text-pv-slate-400">
+            +{queue.length - 1} altr{queue.length - 1 === 1 ? 'o aggiornamento' : 'i aggiornamenti'} in coda
           </p>
-          <h2
-            id="evento-pratica-titolo"
-            className="mt-1.5 text-[19px] font-extrabold leading-tight text-pv-navy-900"
-          >
-            {current.titolo}
-          </h2>
-          <p className="mt-2 text-[14px] leading-relaxed text-pv-slate-600">{current.testo}</p>
+        )}
 
-          {queue.length > 1 && (
-            <p className="mt-3 text-[12px] font-semibold text-pv-slate-400">
-              +{queue.length - 1} altr{queue.length - 1 === 1 ? 'o aggiornamento' : 'i aggiornamenti'} in coda
-            </p>
-          )}
-
-          {/* CTA di proseguimento dominante e pulsante (anello arancione, in
-              sincrono con la modale); "Chiudi" defilato a testo. Senza CTA, il
-              bottone di chiusura diventa l'azione primaria pulsante. */}
-          <div
-            className={`mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center ${
-              current.ctaHref ? 'sm:justify-between' : 'sm:justify-end'
-            }`}
+        {/* CTA di proseguimento dominante e pulsante; "Chiudi" defilato a testo.
+            Senza CTA, il bottone di chiusura diventa l'azione primaria. */}
+        <div
+          className={`mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center ${
+            current.ctaHref ? 'sm:justify-between' : 'sm:justify-end'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => closeCurrent(current.id)}
+            className={
+              current.ctaHref
+                ? 'rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-slate-800'
+                : 'animate-pulse-cta rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800'
+            }
           >
+            {current.ctaHref ? 'Chiudi' : 'Ho capito'}
+          </button>
+          {current.ctaHref && (
             <button
               type="button"
-              onClick={() => closeCurrent(current.id)}
-              className={
-                current.ctaHref
-                  ? 'rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-slate-800'
-                  : 'animate-pulse-cta rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800'
-              }
+              onClick={onCta}
+              className="animate-pulse-cta inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800"
             >
-              {current.ctaHref ? 'Chiudi' : 'Ho capito'}
+              {current.ctaLabel ?? 'Apri'}
+              <span aria-hidden="true" className="text-[15px] leading-none">
+                →
+              </span>
             </button>
-            {current.ctaHref && (
-              <button
-                type="button"
-                onClick={onCta}
-                className="animate-pulse-cta inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800"
-              >
-                {current.ctaLabel ?? 'Apri'}
-                <span aria-hidden="true" className="text-[15px] leading-none">
-                  →
-                </span>
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>

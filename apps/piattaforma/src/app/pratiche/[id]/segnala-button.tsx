@@ -30,18 +30,20 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
   const [pending, startTransition] = useTransition();
 
   if (!open) {
+    // De-enfatizzato di proposito: azione secondaria (stile link rosso, senza
+    // sfondo né sottolineatura). L'obiettivo è far completare la pratica; questa
+    // funzione deve esserci ma saltare poco all'occhio.
     return (
-      <Button
+      <button
         type="button"
-        size="sm"
-        variant="danger"
         onClick={() => {
           setOpen(true);
           setError(null);
         }}
+        className="inline-flex items-center py-2 text-[12px] font-medium text-pv-red-500 transition-colors hover:text-pv-red-600 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
       >
         Segnala problema
-      </Button>
+      </button>
     );
   }
 

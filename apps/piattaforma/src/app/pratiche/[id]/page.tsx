@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma, type PraticaTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Button, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
+import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
 import {
   markFirmaAvvenutaAction,
@@ -168,10 +168,16 @@ export default async function PraticaDetailPage({
           <div className="flex flex-wrap gap-2">
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && (
+              // De-enfatizzato di proposito (stile link rosso, no sfondo/sottolineatura):
+              // l'obiettivo è completare la pratica, l'annullamento resta possibile
+              // ma poco evidente.
               <form action={annullaBound}>
-                <SubmitButton size="sm" variant="danger" loadingLabel="Annullamento…">
+                <button
+                  type="submit"
+                  className="inline-flex items-center py-2 text-[12px] font-medium text-pv-red-500 transition-colors hover:text-pv-red-600 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+                >
                   Annulla pratica
-                </SubmitButton>
+                </button>
               </form>
             )}
             {pratica.documenti.length > 0 && (

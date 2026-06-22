@@ -1,4 +1,5 @@
 import { nameMatches, normalizeCf, companyMatches } from './match';
+import { isAtecoAllowed, type AllowedAteco } from './ateco';
 
 /**
  * Verifica documentale di una parte (venditore/acquirente): confronta i dati
@@ -32,6 +33,8 @@ export type VisuraEstratta = {
   partitaIva?: string;
   dataEmissione?: string; // ISO yyyy-mm-dd
   amministratore?: { nome?: string; cognome?: string; codiceFiscale?: string };
+  ateco?: string; // codice primario (display)
+  atecoCodes?: string[]; // TUTTI i codici ATECO trovati (gate operatore auto)
 };
 export type PermessoEstratto = { nome?: string; cognome?: string; scadenza?: string };
 
@@ -157,10 +160,18 @@ function messaggio(label: string, v: Verdetto): string {
  * viene confrontato con l'amministratore della visura SOLO se estraibile
  * (i dati inseriti per la PG non contengono un nome persona).
  */
+/**
+ * Opzioni di validazione. `atecoAllowed` (allowlist DEALER) abilita il gate
+ * ATECO sull'acquirente operatore auto della minivoltura: si passa solo per
+ * quella parte; le altre non vengono mai controllate sull'ATECO.
+ */
+export type ValidaParteOpts = { atecoAllowed?: AllowedAteco[] };
+
 export function validaParte(
   p: ParteDati,
   ocr: OcrParte,
   now: Date,
+  opts?: ValidaParteOpts,
 ): { ok: boolean; problemi: string[] } {
   const req = documentiRichiestiParte(p);
   const problemi: string[] = [];
@@ -170,6 +181,23 @@ export function validaParte(
 
   if (req.visura) {
     push('Visura camerale', verificaVisura(p, ocr.visura, now));
+
+    // Gate ATECO (minivoltura): l'acquirente operatore auto deve esercitare
+    // un'attività ammessa per i commercianti auto (allowlist DEALER). Stesso
+    // controllo della registrazione: match per prefisso, passa se ALMENO uno dei
+    // codici della visura è ammesso. Se la visura non espone codici ATECO non
+    // blocchiamo qui (lo coprono gli altri verdetti visura).
+    if (opts?.atecoAllowed && p.tipoSoggetto === 'OPERATORE_AUTO') {
+      const codici = ocr.visura?.atecoCodes ?? [];
+      if (
+        codici.length > 0 &&
+        !codici.some((c) => isAtecoAllowed(c, 'DEALER', opts.atecoAllowed!))
+      ) {
+        problemi.push(
+          `Il codice ATECO (${codici.join(', ')}) non rientra tra le attività ammesse per i commercianti auto.`,
+        );
+      }
+    }
     // CI del legale rappresentante: dev'essere presente e leggibile; se la
     // visura espone un amministratore, dev'essere coerente.
     if (!ocr.identita || (!ocr.identita.nome && !ocr.identita.cognome && !ocr.identita.codiceFiscale)) {

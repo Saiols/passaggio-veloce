@@ -30,6 +30,7 @@ import {
   type VisuraEstratta,
   type PermessoEstratto,
 } from '@/lib/kyc/parte-docs';
+import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 import {
   extractLibrettoAction,
@@ -282,7 +283,14 @@ const TIPO_CARDS: {
   },
 ];
 
-export function WizardNuovaPratica({ error }: { error?: string }) {
+export function WizardNuovaPratica({
+  error,
+  atecoAllowed,
+}: {
+  error?: string;
+  /** Allowlist ATECO DEALER (admin /admin/ateco): gate operatore auto minivoltura. */
+  atecoAllowed: AllowedAteco[];
+}) {
   const [step, setStep] = useState(1);
 
   // Al cambio step riporta la pagina in cima: gli step sono lunghi (upload +
@@ -778,7 +786,12 @@ export function WizardNuovaPratica({ error }: { error?: string }) {
   // tutta la render così i verdetti sono coerenti tra gate e Alert.
   const now = new Date();
   const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, now));
-  const verdettoAcquirente = verificaDocumentaleParte(acquirente, now);
+  // Gate ATECO solo per l'acquirente della minivoltura (operatore auto).
+  const verdettoAcquirente = verificaDocumentaleParte(
+    acquirente,
+    now,
+    tipo === 'MINIVOLTURA' ? atecoAllowed : undefined,
+  );
 
   // Blocco UI di un singolo venditore (riusato dal layout singolo e dall'accordion
   // multiplo). `idx` è l'indice GLOBALE nell'array venditori (handler + slot file).
@@ -2125,6 +2138,7 @@ function parteValida(p: Parte): boolean {
 function verificaDocumentaleParte(
   p: Parte,
   now: Date,
+  atecoAllowed?: AllowedAteco[],
 ): { ok: boolean; problemi: string[] } {
   const parteDati: ParteDati = {
     isPersonaGiuridica: p.isPG,
@@ -2140,7 +2154,7 @@ function verificaDocumentaleParte(
     visura: p.visuraOcr,
     permesso: p.permessoOcr,
   };
-  return validaParte(parteDati, ocr, now);
+  return validaParte(parteDati, ocr, now, atecoAllowed ? { atecoAllowed } : undefined);
 }
 
 function parteNome(p: Parte): string {

@@ -161,3 +161,71 @@ describe('validaParte (fail-closed)', () => {
     expect(r.problemi.join(' ')).toMatch(/rappresentante/);
   });
 });
+
+describe('validaParte — gate ATECO acquirente operatore auto (minivoltura)', () => {
+  // Acquirente di una minivoltura: sempre OPERATORE_AUTO (commerciante auto =
+  // profilo DEALER). Il gate ATECO confronta i codici della visura con
+  // l'allowlist DEALER, esattamente come in registrazione.
+  const OPERATORE: ParteDati = {
+    isPersonaGiuridica: true,
+    tipoSoggetto: 'OPERATORE_AUTO',
+    ragioneSociale: 'Auto Veloci SRL',
+    piva: '12345678901',
+  };
+  const ALLOWED_DEALER = [
+    { companyType: 'DEALER' as const, code: '4511', active: true },
+    { companyType: 'DEALER' as const, code: '4781', active: true },
+  ];
+  // Visura che supera già gli altri controlli (P.IVA + denominazione + freschezza)
+  // e identità del rappresentante presente: così il blocco dipende solo dall'ATECO.
+  const ocrConAteco = (atecoCodes?: string[]) => ({
+    identita: { nome: 'Mario', cognome: 'Rossi' },
+    visura: {
+      partitaIva: '12345678901',
+      denominazione: 'Auto Veloci SRL',
+      dataEmissione: '2026-05-01',
+      atecoCodes,
+    },
+  });
+
+  it('codice ATECO ammesso → ok', () => {
+    const r = validaParte(OPERATORE, ocrConAteco(['45.11.01']), NOW, {
+      atecoAllowed: ALLOWED_DEALER,
+    });
+    expect(r.ok).toBe(true);
+    expect(r.problemi).toEqual([]);
+  });
+
+  it('basta che UNO dei codici della visura sia ammesso → ok', () => {
+    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00', '47.81.10']), NOW, {
+      atecoAllowed: ALLOWED_DEALER,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('nessun codice ATECO ammesso → blocco con i codici nel messaggio', () => {
+    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00', '70.22.09']), NOW, {
+      atecoAllowed: ALLOWED_DEALER,
+    });
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/ATECO/);
+    expect(r.problemi.join(' ')).toMatch(/62\.01\.00/);
+  });
+
+  it('visura senza ATECO estraibile → nessun blocco ATECO (parità registrazione)', () => {
+    expect(validaParte(OPERATORE, ocrConAteco([]), NOW, { atecoAllowed: ALLOWED_DEALER }).ok).toBe(true);
+    expect(validaParte(OPERATORE, ocrConAteco(undefined), NOW, { atecoAllowed: ALLOWED_DEALER }).ok).toBe(true);
+  });
+
+  it('senza opts.atecoAllowed → il gate ATECO non si attiva', () => {
+    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00']), NOW);
+    expect(r.ok).toBe(true);
+  });
+
+  it('parte AZIENDA (non operatore auto) → ATECO mai controllato anche con allowlist', () => {
+    const r = validaParte({ ...AZIENDA }, ocrConAteco(['62.01.00']), NOW, {
+      atecoAllowed: ALLOWED_DEALER,
+    });
+    expect(r.ok).toBe(true);
+  });
+});

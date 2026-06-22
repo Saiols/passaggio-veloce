@@ -31,6 +31,7 @@ import {
   type ParteDati,
   type OcrParte,
 } from '@/lib/kyc/parte-docs';
+import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import {
@@ -232,6 +233,10 @@ export async function extractVisuraAction(ref: FileRef): Promise<ExtractVisuraRe
         partitaIva: v.partitaIva,
         dataEmissione: v.dataEmissione,
         amministratore: v.amministratore,
+        // Codici ATECO: servono al gate operatore auto della minivoltura (lato
+        // client per il preview; il submit ri-estrae e ri-valida autoritativo).
+        ateco: v.ateco,
+        atecoCodes: v.atecoCodes,
       },
     };
   } catch (e) {
@@ -767,11 +772,24 @@ export async function submitNuovaPraticaAction(
     return out;
   };
 
+  // Gate ATECO (minivoltura): l'acquirente è un operatore auto; la sua attività
+  // (visura) deve rientrare tra i codici ammessi per i commercianti auto
+  // (allowlist DEALER, gestita da admin in /admin/ateco). Stesso controllo della
+  // registrazione. Sulle pratiche SEMPLICI il gate non si applica.
+  const atecoAllowedDealer: AllowedAteco[] =
+    d.tipo === 'MINIVOLTURA'
+      ? await prisma.atecoAllowedCode.findMany({
+          where: { companyType: 'DEALER', active: true },
+          select: { companyType: true, code: true, active: true },
+        })
+      : [];
+
   const partiDaVerificare: {
     parte: ParteDati;
     prefix: string;
     docId: 'CI' | 'PASSAPORTO' | 'PATENTE';
     label: string;
+    atecoAllowed?: AllowedAteco[];
   }[] = [
     ...venditori.map((v) => ({
       parte: {
@@ -800,13 +818,20 @@ export async function submitNuovaPraticaAction(
       prefix: 'ACQ',
       docId: d.acquirenteDocumentoIdentita,
       label: 'Acquirente',
+      // Solo l'acquirente della minivoltura passa per il gate ATECO.
+      atecoAllowed: d.tipo === 'MINIVOLTURA' ? atecoAllowedDealer : undefined,
     },
   ];
 
   const verificheParti = await Promise.all(
     partiDaVerificare.map(async (x) => ({
       label: x.label,
-      esito: validaParte(x.parte, await ocrParteServer(x.prefix, x.docId), new Date()),
+      esito: validaParte(
+        x.parte,
+        await ocrParteServer(x.prefix, x.docId),
+        new Date(),
+        x.atecoAllowed ? { atecoAllowed: x.atecoAllowed } : undefined,
+      ),
     })),
   );
   const parteKo = verificheParti.find((v) => !v.esito.ok);

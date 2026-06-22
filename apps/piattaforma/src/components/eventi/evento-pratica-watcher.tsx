@@ -160,7 +160,11 @@ export function EventoPraticaWatcher() {
         {/* CTA di proseguimento dominante e pulsante (anello arancione, in
             sincrono con la modale); "Chiudi" defilato a testo. Senza CTA, il
             bottone di chiusura diventa l'azione primaria pulsante. */}
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <div
+          className={`mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center ${
+            current.ctaHref ? 'sm:justify-between' : 'sm:justify-end'
+          }`}
+        >
           <button
             type="button"
             onClick={() => closeCurrent(current.id)}

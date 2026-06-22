@@ -108,9 +108,13 @@ body {
    visibile durante l'animazione (e con reduced-motion vale la shadow inline). */
 @keyframes pv-pulse-modal {
   0%, 100% {
+    transform: scale(1);
     box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 0 rgb(255 122 0 / 0.55);
   }
   50% {
+    /* zoom leggero dei bordi (origine al centro → resta nella stessa posizione),
+       in sincrono con l'alone arancione. */
+    transform: scale(1.03);
     box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 14px rgb(255 122 0 / 0);
   }
 }

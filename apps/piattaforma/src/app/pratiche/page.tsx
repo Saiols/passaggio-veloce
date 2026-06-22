@@ -7,6 +7,7 @@ import { Button, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { PraticheFilters } from './filters';
 import { QuickActionButton } from './quick-action-button';
+import { DownloadDocumentiButton } from './download-documenti-button';
 
 const PAGE_SIZE = 15;
 
@@ -145,14 +146,8 @@ export default async function PratichePage({
           {companyType !== 'AGENZIA' && (
             <div className="flex flex-wrap items-center gap-2">
               {/* Bundle ZIP di tutti i documenti delle pratiche del broker,
-                  una cartella per codice pratica. */}
-              <a
-                href="/api/pratiche/documenti-zip"
-                download
-                className="inline-flex items-center gap-2 rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-[18px] py-3 text-sm font-bold text-pv-navy-700 transition-colors hover:bg-pv-slate-50"
-              >
-                Scarica documenti (ZIP)
-              </a>
+                  una cartella per codice pratica (+ toast al click). */}
+              <DownloadDocumentiButton />
               <Link href="/pratiche/nuova">
                 <Button size="md">+ Nuova pratica</Button>
               </Link>

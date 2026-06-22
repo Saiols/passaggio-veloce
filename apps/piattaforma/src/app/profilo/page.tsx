@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { formatDate } from '@/lib/format';
+import { logoutAction } from '@/app/(auth)/actions';
 
 export default async function ProfiloPage() {
   const session = await auth();
@@ -32,17 +33,44 @@ export default async function ProfiloPage() {
   return (
     <AppShell session={session} activePath="/profilo">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <header className="mb-7">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            Account
-          </p>
-          <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            Profilo
-          </h1>
-          <p className="mt-1 text-[14px] text-pv-slate-500">
-            Dati personali e aziendali. L&apos;admin azienda può modificare i
-            dati dell&apos;azienda dalla sezione dedicata.
-          </p>
+        <header className="mb-7 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              Account
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              Profilo
+            </h1>
+            <p className="mt-1 text-[14px] text-pv-slate-500">
+              Dati personali e aziendali. L&apos;admin azienda può modificare i
+              dati dell&apos;azienda dalla sezione dedicata.
+            </p>
+          </div>
+          {/* Logout anche dal profilo (oltre che dalla sidebar). */}
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="inline-flex shrink-0 items-center gap-2 rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-pv-navy-700 transition-colors hover:bg-pv-slate-50"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="m16 17 5-5-5-5M21 12H9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Esci
+            </button>
+          </form>
         </header>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

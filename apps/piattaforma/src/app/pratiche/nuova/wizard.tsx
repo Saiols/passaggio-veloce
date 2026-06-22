@@ -1119,7 +1119,14 @@ export function WizardNuovaPratica({
 
   return (
     <>
-      <WizardProgress steps={STEPS} current={step} label="Nuova pratica" />
+      {/* sidebar broker: nessun header desktop → la barra step sta a filo top
+          (lg:top-0); su mobile resta sotto l'header hamburger (top-14). */}
+      <WizardProgress
+        steps={STEPS}
+        current={step}
+        label="Nuova pratica"
+        stickyOffset="top-14 lg:top-0"
+      />
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <header className="mb-6 flex items-start justify-between gap-4">
           <div>

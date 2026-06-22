@@ -6,7 +6,7 @@ type Props = {
   steps: readonly Step[];
   current: number;
   label?: string;
-  stickyOffset?: 'top-0' | 'top-14';
+  stickyOffset?: 'top-0' | 'top-14' | 'top-14 lg:top-0';
 };
 
 export function WizardProgress({

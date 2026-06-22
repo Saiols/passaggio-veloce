@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useMemo, useEffect, useRef } from 'react';
+import { useState, useTransition, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, Checkbox, Field, Input, NumberInput, Select } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
@@ -22,6 +22,7 @@ import {
   delegaDocsComplete,
 } from './delega-docs';
 import { formatIndirizzo } from './acquirente-indirizzo';
+import { DRAFT_KEY, parseDraft, serializeDraft } from './wizard-draft';
 import {
   validaParte,
   type ParteDati,
@@ -228,6 +229,53 @@ const emptyVenditore = (veicoloOrdine = 1): VenditoreInput => ({
   veicoloOrdine,
 });
 
+// --- Persistenza bozza (localStorage) ----------------------------------------
+// I File non sono serializzabili: teniamo solo la BlobRef (il file è già su
+// Blob, l'OCR è già stato fatto) e azzeriamo i flag transitori. Al refresh lo
+// slot torna con ref valida e file null → la UploadCard lo mostra "Caricato".
+function slotForStorage(s: BlobSlot): BlobSlot {
+  return { ref: s.ref, file: null, uploading: false, progress: 0, error: null };
+}
+
+function identitaForStorage(f: IdentitaFiles): IdentitaFiles {
+  const out: IdentitaFiles = {};
+  if (f.fronte) out.fronte = slotForStorage(f.fronte);
+  if (f.retro) out.retro = slotForStorage(f.retro);
+  if (f.single) out.single = slotForStorage(f.single);
+  if (f.permesso) out.permesso = slotForStorage(f.permesso);
+  if (f.visura) out.visura = slotForStorage(f.visura);
+  return out;
+}
+
+function veicoloForStorage(v: VeicoloInput): VeicoloInput {
+  return { ...v, libretto: slotForStorage(v.libretto), extracting: false, ocrError: null };
+}
+
+/** Firma degli intestatari (deve coincidere con l'effect di prefill venditori). */
+function computeOwnersSig(veicoli: VeicoloInput[]): string {
+  return intestatariPerVeicolo(veicoli)
+    .map((o) => `${o.veicoloOrdine}#${o.display}`)
+    .join('|');
+}
+
+/** Forma serializzabile dello stato del wizard salvata come bozza. */
+type WizardDraftState = {
+  step: number;
+  tipo: Tipo;
+  multiplo: boolean;
+  numeroVeicoli: number;
+  veicoli: VeicoloInput[];
+  venditori: VenditoreInput[];
+  acquirente: Parte;
+  acquirenteDocId: DocIdTipo;
+  acquirenteIdentita: IdentitaFiles;
+  acquirenteResidenzaDiversa: boolean;
+  acquirenteIndirizzoResidenza: string;
+  comune: string;
+  provincia: string;
+  documenti: Record<string, BlobSlot>;
+};
+
 const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
   { value: 'PRIVATO_ITALIANO_CIE', label: 'Privato italiano · CIE elettronica' },
   { value: 'PRIVATO_ITALIANO_CARTACEA', label: 'Privato italiano · CI cartacea' },
@@ -398,7 +446,7 @@ export function WizardNuovaPratica({
   const ownersSig = useRef<string>('');
   useEffect(() => {
     const prefill = intestatariPerVeicolo(veicoli);
-    const sig = prefill.map((o) => `${o.veicoloOrdine}#${o.display}`).join('|');
+    const sig = computeOwnersSig(veicoli);
     if (sig === ownersSig.current) return;
     ownersSig.current = sig;
     if (!prefill.length) return;
@@ -415,6 +463,118 @@ export function WizardNuovaPratica({
       })),
     );
   }, [veicoli]);
+
+  // --- Persistenza bozza: ripristino + salvataggio ---------------------------
+  const hydratedRef = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Ripristino PRIMA del paint (niente flash dello stato vuoto). La guardia
+  // versione/scadenza e il try/catch sono nel modulo: una bozza corrotta o di
+  // vecchio schema viene semplicemente ignorata.
+  useLayoutEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    try {
+      const d = parseDraft(localStorage.getItem(DRAFT_KEY), Date.now()) as
+        | Partial<WizardDraftState>
+        | null;
+      if (d) {
+        if (typeof d.step === 'number') setStep(d.step);
+        if (d.tipo) setTipo(d.tipo);
+        if (typeof d.multiplo === 'boolean') setMultiplo(d.multiplo);
+        if (typeof d.numeroVeicoli === 'number') setNumeroVeicoli(d.numeroVeicoli);
+        if (Array.isArray(d.veicoli)) {
+          setVeicoli(d.veicoli);
+          // Allinea la firma intestatari: l'effect di prefill venditori vedrà la
+          // stessa sig e NON sovrascriverà i venditori ripristinati.
+          ownersSig.current = computeOwnersSig(d.veicoli);
+        }
+        if (Array.isArray(d.venditori)) setVenditori(d.venditori);
+        if (d.acquirente) setAcquirente(d.acquirente);
+        if (d.acquirenteDocId) setAcquirenteDocId(d.acquirenteDocId);
+        if (d.acquirenteIdentita) setAcquirenteIdentita(d.acquirenteIdentita);
+        if (typeof d.acquirenteResidenzaDiversa === 'boolean')
+          setAcquirenteResidenzaDiversa(d.acquirenteResidenzaDiversa);
+        if (typeof d.acquirenteIndirizzoResidenza === 'string')
+          setAcquirenteIndirizzoResidenza(d.acquirenteIndirizzoResidenza);
+        if (typeof d.comune === 'string') setComune(d.comune);
+        if (typeof d.provincia === 'string') setProvincia(d.provincia);
+        if (d.documenti) setDocumenti(d.documenti);
+      }
+    } catch {
+      /* bozza illeggibile: si parte puliti */
+    }
+    setHydrated(true);
+  }, []);
+
+  // Salvataggio debounced (solo dopo il ripristino, così non si sovrascrive la
+  // bozza con lo stato iniziale vuoto). I File non si salvano: solo le BlobRef.
+  useEffect(() => {
+    if (!hydrated) return;
+    const t = setTimeout(() => {
+      try {
+        const draft: WizardDraftState = {
+          step,
+          tipo,
+          multiplo,
+          numeroVeicoli,
+          veicoli: veicoli.map(veicoloForStorage),
+          venditori: venditori.map((v) => ({ ...v, identita: identitaForStorage(v.identita) })),
+          acquirente,
+          acquirenteDocId,
+          acquirenteIdentita: identitaForStorage(acquirenteIdentita),
+          acquirenteResidenzaDiversa,
+          acquirenteIndirizzoResidenza,
+          comune,
+          provincia,
+          documenti: Object.fromEntries(
+            Object.entries(documenti).map(([k, s]) => [k, slotForStorage(s)]),
+          ),
+        };
+        localStorage.setItem(DRAFT_KEY, serializeDraft(draft, Date.now()));
+      } catch {
+        /* quota o serializzazione: la bozza è best-effort */
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [
+    hydrated,
+    step,
+    tipo,
+    multiplo,
+    numeroVeicoli,
+    veicoli,
+    venditori,
+    acquirente,
+    acquirenteDocId,
+    acquirenteIdentita,
+    acquirenteResidenzaDiversa,
+    acquirenteIndirizzoResidenza,
+    comune,
+    provincia,
+    documenti,
+  ]);
+
+  // Svuota la bozza salvata (al submit riuscito e dal bottone "Ricomincia").
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const ricominciaDaCapo = () => {
+    if (
+      !confirm(
+        'Sicuro di voler ricominciare da capo? I dati inseriti in questa bozza andranno persi.',
+      )
+    ) {
+      return;
+    }
+    clearDraft();
+    window.location.reload();
+  };
 
   const [submitting, startSubmit] = useTransition();
   const router = useRouter();
@@ -727,7 +887,10 @@ export function WizardNuovaPratica({
 
     startSubmit(async () => {
       const res = await submitNuovaPraticaAction(fd);
-      if (res?.ok) router.push(`/pratiche/${res.id}`);
+      if (res?.ok) {
+        clearDraft(); // pratica creata: la bozza non serve più
+        router.push(`/pratiche/${res.id}`);
+      }
     });
   };
 
@@ -958,13 +1121,24 @@ export function WizardNuovaPratica({
     <>
       <WizardProgress steps={STEPS} current={step} label="Nuova pratica" />
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <header className="mb-6">
-          <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            {current.title}
-          </h1>
-          <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-pv-slate-500">
-            {current.hint}
-          </p>
+        <header className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              {current.title}
+            </h1>
+            <p className="mt-2 max-w-xl text-[14px] leading-relaxed text-pv-slate-500">
+              {current.hint}
+            </p>
+          </div>
+          {/* La bozza è salvata in automatico: un refresh non perde i dati.
+              "Ricomincia da capo" la svuota e riparte da zero. */}
+          <button
+            type="button"
+            onClick={ricominciaDaCapo}
+            className="mt-1 shrink-0 whitespace-nowrap text-[12.5px] font-semibold text-pv-slate-500 underline hover:text-pv-red-500"
+          >
+            Ricomincia da capo
+          </button>
         </header>
 
         {error && (
@@ -1840,6 +2014,13 @@ function UploadCard({
   invalid?: boolean;
 }) {
   const file = slot?.file ?? null;
+  const ref = slot?.ref ?? null;
+  // Nome/dimensione: dal File se presente, altrimenti dalla BlobRef (bozza
+  // ripristinata dopo un refresh: il file è già su Blob, ma l'oggetto File
+  // locale non esiste più).
+  const docName = file?.name ?? ref?.name ?? null;
+  const docSize = file?.size ?? ref?.size ?? null;
+  const hasDoc = !!file || !!ref;
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
   const { pick, modal } = useDocumentScanner({ onFile: onSelect });
   const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
@@ -1853,7 +2034,7 @@ function UploadCard({
     };
   }, [previewUrl]);
 
-  const isPdf = file?.type === 'application/pdf';
+  const isPdf = (file?.type ?? ref?.type) === 'application/pdf';
   const caricato = !!slot?.ref && !slot.uploading;
   const uploading = !!slot?.uploading;
   const erroreUpload = slot?.error ?? null;
@@ -1895,14 +2076,16 @@ function UploadCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          {file ? (
+          {docName ? (
             <>
-              <p className="truncate text-[12px] text-pv-slate-700" title={file.name}>
-                {file.name}
+              <p className="truncate text-[12px] text-pv-slate-700" title={docName}>
+                {docName}
               </p>
-              <p className="text-[11px] text-pv-slate-500">
-                {(file.size / 1024 / 1024).toFixed(2)} MB
-              </p>
+              {docSize != null && (
+                <p className="text-[11px] text-pv-slate-500">
+                  {(docSize / 1024 / 1024).toFixed(2)} MB
+                </p>
+              )}
             </>
           ) : (
             <p className="text-[12px] text-pv-slate-500">PDF, JPG o PNG · max 10 MB</p>
@@ -1915,9 +2098,9 @@ function UploadCard({
               htmlFor={inputId}
               className="cursor-pointer text-[12px] font-semibold text-pv-navy-600 hover:underline"
             >
-              {file ? 'Sostituisci' : 'Carica file'}
+              {hasDoc ? 'Sostituisci' : 'Carica file'}
             </label>
-            {file && (
+            {hasDoc && (
               <button
                 type="button"
                 onClick={onRemove}

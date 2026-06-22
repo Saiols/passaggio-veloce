@@ -22,7 +22,7 @@ const base =
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-pv-orange-500 text-[#1a1a1a] shadow-[var(--pv-shadow-cta)] hover:bg-pv-orange-600 ' +
+    'bg-pv-orange-500 text-white shadow-[var(--pv-shadow-cta)] hover:bg-pv-orange-600 ' +
     'disabled:bg-pv-slate-300 disabled:text-pv-slate-500 disabled:shadow-none',
   secondary:
     'bg-white text-pv-navy-700 border border-[1.5px] border-pv-slate-300 hover:bg-pv-slate-50 ' +

@@ -366,7 +366,7 @@ export default async function AdminCrmDashboardPage() {
               <FinanceCard
                 label="Wallet broker"
                 value={formatCurrencyCent(financials.walletAggregateCent)}
-                hint="Saldo aggregato dealer attivi"
+                hint="Saldo aggregato broker attivi"
               />
               <FinanceCard
                 label="Revenue / pratica"

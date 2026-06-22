@@ -76,7 +76,7 @@ export default async function AdminBrokerPage({
             Broker
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            Concessionari e commercianti che inviano pratiche alla piattaforma.
+            Broker che inviano pratiche alla piattaforma.
           </p>
         </header>
 

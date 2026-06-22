@@ -342,7 +342,7 @@ function ChatbotModal({
               rows={5}
               onChange={(v) => setData({ ...data, qa: v })}
               placeholder={
-                'D: Quanto costa?\nR: La piattaforma è gratuita per il dealer; pagano solo le agenzie sulle pratiche concluse.\n\nD: Come funziona la firma?\nR: ...'
+                'D: Quanto costa?\nR: La piattaforma è gratuita per il broker; pagano solo le agenzie sulle pratiche concluse.\n\nD: Come funziona la firma?\nR: ...'
               }
             />
             <FieldTextarea

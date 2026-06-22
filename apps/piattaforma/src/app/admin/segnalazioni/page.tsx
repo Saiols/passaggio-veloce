@@ -71,7 +71,7 @@ export default async function AdminSegnalazioniPage() {
           <p className="mt-1 text-[13px] text-pv-slate-500">
             Pratiche segnalate dalle agenzie per fermi amministrativi, ipoteche
             o documenti non validi. Conferma per annullare con penale broker
-            €100, oppure respingi se la verifica esclude il problema.
+            €25, oppure respingi se la verifica esclude il problema.
           </p>
         </header>
 

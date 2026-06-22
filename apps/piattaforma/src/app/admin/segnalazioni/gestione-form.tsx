@@ -11,7 +11,7 @@ import {
 /**
  * Sistema Penali Broker — SP-B: form admin per gestire una segnalazione
  * pendente (RICEVUTA). Due azioni: conferma → annulla pratica + addebita
- * penale broker €100; respingi → segnalazione annullata, pratica torna live.
+ * penale broker €25; respingi → segnalazione annullata, pratica torna live.
  */
 export function GestioneSegnalazione({ praticaId }: { praticaId: string }) {
   const router = useRouter();
@@ -23,7 +23,7 @@ export function GestioneSegnalazione({ praticaId }: { praticaId: string }) {
   const handleConferma = (): void => {
     if (
       !confirm(
-        'Confermi annullamento + addebito penale €100 al broker? Operazione non reversibile.',
+        'Confermi annullamento + addebito penale €25 al broker? Operazione non reversibile.',
       )
     ) {
       return;

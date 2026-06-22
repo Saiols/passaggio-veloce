@@ -38,7 +38,7 @@ export function AtecoClient({ codes }: { codes: AtecoAllowedCode[] }) {
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Tipo azienda" required>
             <Select value={companyType} onChange={(e) => setCompanyType(e.target.value as CompanyType)}>
-              <option value="DEALER">Dealer</option>
+              <option value="DEALER">Broker</option>
               <option value="AGENZIA">Agenzia</option>
             </Select>
           </Field>
@@ -72,7 +72,7 @@ export function AtecoClient({ codes }: { codes: AtecoAllowedCode[] }) {
             {codes.map((c) => (
               <tr key={c.id} className="border-t border-pv-slate-100">
                 <td className="px-4 py-2 font-semibold text-pv-navy-900">
-                  {c.companyType === 'DEALER' ? 'Dealer' : 'Agenzia'}
+                  {c.companyType === 'DEALER' ? 'Broker' : 'Agenzia'}
                 </td>
                 <td className="px-4 py-2 font-semibold text-pv-navy-900">{c.code}</td>
                 <td className="px-4 py-2">{c.label ?? '—'}</td>

@@ -7,6 +7,7 @@ import { logoutAction } from '@/app/(auth)/actions';
 import { DemoBanner } from '@/components/demo-banner';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
+import { BrokerShell } from '@/components/broker/broker-shell';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
 
 export type AppShellSession = {
@@ -119,7 +120,6 @@ export function AppShell({
   }
 
   // Le agenzie usano la stessa chrome a sidebar (troppe voci per la top-bar).
-  // Dealer/broker restano sulla top-bar storica.
   if (session.user.companyType === 'AGENZIA') {
     const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7);
     return (
@@ -134,6 +134,23 @@ export function AppShell({
     );
   }
 
+  // Anche i broker (dealer) usano la chrome a sidebar: backoffice uniforme per
+  // tutti e tre i ruoli (admin / agenzia / broker).
+  if (session.user.companyType === 'DEALER') {
+    const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7);
+    return (
+      <BrokerShell
+        session={session}
+        activePath={activePath}
+        buildSha={buildSha}
+        demoBanner={<DemoBanner isAdmin={false} />}
+      >
+        {children}
+      </BrokerShell>
+    );
+  }
+
+  // Fallback (utente senza companyType riconosciuto): top-bar storica.
   const links = navForRole(session.user.role, session.user.companyType);
 
   return (

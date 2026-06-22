@@ -64,7 +64,7 @@ export function CookieBanner() {
   if (!shown) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-pv-slate-200 bg-white shadow-[0_-8px_24px_rgb(10_37_64_/_0.08)]">
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-pv-slate-200 bg-white shadow-[0_-8px_24px_rgb(10_37_64_/_0.08)]">
       <div className="mx-auto max-w-5xl px-5 py-4 sm:px-6">
         {!customizing ? (
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

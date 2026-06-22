@@ -8,9 +8,9 @@ import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
 import {
   markFirmaAvvenutaAction,
   markPraticaProcessataAction,
-  annullaPraticaAction,
 } from '../actions';
 import { SegnalaProblemaButton } from './segnala-button';
+import { AnnullaPraticaButton } from './annulla-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
@@ -91,7 +91,6 @@ export default async function PraticaDetailPage({
 
   const firmaBound = markFirmaAvvenutaAction.bind(null, pratica.id);
   const processataBound = markPraticaProcessataAction.bind(null, pratica.id);
-  const annullaBound = annullaPraticaAction.bind(null, pratica.id);
 
   const canValutare =
     companyType === 'DEALER' &&
@@ -167,19 +166,7 @@ export default async function PraticaDetailPage({
           </div>
           <div className="flex flex-wrap gap-2">
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
-            {canAnnulla && (
-              // De-enfatizzato di proposito (stile link rosso, no sfondo/sottolineatura):
-              // l'obiettivo è completare la pratica, l'annullamento resta possibile
-              // ma poco evidente.
-              <form action={annullaBound}>
-                <button
-                  type="submit"
-                  className="inline-flex items-center py-2 text-[12px] font-medium text-pv-red-500 transition-colors hover:text-pv-red-600 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
-                >
-                  Annulla pratica
-                </button>
-              </form>
-            )}
+            {canAnnulla && <AnnullaPraticaButton praticaId={pratica.id} />}
             {pratica.documenti.length > 0 && (
               <a
                 href={`/api/pratiche/${pratica.id}/pdf`}

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
 import { Input } from '@/components/ui';
 
 export type AddressParts = {
@@ -23,8 +22,14 @@ let placesPromise: Promise<google.maps.PlacesLibrary> | null = null;
 function loadPlaces(): Promise<google.maps.PlacesLibrary> | null {
   if (!API_KEY) return null;
   if (!placesPromise) {
-    setOptions({ key: API_KEY, v: 'weekly' });
-    placesPromise = importLibrary('places');
+    // Import dinamico: @googlemaps/js-api-loader tocca `window` a livello di
+    // modulo, quindi NON va valutato in SSR (causava 500 sul caricamento
+    // diretto/refresh di /pratiche/nuova e /register). Caricato solo qui, lato
+    // client (loadPlaces gira dentro useEffect).
+    placesPromise = import('@googlemaps/js-api-loader').then(({ setOptions, importLibrary }) => {
+      setOptions({ key: API_KEY!, v: 'weekly' });
+      return importLibrary('places') as Promise<google.maps.PlacesLibrary>;
+    });
   }
   return placesPromise;
 }

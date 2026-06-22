@@ -138,63 +138,66 @@ export function EventoPraticaWatcher() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="evento-pratica-titolo"
-        className="animate-pulse-modal relative w-full max-w-md rounded-[16px] bg-white p-6 shadow-[0_24px_60px_rgba(10,15,31,0.35)]"
+        className="relative w-full max-w-md p-6"
       >
-        {/* Cornice arancione decorativa che "respira": elemento SEPARATO senza
-            testo → scalarlo non applica alcuna transform al contenuto, quindi il
-            testo resta perfettamente fermo (niente shimmer). pointer-events-none
-            così non intercetta i click. */}
+        {/* Box della modale (bianco + bordo arancione + alone) che pulsa e zooma.
+            È un layer DECORATIVO separato, SENZA testo: così a "respirare" sono i
+            bordi — bianchi e arancioni — mentre il contenuto sopra non subisce
+            alcuna transform (niente shimmer del testo). */}
         <div
           aria-hidden="true"
-          className="animate-pulse-frame pointer-events-none absolute inset-0 rounded-[16px] border-2 border-pv-orange-500/50"
+          className="animate-pulse-modal-box pointer-events-none absolute inset-0 rounded-[16px] border-2 border-pv-orange-500/50 bg-white shadow-[0_24px_60px_rgba(10,15,31,0.35)]"
         />
-        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pv-orange-500">
-          Aggiornamento pratica
-        </p>
-        <h2
-          id="evento-pratica-titolo"
-          className="mt-1.5 text-[19px] font-extrabold leading-tight text-pv-navy-900"
-        >
-          {current.titolo}
-        </h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-pv-slate-600">{current.testo}</p>
-
-        {queue.length > 1 && (
-          <p className="mt-3 text-[12px] font-semibold text-pv-slate-400">
-            +{queue.length - 1} altr{queue.length - 1 === 1 ? 'o aggiornamento' : 'i aggiornamenti'} in coda
+        {/* Contenuto: layer statico sopra il box, mai trasformato. */}
+        <div className="relative">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pv-orange-500">
+            Aggiornamento pratica
           </p>
-        )}
-
-        {/* CTA di proseguimento dominante e pulsante; "Chiudi" defilato a testo.
-            Senza CTA, il bottone di chiusura diventa l'azione primaria. */}
-        <div
-          className={`mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center ${
-            current.ctaHref ? 'sm:justify-between' : 'sm:justify-end'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => closeCurrent(current.id)}
-            className={
-              current.ctaHref
-                ? 'rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-slate-800'
-                : 'animate-pulse-cta rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800'
-            }
+          <h2
+            id="evento-pratica-titolo"
+            className="mt-1.5 text-[19px] font-extrabold leading-tight text-pv-navy-900"
           >
-            {current.ctaHref ? 'Chiudi' : 'Ho capito'}
-          </button>
-          {current.ctaHref && (
+            {current.titolo}
+          </h2>
+          <p className="mt-2 text-[14px] leading-relaxed text-pv-slate-600">{current.testo}</p>
+
+          {queue.length > 1 && (
+            <p className="mt-3 text-[12px] font-semibold text-pv-slate-400">
+              +{queue.length - 1} altr{queue.length - 1 === 1 ? 'o aggiornamento' : 'i aggiornamenti'} in coda
+            </p>
+          )}
+
+          {/* CTA di proseguimento dominante e pulsante; "Chiudi" defilato a testo.
+              Senza CTA, il bottone di chiusura diventa l'azione primaria. */}
+          <div
+            className={`mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center ${
+              current.ctaHref ? 'sm:justify-between' : 'sm:justify-end'
+            }`}
+          >
             <button
               type="button"
-              onClick={onCta}
-              className="animate-pulse-cta inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800"
+              onClick={() => closeCurrent(current.id)}
+              className={
+                current.ctaHref
+                  ? 'rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-slate-800'
+                  : 'animate-pulse-cta rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800'
+              }
             >
-              {current.ctaLabel ?? 'Apri'}
-              <span aria-hidden="true" className="text-[15px] leading-none">
-                →
-              </span>
+              {current.ctaHref ? 'Chiudi' : 'Ho capito'}
             </button>
-          )}
+            {current.ctaHref && (
+              <button
+                type="button"
+                onClick={onCta}
+                className="animate-pulse-cta inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800"
+              >
+                {current.ctaLabel ?? 'Apri'}
+                <span aria-hidden="true" className="text-[15px] leading-none">
+                  →
+                </span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -102,21 +102,25 @@ body {
   }
 }
 
-/* Modale "Aggiornamento pratica" (EventoPraticaWatcher): l'INTERA modale pulsa
-   con un alone arancione per richiamare con forza l'attenzione e guidare
-   l'utente al prossimo passo. La base shadow è inclusa nei keyframe così resta
-   visibile durante l'animazione (e con reduced-motion vale la shadow inline). */
-@keyframes pv-pulse-modal {
+/* Box della modale "Aggiornamento pratica" (EventoPraticaWatcher): un layer
+   DECORATIVO (bianco + bordo arancione + alone) che pulsa e zooma per richiamare
+   l'attenzione. È separato dal testo, quindi scalarlo NON applica transform al
+   contenuto → nessun shimmer. I bordi (bianchi e arancioni) ingrandiscono e
+   tornano allo stato originale; la drop shadow è nei keyframe così resta durante
+   lo scale. */
+@keyframes pv-pulse-modal-box {
   0%, 100% {
-    box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 0 rgb(255 122 0 / 0.55);
+    transform: scale(1);
+    box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 0 rgb(255 122 0 / 0.5);
   }
   50% {
+    transform: scale(1.04);
     box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 14px rgb(255 122 0 / 0);
   }
 }
 
-.animate-pulse-modal {
-  animation: pv-pulse-modal 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.animate-pulse-modal-box {
+  animation: pv-pulse-modal-box 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* Pulsazione della CTA di proseguimento: anello arancione, in sincrono con la
@@ -134,27 +138,9 @@ body {
   animation: pv-pulse-cta 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Cornice decorativa che "respira": un elemento SEPARATO senza testo (vedi
-   EventoPraticaWatcher), quindi scalarlo NON applica alcuna transform al
-   contenuto → il testo resta perfettamente fermo (niente shimmer). Solo i bordi
-   ingrandiscono e tornano allo stato originale, in sincrono con l'alone. */
-@keyframes pv-pulse-frame {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.04);
-  }
-}
-
-.animate-pulse-frame {
-  animation: pv-pulse-frame 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse-modal,
-  .animate-pulse-cta,
-  .animate-pulse-frame {
+  .animate-pulse-modal-box,
+  .animate-pulse-cta {
     animation: none;
   }
 }

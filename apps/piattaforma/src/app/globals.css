@@ -102,6 +102,45 @@ body {
   }
 }
 
+/* Modale "Aggiornamento pratica" (EventoPraticaWatcher): l'INTERA modale pulsa
+   con un alone arancione per richiamare con forza l'attenzione e guidare
+   l'utente al prossimo passo. La base shadow è inclusa nei keyframe così resta
+   visibile durante l'animazione (e con reduced-motion vale la shadow inline). */
+@keyframes pv-pulse-modal {
+  0%, 100% {
+    box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 0 rgb(255 122 0 / 0.55);
+  }
+  50% {
+    box-shadow: 0 24px 60px rgba(10, 15, 31, 0.35), 0 0 0 14px rgb(255 122 0 / 0);
+  }
+}
+
+.animate-pulse-modal {
+  animation: pv-pulse-modal 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Pulsazione della CTA di proseguimento: anello arancione, in sincrono con la
+   modale, per renderla inequivocabilmente l'azione da compiere (vs "Chiudi"). */
+@keyframes pv-pulse-cta {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgb(255 122 0 / 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgb(255 122 0 / 0);
+  }
+}
+
+.animate-pulse-cta {
+  animation: pv-pulse-cta 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-modal,
+  .animate-pulse-cta {
+    animation: none;
+  }
+}
+
 /* Bar chart wallet rendimento (RendimentoChart): le barre crescono dal
    baseline con stagger, su hover si schiariscono leggermente. */
 @keyframes pv-bar-grow {

@@ -138,7 +138,7 @@ export function EventoPraticaWatcher() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="evento-pratica-titolo"
-        className="relative w-full max-w-md rounded-[16px] border border-pv-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(10,15,31,0.35)]"
+        className="animate-pulse-modal relative w-full max-w-md rounded-[16px] border-2 border-pv-orange-500/40 bg-white p-6 shadow-[0_24px_60px_rgba(10,15,31,0.35)]"
       >
         <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-pv-orange-500">
           Aggiornamento pratica
@@ -157,21 +157,31 @@ export function EventoPraticaWatcher() {
           </p>
         )}
 
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        {/* CTA di proseguimento dominante e pulsante (anello arancione, in
+            sincrono con la modale); "Chiudi" defilato a testo. Senza CTA, il
+            bottone di chiusura diventa l'azione primaria pulsante. */}
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
             onClick={() => closeCurrent(current.id)}
-            className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2.5 text-[13px] font-semibold text-pv-slate-700 transition-colors hover:bg-pv-slate-50"
+            className={
+              current.ctaHref
+                ? 'rounded-[10px] px-4 py-2.5 text-[13px] font-semibold text-pv-slate-500 transition-colors hover:text-pv-slate-800'
+                : 'animate-pulse-cta rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800'
+            }
           >
-            Chiudi
+            {current.ctaHref ? 'Chiudi' : 'Ho capito'}
           </button>
           {current.ctaHref && (
             <button
               type="button"
               onClick={onCta}
-              className="rounded-[10px] bg-pv-navy-700 px-4 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-pv-navy-800"
+              className="animate-pulse-cta inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-pv-navy-700 px-5 py-3 text-[14px] font-bold text-white shadow-sm transition-colors hover:bg-pv-navy-800"
             >
               {current.ctaLabel ?? 'Apri'}
+              <span aria-hidden="true" className="text-[15px] leading-none">
+                →
+              </span>
             </button>
           )}
         </div>

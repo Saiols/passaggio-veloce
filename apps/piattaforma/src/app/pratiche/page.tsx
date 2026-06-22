@@ -143,9 +143,20 @@ export default async function PratichePage({
             </p>
           </div>
           {companyType !== 'AGENZIA' && (
-            <Link href="/pratiche/nuova">
-              <Button size="md">+ Nuova pratica</Button>
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Bundle ZIP di tutti i documenti delle pratiche del broker,
+                  una cartella per codice pratica. */}
+              <a
+                href="/api/pratiche/documenti-zip"
+                download
+                className="inline-flex items-center gap-2 rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-[18px] py-3 text-sm font-bold text-pv-navy-700 transition-colors hover:bg-pv-slate-50"
+              >
+                Scarica documenti (ZIP)
+              </a>
+              <Link href="/pratiche/nuova">
+                <Button size="md">+ Nuova pratica</Button>
+              </Link>
+            </div>
           )}
         </header>
 

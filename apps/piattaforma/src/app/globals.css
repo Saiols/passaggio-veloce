@@ -138,9 +138,26 @@ body {
   animation: pv-pulse-cta 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Contro-scala del contenuto: annulla lo zoom del pannello (pv-pulse-modal)
+   così a "respirare" sono solo i bordi/cornice, mentre testo e bottoni restano
+   di dimensione fissa. Stessa durata/easing → ai keyframe il prodotto è 1. */
+@keyframes pv-pulse-modal-content {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.970874); /* 1 / 1.03 */
+  }
+}
+
+.animate-pulse-modal-content {
+  animation: pv-pulse-modal-content 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-modal,
-  .animate-pulse-cta {
+  .animate-pulse-cta,
+  .animate-pulse-modal-content {
     animation: none;
   }
 }

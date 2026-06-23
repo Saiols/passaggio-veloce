@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Alert, Button, Checkbox, Field, Input, NumberInput, Select } from '@/components/ui';
+import { Alert, Button, Checkbox, Field, Input, NumberInput, Select, useToast } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
@@ -25,6 +25,7 @@ import { formatIndirizzo } from './acquirente-indirizzo';
 import { DRAFT_KEY, parseDraft, serializeDraft } from './wizard-draft';
 import {
   validaParte,
+  documentiRichiestiParte,
   type ParteDati,
   type OcrParte,
   type IdentitaEstratta,
@@ -586,6 +587,7 @@ export function WizardNuovaPratica({
 
   const [submitting, startSubmit] = useTransition();
   const router = useRouter();
+  const toast = useToast();
 
   // Sistema Penali Broker — SP-A: popup di responsabilità mostrato come step
   // finale prima del submit. Il broker deve spuntare il checkbox prima di
@@ -1041,7 +1043,9 @@ export function WizardNuovaPratica({
         }
       />
 
-      {verdettiVenditori[idx] && !verdettiVenditori[idx]!.ok && (
+      {verdettiVenditori[idx] &&
+        !verdettiVenditori[idx]!.ok &&
+        parteCompleta(v, v.docId, v.identita) && (
         <Alert variant="error">
           <strong>Verifica documenti del venditore non superata:</strong>
           <ul className="mt-1 list-disc pl-5">
@@ -1124,6 +1128,64 @@ export function WizardNuovaPratica({
     comune.trim().length > 0 &&
     /^[A-Za-z]{2}$/.test(provincia.trim()) &&
     esitoSchema.kind === 'OK';
+
+  // Punto 3: il tasto di proseguimento resta "disabilitato" (look) ma cliccabile;
+  // al click con dati incompleti mostra un toast con cosa manca.
+  const avvisaMancanze = (mancanze: string[]): void => {
+    toast(
+      mancanze.length > 0
+        ? `Per proseguire manca: ${mancanze.join(' · ')}`
+        : 'Completa i dati richiesti per proseguire',
+      'info',
+    );
+  };
+  const mancanzeStep1 = (): string[] => {
+    if (librettiUploading) return ['attendere il caricamento del libretto'];
+    const m: string[] = [];
+    veicoli.forEach((v, i) => {
+      const tag = veicoli.length > 1 ? ` (veicolo ${i + 1})` : '';
+      if (!v.libretto.ref) m.push(`libretto${tag}`);
+      else if (!v.ocr) m.push(`OCR libretto non riuscito${tag}`);
+      if (v.targa.length < 5) m.push(`targa${tag}`);
+      if (v.telaio.length < 11) m.push(`telaio${tag}`);
+      if (!v.proprietarioAttuale.trim()) m.push(`proprietario${tag}`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione))
+        m.push(`data immatricolazione${tag}`);
+      if (v.preImm2015 && !documenti[cdpDocKey(i + 1)]?.ref)
+        m.push(`certificato di proprietà${tag}`);
+    });
+    return m;
+  };
+  const mancanzeStep2 = (): string[] => {
+    const m: string[] = [];
+    venditori.forEach((v, i) => {
+      const tag = venditori.length > 1 ? ` (venditore ${i + 1})` : '';
+      mancanzeParte(v, v.docId, v.identita).forEach((x) => m.push(`${x}${tag}`));
+      if (parteCompleta(v, v.docId, v.identita) && !verdettiVenditori[i]!.ok)
+        m.push(`documenti venditore da correggere${tag}`);
+    });
+    if (ccVend === 'MISMATCH') m.push('i venditori non corrispondono al libretto');
+    if (!delegaCompleta) m.push('allegati delega/procura');
+    return m;
+  };
+  const mancanzeStep3 = (): string[] => {
+    const m = mancanzeParte(acquirente, acquirenteDocId, acquirenteIdentita);
+    if (
+      parteCompleta(acquirente, acquirenteDocId, acquirenteIdentita) &&
+      !verdettoAcquirente.ok
+    )
+      m.push('documenti acquirente da correggere');
+    if (acquirenteResidenzaDiversa && !acquirenteIndirizzoResidenza.trim())
+      m.push('indirizzo di residenza');
+    return m;
+  };
+  const mancanzeStep4 = (): string[] => {
+    const m: string[] = [];
+    if (!comune.trim()) m.push('comune');
+    if (!/^[A-Za-z]{2}$/.test(provincia.trim())) m.push('provincia (2 lettere)');
+    if (esitoSchema.kind !== 'OK') m.push('documenti richiesti incompleti');
+    return m;
+  };
 
   return (
     <>
@@ -1264,7 +1326,13 @@ export function WizardNuovaPratica({
             ))}
 
             <div className="flex justify-end">
-              <Button disabled={!canStep1} onClick={() => setStep(2)}>
+              <Button
+                className={!canStep1 ? 'opacity-50' : undefined}
+                onClick={() => {
+                  if (!canStep1) return avvisaMancanze(mancanzeStep1());
+                  setStep(2);
+                }}
+              >
                 Avanti
               </Button>
             </div>
@@ -1386,7 +1454,13 @@ export function WizardNuovaPratica({
               <Button variant="secondary" onClick={() => setStep(1)}>
                 Indietro
               </Button>
-              <Button disabled={!canStep2} onClick={() => setStep(3)}>
+              <Button
+                className={!canStep2 ? 'opacity-50' : undefined}
+                onClick={() => {
+                  if (!canStep2) return avvisaMancanze(mancanzeStep2());
+                  setStep(3);
+                }}
+              >
                 Avanti
               </Button>
             </div>
@@ -1516,7 +1590,8 @@ export function WizardNuovaPratica({
 
             {/* Verifica documentale OCR (fail-closed): finché ci sono problemi
                 l'acquirente non supera il gate "Avanti". */}
-            {!verdettoAcquirente.ok && (
+            {!verdettoAcquirente.ok &&
+              parteCompleta(acquirente, acquirenteDocId, acquirenteIdentita) && (
               <Alert variant="error">
                 <strong>Verifica documenti dell&apos;acquirente non superata:</strong>
                 <ul className="mt-1 list-disc pl-5">
@@ -1537,7 +1612,13 @@ export function WizardNuovaPratica({
               <Button variant="secondary" onClick={() => setStep(2)}>
                 Indietro
               </Button>
-              <Button disabled={!canStep3} onClick={() => setStep(4)}>
+              <Button
+                className={!canStep3 ? 'opacity-50' : undefined}
+                onClick={() => {
+                  if (!canStep3) return avvisaMancanze(mancanzeStep3());
+                  setStep(4);
+                }}
+              >
                 Avanti
               </Button>
             </div>
@@ -1626,11 +1707,13 @@ export function WizardNuovaPratica({
                 Indietro
               </Button>
               <Button
+                className={!canSubmit && !submitting ? 'opacity-50' : undefined}
                 onClick={() => {
+                  if (!canSubmit) return avvisaMancanze(mancanzeStep4());
                   setDichiarazioneAccettata(false);
                   setShowDichiarazione(true);
                 }}
-                disabled={!canSubmit || submitting}
+                disabled={submitting}
                 loading={submitting}
                 loadingLabel="Invio pratica…"
               >
@@ -1723,6 +1806,9 @@ function VeicoloSection({
 }) {
   const hasOcr = !!veicolo.ocr;
   const lib = veicolo.libretto;
+  // Foto (JPG/PNG) → editor di ritaglio/scansione come gli altri documenti; i
+  // PDF passano diretti (non sono immagini → niente ritaglio possibile).
+  const { pick, modal } = useDocumentScanner({ onFile: (f) => onFile(f ?? undefined) });
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
@@ -1740,7 +1826,10 @@ function VeicoloSection({
               <input
                 type="file"
                 accept="application/pdf,image/jpeg,image/png"
-                onChange={(e) => onFile(e.target.files?.[0])}
+                onChange={(e) => {
+                  pick(e.target.files?.[0] ?? null);
+                  e.target.value = '';
+                }}
                 className="sr-only"
               />
             </label>
@@ -1752,13 +1841,17 @@ function VeicoloSection({
                 type="file"
                 accept="image/jpeg,image/png"
                 capture="environment"
-                onChange={(e) => onFile(e.target.files?.[0])}
+                onChange={(e) => {
+                  pick(e.target.files?.[0] ?? null);
+                  e.target.value = '';
+                }}
                 className="sr-only"
               />
             </label>
           </div>
         </div>
       </Field>
+      {modal}
 
       {/* Stato upload del libretto su Blob (prima dell'OCR). */}
       {lib.uploading && (
@@ -2325,6 +2418,48 @@ function parteValida(p: Parte): boolean {
   return (
     p.nome.trim().length > 0 && p.cognome.trim().length > 0 && p.cf.trim().length === 16
   );
+}
+
+/**
+ * True se la parte è "completa": anagrafica valida + tutti i documenti richiesti
+ * presenti (e nessun upload in corso). Solo allora un verdetto negativo è un
+ * errore REALE da mostrare; con campi vuoti o documenti non ancora caricati il
+ * controllo fail-closed darebbe falsi positivi già all'atterraggio sullo step.
+ */
+function parteCompleta(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): boolean {
+  if (!parteValida(p)) return false;
+  if (identitaUploading(identita)) return false;
+  const req = documentiRichiestiParte({
+    isPersonaGiuridica: p.isPG,
+    tipoSoggetto: p.tipoSoggetto,
+  });
+  if (req.identita && !identitaPresente(docId, identita)) return false;
+  if (req.visura && !identita.visura?.ref) return false;
+  if (req.permesso && !identita.permesso?.ref) return false;
+  return true;
+}
+
+/** Elenco leggibile dei dati/documenti mancanti di una parte (per il toast). */
+function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): string[] {
+  const m: string[] = [];
+  if (!p.tipoSoggetto) m.push('tipo soggetto');
+  if (p.isPG) {
+    if (!p.ragioneSociale.trim()) m.push('ragione sociale');
+    if (p.piva.length !== 11) m.push('P.IVA (11 cifre)');
+  } else {
+    if (!p.nome.trim()) m.push('nome');
+    if (!p.cognome.trim()) m.push('cognome');
+    if (p.cf.trim().length !== 16) m.push('codice fiscale (16 caratteri)');
+  }
+  const req = documentiRichiestiParte({
+    isPersonaGiuridica: p.isPG,
+    tipoSoggetto: p.tipoSoggetto,
+  });
+  if (req.identita && !identitaPresente(docId, identita)) m.push("documento d'identità");
+  if (req.visura && !identita.visura?.ref) m.push('visura camerale');
+  if (req.permesso && !identita.permesso?.ref) m.push('permesso di soggiorno');
+  if (identitaUploading(identita)) m.push('caricamento documenti in corso');
+  return m;
 }
 
 /**

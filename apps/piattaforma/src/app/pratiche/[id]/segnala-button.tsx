@@ -40,7 +40,7 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
           setOpen(true);
           setError(null);
         }}
-        className="inline-flex items-center py-2 text-[12px] font-medium text-pv-red-500 transition-colors hover:text-pv-red-600 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+        className="mr-[15px] inline-flex items-center py-2 text-[12px] font-medium text-pv-red-500 transition-colors hover:text-pv-red-600 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
       >
         Segnala problema
       </button>

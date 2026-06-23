@@ -164,7 +164,7 @@ export default async function PraticaDetailPage({
               {pratica.provincia ? ` (${pratica.provincia})` : ''}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-y-2">
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && <AnnullaPraticaButton praticaId={pratica.id} />}
             {pratica.documenti.length > 0 && (

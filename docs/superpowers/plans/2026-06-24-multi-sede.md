@@ -31,7 +31,11 @@
 
 ---
 
-## FASE 1 — Schema & Migrazione (expand + backfill)
+## FASE 1 — Schema & Migrazione (expand + backfill) ✅ FATTA (2026-06-24)
+
+> Migration `20260624013750_multi_sede_expand` applicata su DB locale; backfill
+> verificato (14 company → 14 sedi, tutte le FK re-pointed, wallet su sede,
+> UserSede create); `verify-multi-sede.ts` exit 0. 4 commit su `feat/multi-sede`.
 
 Obiettivo: schema esteso, migrazione con backfill sui dati esistenti, seed che genera la nuova forma, script di verifica. Nessun codice applicativo cambia (l'app continua a girare sulle colonne vecchie).
 
@@ -506,10 +510,9 @@ git commit -m "test(multi-sede): script verifica invarianti dati"
 
 Ogni fase produce software testabile e chiude con i suoi test. Da qui in poi vale la TDD Vitest piena (logica pura in `apps/piattaforma/src`, test `*.test.ts` con mock `@pv/db`). Mappa esplicita spec → fase per garantire copertura.
 
-### Fase 2 — Auth & contesto sede (spec §8)
-- **File chiave:** `apps/piattaforma/src/auth.ts`, `auth.config.ts`, nuovo `src/lib/auth/session-context.ts` (`getSessionContext()`), nuovo `src/lib/sedi/scope.ts` (`assertSedeAccess`, risoluzione `accessibleSedi`/`currentSede` da cookie `pv_sede`), `src/lib/auth/permissions.ts` (helper `isOwner`).
-- **Test:** unit su risoluzione contesto (proprietario→tutte; admin/operatore→membership; sede singola→fissa; `'ALL'` solo proprietario); `assertSedeAccess` nega sedi fuori membership.
-- **Exit:** `getSessionContext()` usato come unica fonte di scoping; cookie `pv_sede` validato server-side.
+### Fase 2 — Auth & contesto sede (spec §8) ✅ FATTA (2026-06-24)
+- **Fatto:** `src/lib/sedi/scope.ts` (`resolveAccessibleSedi`/`resolveCurrentSede`/`assertSedeAccess`/`canSelectSede`, puro, 17 test); `src/lib/auth/session-context.ts` (`getSessionContext()` + `SEDE_COOKIE='pv_sede'`, 4 test con mock auth/cookies/db); `src/lib/auth/permissions.ts` (`isOwner`); `src/lib/sedi/actions.ts` (`setCurrentSedeAction`, validazione server-side, 4 test). Suite 621/621 verde. 3 commit.
+- **Nota:** il contesto sede NON è nel JWT (le membership cambiano senza re-login); `getSessionContext()` lo calcola per-request da cookie + DB. `isOwner = role ADMIN_AZIENDA`.
 
 ### Fase 3 — Re-pointing operativo (spec §5.4)
 - **File chiave:** `apps/piattaforma/src/app/pratiche/**` (queries `brokerId`→`brokerSedeId`, `agenziaAssegnataId`→`agenziaSedeId`), motore di distribuzione/assegnazione (round 1/2/3) → `sedeId`, calendario agenzia (`OrariApertura`/`ChiusuraStraordinaria`), `Valutazione`, `Wallet` (per sede), `EventoPratica` (`targetSedeId`). Da localizzare con precisione il file del motore di distribuzione.

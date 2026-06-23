@@ -3,6 +3,7 @@ import {
   resolveAccessibleSedi,
   resolveCurrentSede,
   assertSedeAccess,
+  canSelectSede,
   type SedeRef,
 } from './scope';
 
@@ -98,5 +99,20 @@ describe('assertSedeAccess', () => {
 
   it('false se la sede non è accessibile', () => {
     expect(assertSedeAccess('zzz', companySedi)).toBe(false);
+  });
+});
+
+describe('canSelectSede', () => {
+  it("'ALL' permesso solo al proprietario", () => {
+    expect(canSelectSede('ALL', { isOwner: true, accessibleSedi: companySedi })).toBe(true);
+    expect(canSelectSede('ALL', { isOwner: false, accessibleSedi: companySedi })).toBe(false);
+  });
+
+  it('sede accessibile: permesso', () => {
+    expect(canSelectSede('b', { isOwner: false, accessibleSedi: [sedeB] })).toBe(true);
+  });
+
+  it('sede non accessibile: negato', () => {
+    expect(canSelectSede('a', { isOwner: false, accessibleSedi: [sedeB] })).toBe(false);
   });
 });

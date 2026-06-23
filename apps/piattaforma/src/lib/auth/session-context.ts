@@ -2,6 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
+import { isOwner as isOwnerRole } from '@/lib/auth/permissions';
 import {
   resolveAccessibleSedi,
   resolveCurrentSede,
@@ -39,7 +40,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
 
   const user = session.user as SessionUser;
   const companyId = user.companyId;
-  const isOwner = user.role === 'ADMIN_AZIENDA';
+  const isOwner = isOwnerRole(user.role);
 
   if (!companyId) {
     return { user, companyId: undefined, isOwner: false, accessibleSedi: [], currentSede: null };

@@ -62,3 +62,16 @@ export function resolveCurrentSede(args: {
 export function assertSedeAccess(sedeId: string, accessibleSedi: SedeRef[]): boolean {
   return accessibleSedi.some((s) => s.id === sedeId);
 }
+
+/**
+ * True se l'utente può selezionare `target` come sede corrente.
+ * `target` = 'ALL' è permesso solo al proprietario; altrimenti dev'essere
+ * una sede accessibile.
+ */
+export function canSelectSede(
+  target: string,
+  ctx: { isOwner: boolean; accessibleSedi: SedeRef[] },
+): boolean {
+  if (target === SEDE_ALL) return ctx.isOwner;
+  return assertSedeAccess(target, ctx.accessibleSedi);
+}

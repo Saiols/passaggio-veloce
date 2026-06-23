@@ -35,6 +35,14 @@ export function isAdminPiattaforma(role: string | undefined): boolean {
   return role === 'ADMIN_PIATTAFORMA';
 }
 
+/**
+ * Proprietario dell'azienda madre (multi-sede): accesso implicito a TUTTE le
+ * sedi e alla vista aggregata. Mappa sul ruolo piattaforma `ADMIN_AZIENDA`.
+ */
+export function isOwner(role: string | undefined): boolean {
+  return role === 'ADMIN_AZIENDA';
+}
+
 /** Solo ADMIN_PIATTAFORMA vede i dati finanziari aggregati piattaforma. */
 export function canViewAggregatedFinancials(role: string | undefined): boolean {
   return role === 'ADMIN_PIATTAFORMA';

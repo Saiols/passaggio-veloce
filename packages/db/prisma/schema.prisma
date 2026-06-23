@@ -51,6 +51,14 @@ enum InvitationStatus {
   EXPIRED
 }
 
+// Multi-sede: ruolo di un utente DENTRO una sede (membership UserSede).
+// Il proprietario (User.role = ADMIN_AZIENDA) ha accesso implicito a tutte
+// le sedi della madre e non richiede righe UserSede.
+enum RuoloSede {
+  ADMIN_SEDE
+  OPERATORE
+}
+
 enum VerificationTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
@@ -347,7 +355,17 @@ model Company {
 
   // Codice referral univoco da inserire nel link di iscrizione.
   // Nullable durante backfill, dopo migration tutti i record avranno valore.
+  // DEPRECATO con multi-sede: la sorgente primaria è Sede.referralCode; questo
+  // resta in sola lettura per risolvere vecchi link /r/<code>.
   referralCode String? @unique
+
+  // Multi-sede: unità operative sotto questa madre.
+  sedi Sede[] @relation("CompanySedi")
+
+  // Affiliazione: la sede (della madre referente) che ha condiviso il link.
+  // referenteId resta e punta SEMPRE a una madre (affiliazione madre→madre).
+  referenteSedeId String? @db.Uuid
+  referenteSede   Sede?   @relation("SedeReferral", fields: [referenteSedeId], references: [id])
 
   users       User[]
   invitations Invitation[]
@@ -475,6 +493,9 @@ model User {
   // AF-AC: review commissioni affiliazione sospette
   commissioniReviewed CommissioneAffiliazione[] @relation("CommissioneAffiliazioneReviewer")
 
+  // Multi-sede: sedi su cui questo utente può operare (login multi-sede).
+  sediMembership UserSede[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -484,6 +505,82 @@ model User {
   @@index([status])
   @@index([email])
   @@map("users")
+}
+
+// ============================================================
+// MODELS — multi-sede (azienda madre → N sedi operative)
+// Spec: docs/sistema-multi-sede.md
+// ============================================================
+
+// Unità operativa senza P.IVA propria. Appartiene a una Company (madre,
+// soggetto giuridico). Eredita `type` dalla madre (single-type). I sottosistemi
+// operativi (pratiche, assegnazione, calendario, wallet, valutazioni, referral)
+// si agganciano alla Sede; fatturazione/SEPA/KYC restano sulla Company.
+model Sede {
+  id        String      @id @default(uuid()) @db.Uuid
+  companyId String      @db.Uuid
+  company   Company     @relation("CompanySedi", fields: [companyId], references: [id], onDelete: Cascade)
+  type      CompanyType
+
+  nome      String
+  indirizzo String
+  civico    String?
+  citta     String
+  cap       String
+  provincia String
+  telefono  String?
+  email     String?
+
+  iban                String? // null → usa Company.iban (madre)
+  payoutThresholdCent Int     @default(100000)
+  referralCode        String? @unique
+  codiceInterno       String?
+
+  suspendedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  praticheBroker        Pratica[]                 @relation("PraticheBrokerSede")
+  praticheAgenzia       Pratica[]                 @relation("PraticheAgenziaSede")
+  assegnazioni          PraticaAssegnazione[]
+  orariApertura         OrariApertura[]
+  chiusureStraordinarie ChiusuraStraordinaria[]
+  listini               Listino[]
+  valutazioniRicevute   Valutazione[]             @relation("ValutazioniAgenziaSede")
+  valutazioniFatte      Valutazione[]             @relation("ValutazioniBrokerSede")
+  wallet                Wallet?                   @relation("WalletSede")
+  feeAddebiti           FeeAddebito[]
+  referralClicks        ReferralClick[]
+  membership            UserSede[]
+  eventi                EventoPratica[]
+  notifiche             NotificaInviata[]
+  commissioniAttribuite CommissioneAffiliazione[] @relation("SedeAffiliante")
+  companiesAffiliate    Company[]                 @relation("SedeReferral")
+
+  @@index([companyId])
+  @@index([type])
+  @@index([citta])
+  @@index([provincia])
+  @@map("sedi")
+}
+
+// Membership molti-a-molti utente↔sede (login multi-sede). Il `ruolo` distingue
+// l'admin di sede (gestisce utenti/impostazioni della sede) dall'operatore.
+model UserSede {
+  id     String    @id @default(uuid()) @db.Uuid
+  userId String    @db.Uuid
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sedeId String    @db.Uuid
+  sede   Sede      @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+  ruolo  RuoloSede @default(OPERATORE)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, sedeId])
+  @@index([sedeId])
+  @@index([userId])
+  @@map("user_sedi")
 }
 
 // (Vedi modello Company per payoutThresholdCent: soglia payout automatico
@@ -512,6 +609,11 @@ model Invitation {
 
   companyId String  @db.Uuid
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Multi-sede: sede di destinazione dell'invito (null = invito a livello madre,
+  // solo per ADMIN_AZIENDA) + ruolo dell'utente nella sede.
+  sedeId    String?   @db.Uuid
+  ruoloSede RuoloSede @default(OPERATORE)
 
   invitedById String @db.Uuid
 
@@ -584,12 +686,18 @@ model Pratica {
   comune    String?
   provincia String?
 
-  // Attori
+  // Attori (Company madre — legacy, mantenuti in fase expand)
   brokerId String  @db.Uuid
   broker   Company @relation("PraticheBroker", fields: [brokerId], references: [id])
 
   agenziaAssegnataId String?  @db.Uuid
   agenziaAssegnata   Company? @relation("PraticheAgenziaAssegnata", fields: [agenziaAssegnataId], references: [id])
+
+  // Multi-sede: sede operativa broker / sede agenzia assegnata.
+  brokerSedeId  String? @db.Uuid
+  brokerSede    Sede?   @relation("PraticheBrokerSede", fields: [brokerSedeId], references: [id])
+  agenziaSedeId String? @db.Uuid
+  agenziaSede   Sede?   @relation("PraticheAgenziaSede", fields: [agenziaSedeId], references: [id])
 
   // Codice interno agenzia + nota (assegnata al momento accettazione)
   codiceAgenziaInterno String?
@@ -644,6 +752,8 @@ model Pratica {
 
   @@index([brokerId])
   @@index([agenziaAssegnataId])
+  @@index([brokerSedeId])
+  @@index([agenziaSedeId])
   @@index([stato])
   @@index([provincia])
   @@index([comune])
@@ -684,6 +794,10 @@ model PraticaAssegnazione {
   agenziaId String  @db.Uuid
   agenzia   Company @relation(fields: [agenziaId], references: [id])
 
+  // Multi-sede: sede agenzia assegnataria (distribuzione a sede fisica).
+  sedeId String? @db.Uuid
+  sede   Sede?   @relation(fields: [sedeId], references: [id])
+
   round Int // 1, 2, 3
 
   invioAt           DateTime  @default(now())
@@ -702,6 +816,7 @@ model PraticaAssegnazione {
 
   @@unique([praticaId, agenziaId, round])
   @@index([agenziaId, esito])
+  @@index([sedeId, esito])
   @@index([round, esito])
   @@map("pratiche_assegnazioni")
 }
@@ -830,6 +945,10 @@ model OrariApertura {
   agenziaId String  @db.Uuid
   agenzia   Company @relation(fields: [agenziaId], references: [id], onDelete: Cascade)
 
+  // Multi-sede: calendario per sede fisica.
+  sedeId String? @db.Uuid
+  sede   Sede?   @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
   giorno GiornoSettimana
 
   // Fasce orarie come JSON: [{ inizio: "09:00", fine: "13:00" }, { inizio: "15:00", fine: "18:30" }]
@@ -848,6 +967,10 @@ model ChiusuraStraordinaria {
   agenziaId String  @db.Uuid
   agenzia   Company @relation(fields: [agenziaId], references: [id], onDelete: Cascade)
 
+  // Multi-sede: chiusura per sede fisica.
+  sedeId String? @db.Uuid
+  sede   Sede?   @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
   dataInizio DateTime @db.Date
   dataFine   DateTime @db.Date
   motivo     String?
@@ -865,8 +988,12 @@ model ChiusuraStraordinaria {
 model Wallet {
   id String @id @default(uuid()) @db.Uuid
 
-  companyId String  @unique @db.Uuid
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // Multi-sede: il wallet appartiene a una SEDE (crediti pratica broker) OPPURE
+  // a una Company madre (commissioni affiliazione). Esattamente uno valorizzato.
+  sedeId    String?  @unique @db.Uuid
+  sede      Sede?    @relation("WalletSede", fields: [sedeId], references: [id], onDelete: Cascade)
+  companyId String?  @unique @db.Uuid
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   saldoCent Int @default(0)
 
@@ -942,6 +1069,11 @@ model FeeAddebito {
   agenziaId String  @db.Uuid
   agenzia   Company @relation(fields: [agenziaId], references: [id])
 
+  // Multi-sede: sede che ha generato la fee (attribuzione). L'addebito SEPA usa
+  // comunque il mandato della Company madre.
+  agenziaSedeId String? @db.Uuid
+  agenziaSede   Sede?   @relation(fields: [agenziaSedeId], references: [id])
+
   importoCent Int
   tipo        FeeAddebitoTipo
   stato       FeeAddebitoStato @default(SCHEDULED)
@@ -955,6 +1087,7 @@ model FeeAddebito {
   updatedAt DateTime @updatedAt
 
   @@index([agenziaId, stato])
+  @@index([agenziaSedeId, stato])
   @@index([praticaId])
   @@index([scheduledAt])
   @@map("fee_addebiti")
@@ -989,6 +1122,10 @@ model ReferralClick {
   companyId String  @db.Uuid
   company   Company @relation("ReferralClicks", fields: [companyId], references: [id], onDelete: Cascade)
 
+  // Multi-sede: la sede il cui referralCode ha generato il click.
+  sedeId String? @db.Uuid
+  sede   Sede?   @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
   /// Snapshot del code (audit, anche se la company viene eliminata).
   referralCode String
 
@@ -1014,9 +1151,13 @@ model CommissioneAffiliazione {
   praticaId String  @db.Uuid
   pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
 
-  // Chi riceve la commissione (Company referente)
+  // Chi riceve la commissione (Company referente = madre)
   referenteId String  @db.Uuid
   referente   Company @relation("ReferenteCommissioni", fields: [referenteId], references: [id])
+
+  // Multi-sede: la sede della madre che ha affiliato (attribuzione/classifica).
+  referenteSedeId String? @db.Uuid
+  referenteSede   Sede?   @relation("SedeAffiliante", fields: [referenteSedeId], references: [id])
 
   tipo  CommissioneAffiliazioneTipo
   stato CommissioneAffiliazioneStato @default(MATURATA)
@@ -1070,6 +1211,12 @@ model Valutazione {
 
   dealerId String  @db.Uuid
   dealer   Company @relation("ValutazioniDealer", fields: [dealerId], references: [id])
+
+  // Multi-sede: sede valutata / sede broker che vota.
+  agenziaSedeId String? @db.Uuid
+  agenziaSede   Sede?   @relation("ValutazioniAgenziaSede", fields: [agenziaSedeId], references: [id])
+  brokerSedeId  String? @db.Uuid
+  brokerSede    Sede?   @relation("ValutazioniBrokerSede", fields: [brokerSedeId], references: [id])
 
   stelle Int // 1..5
   note   String?
@@ -1180,6 +1327,10 @@ model Listino {
   agenziaId String  @db.Uuid
   agenzia   Company @relation(fields: [agenziaId], references: [id], onDelete: Cascade)
 
+  // Multi-sede: listino per sede fisica.
+  sedeId String? @db.Uuid
+  sede   Sede?   @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
   formato ListinoFormato
 
   // Se formato = UPLOAD_FILE, riferimento al documento (non FK hard: può vivere in storage esterno)
@@ -1217,6 +1368,10 @@ model NotificaInviata {
   companyId String?  @db.Uuid
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
+  // Multi-sede: sede destinataria/contesto della notifica (opzionale).
+  sedeId String? @db.Uuid
+  sede   Sede?   @relation(fields: [sedeId], references: [id], onDelete: SetNull)
+
   destinazione String // email o telefono effettivo al momento dell'invio
   subject      String?
   bodyPreview  String? // primi 200 char (audit rapido)
@@ -1249,6 +1404,10 @@ model EventoPratica {
 
   praticaId       String? @db.Uuid
   targetCompanyId String  @db.Uuid
+
+  // Multi-sede: sede destinataria della modale evento (controparte operativa).
+  targetSedeId String? @db.Uuid
+  targetSede   Sede?   @relation(fields: [targetSedeId], references: [id])
 
   tipo     String
   titolo   String

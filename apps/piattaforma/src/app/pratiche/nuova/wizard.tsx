@@ -443,8 +443,19 @@ export function WizardNuovaPratica({
   // taggato col veicoloOrdine (no dedup tra veicoli → stesso intestatario su 2
   // veicoli = 2 voci). Si attiva solo quando l'insieme cambia, così non
   // sovrascrive le modifiche fatte a mano nello step Venditore.
+  // Stato di hydration della bozza: dichiarato qui perché l'effect di prefill
+  // venditori deve attenderlo (vedi sotto).
+  const hydratedRef = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
+
   const ownersSig = useRef<string>('');
   useEffect(() => {
+    // Aspetta il ripristino della bozza. Senza questa guardia l'effect girerebbe
+    // prima sullo stato di default (pre-restore) — resettando ownersSig — e poi
+    // sui veicoli ripristinati, rigenerando i venditori dagli intestatari e
+    // SOVRASCRIVENDO quelli ripristinati (coi documenti già validati). Dopo
+    // l'hydration ownersSig è allineato ai veicoli ripristinati → niente clobber.
+    if (!hydrated) return;
     const prefill = intestatariPerVeicolo(veicoli);
     const sig = computeOwnersSig(veicoli);
     if (sig === ownersSig.current) return;
@@ -462,12 +473,9 @@ export function WizardNuovaPratica({
         piva: o.piva ?? '',
       })),
     );
-  }, [veicoli]);
+  }, [veicoli, hydrated]);
 
   // --- Persistenza bozza: ripristino + salvataggio ---------------------------
-  const hydratedRef = useRef(false);
-  const [hydrated, setHydrated] = useState(false);
-
   // Ripristino PRIMA del paint (niente flash dello stato vuoto). La guardia
   // versione/scadenza e il try/catch sono nel modulo: una bozza corrotta o di
   // vecchio schema viene semplicemente ignorata.

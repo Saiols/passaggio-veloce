@@ -2364,6 +2364,81 @@ async function main() {
   }
   console.log(`  · ateco allowlist: ${atecoDefaults.length} codici`);
 
+  // ============================================================
+  // MULTI-SEDE: 1 sede "specchio" per ogni company + re-pointing FK.
+  // Idempotente: salta le company che hanno già una sede. Il backfill SQL
+  // della migration vale per i dati esistenti; questo blocco serve a un DB
+  // fresco (migrate reset) perché il seed produca la stessa forma.
+  // ============================================================
+  console.log('');
+  console.log('  [MULTI-SEDE backfill seed]');
+
+  const allCompaniesMS = await prisma.company.findMany();
+  for (const c of allCompaniesMS) {
+    const existing = await prisma.sede.findFirst({ where: { companyId: c.id } });
+    if (existing) continue;
+
+    const sede = await prisma.sede.create({
+      data: {
+        companyId: c.id,
+        type: c.type,
+        nome: c.ragioneSociale,
+        indirizzo: c.indirizzo,
+        civico: c.civico,
+        citta: c.citta,
+        cap: c.cap,
+        provincia: c.provincia,
+        telefono: c.telefono,
+        email: c.email,
+        iban: c.iban,
+        payoutThresholdCent: c.payoutThresholdCent,
+        referralCode: c.referralCode,
+        deletedAt: c.deletedAt,
+      },
+    });
+
+    // Re-pointing FK operative verso la sede appena creata.
+    await prisma.pratica.updateMany({ where: { brokerId: c.id }, data: { brokerSedeId: sede.id } });
+    await prisma.pratica.updateMany({ where: { agenziaAssegnataId: c.id }, data: { agenziaSedeId: sede.id } });
+    await prisma.praticaAssegnazione.updateMany({ where: { agenziaId: c.id }, data: { sedeId: sede.id } });
+    await prisma.orariApertura.updateMany({ where: { agenziaId: c.id }, data: { sedeId: sede.id } });
+    await prisma.chiusuraStraordinaria.updateMany({ where: { agenziaId: c.id }, data: { sedeId: sede.id } });
+    await prisma.listino.updateMany({ where: { agenziaId: c.id }, data: { sedeId: sede.id } });
+    await prisma.valutazione.updateMany({ where: { agenziaId: c.id }, data: { agenziaSedeId: sede.id } });
+    await prisma.valutazione.updateMany({ where: { dealerId: c.id }, data: { brokerSedeId: sede.id } });
+    await prisma.feeAddebito.updateMany({ where: { agenziaId: c.id }, data: { agenziaSedeId: sede.id } });
+    await prisma.referralClick.updateMany({ where: { companyId: c.id }, data: { sedeId: sede.id } });
+    await prisma.eventoPratica.updateMany({ where: { targetCompanyId: c.id }, data: { targetSedeId: sede.id } });
+
+    // Wallet operativo: sposta ownership company → sede.
+    const w = await prisma.wallet.findFirst({ where: { companyId: c.id } });
+    if (w) {
+      await prisma.wallet.update({ where: { id: w.id }, data: { sedeId: sede.id, companyId: null } });
+    }
+
+    // UserSede per gli utenti della company.
+    const usersMS = await prisma.user.findMany({ where: { companyId: c.id } });
+    for (const u of usersMS) {
+      await prisma.userSede.upsert({
+        where: { userId_sedeId: { userId: u.id, sedeId: sede.id } },
+        update: {},
+        create: {
+          userId: u.id,
+          sedeId: sede.id,
+          ruolo: u.role === 'ADMIN_AZIENDA' ? 'ADMIN_SEDE' : 'OPERATORE',
+        },
+      });
+    }
+  }
+
+  // Affiliazione: referenteSede = sede della madre referente.
+  const refedMS = await prisma.company.findMany({ where: { referenteId: { not: null } } });
+  for (const c of refedMS) {
+    const refSede = await prisma.sede.findFirst({ where: { companyId: c.referenteId! } });
+    if (refSede) await prisma.company.update({ where: { id: c.id }, data: { referenteSedeId: refSede.id } });
+  }
+  console.log(`  · sedi backfill: ${allCompaniesMS.length} company processate`);
+
   console.log('');
   console.log('✔ Seed completato');
   console.log(`  password dev (tutti gli utenti): ${DEV_PASSWORD}`);

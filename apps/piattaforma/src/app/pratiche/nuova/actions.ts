@@ -293,6 +293,8 @@ const veicoloSchema = z.object({
   preImm2015: z.boolean().default(false),
   flagComodatoDuso: z.boolean().default(false),
   flagDelegaVendita: z.boolean().default(false),
+  // Prezzo di vendita del veicolo, in cent — obbligatorio.
+  prezzoVenditaCent: z.coerce.number().int().positive(),
   // Snapshot OCR opzionale (così com'è arrivato dall'estrazione, pre-correzione).
   ocrData: z.record(z.string(), z.unknown()).optional().nullable(),
 });
@@ -954,6 +956,7 @@ export async function submitNuovaPraticaAction(
           preImm2015: v.preImm2015,
           flagComodatoDuso: v.flagComodatoDuso,
           flagDelegaVendita: v.flagDelegaVendita,
+          prezzoVenditaCent: v.prezzoVenditaCent,
           ocrData: (v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined,
           ocrProvider: env.OCR_PROVIDER,
           ocrAt: now,

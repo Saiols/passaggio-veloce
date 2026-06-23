@@ -142,6 +142,8 @@ type VeicoloInput = {
   preImm2015: boolean;
   flagComodatoDuso: boolean;
   flagDelegaVendita: boolean;
+  /** Prezzo di vendita in euro (stringa dell'input number); → cent al submit. */
+  prezzoVendita: string;
 };
 
 function emptyVeicolo(): VeicoloInput {
@@ -159,6 +161,7 @@ function emptyVeicolo(): VeicoloInput {
     preImm2015: false,
     flagComodatoDuso: false,
     flagDelegaVendita: false,
+    prezzoVendita: '',
   };
 }
 
@@ -797,6 +800,7 @@ export function WizardNuovaPratica({
       preImm2015: v.preImm2015,
       flagComodatoDuso: v.flagComodatoDuso,
       flagDelegaVendita: v.flagDelegaVendita,
+      prezzoVenditaCent: Math.round(Number(v.prezzoVendita) * 100),
       ocrData: v.ocr ?? null,
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
@@ -919,7 +923,8 @@ export function WizardNuovaPratica({
         v.targa.length >= 5 &&
         v.telaio.length >= 11 &&
         v.proprietarioAttuale.length > 0 &&
-        /^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione),
+        /^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione) &&
+        Number(v.prezzoVendita) > 0,
     );
   // Gate per lasciare lo step 1 (Tipo & veicoli).
   // Veicoli pre-2015: il Certificato di Proprietà va caricato qui (step veicolo).
@@ -1151,6 +1156,7 @@ export function WizardNuovaPratica({
       if (!v.proprietarioAttuale.trim()) m.push(`proprietario${tag}`);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(v.dataImmatricolazione))
         m.push(`data immatricolazione${tag}`);
+      if (!(Number(v.prezzoVendita) > 0)) m.push(`prezzo di vendita${tag}`);
       if (v.preImm2015 && !documenti[cdpDocKey(i + 1)]?.ref)
         m.push(`certificato di proprietà${tag}`);
     });
@@ -1984,6 +1990,17 @@ function VeicoloSection({
                 </button>
               </div>
             </div>
+            <Field label="Prezzo di vendita (€)" required className="sm:col-span-2">
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                placeholder="es. 12000"
+                value={veicolo.prezzoVendita ?? ''}
+                onChange={(e) => onChange({ prezzoVendita: e.target.value })}
+              />
+            </Field>
           </div>
         </div>
       )}

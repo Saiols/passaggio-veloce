@@ -292,6 +292,14 @@ export default async function PraticaDetailPage({
                         <InfoRow label="Immatricolazione" value={formatDate(v.dataImmatricolazione)} />
                         <InfoRow label="Pre-2015" value={v.preImm2015 ? 'Sì' : 'No'} />
                         <InfoRow label="Comodato d'uso" value={v.flagComodatoDuso ? 'Sì' : 'No'} />
+                        <InfoRow
+                          label="Prezzo di vendita"
+                          value={
+                            v.prezzoVenditaCent != null
+                              ? formatCurrencyCent(v.prezzoVenditaCent)
+                              : null
+                          }
+                        />
                       </dl>
                     </div>
                   ))}

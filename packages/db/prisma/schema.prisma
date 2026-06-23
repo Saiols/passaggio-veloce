@@ -779,6 +779,7 @@ model Veicolo {
   preImm2015           Boolean   @default(false)
   flagComodatoDuso     Boolean   @default(false)
   flagDelegaVendita    Boolean   @default(false)
+  prezzoVenditaCent    Int? // prezzo di vendita veicolo (cent); richiesto in creazione pratica
   ocrData              Json?
   ocrProvider          String?
   ocrAt                DateTime?

@@ -57,7 +57,14 @@ export function GuidaStepCard({
           </p>
           <p className="mt-0.5 text-[12.5px] text-pv-slate-500">{guida.descrizione}</p>
         </div>
-        {guida.variant === 'azione' && cta && <div className="shrink-0">{cta}</div>}
+        {guida.variant === 'azione' && cta && (
+          // CTA "prossimo passo": dimensioni fisse. Le varianti [&_button] hanno
+          // specificità maggiore (.classe button) → sovrascrivono il font-size
+          // del size del Button anche senza tailwind-merge.
+          <div className="shrink-0 [&_button]:h-[45px] [&_button]:min-w-[180px] [&_button]:text-[16px]">
+            {cta}
+          </div>
+        )}
       </div>
     </div>
   );

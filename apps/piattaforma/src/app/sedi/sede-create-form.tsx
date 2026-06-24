@@ -18,7 +18,7 @@ const EMPTY = {
   iban: '',
 };
 
-export function SedeCreateForm() {
+export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +58,7 @@ export function SedeCreateForm() {
       if (res.ok) {
         setF({ ...EMPTY });
         router.refresh();
+        onSuccess?.();
       } else {
         setError(res.error);
       }

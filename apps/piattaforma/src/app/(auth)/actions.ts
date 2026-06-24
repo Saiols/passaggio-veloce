@@ -265,7 +265,7 @@ export async function registerAction(
     return { ok: false, error: docCheck.error };
   }
 
-  const { account, company, payment } = parsed.data;
+  const { account, company, payment, sedi } = parsed.data;
 
   const refByTipo = (t: RegistrationDocSlot) => docRefs.find((d) => d.tipo === t)!.ref;
 
@@ -420,16 +420,19 @@ export async function registerAction(
   let createdCompanyId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
-      // Genera codice referral (vive sulla Sede) con retry su collisione.
-      let referralCode = generateReferralCode();
-      for (let i = 0; i < 5; i++) {
-        const collision = await tx.sede.findUnique({
-          where: { referralCode },
-          select: { id: true },
-        });
-        if (!collision) break;
-        referralCode = generateReferralCode();
-      }
+      // Genera un codice referral univoco per una sede (retry su collisione).
+      const genSedeReferralCode = async (): Promise<string> => {
+        let code = generateReferralCode();
+        for (let i = 0; i < 5; i++) {
+          const collision = await tx.sede.findUnique({
+            where: { referralCode: code },
+            select: { id: true },
+          });
+          if (!collision) break;
+          code = generateReferralCode();
+        }
+        return code;
+      };
 
       const createdCompany = await tx.company.create({
         data: {
@@ -470,25 +473,43 @@ export async function registerAction(
         },
       });
 
-      // Multi-sede: sede operativa auto-derivata dai dati azienda (caso 1:1).
-      // Il proprietario può aggiungere altre sedi dal pannello. Il referralCode
-      // vive qui (non più sulla Company).
-      await tx.sede.create({
-        data: {
-          companyId: createdCompany.id,
-          type: company.type,
-          nome: company.ragioneSociale,
-          indirizzo: company.indirizzo,
-          civico: company.civico,
-          citta: company.citta,
-          cap: company.cap,
-          provincia: company.provincia.toUpperCase(),
-          telefono: company.telefono || null,
-          email: company.email,
-          iban: payment.iban,
-          referralCode,
-        },
-      });
+      // Multi-sede: crea le sedi definite nello step "Sedi". Se non fornite
+      // (client vecchio/flusso ridotto), deriva 1 sede dai dati azienda (caso 1:1).
+      // Ogni sede ha un referralCode univoco; l'IBAN sede ha fallback su quello madre.
+      const sediInput =
+        sedi && sedi.length > 0
+          ? sedi
+          : [
+              {
+                nome: company.ragioneSociale,
+                indirizzo: company.indirizzo,
+                civico: company.civico,
+                citta: company.citta,
+                cap: company.cap,
+                provincia: company.provincia,
+                telefono: company.telefono,
+                email: company.email,
+                iban: payment.iban,
+              },
+            ];
+      for (const s of sediInput) {
+        await tx.sede.create({
+          data: {
+            companyId: createdCompany.id,
+            type: company.type,
+            nome: s.nome,
+            indirizzo: s.indirizzo,
+            civico: s.civico || null,
+            citta: s.citta,
+            cap: s.cap,
+            provincia: s.provincia.toUpperCase(),
+            telefono: s.telefono || company.telefono || null,
+            email: s.email || company.email || null,
+            iban: s.iban || payment.iban,
+            referralCode: await genSedeReferralCode(),
+          },
+        });
+      }
 
       await tx.user.create({
         data: {

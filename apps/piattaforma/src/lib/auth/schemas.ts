@@ -84,11 +84,29 @@ export const registerStep4PaymentSchema = z.object({
   }),
 });
 
+// Step 5 (sedi): unità operative sotto l'azienda madre (multi-sede). La prima è
+// pre-compilata dai dati azienda; IBAN/telefono/email opzionali per sede.
+export const registerSedeSchema = z.object({
+  nome: z.string().trim().min(2, 'Nome sede obbligatorio'),
+  indirizzo: z.string().trim().min(2, 'Indirizzo obbligatorio'),
+  civico: z.string().trim().optional().default(''),
+  citta: z.string().trim().min(2, 'Città obbligatoria'),
+  cap: capSchema,
+  provincia: z.string().trim().length(2, 'Provincia (2 lettere)'),
+  telefono: z.string().trim().optional().default(''),
+  email: z.string().trim().optional().default(''),
+  iban: z.string().trim().optional().default(''),
+});
+
+export type RegisterSedeInput = z.infer<typeof registerSedeSchema>;
+
 // Schema completo (concatenazione di tutti gli step) per il submit finale.
+// `sedi` è opzionale: se assente, il server deriva 1 sede dai dati azienda.
 export const registerFullSchema = z.object({
   account: registerStep1AccountSchema,
   company: registerStep2CompanySchema,
   payment: registerStep4PaymentSchema,
+  sedi: z.array(registerSedeSchema).min(1).optional(),
 });
 
 export type RegisterFullInput = z.infer<typeof registerFullSchema>;

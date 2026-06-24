@@ -42,11 +42,25 @@ type DocumentsData = {
  */
 type KycFailureUi = { doc?: 'CI' | 'CF' | 'VISURA'; message: string };
 
+/** Una sede operativa definita in registrazione (multi-sede). */
+type SedeInput = {
+  nome: string;
+  indirizzo: string;
+  civico: string;
+  citta: string;
+  cap: string;
+  provincia: string;
+  telefono: string;
+  email: string;
+  iban: string;
+};
+
 type WizardData = {
   account?: AccountData;
   company?: CompanyData;
   documents?: DocumentsData;
   payment?: PaymentData;
+  sedi?: SedeInput[];
 };
 
 const STEPS = [
@@ -54,6 +68,7 @@ const STEPS = [
   { id: 2, label: 'Azienda', title: 'Dati azienda', hint: 'Ragione sociale, partita IVA, sede legale e contatti.' },
   { id: 3, label: 'Documenti', title: 'Documenti richiesti', hint: 'CI, codice fiscale e visura camerale per la verifica KYC.' },
   { id: 4, label: 'Pagamento', title: 'Pagamento e condizioni', hint: 'IBAN per il mandato SEPA e accettazione dei Termini.' },
+  { id: 5, label: 'Sedi', title: 'Le tue sedi', hint: 'Definisci le sedi operative (agenzie/punti). Se ne hai una sola, è già pronta dai dati azienda: clicca Completa.' },
 ] as const;
 
 export function RegisterWizard({
@@ -84,6 +99,7 @@ export function RegisterWizard({
   const [promoOutcome, setPromoOutcome] = useState<
     { applied: true; amountCent: number } | { applied: false } | null
   >(null);
+  const [pendingPromoCode, setPendingPromoCode] = useState('');
   const [isPending, startTransition] = useTransition();
   const [isVerifyingDocs, startVerifyDocs] = useTransition();
 
@@ -154,14 +170,22 @@ export function RegisterWizard({
     });
   };
 
+  // Pagamento: salva i dati e avanza allo step Sedi (il submit finale è lì).
   const handlePayment = (values: PaymentData, promoCode: string) => {
     setData((d) => ({ ...d, payment: values }));
-    if (!data.account || !data.company || !data.documents) {
+    setPendingPromoCode(promoCode);
+    setSubmitError(null);
+    setStep(5);
+  };
+
+  // Step Sedi → submit finale della registrazione (include le sedi definite).
+  const handleSedi = (sedi: SedeInput[]) => {
+    if (!data.account || !data.company || !data.documents || !data.payment) {
       setSubmitError('Dati mancanti, ricomincia il wizard');
       setStep(1);
       return;
     }
-
+    setData((d) => ({ ...d, sedi }));
     setSubmitError(null);
     setKycErrors([]);
     const docs = data.documents;
@@ -172,9 +196,10 @@ export function RegisterWizard({
         JSON.stringify({
           account: data.account,
           company: data.company,
-          payment: values,
+          payment: data.payment,
+          sedi,
           referralCode,
-          promoCode,
+          promoCode: pendingPromoCode,
           kycToken,
         }),
       );
@@ -281,6 +306,16 @@ export function RegisterWizard({
               companyType={data.company?.type}
               onBack={() => setStep(3)}
               onSubmit={handlePayment}
+              isSubmitting={false}
+            />
+          )}
+          {step === 5 && (
+            <SediStep
+              company={data.company}
+              paymentIban={data.payment?.iban}
+              defaultValues={data.sedi}
+              onBack={() => setStep(4)}
+              onSubmit={handleSedi}
               isSubmitting={isPending}
             />
           )}
@@ -869,9 +904,162 @@ function PaymentStep({
           type="submit"
           disabled={!isValid}
           loading={isSubmitting}
-          loadingLabel="Verifica documenti in corso…"
           className="sm:flex-1"
         >
+          Avanti
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ============================================================
+// STEP 5 - SEDI (multi-sede)
+// ============================================================
+
+const EMPTY_SEDE: SedeInput = {
+  nome: '',
+  indirizzo: '',
+  civico: '',
+  citta: '',
+  cap: '',
+  provincia: '',
+  telefono: '',
+  email: '',
+  iban: '',
+};
+
+function SediStep({
+  company,
+  paymentIban,
+  defaultValues,
+  onBack,
+  onSubmit,
+  isSubmitting,
+}: {
+  company?: CompanyData;
+  paymentIban?: string;
+  defaultValues?: SedeInput[];
+  onBack: () => void;
+  onSubmit: (sedi: SedeInput[]) => void;
+  isSubmitting: boolean;
+}) {
+  // La prima sede è pre-compilata dai dati azienda (caso 1 sola sede → UX invariata).
+  const firstFromCompany: SedeInput = {
+    ...EMPTY_SEDE,
+    nome: company?.ragioneSociale ?? '',
+    indirizzo: company?.indirizzo ?? '',
+    civico: company?.civico ?? '',
+    citta: company?.citta ?? '',
+    cap: company?.cap ?? '',
+    provincia: company?.provincia ?? '',
+    telefono: company?.telefono ?? '',
+    email: company?.email ?? '',
+    iban: paymentIban ?? '',
+  };
+  const [sedi, setSedi] = useState<SedeInput[]>(
+    defaultValues && defaultValues.length > 0 ? defaultValues : [firstFromCompany],
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const update = (i: number, field: keyof SedeInput, value: string) => {
+    setSedi((arr) => arr.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)));
+  };
+  const addSede = () => setSedi((arr) => [...arr, { ...EMPTY_SEDE }]);
+  const removeSede = (i: number) => setSedi((arr) => arr.filter((_, idx) => idx !== i));
+
+  const valid =
+    sedi.length >= 1 &&
+    sedi.every(
+      (s) =>
+        s.nome.trim().length >= 2 &&
+        s.indirizzo.trim().length >= 2 &&
+        s.citta.trim().length >= 2 &&
+        s.cap.trim().length >= 4 &&
+        s.provincia.trim().length === 2,
+    );
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid) {
+      setError('Completa i campi obbligatori di ogni sede (nome, indirizzo, città, CAP, provincia).');
+      return;
+    }
+    setError(null);
+    onSubmit(sedi);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Alert variant="info">
+        Definisci le sedi operative della tua azienda. Se ne hai una sola, è già pronta: clicca
+        “Completa registrazione”. Puoi aggiungerne altre ora o in seguito dal pannello.
+      </Alert>
+
+      {sedi.map((s, i) => (
+        <div key={i} className="rounded-2xl border border-pv-slate-200 bg-white p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[13px] font-bold text-pv-navy-800">
+              Sede {i + 1}
+              {i === 0 && <span className="ml-2 text-[11px] font-medium text-pv-slate-500">(dai dati azienda)</span>}
+            </p>
+            {sedi.length > 1 && (
+              <button
+                type="button"
+                onClick={() => removeSede(i)}
+                className="text-[12px] font-semibold text-pv-red-500 hover:underline"
+              >
+                Rimuovi
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Nome sede" required>
+              <Input value={s.nome} onChange={(e) => update(i, 'nome', e.target.value)} />
+            </Field>
+            <Field label="Indirizzo" required>
+              <Input value={s.indirizzo} onChange={(e) => update(i, 'indirizzo', e.target.value)} />
+            </Field>
+            <Field label="Civico">
+              <Input value={s.civico} onChange={(e) => update(i, 'civico', e.target.value)} />
+            </Field>
+            <Field label="Città" required>
+              <Input value={s.citta} onChange={(e) => update(i, 'citta', e.target.value)} />
+            </Field>
+            <Field label="CAP" required>
+              <Input value={s.cap} onChange={(e) => update(i, 'cap', e.target.value)} />
+            </Field>
+            <Field label="Provincia (sigla)" required>
+              <Input maxLength={2} value={s.provincia} onChange={(e) => update(i, 'provincia', e.target.value)} />
+            </Field>
+            <Field label="Telefono">
+              <Input value={s.telefono} onChange={(e) => update(i, 'telefono', e.target.value)} />
+            </Field>
+            <Field label="Email operativa">
+              <Input value={s.email} onChange={(e) => update(i, 'email', e.target.value)} />
+            </Field>
+            <Field label="IBAN dedicato (opzionale, altrimenti quello aziendale)">
+              <Input value={s.iban} onChange={(e) => update(i, 'iban', e.target.value)} />
+            </Field>
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={addSede}
+        className="rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+      >
+        + Aggiungi un&apos;altra sede
+      </button>
+
+      {error && <Alert variant="error">{error}</Alert>}
+
+      <div className="flex flex-col-reverse gap-3 sm:flex-row">
+        <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto" disabled={isSubmitting}>
+          Indietro
+        </Button>
+        <Button type="submit" disabled={!valid} loading={isSubmitting} className="sm:flex-1">
           Completa registrazione
         </Button>
       </div>

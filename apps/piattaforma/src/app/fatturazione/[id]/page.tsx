@@ -7,16 +7,23 @@ import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { resolveSedeRiferimento, type SedeRiferimento } from '@/lib/fatturazione/descrizione';
 import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 import { BackButton } from '@/components/back-button';
 
 export const dynamic = 'force-dynamic';
 
-function Parte({ titolo, dati }: { titolo: string; dati: DatiFiscali }) {
+function Parte({ titolo, dati, sede }: { titolo: string; dati: DatiFiscali; sede?: SedeRiferimento | null }) {
   return (
     <div>
       <p className="text-[10px] font-bold uppercase tracking-wider text-pv-slate-500">{titolo}</p>
       <p className="mt-1 text-[14px] font-bold text-pv-navy-900">{dati.ragioneSociale}</p>
+      {sede && (
+        <p className="text-[12.5px] font-semibold text-pv-navy-700">
+          Sede: {sede.nome}
+          {sede.citta ? ` · ${sede.citta}${sede.provincia ? ` (${sede.provincia})` : ''}` : ''}
+        </p>
+      )}
       <p className="text-[12.5px] text-pv-slate-600">P.IVA {dati.partitaIva}</p>
       {(dati.indirizzo || dati.citta) && (
         <p className="text-[12.5px] text-pv-slate-600">
@@ -43,7 +50,14 @@ export default async function DocumentoFiscaleDetailPage({
   const doc = await prisma.documentoFiscale.findUnique({
     where: { id },
     include: {
-      pratica: { select: { id: true, codicePratica: true } },
+      pratica: {
+        select: {
+          id: true,
+          codicePratica: true,
+          agenziaSede: { select: { nome: true, citta: true, provincia: true } },
+          brokerSede: { select: { nome: true, citta: true, provincia: true } },
+        },
+      },
       payout: {
         select: {
           id: true,
@@ -52,6 +66,7 @@ export default async function DocumentoFiscaleDetailPage({
             where: { tipo: 'CREDITO_PRATICA' },
             select: { pratica: { select: { id: true, codicePratica: true } } },
           },
+          wallet: { select: { sede: { select: { nome: true, citta: true, provincia: true } } } },
         },
       },
       notaVariazionePer: { select: { id: true, numeroProgressivo: true, anno: true } },
@@ -70,6 +85,7 @@ export default async function DocumentoFiscaleDetailPage({
 
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;
+  const sede = resolveSedeRiferimento(doc);
   const negativa = doc.importoLordoCent < 0;
 
   return (
@@ -117,8 +133,12 @@ export default async function DocumentoFiscaleDetailPage({
 
         <Card className="mb-5">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <Parte titolo="Emittente" dati={emittente} />
-            <Parte titolo="Destinatario" dati={destinatario} />
+            <Parte titolo="Emittente" dati={emittente} sede={sede?.lato === 'emittente' ? sede : null} />
+            <Parte
+              titolo="Destinatario"
+              dati={destinatario}
+              sede={sede?.lato === 'destinatario' ? sede : null}
+            />
           </div>
         </Card>
 

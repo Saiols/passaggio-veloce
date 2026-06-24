@@ -5,6 +5,7 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from './format';
 import { winAnsiSafe } from '@/lib/pdf/winansi';
 import type { DatiFiscali } from './pv-emittente';
+import type { SedeRiferimento } from './descrizione';
 
 /**
  * Genera on-the-fly il PDF di un DocumentoFiscale (fattura PV, compenso
@@ -33,6 +34,11 @@ export type DocumentoPdfInput = {
   descrizione: string;
   /** Riferimento testuale (es. "Pratica PV-2026-00042" o "Payout del …"). */
   riferimento?: string | null;
+  /**
+   * Sede operativa a cui il documento si riferisce (multi-sede). I dati fiscali
+   * restano della madre; la sede è mostrata accanto alla parte indicata da `lato`.
+   */
+  sede?: SedeRiferimento | null;
 };
 
 const NAVY = rgb(10 / 255, 37 / 255, 64 / 255);
@@ -51,6 +57,11 @@ function indirizzoLinea(d: DatiFiscali): string {
   return [d.indirizzo, [d.cap, d.citta].filter(Boolean).join(' '), d.provincia ? `(${d.provincia})` : '']
     .filter(Boolean)
     .join(', ');
+}
+
+function sedeLinea(s: { nome: string; citta: string; provincia: string }): string {
+  const loc = [s.citta, s.provincia ? `(${s.provincia})` : ''].filter(Boolean).join(' ');
+  return loc ? `${s.nome} · ${loc}` : s.nome;
 }
 
 /**
@@ -144,11 +155,15 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
 
   // ─── Emittente / Destinatario ────────────────────────────────────
   const colW = (PAGE_W - MARGIN * 2 - 20) / 2;
-  const drawParte = (titolo: string, d: DatiFiscali, x: number): void => {
+  const drawParte = (titolo: string, d: DatiFiscali, x: number, sede?: SedeRiferimento | null): void => {
     let yy = y;
     text(page, titolo, x, yy, { font: helvBold, size: 9, color: SLATE_500 });
     yy -= 15;
     text(page, d.ragioneSociale, x, yy, { font: helvBold, size: 11, color: NAVY });
+    if (sede) {
+      yy -= 13;
+      text(page, `Sede: ${sedeLinea(sede)}`, x, yy, { font: helvBold, size: 9, color: NAVY_700 });
+    }
     yy -= 14;
     text(page, `P.IVA ${d.partitaIva}`, x, yy, { size: 9 });
     const addr = indirizzoLinea(d);
@@ -165,8 +180,13 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
       text(page, `PEC ${d.pec}`, x, yy, { size: 9 });
     }
   };
-  drawParte('EMITTENTE', input.emittente, MARGIN);
-  drawParte('DESTINATARIO', input.destinatario, MARGIN + colW + 20);
+  drawParte('EMITTENTE', input.emittente, MARGIN, input.sede?.lato === 'emittente' ? input.sede : null);
+  drawParte(
+    'DESTINATARIO',
+    input.destinatario,
+    MARGIN + colW + 20,
+    input.sede?.lato === 'destinatario' ? input.sede : null,
+  );
   y -= 110;
 
   // ─── Tabella riga documento ──────────────────────────────────────

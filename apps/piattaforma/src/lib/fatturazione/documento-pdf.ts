@@ -1,7 +1,7 @@
 import 'server-only';
 import { prisma, type Prisma } from '@pv/db';
 import { buildDocumentoPdf, type DocumentoPdfInput } from './pdf';
-import { descrizioneDocumento } from './descrizione';
+import { descrizioneDocumento, resolveSedeRiferimento } from './descrizione';
 import { labelTipoDocumento } from './format';
 import type { DatiFiscali } from './pv-emittente';
 import type { EmailAttachment } from '@/lib/providers/email';
@@ -12,8 +12,12 @@ import type { EmailAttachment } from '@/lib/providers/email';
  * comporre descrizione/riferimento. Condiviso tra il route di download e
  * l'allegato email così che il PDF resti identico nei due percorsi.
  */
+const sedeSelect = { select: { nome: true, citta: true, provincia: true } } as const;
+
 export const documentoPdfInclude = {
-  pratica: { select: { codicePratica: true } },
+  pratica: {
+    select: { codicePratica: true, agenziaSede: sedeSelect, brokerSede: sedeSelect },
+  },
   payout: {
     select: {
       eseguitoAt: true,
@@ -21,6 +25,7 @@ export const documentoPdfInclude = {
         where: { tipo: 'CREDITO_PRATICA' },
         select: { pratica: { select: { codicePratica: true } } },
       },
+      wallet: { select: { sede: sedeSelect } },
     },
   },
   notaVariazionePer: { select: { numeroProgressivo: true, anno: true } },
@@ -47,6 +52,7 @@ export function documentoPdfInput(doc: DocumentoPdfRecord): DocumentoPdfInput {
     importoLordoCent: doc.importoLordoCent,
     descrizione,
     riferimento,
+    sede: resolveSedeRiferimento(doc),
   };
 }
 

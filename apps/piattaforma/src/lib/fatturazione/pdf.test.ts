@@ -78,6 +78,14 @@ describe('buildDocumentoPdf — robustezza encoding', () => {
     expect(bytes.length).toBeGreaterThan(500);
   });
 
+  it('genera il PDF con la sede di riferimento (lato destinatario) senza crashare', async () => {
+    const input = baseInput({
+      sede: { nome: 'AutoScout Milano', citta: 'Milano', provincia: 'MI', lato: 'destinatario' },
+    });
+    const bytes = await buildDocumentoPdf(input);
+    expect(bytes.length).toBeGreaterThan(500);
+  });
+
   it('genera il PDF con descrizione e riferimento molto lunghi (wrap, no overflow)', async () => {
     const input = baseInput({
       descrizione:

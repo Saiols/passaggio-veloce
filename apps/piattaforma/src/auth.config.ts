@@ -48,6 +48,11 @@ export const authConfig = {
         return true;
       }
 
+      // Link referral pubblico: l'utente ANONIMO clicca /r/<code>, la route
+      // logga il click e redirige a /register?ref=<code>. Deve quindi essere
+      // raggiungibile senza login (è l'ingresso dell'affiliazione).
+      if (path.startsWith('/r/')) return true;
+
       if (isPublicPath(path)) return true;
 
       // Everything else requires auth.

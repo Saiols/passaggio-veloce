@@ -2375,29 +2375,29 @@ async function main() {
 
   const allCompaniesMS = await prisma.company.findMany();
   for (const c of allCompaniesMS) {
-    const existing = await prisma.sede.findFirst({ where: { companyId: c.id } });
-    if (existing) continue;
+    const sede =
+      (await prisma.sede.findFirst({ where: { companyId: c.id } })) ??
+      (await prisma.sede.create({
+        data: {
+          companyId: c.id,
+          type: c.type,
+          nome: c.ragioneSociale,
+          indirizzo: c.indirizzo,
+          civico: c.civico,
+          citta: c.citta,
+          cap: c.cap,
+          provincia: c.provincia,
+          telefono: c.telefono,
+          email: c.email,
+          iban: c.iban,
+          payoutThresholdCent: c.payoutThresholdCent,
+          referralCode: c.referralCode,
+          deletedAt: c.deletedAt,
+        },
+      }));
 
-    const sede = await prisma.sede.create({
-      data: {
-        companyId: c.id,
-        type: c.type,
-        nome: c.ragioneSociale,
-        indirizzo: c.indirizzo,
-        civico: c.civico,
-        citta: c.citta,
-        cap: c.cap,
-        provincia: c.provincia,
-        telefono: c.telefono,
-        email: c.email,
-        iban: c.iban,
-        payoutThresholdCent: c.payoutThresholdCent,
-        referralCode: c.referralCode,
-        deletedAt: c.deletedAt,
-      },
-    });
-
-    // Re-pointing FK operative verso la sede appena creata.
+    // Re-pointing FK operative verso la sede (idempotente, sempre eseguito così
+    // anche le pratiche create in un re-run vengono agganciate).
     await prisma.pratica.updateMany({ where: { brokerId: c.id }, data: { brokerSedeId: sede.id } });
     await prisma.pratica.updateMany({ where: { agenziaAssegnataId: c.id }, data: { agenziaSedeId: sede.id } });
     await prisma.praticaAssegnazione.updateMany({ where: { agenziaId: c.id }, data: { sedeId: sede.id } });
@@ -2438,6 +2438,92 @@ async function main() {
     if (refSede) await prisma.company.update({ where: { id: c.id }, data: { referenteSedeId: refSede.id } });
   }
   console.log(`  · sedi backfill: ${allCompaniesMS.length} company processate`);
+
+  // ============================================================
+  // DEMO MULTI-SEDE: una madre DEALER con 3 sedi, per testare selettore,
+  // breakdown, classifica affiliazione e gestione sedi.
+  // - owner@multisede (ADMIN_AZIENDA): vede tutte le sedi + "Tutte le sedi"
+  // - operatore@multisede (UTENTE_AZIENDA): scoped alla sola sede Torino
+  // ============================================================
+  const multiCompany = await prisma.company.upsert({
+    where: { partitaIva: '88888888881' },
+    create: {
+      type: 'DEALER',
+      ragioneSociale: 'AutoScout Group Demo',
+      partitaIva: '88888888881',
+      pec: 'pec@autoscoutdemo.it',
+      email: 'info@autoscoutdemo.it',
+      indirizzo: 'Via Centrale 1',
+      citta: 'Milano',
+      cap: '20100',
+      provincia: 'MI',
+      iban: 'IT60X0542811101000000088881',
+      sepaMandateAccepted: true,
+      sepaMandateAcceptedAt: now,
+      termsAcceptedAt: now,
+    },
+    update: {},
+  });
+  const sediDemoMulti = [
+    { nome: 'AutoScout Milano', citta: 'Milano', cap: '20100', provincia: 'MI', code: 'asmilano' },
+    { nome: 'AutoScout Torino', citta: 'Torino', cap: '10100', provincia: 'TO', code: 'astorino' },
+    { nome: 'AutoScout Bologna', citta: 'Bologna', cap: '40100', provincia: 'BO', code: 'asbologna' },
+  ];
+  const createdSediMulti: { id: string; nome: string }[] = [];
+  for (const s of sediDemoMulti) {
+    let sede = await prisma.sede.findFirst({ where: { companyId: multiCompany.id, nome: s.nome } });
+    if (!sede) {
+      sede = await prisma.sede.create({
+        data: {
+          companyId: multiCompany.id,
+          type: 'DEALER',
+          nome: s.nome,
+          indirizzo: 'Via Demo 1',
+          citta: s.citta,
+          cap: s.cap,
+          provincia: s.provincia,
+          iban: multiCompany.iban,
+          referralCode: s.code,
+        },
+      });
+    }
+    createdSediMulti.push({ id: sede.id, nome: sede.nome });
+  }
+  await upsertUserByEmail('owner@multisede.passaggioveloce.it', {
+    create: {
+      email: 'owner@multisede.passaggioveloce.it',
+      passwordHash,
+      nome: 'Olga',
+      cognome: 'Proprietaria',
+      role: 'ADMIN_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+      companyId: multiCompany.id,
+    },
+    update: { passwordHash, companyId: multiCompany.id },
+  });
+  const operatoreMulti = await upsertUserByEmail('operatore@multisede.passaggioveloce.it', {
+    create: {
+      email: 'operatore@multisede.passaggioveloce.it',
+      passwordHash,
+      nome: 'Otto',
+      cognome: 'Operatore',
+      role: 'UTENTE_AZIENDA',
+      status: 'ACTIVE',
+      emailVerifiedAt: now,
+      companyId: multiCompany.id,
+    },
+    update: { passwordHash, companyId: multiCompany.id },
+  });
+  const torinoSede = createdSediMulti.find((s) => s.nome === 'AutoScout Torino');
+  if (torinoSede) {
+    await prisma.userSede.upsert({
+      where: { userId_sedeId: { userId: operatoreMulti.id, sedeId: torinoSede.id } },
+      update: {},
+      create: { userId: operatoreMulti.id, sedeId: torinoSede.id, ruolo: 'OPERATORE' },
+    });
+  }
+  console.log('  · DEMO multi-sede: AutoScout Group (3 sedi) — owner@multisede.passaggioveloce.it / operatore@multisede.passaggioveloce.it');
 
   console.log('');
   console.log('✔ Seed completato');

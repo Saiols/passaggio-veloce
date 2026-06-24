@@ -35,13 +35,22 @@ async function main() {
   const walletOrfani = await prisma.wallet.count({ where: { sedeId: null, companyId: null } });
   if (walletOrfani) errors.push(`${walletOrfani} wallet orfani (né sede né company)`);
 
-  const usersWithCompany = await prisma.user.count({ where: { companyId: { not: null } } });
-  const usersWithMembership = await prisma.user.count({
-    where: { companyId: { not: null }, sediMembership: { some: {} } },
+  // I proprietari (ADMIN_AZIENDA) hanno accesso implicito a tutte le sedi della
+  // madre: NON richiedono righe UserSede. Il requisito vale per gli altri utenti.
+  const opUsers = await prisma.user.count({
+    where: { companyId: { not: null }, role: { not: 'ADMIN_AZIENDA' }, deletedAt: null },
   });
-  if (usersWithMembership < usersWithCompany) {
+  const opUsersWithMembership = await prisma.user.count({
+    where: {
+      companyId: { not: null },
+      role: { not: 'ADMIN_AZIENDA' },
+      deletedAt: null,
+      sediMembership: { some: {} },
+    },
+  });
+  if (opUsersWithMembership < opUsers) {
     errors.push(
-      `UserSede mancanti: ${usersWithCompany - usersWithMembership} utenti con companyId senza membership`,
+      `UserSede mancanti: ${opUsers - opUsersWithMembership} utenti operativi (non-owner) con companyId senza membership`,
     );
   }
 

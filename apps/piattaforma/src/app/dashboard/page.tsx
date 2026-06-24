@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { AppShell } from '@/components/app-shell';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { BrokerDashboard } from './broker-dashboard';
@@ -25,6 +26,10 @@ export default async function DashboardPage({
   const companyType = session.user.companyType;
   const companyId = session.user.companyId;
 
+  // Multi-sede: sedi su cui filtrare le dashboard (sede corrente o tutte, owner).
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
+
   return (
     <AppShell session={session} activePath="/dashboard">
       {/* Admin e Assistente condividono l'overview operativa (conteggi pratiche/
@@ -44,9 +49,9 @@ export default async function DashboardPage({
           }
         />
       ) : companyType === 'AGENZIA' && companyId ? (
-        <AgenziaDashboard companyId={companyId} />
+        <AgenziaDashboard scopeIds={scopeIds} />
       ) : companyType === 'DEALER' && companyId ? (
-        <BrokerDashboard companyId={companyId} userName={session.user.name ?? undefined} />
+        <BrokerDashboard scopeIds={scopeIds} userName={session.user.name ?? undefined} />
       ) : (
         <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
           <p className="text-pv-slate-500">Account non configurato. Contatta il supporto.</p>

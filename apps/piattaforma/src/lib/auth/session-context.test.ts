@@ -58,6 +58,7 @@ describe('getSessionContext', () => {
     expect(ctx!.isOwner).toBe(true);
     expect(ctx!.accessibleSedi).toEqual([sedeA, sedeB]);
     expect(ctx!.currentSede).toEqual({ kind: 'ALL' });
+    expect(ctx!.scopeIds).toEqual(['a', 'b']);
   });
 
   it('operatore: solo sedi in membership; cookie valido → quella sede', async () => {
@@ -68,5 +69,6 @@ describe('getSessionContext', () => {
     expect(ctx!.isOwner).toBe(false);
     expect(ctx!.accessibleSedi).toEqual([sedeB]);
     expect(ctx!.currentSede).toEqual({ kind: 'ONE', sede: sedeB });
+    expect(ctx!.scopeIds).toEqual(['b']);
   });
 });

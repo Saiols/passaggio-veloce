@@ -64,6 +64,40 @@ export function assertSedeAccess(sedeId: string, accessibleSedi: SedeRef[]): boo
 }
 
 /**
+ * Lista di sedeId su cui filtrare le query operative, dato il contesto:
+ * - sede corrente ONE → solo quella sede;
+ * - vista aggregata ALL (proprietario) → tutte le sedi accessibili;
+ * - nessuna sede → lista vuota (il chiamante decide il fallback).
+ * Le query usano `{ in: ids }` in modo uniforme.
+ */
+export function sedeScopeIds(args: {
+  currentSede: CurrentSede | null;
+  accessibleSedi: SedeRef[];
+}): string[] {
+  if (!args.currentSede) return [];
+  if (args.currentSede.kind === 'ONE') return [args.currentSede.sede.id];
+  return args.accessibleSedi.map((s) => s.id);
+}
+
+/**
+ * Sede in cui l'utente sta operando per una SCRITTURA (es. creare una pratica).
+ * - sede corrente ONE → quella sede;
+ * - vista ALL ma con una sola sede accessibile (caso 1:1) → quella sede;
+ * - vista ALL con più sedi → null (l'utente deve prima selezionare una sede);
+ * - nessuna sede → null.
+ */
+export function resolveOperatingSede(args: {
+  currentSede: CurrentSede | null;
+  accessibleSedi: SedeRef[];
+}): SedeRef | null {
+  if (args.currentSede?.kind === 'ONE') return args.currentSede.sede;
+  if (args.currentSede?.kind === 'ALL' && args.accessibleSedi.length === 1) {
+    return args.accessibleSedi[0];
+  }
+  return null;
+}
+
+/**
  * True se l'utente può selezionare `target` come sede corrente.
  * `target` = 'ALL' è permesso solo al proprietario; altrimenti dev'essere
  * una sede accessibile.

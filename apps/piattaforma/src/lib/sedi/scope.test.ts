@@ -4,6 +4,8 @@ import {
   resolveCurrentSede,
   assertSedeAccess,
   canSelectSede,
+  sedeScopeIds,
+  resolveOperatingSede,
   type SedeRef,
 } from './scope';
 
@@ -99,6 +101,48 @@ describe('assertSedeAccess', () => {
 
   it('false se la sede non è accessibile', () => {
     expect(assertSedeAccess('zzz', companySedi)).toBe(false);
+  });
+});
+
+describe('sedeScopeIds', () => {
+  it('null → lista vuota', () => {
+    expect(sedeScopeIds({ currentSede: null, accessibleSedi: companySedi })).toEqual([]);
+  });
+
+  it('ONE → solo quella sede', () => {
+    expect(
+      sedeScopeIds({ currentSede: { kind: 'ONE', sede: sedeB }, accessibleSedi: companySedi }),
+    ).toEqual(['b']);
+  });
+
+  it('ALL → tutte le sedi accessibili (vista aggregata proprietario)', () => {
+    expect(
+      sedeScopeIds({ currentSede: { kind: 'ALL' }, accessibleSedi: companySedi }),
+    ).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('resolveOperatingSede', () => {
+  it('ONE → quella sede', () => {
+    expect(
+      resolveOperatingSede({ currentSede: { kind: 'ONE', sede: sedeB }, accessibleSedi: companySedi }),
+    ).toEqual(sedeB);
+  });
+
+  it('ALL con una sola sede (caso 1:1) → quella sede', () => {
+    expect(
+      resolveOperatingSede({ currentSede: { kind: 'ALL' }, accessibleSedi: [sedeA] }),
+    ).toEqual(sedeA);
+  });
+
+  it('ALL con più sedi → null (serve selezione)', () => {
+    expect(
+      resolveOperatingSede({ currentSede: { kind: 'ALL' }, accessibleSedi: companySedi }),
+    ).toBeNull();
+  });
+
+  it('nessuna sede → null', () => {
+    expect(resolveOperatingSede({ currentSede: null, accessibleSedi: [] })).toBeNull();
   });
 });
 

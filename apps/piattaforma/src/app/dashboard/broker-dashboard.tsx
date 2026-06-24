@@ -4,20 +4,20 @@ import { Button, StatCard, StatusChip, type PraticaStato } from '@/components/ui
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 
 export async function BrokerDashboard({
-  companyId,
+  scopeIds,
   userName,
 }: {
-  companyId: string;
+  scopeIds: string[];
   userName?: string;
 }) {
-  const [byStato, ultime, wallet, daValutare] = await Promise.all([
+  const [byStato, ultime, walletAgg, daValutare] = await Promise.all([
     prisma.pratica.groupBy({
       by: ['stato'],
-      where: { brokerId: companyId, deletedAt: null },
+      where: { brokerSedeId: { in: scopeIds }, deletedAt: null },
       _count: { _all: true },
     }),
     prisma.pratica.findMany({
-      where: { brokerId: companyId, deletedAt: null },
+      where: { brokerSedeId: { in: scopeIds }, deletedAt: null },
       orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       take: 5,
       include: {
@@ -25,12 +25,13 @@ export async function BrokerDashboard({
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
       },
     }),
-    prisma.wallet.findUnique({ where: { companyId } }),
+    // Multi-sede: saldo operativo = somma dei wallet delle sedi in scope.
+    prisma.wallet.aggregate({ _sum: { saldoCent: true }, where: { sedeId: { in: scopeIds } } }),
     // A7 banner valuta post-firma: pratiche FIRMATA del broker per cui
     // non esiste ancora una Valutazione, ordinate dalla più recente.
     prisma.pratica.findMany({
       where: {
-        brokerId: companyId,
+        brokerSedeId: { in: scopeIds },
         deletedAt: null,
         stato: 'FIRMATA',
         valutazione: null,
@@ -153,7 +154,7 @@ export async function BrokerDashboard({
         />
         <StatCard
           label="Wallet"
-          value={formatCurrencyCent(wallet?.saldoCent ?? 0)}
+          value={formatCurrencyCent(walletAgg._sum.saldoCent ?? 0)}
           hint="Saldo disponibile"
           icon={<WalletIcon />}
           accent="navy"

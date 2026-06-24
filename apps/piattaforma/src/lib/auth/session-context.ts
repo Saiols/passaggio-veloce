@@ -6,6 +6,7 @@ import { isOwner as isOwnerRole } from '@/lib/auth/permissions';
 import {
   resolveAccessibleSedi,
   resolveCurrentSede,
+  sedeScopeIds,
   type SedeRef,
   type CurrentSede,
 } from '@/lib/sedi/scope';
@@ -27,6 +28,8 @@ export type SessionContext = {
   isOwner: boolean;
   accessibleSedi: SedeRef[];
   currentSede: CurrentSede | null;
+  /** Sedi su cui filtrare le query operative (`{ in: scopeIds }`). */
+  scopeIds: string[];
 };
 
 /**
@@ -43,7 +46,14 @@ export async function getSessionContext(): Promise<SessionContext | null> {
   const isOwner = isOwnerRole(user.role);
 
   if (!companyId) {
-    return { user, companyId: undefined, isOwner: false, accessibleSedi: [], currentSede: null };
+    return {
+      user,
+      companyId: undefined,
+      isOwner: false,
+      accessibleSedi: [],
+      currentSede: null,
+      scopeIds: [],
+    };
   }
 
   const [companySedi, memberships] = await Promise.all([
@@ -66,6 +76,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
 
   const cookieValue = (await cookies()).get(SEDE_COOKIE)?.value ?? null;
   const currentSede = resolveCurrentSede({ isOwner, accessibleSedi, cookieValue });
+  const scopeIds = sedeScopeIds({ currentSede, accessibleSedi });
 
-  return { user, companyId, isOwner, accessibleSedi, currentSede };
+  return { user, companyId, isOwner, accessibleSedi, currentSede, scopeIds };
 }

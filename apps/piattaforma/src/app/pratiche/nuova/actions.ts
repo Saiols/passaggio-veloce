@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { resolveOperatingSede } from '@/lib/sedi/scope';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import {
@@ -426,6 +428,18 @@ export async function submitNuovaPraticaAction(
   }
   const brokerId = session.user.companyId!;
   const userId = session.user.id!;
+
+  // Multi-sede: la pratica è creata dalla sede broker operativa corrente.
+  const ctx = await getSessionContext();
+  const operatingSede = ctx
+    ? resolveOperatingSede({ currentSede: ctx.currentSede, accessibleSedi: ctx.accessibleSedi })
+    : null;
+  if (!operatingSede) {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent('Seleziona una sede prima di creare una pratica')}`,
+    );
+  }
+  const brokerSedeId = operatingSede.id;
 
   const raw = Object.fromEntries(formData.entries());
   const parsed = submitSchema.safeParse(raw);
@@ -931,6 +945,7 @@ export async function submitNuovaPraticaAction(
       flagMinore: d.flagMinore,
 
       brokerId,
+      brokerSedeId,
       feeAgenziaCent,
       creditoBrokerCent,
 

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma, type PraticaTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
@@ -39,13 +40,18 @@ export default async function PraticaDetailPage({
     session.user.role === 'ADMIN_PIATTAFORMA' || session.user.role === 'ASSISTENTE';
   if (!isStaff && !companyId) notFound();
 
+  // Multi-sede: l'accesso non-staff è scoped alle sedi (broker o agenzia).
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
+  const inScope = (sedeId: string | null): boolean => sedeId != null && scopeIds.includes(sedeId);
+
   const pratica = await prisma.pratica.findFirst({
     where: {
       id,
       deletedAt: null,
       ...(isStaff
         ? {}
-        : { OR: [{ brokerId: companyId! }, { agenziaAssegnataId: companyId! }] }),
+        : { OR: [{ brokerSedeId: { in: scopeIds } }, { agenziaSedeId: { in: scopeIds } }] }),
     },
     include: {
       broker: { select: { ragioneSociale: true, citta: true, provincia: true } },
@@ -74,17 +80,17 @@ export default async function PraticaDetailPage({
 
   const canProcessata =
     companyType === 'AGENZIA' &&
-    pratica.agenziaAssegnataId === companyId &&
+    inScope(pratica.agenziaSedeId) &&
     pratica.stato === 'ACCETTATA';
 
   const canFirma =
     companyType === 'AGENZIA' &&
-    pratica.agenziaAssegnataId === companyId &&
+    inScope(pratica.agenziaSedeId) &&
     pratica.stato === 'PROCESSATA';
 
   const canAnnulla =
     companyType === 'DEALER' &&
-    pratica.brokerId === companyId &&
+    inScope(pratica.brokerSedeId) &&
     pratica.stato !== 'FIRMATA' &&
     pratica.stato !== 'ANNULLATA' &&
     pratica.stato !== 'SCADUTA';
@@ -94,7 +100,7 @@ export default async function PraticaDetailPage({
 
   const canValutare =
     companyType === 'DEALER' &&
-    pratica.brokerId === companyId &&
+    inScope(pratica.brokerSedeId) &&
     pratica.stato === 'FIRMATA' &&
     !pratica.valutazione &&
     !!pratica.agenziaAssegnata;
@@ -104,7 +110,7 @@ export default async function PraticaDetailPage({
   // volta per pratica.
   const canSegnalare =
     companyType === 'AGENZIA' &&
-    pratica.agenziaAssegnataId === companyId &&
+    inScope(pratica.agenziaSedeId) &&
     (pratica.stato === 'ACCETTATA' || pratica.stato === 'PROCESSATA') &&
     !pratica.flagSegnalata;
 

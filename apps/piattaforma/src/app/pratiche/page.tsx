@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Button, StatusChip, type PraticaStato } from '@/components/ui';
@@ -83,10 +84,14 @@ export default async function PratichePage({
     deletedAt: null,
   };
 
+  // Multi-sede: scoping per sede corrente (ONE) o tutte le sedi della madre
+  // (ALL, proprietario). `scopeIds` vuoto ⇒ nessuna pratica visibile.
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
   if (companyType === 'AGENZIA') {
-    where.agenziaAssegnataId = companyId;
+    where.agenziaSedeId = { in: scopeIds };
   } else {
-    where.brokerId = companyId;
+    where.brokerSedeId = { in: scopeIds };
   }
 
   if (sp.stato && STATI_USER.some((s) => s.value === sp.stato)) {

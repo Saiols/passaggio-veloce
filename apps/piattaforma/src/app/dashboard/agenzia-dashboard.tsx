@@ -4,28 +4,28 @@ import { Alert, StatCard, StatusChip, type PraticaStato } from '@/components/ui'
 import { formatRelative, formatCurrencyCent } from '@/lib/format';
 import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
 
-export async function AgenziaDashboard({ companyId }: { companyId: string }) {
+export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
   const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, prossimiAddebiti] = await Promise.all([
     prisma.praticaAssegnazione.count({
-      where: { agenziaId: companyId, esito: 'PENDING' },
+      where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
     }),
     prisma.pratica.count({
-      where: { agenziaAssegnataId: companyId, stato: 'ACCETTATA', deletedAt: null },
+      where: { agenziaSedeId: { in: scopeIds }, stato: 'ACCETTATA', deletedAt: null },
     }),
     prisma.pratica.count({
       where: {
-        agenziaAssegnataId: companyId,
+        agenziaSedeId: { in: scopeIds },
         stato: 'FIRMATA',
         firmaAvvenutaAt: { gte: monthStart() },
       },
     }),
     prisma.valutazione.aggregate({
-      where: { agenziaId: companyId },
+      where: { agenziaSedeId: { in: scopeIds } },
       _avg: { stelle: true },
       _count: { _all: true },
     }),
     prisma.praticaAssegnazione.findMany({
-      where: { agenziaId: companyId, esito: 'PENDING' },
+      where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
       orderBy: { invioAt: 'desc' },
       take: 5,
       include: {
@@ -40,11 +40,11 @@ export async function AgenziaDashboard({ companyId }: { companyId: string }) {
     // LISTINI DISABILITATI (feature nascosta 2026-06-12) — riattivare insieme a /profilo/listino:
     // A1: presenza listino per banner "Pubblica il tuo listino"
     // prisma.listino.findFirst({
-    //   where: { agenziaId: companyId },
+    //   where: { sedeId: { in: scopeIds } },
     //   select: { id: true, formato: true },
     // }),
     prisma.feeAddebito.findMany({
-      where: { agenziaId: companyId, stato: 'SCHEDULED', scheduledAt: { not: null } },
+      where: { agenziaSedeId: { in: scopeIds }, stato: 'SCHEDULED', scheduledAt: { not: null } },
       orderBy: { scheduledAt: 'asc' },
       take: 3,
       include: { pratica: { select: { id: true, codicePratica: true } } },

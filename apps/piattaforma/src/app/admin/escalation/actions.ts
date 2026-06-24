@@ -29,7 +29,7 @@ const ESCALATION_ROUND = 99;
 
 export async function assegnaEscalationAction(
   praticaId: string,
-  agenziaId: string,
+  sedeId: string,
 ): Promise<AssignResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -38,61 +38,69 @@ export async function assegnaEscalationAction(
   }
 
   try {
-    const notificaData: NotificaData = await prisma.$transaction(async (tx) => {
-      const pratica = await tx.pratica.findUnique({
-        where: { id: praticaId },
-        include: {
-          broker: { select: { ragioneSociale: true } },
-          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
-        },
-      });
-      if (!pratica) throw new Error('Pratica non trovata');
-      if (pratica.stato !== 'IN_ESCALATION') {
-        throw new Error('La pratica non è in escalation');
-      }
+    const notificaData: NotificaData & { agenziaCompanyId: string } = await prisma.$transaction(
+      async (tx) => {
+        const pratica = await tx.pratica.findUnique({
+          where: { id: praticaId },
+          include: {
+            broker: { select: { ragioneSociale: true } },
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+          },
+        });
+        if (!pratica) throw new Error('Pratica non trovata');
+        if (pratica.stato !== 'IN_ESCALATION') {
+          throw new Error('La pratica non è in escalation');
+        }
 
-      const agenzia = await tx.company.findUnique({
-        where: { id: agenziaId },
-        select: {
-          id: true,
-          type: true,
-          deletedAt: true,
-          ragioneSociale: true,
-          email: true,
-        },
-      });
-      if (!agenzia || agenzia.type !== 'AGENZIA') {
-        throw new Error('Agenzia non valida');
-      }
-      if (agenzia.deletedAt !== null) {
-        throw new Error("L'agenzia selezionata è stata eliminata");
-      }
+        // Multi-sede: l'assegnazione manuale è verso una SEDE agenzia.
+        const sede = await tx.sede.findUnique({
+          where: { id: sedeId },
+          select: {
+            id: true,
+            type: true,
+            deletedAt: true,
+            suspendedAt: true,
+            nome: true,
+            email: true,
+            companyId: true,
+            company: { select: { email: true } },
+          },
+        });
+        if (!sede || sede.type !== 'AGENZIA') {
+          throw new Error('Sede agenzia non valida');
+        }
+        if (sede.deletedAt !== null || sede.suspendedAt !== null) {
+          throw new Error('La sede selezionata non è attiva');
+        }
 
-      await tx.praticaAssegnazione.create({
-        data: {
-          praticaId,
-          agenziaId,
-          round: ESCALATION_ROUND,
-          esito: 'ACCETTATA',
-          invioAt: new Date(),
-          esitoAt: new Date(),
-        },
-      });
+        await tx.praticaAssegnazione.create({
+          data: {
+            praticaId,
+            agenziaId: sede.companyId,
+            sedeId: sede.id,
+            round: ESCALATION_ROUND,
+            esito: 'ACCETTATA',
+            invioAt: new Date(),
+            esitoAt: new Date(),
+          },
+        });
 
-      await tx.pratica.update({
-        where: { id: praticaId },
-        data: {
-          // "ACCETTATA" è lo stato corretto post-assegnazione manuale
-          // (ASSEGNATA non esiste nell'enum PraticaStato)
-          stato: 'ACCETTATA',
-          agenziaAssegnataId: agenziaId,
-          accettataAt: new Date(),
-        },
-      });
+        await tx.pratica.update({
+          where: { id: praticaId },
+          data: {
+            // "ACCETTATA" è lo stato corretto post-assegnazione manuale
+            // (ASSEGNATA non esiste nell'enum PraticaStato)
+            stato: 'ACCETTATA',
+            agenziaAssegnataId: sede.companyId,
+            agenziaSedeId: sede.id,
+            accettataAt: new Date(),
+          },
+        });
 
-      return {
-        agenziaEmail: agenzia.email,
-        agenziaRagioneSociale: agenzia.ragioneSociale,
+        return {
+          agenziaCompanyId: sede.companyId,
+          agenziaEmail: sede.email ?? sede.company.email,
+          agenziaRagioneSociale: sede.nome,
         codicePratica: pratica.codicePratica,
         targa:
           pratica.veicoli[0]?.targa
@@ -112,7 +120,7 @@ export async function assegnaEscalationAction(
         tipo: 'N6_AGENZIA_NUOVA_PRATICA',
         target: {
           email: notificaData.agenziaEmail,
-          companyId: agenziaId,
+          companyId: notificaData.agenziaCompanyId,
         },
         payload: {
           codicePratica: notificaData.codicePratica ?? '—',
@@ -137,7 +145,7 @@ export async function assegnaEscalationAction(
           prisma,
           eventoPraticaAssegnata({
             praticaId,
-            agenziaId,
+            agenziaId: notificaData.agenziaCompanyId,
             codicePratica: notificaData.codicePratica,
           }),
         );

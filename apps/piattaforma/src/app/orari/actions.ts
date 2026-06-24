@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
+import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma, Prisma } from '@pv/db';
 
 type Giorno = 'LUN' | 'MAR' | 'MER' | 'GIO' | 'VEN' | 'SAB' | 'DOM';
@@ -33,16 +34,22 @@ export async function updateOrariAction(formData: FormData): Promise<ActionResul
   const agenziaId = session.user.companyId;
   if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
 
+  // Multi-sede: gli orari sono per sede operativa. Il proprietario in vista
+  // aggregata (più sedi) deve prima selezionare una sede.
+  const sede = await getOperatingSede();
+  if (!sede) return { ok: false, error: 'Seleziona una sede per modificarne gli orari' };
+
   for (const g of GIORNI) {
     const f1 = readFascia(formData, g, 1);
     const f2 = readFascia(formData, g, 2);
     const fasce = [f1, f2].filter((x): x is { inizio: string; fine: string } => x !== null);
 
     await prisma.orariApertura.upsert({
-      where: { agenziaId_giorno: { agenziaId, giorno: g } },
+      where: { sedeId_giorno: { sedeId: sede.id, giorno: g } },
       update: { fasceOrarie: fasce as unknown as Prisma.InputJsonValue },
       create: {
         agenziaId,
+        sedeId: sede.id,
         giorno: g,
         fasceOrarie: fasce as unknown as Prisma.InputJsonValue,
       },

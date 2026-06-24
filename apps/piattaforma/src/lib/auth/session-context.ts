@@ -6,6 +6,7 @@ import { isOwner as isOwnerRole } from '@/lib/auth/permissions';
 import {
   resolveAccessibleSedi,
   resolveCurrentSede,
+  resolveOperatingSede,
   sedeScopeIds,
   type SedeRef,
   type CurrentSede,
@@ -79,4 +80,15 @@ export async function getSessionContext(): Promise<SessionContext | null> {
   const scopeIds = sedeScopeIds({ currentSede, accessibleSedi });
 
   return { user, companyId, isOwner, accessibleSedi, currentSede, scopeIds };
+}
+
+/**
+ * Sede in cui l'utente sta operando per una scrittura (es. configurare il
+ * calendario di una sede). Null se nessun contesto o se il proprietario è in
+ * vista aggregata con più sedi (deve prima selezionarne una).
+ */
+export async function getOperatingSede(): Promise<SedeRef | null> {
+  const ctx = await getSessionContext();
+  if (!ctx) return null;
+  return resolveOperatingSede({ currentSede: ctx.currentSede, accessibleSedi: ctx.accessibleSedi });
 }

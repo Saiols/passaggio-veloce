@@ -958,6 +958,7 @@ model OrariApertura {
   createdAt DateTime @default(now())
 
   @@unique([agenziaId, giorno])
+  @@unique([sedeId, giorno])
   @@map("orari_apertura")
 }
 

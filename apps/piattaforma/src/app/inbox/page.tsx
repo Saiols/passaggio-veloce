@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
@@ -21,11 +22,13 @@ export default async function InboxPage() {
     );
   }
 
-  const agenziaId = session.user.companyId!;
+  // Multi-sede: inbox scoped alle sedi accessibili (sede corrente o tutte, owner).
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
 
   const [pending, recenti] = await Promise.all([
     prisma.praticaAssegnazione.findMany({
-      where: { agenziaId, esito: 'PENDING' },
+      where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
       orderBy: { invioAt: 'desc' },
       include: {
         pratica: {
@@ -37,7 +40,7 @@ export default async function InboxPage() {
       },
     }),
     prisma.praticaAssegnazione.findMany({
-      where: { agenziaId, esito: { in: ['RIFIUTATA', 'ASSEGNATA_ALTRO', 'TIMEOUT'] } },
+      where: { sedeId: { in: scopeIds }, esito: { in: ['RIFIUTATA', 'ASSEGNATA_ALTRO', 'TIMEOUT'] } },
       orderBy: { esitoAt: 'desc' },
       take: 10,
       include: {

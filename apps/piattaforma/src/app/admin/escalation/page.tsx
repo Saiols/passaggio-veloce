@@ -34,26 +34,27 @@ export default async function AdminEscalationPage() {
   };
   const agenzieByProvincia = new Map<string, AgenziaPick[]>();
   for (const prov of province) {
-    const agenzie = await prisma.company.findMany({
-      where: { type: 'AGENZIA', deletedAt: null, provincia: prov },
-      select: { id: true, ragioneSociale: true },
+    // Multi-sede: l'assegnazione manuale è verso una SEDE agenzia (attiva).
+    const sedi = await prisma.sede.findMany({
+      where: { type: 'AGENZIA', deletedAt: null, suspendedAt: null, provincia: prov },
+      select: { id: true, nome: true },
     });
-    if (agenzie.length === 0) {
+    if (sedi.length === 0) {
       agenzieByProvincia.set(prov, []);
       continue;
     }
     const ratings = await prisma.valutazione.groupBy({
-      by: ['agenziaId'],
-      where: { agenziaId: { in: agenzie.map((a) => a.id) } },
+      by: ['agenziaSedeId'],
+      where: { agenziaSedeId: { in: sedi.map((s) => s.id) } },
       _avg: { stelle: true },
       _count: { _all: true },
     });
-    const ratingMap = new Map(ratings.map((r) => [r.agenziaId, r]));
-    const enriched: AgenziaPick[] = agenzie.map((a) => {
-      const r = ratingMap.get(a.id);
+    const ratingMap = new Map(ratings.map((r) => [r.agenziaSedeId, r]));
+    const enriched: AgenziaPick[] = sedi.map((s) => {
+      const r = ratingMap.get(s.id);
       return {
-        id: a.id,
-        ragioneSociale: a.ragioneSociale,
+        id: s.id,
+        ragioneSociale: s.nome,
         avgStars: r?._avg.stelle ?? null,
         numValutazioni: r?._count._all ?? 0,
       };

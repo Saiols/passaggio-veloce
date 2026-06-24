@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { tickPratica } from '@/lib/distribuzione';
 import { sendNotification } from '@/lib/notifiche';
@@ -20,10 +21,15 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
   const agenziaId = session.user.companyId;
   if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
 
+  // Multi-sede: l'assegnazione da accettare è quella di una sede a cui l'utente
+  // ha accesso (scopeIds). La sede accettante è registrata sulla pratica.
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
+
   try {
     await prisma.$transaction(async (tx) => {
       const assegnazione = await tx.praticaAssegnazione.findFirst({
-        where: { praticaId, agenziaId, esito: 'PENDING' },
+        where: { praticaId, sedeId: { in: scopeIds }, esito: 'PENDING' },
       });
       if (!assegnazione) {
         throw new Error(
@@ -61,7 +67,8 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
         where: { id: praticaId },
         data: {
           stato: 'ACCETTATA',
-          agenziaAssegnataId: agenziaId,
+          agenziaAssegnataId: assegnazione.agenziaId,
+          agenziaSedeId: assegnazione.sedeId,
           accettataAt: now,
         },
       });
@@ -174,11 +181,14 @@ export async function rejectPratica(
   const agenziaId = session.user.companyId;
   if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
 
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
+
   const notaRaw = formData.get('nota');
   const nota = typeof notaRaw === 'string' && notaRaw.trim() ? notaRaw.trim().slice(0, 500) : null;
 
   const assegnazione = await prisma.praticaAssegnazione.findFirst({
-    where: { praticaId, agenziaId, esito: 'PENDING' },
+    where: { praticaId, sedeId: { in: scopeIds }, esito: 'PENDING' },
   });
   if (!assegnazione) {
     return { ok: false, error: 'Assegnazione non trovata o già chiusa' };

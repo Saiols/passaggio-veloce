@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card } from '@/components/ui';
@@ -49,8 +50,21 @@ export default async function OrariPage({
   }
 
   const sp = await searchParams;
-  const agenziaId = session.user.companyId!;
-  const orari = await prisma.orariApertura.findMany({ where: { agenziaId } });
+
+  // Multi-sede: orari per sede operativa.
+  const sede = await getOperatingSede();
+  if (!sede) {
+    return (
+      <AppShell session={session} activePath="/orari">
+        <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
+          <p className="text-pv-slate-500">
+            Seleziona una sede dal menù in alto per gestirne gli orari di apertura.
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
+  const orari = await prisma.orariApertura.findMany({ where: { sedeId: sede.id } });
   const byGiorno = new Map<string, Fascia[]>();
   for (const o of orari) byGiorno.set(o.giorno, parseFasce(o.fasceOrarie));
 

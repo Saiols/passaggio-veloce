@@ -15,32 +15,35 @@ type AgenziaOrari = {
 };
 
 /**
- * Carica orari + chiusure per un set di agenzie in un singolo roundtrip.
+ * Carica orari + chiusure per un set di SEDI in un singolo roundtrip.
+ * (Multi-sede: calendario per sede fisica, non per azienda madre.)
  */
-export async function loadOrariPerAgenzie(
-  agenziaIds: string[],
+export async function loadOrariPerSedi(
+  sedeIds: string[],
   tx?: Prisma.TransactionClient,
 ): Promise<Map<string, AgenziaOrari>> {
   const client = tx ?? prisma;
 
-  if (agenziaIds.length === 0) return new Map();
+  if (sedeIds.length === 0) return new Map();
 
   const [orari, chiusure] = await Promise.all([
-    client.orariApertura.findMany({ where: { agenziaId: { in: agenziaIds } } }),
-    client.chiusuraStraordinaria.findMany({ where: { agenziaId: { in: agenziaIds } } }),
+    client.orariApertura.findMany({ where: { sedeId: { in: sedeIds } } }),
+    client.chiusuraStraordinaria.findMany({ where: { sedeId: { in: sedeIds } } }),
   ]);
 
   const result = new Map<string, AgenziaOrari>();
-  for (const id of agenziaIds) result.set(id, { fasce: {}, chiusure: [] });
+  for (const id of sedeIds) result.set(id, { fasce: {}, chiusure: [] });
 
   for (const o of orari) {
-    const current = result.get(o.agenziaId);
+    if (o.sedeId == null) continue;
+    const current = result.get(o.sedeId);
     if (!current) continue;
     const giorno = o.giorno as GiornoSettimana;
     current.fasce[giorno] = parseFasceOrarie(o.fasceOrarie);
   }
   for (const c of chiusure) {
-    const current = result.get(c.agenziaId);
+    if (c.sedeId == null) continue;
+    const current = result.get(c.sedeId);
     if (!current) continue;
     current.chiusure.push({ dataInizio: c.dataInizio, dataFine: c.dataFine });
   }

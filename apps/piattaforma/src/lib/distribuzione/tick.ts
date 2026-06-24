@@ -2,9 +2,10 @@ import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { DISTRIBUZIONE } from './constants';
 import { provinceLimitrofe } from './province-limitrofe';
-import { computeCountdown, loadOrariPerAgenzie } from './countdown';
+import { computeCountdown, loadOrariPerSedi } from './countdown';
 import { attachRating, rankCandidates } from './ranking';
-import { checkAutoSuspendForAgenzie } from './auto-suspend';
+import { dedupeByMadre } from './dedupe';
+import { checkAutoSuspendForSedi } from './auto-suspend';
 import {
   getAdminEmails,
   sendNotification,
@@ -75,10 +76,12 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
         a.esito = 'TIMEOUT';
         a.esitoAt = now;
       }
-      // A3 anti-abuso: dopo aver marcato TIMEOUT, controlla se le
-      // agenzie hanno ora 5+ timeout consecutivi → auto-suspend.
-      const idsToCheck = Array.from(new Set(daScadere.map((a) => a.agenziaId)));
-      await checkAutoSuspendForAgenzie(tx, idsToCheck);
+      // A3 anti-abuso: dopo aver marcato TIMEOUT, controlla se le SEDI
+      // hanno ora 5+ timeout consecutivi → auto-suspend (per sede).
+      const sediToCheck = Array.from(
+        new Set(daScadere.map((a) => a.sedeId).filter((x): x is string => x != null)),
+      );
+      await checkAutoSuspendForSedi(tx, sediToCheck);
     }
 
     const ancoraPending = assegnazioniCorrenti.some((a) => a.esito === 'PENDING');
@@ -146,24 +149,38 @@ async function avviaRound(
     return handleNoCandidates(tx, pratica.id, round, now);
   }
 
-  const raw = await tx.company.findMany({
+  // Multi-sede: i candidati sono SEDI agenzia (non Company). Filtra sedi e
+  // madre attive; `giaContattate` (madri già contattate) esclude la madre.
+  const rawSedi = await tx.sede.findMany({
     where: {
       type: 'AGENZIA',
       deletedAt: null,
+      suspendedAt: null,
       provincia: { in: provincieTarget as string[] },
-      id: { notIn: Array.from(giaContattate) },
+      companyId: { notIn: Array.from(giaContattate) },
+      company: { deletedAt: null, suspendedAt: null },
     },
-    select: { id: true, createdAt: true, ragioneSociale: true, provincia: true },
+    select: { id: true, createdAt: true, nome: true, provincia: true, companyId: true },
   });
+  const raw = rawSedi.map((s) => ({
+    id: s.id,
+    companyId: s.companyId,
+    createdAt: s.createdAt,
+    ragioneSociale: s.nome,
+    provincia: s.provincia,
+  }));
   const rankedCandidates = await attachRating(tx, raw);
   const eligible = rankCandidates(rankedCandidates);
-  const candidate = eligible.slice(0, maxPerRound);
+
+  // Decisione "una per madre": tra le sedi idonee dello stesso gruppo tieni
+  // solo la migliore (la lista è già ordinata per ranking).
+  const candidate = dedupeByMadre(eligible).slice(0, maxPerRound);
 
   if (candidate.length === 0) {
     return handleNoCandidates(tx, pratica.id, round, now);
   }
 
-  const orariMap = await loadOrariPerAgenzie(
+  const orariMap = await loadOrariPerSedi(
     candidate.map((c) => c.id),
     tx,
   );
@@ -176,7 +193,8 @@ async function avviaRound(
     const created = await tx.praticaAssegnazione.create({
       data: {
         praticaId: pratica.id,
-        agenziaId: a.id,
+        agenziaId: a.companyId, // madre (colonna legacy, NOT NULL)
+        sedeId: a.id, // sede fisica assegnataria
         round,
         esito: 'PENDING',
         invioAt: now,

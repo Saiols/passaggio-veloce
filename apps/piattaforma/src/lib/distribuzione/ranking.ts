@@ -10,9 +10,10 @@ export const effectiveScore = _effectiveScore;
 export const rankCandidates = _rankCandidates;
 
 export type AgenziaRanked = {
-  id: string;
+  id: string; // id della SEDE candidata
+  companyId: string; // azienda madre della sede (per dedup "una per madre")
   createdAt: Date;
-  ragioneSociale: string;
+  ragioneSociale: string; // nome sede
   provincia: string;
   ratingAvg: number | null;
   ratingCount: number;
@@ -23,7 +24,8 @@ export type AgenziaRanked = {
 };
 
 type Candidate = {
-  id: string;
+  id: string; // id della SEDE
+  companyId: string;
   createdAt: Date;
   ragioneSociale: string;
   provincia: string;
@@ -43,35 +45,36 @@ export async function attachRating(
 
   const [ratings, recentAssegnazioni] = await Promise.all([
     tx.valutazione.groupBy({
-      by: ['agenziaId'],
-      where: { agenziaId: { in: candidateIds } },
+      by: ['agenziaSedeId'],
+      where: { agenziaSedeId: { in: candidateIds } },
       _avg: { stelle: true },
       _count: { _all: true },
     }),
-    // A3: ultime N assegnazioni per agenzia, ordinate desc per timestamp,
+    // A3: ultime N assegnazioni per sede, ordinate desc per timestamp,
     // per calcolare i "rifiuti consecutivi" recenti (decay anti-abuso).
     tx.praticaAssegnazione.findMany({
       where: {
-        agenziaId: { in: candidateIds },
+        sedeId: { in: candidateIds },
         esito: { in: ['ACCETTATA', 'RIFIUTATA', 'TIMEOUT'] },
       },
       orderBy: { esitoAt: 'desc' },
-      select: { agenziaId: true, esito: true },
+      select: { sedeId: true, esito: true },
       take: ANTI_ABUSO.REJECT_DECAY_LOOKBACK * candidateIds.length,
     }),
   ]);
 
   const byId = new Map<string, { avg: number | null; count: number }>();
   for (const r of ratings) {
-    byId.set(r.agenziaId, { avg: r._avg.stelle, count: r._count._all });
+    if (r.agenziaSedeId == null) continue;
+    byId.set(r.agenziaSedeId, { avg: r._avg.stelle, count: r._count._all });
   }
 
-  // Per ogni agenzia: conta rifiuti consecutivi più recenti (RIFIUTATA),
+  // Per ogni sede: conta rifiuti consecutivi più recenti (RIFIUTATA),
   // si interrompono al primo ACCETTATA o TIMEOUT.
   const rejectsById = new Map<string, number>();
   for (const id of candidateIds) {
     const recent = recentAssegnazioni
-      .filter((a) => a.agenziaId === id)
+      .filter((a) => a.sedeId === id)
       .slice(0, ANTI_ABUSO.REJECT_DECAY_LOOKBACK);
     let consecutive = 0;
     for (const a of recent) {

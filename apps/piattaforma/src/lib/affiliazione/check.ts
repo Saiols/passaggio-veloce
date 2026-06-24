@@ -70,6 +70,8 @@ export async function detectCollusion(
         iban: true,
         signupIp: true,
         email: true,
+        // Multi-sede: considera anche gli IBAN delle sedi nel check SAME_IBAN.
+        sedi: { select: { iban: true } },
       },
     }),
     tx.company.findUnique({
@@ -79,6 +81,7 @@ export async function detectCollusion(
         iban: true,
         signupIp: true,
         email: true,
+        sedi: { select: { iban: true } },
       },
     }),
   ]);
@@ -87,13 +90,15 @@ export async function detectCollusion(
 
   const flags: CollusionFlag[] = [];
 
-  // SAME_IBAN: stesso conto bancario
-  if (
-    referente.iban &&
-    referral.iban &&
-    referente.iban.replace(/\s+/g, '').toUpperCase() ===
-      referral.iban.replace(/\s+/g, '').toUpperCase()
-  ) {
+  // SAME_IBAN: stesso conto bancario (madre o una qualsiasi sede di una madre).
+  const normIban = (s: string) => s.replace(/\s+/g, '').toUpperCase();
+  const ibansOf = (c: { iban: string | null; sedi: { iban: string | null }[] }): Set<string> =>
+    new Set(
+      [c.iban, ...c.sedi.map((s) => s.iban)].filter((x): x is string => !!x).map(normIban),
+    );
+  const refIbans = ibansOf(referente);
+  const reflIbans = ibansOf(referral);
+  if ([...refIbans].some((i) => reflIbans.has(i))) {
     flags.push('SAME_IBAN');
   }
 

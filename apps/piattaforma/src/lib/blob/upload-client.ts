@@ -42,6 +42,23 @@ export async function uploadToBlob(
   if (!ACCEPTED_MIME.includes(file.type)) {
     throw new Error('Formato non supportato (PDF/JPG/PNG)');
   }
+
+  // Sviluppo LOCALE: se NEXT_PUBLIC_BLOB_LOCAL=1 (niente token Vercel Blob),
+  // invia il file al route handler locale che lo salva via storage provider.
+  if (process.env.NEXT_PUBLIC_BLOB_LOCAL === '1') {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('scope', scope);
+    onProgress?.(10);
+    const resp = await fetch('/api/blob/upload-local', { method: 'POST', body: fd });
+    if (!resp.ok) {
+      const j = (await resp.json().catch(() => ({}))) as { error?: string };
+      throw new Error(j.error ?? 'Upload locale fallito');
+    }
+    onProgress?.(100);
+    return (await resp.json()) as BlobRef;
+  }
+
   const pathname = `${scope}/${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
   const blob = await upload(pathname, file, {
     access: 'public',

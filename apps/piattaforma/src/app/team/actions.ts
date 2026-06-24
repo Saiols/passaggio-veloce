@@ -13,7 +13,32 @@ export type InviteResult =
   | { ok: true; demoLink?: string }
   | { ok: false; error: string };
 
-export async function createInvitationAction(email: string): Promise<InviteResult> {
+/**
+ * Multi-sede: risolve la sede a cui assegnare un nuovo utente. Default alla sede
+ * unica (caso 1:1); con più sedi serve la scelta esplicita.
+ */
+async function resolveTargetSede(
+  companyId: string,
+  sedeId?: string,
+): Promise<{ ok: true; sedeId: string } | { ok: false; error: string }> {
+  const sedi = await prisma.sede.findMany({
+    where: { companyId, deletedAt: null },
+    select: { id: true },
+  });
+  if (sedeId) {
+    if (!sedi.some((s) => s.id === sedeId)) return { ok: false, error: 'Sede non valida' };
+    return { ok: true, sedeId };
+  }
+  if (sedi.length === 1) return { ok: true, sedeId: sedi[0].id };
+  if (sedi.length === 0) return { ok: false, error: 'Nessuna sede configurata' };
+  return { ok: false, error: 'Specifica una sede per il nuovo utente' };
+}
+
+export async function createInvitationAction(
+  email: string,
+  sedeId?: string,
+  ruoloSede?: 'ADMIN_SEDE' | 'OPERATORE',
+): Promise<InviteResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.role !== 'ADMIN_AZIENDA') {
@@ -21,6 +46,9 @@ export async function createInvitationAction(email: string): Promise<InviteResul
   }
   const companyId = session.user.companyId!;
   const invitedById = session.user.id!;
+
+  const targetSede = await resolveTargetSede(companyId, sedeId);
+  if (!targetSede.ok) return { ok: false, error: targetSede.error };
 
   const emailLower = email.toLowerCase().trim();
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
@@ -54,6 +82,8 @@ export async function createInvitationAction(email: string): Promise<InviteResul
       role: 'UTENTE_AZIENDA',
       status: 'PENDING',
       companyId,
+      sedeId: targetSede.sedeId,
+      ruoloSede: ruoloSede ?? 'OPERATORE',
       invitedById,
       expiresAt: expiresIn(24 * 7),
     },
@@ -125,8 +155,15 @@ export async function acceptInvitationAction(
 
   const passwordHash = await hashPassword(password);
 
+  // Multi-sede: sede dell'invito (o sede unica come fallback per inviti legacy).
+  let sedeId = invitation.sedeId;
+  if (!sedeId) {
+    const t = await resolveTargetSede(invitation.companyId);
+    if (t.ok) sedeId = t.sedeId;
+  }
+
   await prisma.$transaction(async (tx) => {
-    await tx.user.create({
+    const user = await tx.user.create({
       data: {
         email: invitation.email,
         passwordHash,
@@ -138,6 +175,11 @@ export async function acceptInvitationAction(
         companyId: invitation.companyId,
       },
     });
+    if (sedeId) {
+      await tx.userSede.create({
+        data: { userId: user.id, sedeId, ruolo: invitation.ruoloSede },
+      });
+    }
     await tx.invitation.update({
       where: { id: invitation.id },
       data: { status: 'ACCEPTED', acceptedAt: new Date() },
@@ -160,6 +202,8 @@ export async function createUserDirectAction(
   nome: string,
   cognome: string,
   password: string,
+  sedeId?: string,
+  ruoloSede?: 'ADMIN_SEDE' | 'OPERATORE',
 ): Promise<CreateUserResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -167,6 +211,11 @@ export async function createUserDirectAction(
     return { ok: false, error: "Solo l'admin azienda può creare account utente" };
   }
   const companyId = session.user.companyId!;
+
+  // Multi-sede: l'utente va assegnato a una sede. Default alla sede unica
+  // (caso 1:1); se più sedi e nessuna scelta, richiedi la selezione.
+  const targetSede = await resolveTargetSede(companyId, sedeId);
+  if (!targetSede.ok) return { ok: false, error: targetSede.error };
 
   const emailLower = email.toLowerCase().trim();
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
@@ -193,17 +242,22 @@ export async function createUserDirectAction(
   }
 
   const passwordHash = await hashPassword(password);
-  await prisma.user.create({
-    data: {
-      email: emailLower,
-      passwordHash,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-      role: 'UTENTE_AZIENDA',
-      status: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-      companyId,
-    },
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        email: emailLower,
+        passwordHash,
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+        role: 'UTENTE_AZIENDA',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        companyId,
+      },
+    });
+    await tx.userSede.create({
+      data: { userId: user.id, sedeId: targetSede.sedeId, ruolo: ruoloSede ?? 'OPERATORE' },
+    });
   });
 
   revalidatePath('/team');

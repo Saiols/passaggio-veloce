@@ -339,15 +339,31 @@ export async function registerAction(
 
   const refCodeInput = refCodeFromPayload?.trim().toLowerCase();
 
-  // Lookup referente (silente: se codice invalido, registrazione procede senza)
+  // Lookup referente per SEDE (multi-sede): il codice referral vive su Sede.
+  // referenteId = azienda madre (riceve la commissione), referenteSedeId = la
+  // sede che ha condiviso il link (attribuzione/classifica). Silente se invalido.
   let referenteId: string | null = null;
+  let referenteSedeId: string | null = null;
   if (refCodeInput) {
-    const referente = await prisma.company.findUnique({
+    const sede = await prisma.sede.findUnique({
       where: { referralCode: refCodeInput },
-      select: { id: true, deletedAt: true, suspendedAt: true },
+      select: {
+        id: true,
+        companyId: true,
+        deletedAt: true,
+        suspendedAt: true,
+        company: { select: { deletedAt: true, suspendedAt: true } },
+      },
     });
-    if (referente && !referente.deletedAt && !referente.suspendedAt) {
-      referenteId = referente.id;
+    if (
+      sede &&
+      !sede.deletedAt &&
+      !sede.suspendedAt &&
+      !sede.company.deletedAt &&
+      !sede.company.suspendedAt
+    ) {
+      referenteId = sede.companyId;
+      referenteSedeId = sede.id;
     }
   }
 
@@ -404,10 +420,10 @@ export async function registerAction(
   let createdCompanyId: string | null = null;
   try {
     await prisma.$transaction(async (tx) => {
-      // Genera codice referral con retry su collisione (rarissima ma possibile).
+      // Genera codice referral (vive sulla Sede) con retry su collisione.
       let referralCode = generateReferralCode();
       for (let i = 0; i < 5; i++) {
-        const collision = await tx.company.findUnique({
+        const collision = await tx.sede.findUnique({
           where: { referralCode },
           select: { id: true },
         });
@@ -437,8 +453,9 @@ export async function registerAction(
           sepaMandateAccepted: true,
           sepaMandateAcceptedAt: new Date(),
           termsAcceptedAt: new Date(),
-          referralCode,
+          // referralCode deprecato sulla Company: il codice vive sulla Sede.
           referenteId,
+          referenteSedeId,
           signupIp,
           utmSource: utm.source ?? null,
           utmMedium: utm.medium ?? null,
@@ -450,6 +467,26 @@ export async function registerAction(
             kycExtracted?.passed && kycExtracted.extracted.visura.dataEmissione
               ? new Date(kycExtracted.extracted.visura.dataEmissione)
               : null,
+        },
+      });
+
+      // Multi-sede: sede operativa auto-derivata dai dati azienda (caso 1:1).
+      // Il proprietario può aggiungere altre sedi dal pannello. Il referralCode
+      // vive qui (non più sulla Company).
+      await tx.sede.create({
+        data: {
+          companyId: createdCompany.id,
+          type: company.type,
+          nome: company.ragioneSociale,
+          indirizzo: company.indirizzo,
+          civico: company.civico,
+          citta: company.citta,
+          cap: company.cap,
+          provincia: company.provincia.toUpperCase(),
+          telefono: company.telefono || null,
+          email: company.email,
+          iban: payment.iban,
+          referralCode,
         },
       });
 

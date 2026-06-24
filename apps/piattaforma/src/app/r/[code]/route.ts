@@ -35,19 +35,33 @@ export async function GET(
   const utmMedium = truncate(url.searchParams.get('utm_medium'), 80);
   const utmCampaign = truncate(url.searchParams.get('utm_campaign'), 120);
 
-  // Best-effort: se la company esiste e non è sospesa, logga il click.
+  // Best-effort: il codice referral vive sulla SEDE (multi-sede). Se la sede e
+  // la sua madre sono attive, logga il click su sede + madre.
   try {
-    const company = await prisma.company.findUnique({
+    const sede = await prisma.sede.findUnique({
       where: { referralCode: codeNorm },
-      select: { id: true, deletedAt: true, suspendedAt: true },
+      select: {
+        id: true,
+        companyId: true,
+        deletedAt: true,
+        suspendedAt: true,
+        company: { select: { deletedAt: true, suspendedAt: true } },
+      },
     });
-    if (company && !company.deletedAt && !company.suspendedAt) {
+    if (
+      sede &&
+      !sede.deletedAt &&
+      !sede.suspendedAt &&
+      !sede.company.deletedAt &&
+      !sede.company.suspendedAt
+    ) {
       const ipRaw =
         req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip');
       const ua = req.headers.get('user-agent');
       await prisma.referralClick.create({
         data: {
-          companyId: company.id,
+          companyId: sede.companyId,
+          sedeId: sede.id,
           referralCode: codeNorm,
           ip: anonymizeIp(ipRaw),
           userAgent: truncate(ua, 240),

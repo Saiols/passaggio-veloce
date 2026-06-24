@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { AddUserModal } from './add-user-modal';
 
-export function TeamPageClient() {
+export function TeamPageClient({ sedi = [] }: { sedi?: { id: string; nome: string }[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -14,7 +14,7 @@ export function TeamPageClient() {
       >
         + Aggiungi utente
       </button>
-      <AddUserModal open={open} onClose={() => setOpen(false)} />
+      <AddUserModal open={open} onClose={() => setOpen(false)} sedi={sedi} />
     </>
   );
 }

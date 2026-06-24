@@ -6,7 +6,8 @@ import { createUserDirectAction } from './actions';
 
 export function CreateUserForm({
   onSuccess,
-}: { onSuccess?: () => void } = {}) {
+  sedi = [],
+}: { onSuccess?: () => void; sedi?: { id: string; nome: string }[] } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -19,7 +20,11 @@ export function CreateUserForm({
       const nome = String(formData.get('nome') ?? '');
       const cognome = String(formData.get('cognome') ?? '');
       const password = String(formData.get('password') ?? '');
-      const res = await createUserDirectAction(email, nome, cognome, password);
+      const sedeId = String(formData.get('sedeId') ?? '') || undefined;
+      const ruoloSede = String(formData.get('ruoloSede') ?? 'OPERATORE') as
+        | 'ADMIN_SEDE'
+        | 'OPERATORE';
+      const res = await createUserDirectAction(email, nome, cognome, password, sedeId, ruoloSede);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -62,6 +67,31 @@ export function CreateUserForm({
         className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
         containerClassName="sm:col-span-2"
       />
+      {sedi.length > 1 && (
+        <select
+          name="sedeId"
+          required
+          defaultValue=""
+          className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="" disabled>
+            Sede…
+          </option>
+          {sedi.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nome}
+            </option>
+          ))}
+        </select>
+      )}
+      <select
+        name="ruoloSede"
+        defaultValue="OPERATORE"
+        className={`rounded-lg border border-pv-slate-300 px-3 py-2 text-sm ${sedi.length > 1 ? '' : 'sm:col-span-2'}`}
+      >
+        <option value="OPERATORE">Operatore</option>
+        <option value="ADMIN_SEDE">Admin di sede</option>
+      </select>
       <button
         type="submit"
         disabled={pending}

@@ -6,7 +6,8 @@ import { createInvitationAction } from './actions';
 
 export function InviteForm({
   onSuccess,
-}: { onSuccess?: () => void } = {}) {
+  sedi = [],
+}: { onSuccess?: () => void; sedi?: { id: string; nome: string }[] } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [demoLink, setDemoLink] = useState<string | null>(null);
@@ -16,7 +17,11 @@ export function InviteForm({
     setError(null); setSuccess(null); setDemoLink(null);
     startTransition(async () => {
       const email = String(formData.get('email') ?? '');
-      const res = await createInvitationAction(email);
+      const sedeId = String(formData.get('sedeId') ?? '') || undefined;
+      const ruoloSede = String(formData.get('ruoloSede') ?? 'OPERATORE') as
+        | 'ADMIN_SEDE'
+        | 'OPERATORE';
+      const res = await createInvitationAction(email, sedeId, ruoloSede);
       if (!res.ok) { setError(res.error); return; }
       setSuccess(`Invito inviato a ${email}.`);
       if (res.demoLink) setDemoLink(res.demoLink);
@@ -33,6 +38,31 @@ export function InviteForm({
         placeholder="utente@azienda.it"
         className="flex-1 rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
       />
+      {sedi.length > 1 && (
+        <select
+          name="sedeId"
+          required
+          defaultValue=""
+          className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="" disabled>
+            Sede…
+          </option>
+          {sedi.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nome}
+            </option>
+          ))}
+        </select>
+      )}
+      <select
+        name="ruoloSede"
+        defaultValue="OPERATORE"
+        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
+      >
+        <option value="OPERATORE">Operatore</option>
+        <option value="ADMIN_SEDE">Admin di sede</option>
+      </select>
       <button
         type="submit"
         disabled={pending}

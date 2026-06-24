@@ -14,7 +14,7 @@ export default async function TeamPage() {
   if (session.user.role !== 'ADMIN_AZIENDA') redirect('/dashboard');
   const companyId = session.user.companyId!;
 
-  const [users, invitations] = await Promise.all([
+  const [users, invitations, sedi] = await Promise.all([
     prisma.user.findMany({
       where: { companyId, deletedAt: null },
       orderBy: { createdAt: 'asc' },
@@ -27,6 +27,11 @@ export default async function TeamPage() {
       where: { companyId, status: 'PENDING' },
       orderBy: { createdAt: 'desc' },
       select: { id: true, email: true, createdAt: true, expiresAt: true },
+    }),
+    prisma.sede.findMany({
+      where: { companyId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, nome: true },
     }),
   ]);
 
@@ -45,7 +50,7 @@ export default async function TeamPage() {
               Gestisci gli utenti che possono operare per conto della tua azienda.
             </p>
           </div>
-          <TeamPageClient />
+          <TeamPageClient sedi={sedi} />
         </header>
 
         <section className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">

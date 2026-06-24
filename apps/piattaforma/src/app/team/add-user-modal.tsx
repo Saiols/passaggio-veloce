@@ -10,9 +10,11 @@ type Tab = 'password' | 'invite';
 export function AddUserModal({
   open,
   onClose,
+  sedi = [],
 }: {
   open: boolean;
   onClose: () => void;
+  sedi?: { id: string; nome: string }[];
 }) {
   const [tab, setTab] = useState<Tab>('password');
 
@@ -50,9 +52,9 @@ export function AddUserModal({
       </div>
 
       {tab === 'password' ? (
-        <CreateUserForm onSuccess={onClose} />
+        <CreateUserForm onSuccess={onClose} sedi={sedi} />
       ) : (
-        <InviteForm onSuccess={onClose} />
+        <InviteForm onSuccess={onClose} sedi={sedi} />
       )}
     </Modal>
   );

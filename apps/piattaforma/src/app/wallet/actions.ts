@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { WALLET, validatePayoutThresholdCent } from '@/lib/wallet/config';
 
@@ -18,9 +19,11 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
   ) {
     return { ok: false, error: 'Payout disponibile solo per broker e agenzie' };
   }
-  const companyId = session.user.companyId!;
+  // Multi-sede: payout dal wallet della sede operativa.
+  const sede = await getOperatingSede();
+  if (!sede) return { ok: false, error: 'Seleziona una sede per richiedere il payout' };
 
-  const wallet = await prisma.wallet.findUnique({ where: { companyId } });
+  const wallet = await prisma.wallet.findUnique({ where: { sedeId: sede.id } });
   if (!wallet) return { ok: false, error: 'Wallet non trovato' };
   if (wallet.saldoCent < WALLET.MIN_PAYOUT_CENT) {
     return { ok: false, error: 'Saldo sotto la soglia minima di 500€' };
@@ -63,8 +66,6 @@ export async function updatePayoutThresholdAction(
       error: "Solo l'admin azienda può modificare la soglia",
     };
   }
-  const companyId = session.user.companyId!;
-
   const valid = validatePayoutThresholdCent(thresholdCent);
   if (valid === null) {
     return {
@@ -73,8 +74,12 @@ export async function updatePayoutThresholdAction(
     };
   }
 
-  await prisma.company.update({
-    where: { id: companyId },
+  // Multi-sede: la soglia auto-payout è per sede operativa.
+  const sede = await getOperatingSede();
+  if (!sede) return { ok: false, error: 'Seleziona una sede per modificarne la soglia' };
+
+  await prisma.sede.update({
+    where: { id: sede.id },
     data: { payoutThresholdCent: valid },
   });
 

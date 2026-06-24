@@ -56,22 +56,18 @@ const MONTH_LABELS = [
  * (7d/30d) o per mese (12m/ytd).
  */
 export async function getRendimento(
-  companyId: string,
+  walletId: string | null,
   period: RendimentoPeriod,
   types?: readonly string[],
 ): Promise<RendimentoData> {
-  const wallet = await prisma.wallet.findUnique({
-    where: { companyId },
-    select: { id: true },
-  });
-  if (!wallet) {
+  if (!walletId) {
     return { period, buckets: [], totalCent: 0, count: 0 };
   }
 
   const since = startDateForPeriod(period);
   const txs = await prisma.transazioneWallet.findMany({
     where: {
-      walletId: wallet.id,
+      walletId,
       createdAt: { gte: since },
       ...(types && types.length > 0 ? { tipo: { in: types as never } } : {}),
     },

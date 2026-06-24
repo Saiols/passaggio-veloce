@@ -14,7 +14,14 @@ export type ProcessPayoutsResult = {
 
 const payoutWithWallet = Prisma.validator<Prisma.PayoutDefaultArgs>()({
   include: {
-    wallet: { include: { company: { select: { id: true, iban: true } } } },
+    wallet: {
+      include: {
+        // Wallet operativo (sede): IBAN sede con fallback madre.
+        sede: { select: { iban: true, company: { select: { iban: true } } } },
+        // Wallet affiliazione (madre): IBAN madre diretto.
+        company: { select: { id: true, iban: true } },
+      },
+    },
   },
 });
 
@@ -43,7 +50,8 @@ export async function processPayouts(): Promise<ProcessPayoutsResult> {
       data: { stato: 'IN_LAVORAZIONE' },
     });
 
-    const iban = payout.wallet.company.iban ?? '';
+    const w = payout.wallet;
+    const iban = (w.sede ? (w.sede.iban ?? w.sede.company.iban) : w.company?.iban) ?? '';
     if (!iban) {
       await prisma.payout.update({
         where: { id: payout.id },

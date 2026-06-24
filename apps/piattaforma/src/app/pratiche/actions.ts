@@ -227,12 +227,12 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         },
       });
 
-      // Credito wallet broker (proventi pratica)
-      if (pratica.creditoBrokerCent > 0) {
+      // Credito wallet broker (proventi pratica) — multi-sede: wallet della sede.
+      if (pratica.creditoBrokerCent > 0 && pratica.brokerSedeId) {
         const wallet = await tx.wallet.upsert({
-          where: { companyId: pratica.brokerId },
+          where: { sedeId: pratica.brokerSedeId },
           update: {},
-          create: { companyId: pratica.brokerId, saldoCent: 0 },
+          create: { sedeId: pratica.brokerSedeId, saldoCent: 0 },
         });
         const nuovoSaldo = wallet.saldoCent + pratica.creditoBrokerCent;
         await tx.wallet.update({

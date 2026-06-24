@@ -72,10 +72,16 @@ export async function createDocBroker(input: { payoutId: string }): Promise<void
     if (esiste) return;
     const payout = await tx.payout.findUnique({
       where: { id: input.payoutId },
-      include: { wallet: { include: { company: true } }, transazioni: true },
+      include: {
+        wallet: { include: { sede: { include: { company: true } }, company: true } },
+        transazioni: true,
+      },
     });
     if (!payout) return;
-    const broker = payout.wallet.company;
+    // Multi-sede: il broker (soggetto fiscale = madre) è la company della sede
+    // del wallet operativo; per il wallet affiliazione madre è company diretta.
+    const broker = payout.wallet.sede?.company ?? payout.wallet.company;
+    if (!broker) return;
 
     const lordo = payout.transazioni
       .filter((t) => t.tipo === 'CREDITO_PRATICA')

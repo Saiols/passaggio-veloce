@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
@@ -44,11 +45,23 @@ export default async function WalletPage({
     );
   }
 
-  const companyId = session.user.companyId!;
+  // Multi-sede: il wallet operativo è quello della sede corrente.
+  const sede = await getOperatingSede();
+  if (!sede) {
+    return (
+      <AppShell session={session} activePath="/wallet">
+        <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
+          <Alert variant="info">
+            Seleziona una sede dal menù in alto per vederne il wallet.
+          </Alert>
+        </div>
+      </AppShell>
+    );
+  }
 
-  const [wallet, company] = await Promise.all([
+  const [wallet, sedeRow] = await Promise.all([
     prisma.wallet.findUnique({
-      where: { companyId },
+      where: { sedeId: sede.id },
       include: {
         transazioni: {
           orderBy: { createdAt: 'desc' },
@@ -68,15 +81,15 @@ export default async function WalletPage({
         },
       },
     }),
-    prisma.company.findUnique({
-      where: { id: companyId },
+    prisma.sede.findUnique({
+      where: { id: sede.id },
       select: { payoutThresholdCent: true },
     }),
   ]);
 
   const saldoCent = wallet?.saldoCent ?? 0;
   const thresholdAutoCent =
-    company?.payoutThresholdCent ?? WALLET.AUTO_PAYOUT_DEFAULT_CENT;
+    sedeRow?.payoutThresholdCent ?? WALLET.AUTO_PAYOUT_DEFAULT_CENT;
 
   const statusPayout =
     saldoCent >= thresholdAutoCent
@@ -96,7 +109,7 @@ export default async function WalletPage({
   )
     ? (sp.rendimento as RendimentoPeriod)
     : '30d';
-  const rendimento = await getRendimento(companyId, rendimentoPeriod, [
+  const rendimento = await getRendimento(wallet?.id ?? null, rendimentoPeriod, [
     'CREDITO_PRATICA',
     'CREDITO_AFFILIAZIONE',
   ]);

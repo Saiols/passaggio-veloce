@@ -130,7 +130,7 @@ export function AppShell({
         buildSha={buildSha}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
-        <SedeSwitcher />
+        <SedeSwitcher activePath={activePath} />
         {children}
       </AgenziaShell>
     );
@@ -147,7 +147,7 @@ export function AppShell({
         buildSha={buildSha}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
-        <SedeSwitcher />
+        <SedeSwitcher activePath={activePath} />
         {children}
       </BrokerShell>
     );

@@ -28,7 +28,7 @@ export default async function SedeDetailPage({
 
   return (
     <AppShell session={session} activePath="/sedi">
-      <div className="mx-auto w-full max-w-4xl px-5 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         <Link href="/sedi" className="text-[13px] font-semibold text-pv-navy-600 hover:underline">
           ← Tutte le sedi
         </Link>

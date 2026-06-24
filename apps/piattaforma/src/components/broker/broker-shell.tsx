@@ -72,7 +72,10 @@ export function BrokerShell({
         { href: '/notifiche', label: 'Notifiche', icon: IconNotifiche },
         { href: '/profilo', label: 'Profilo', icon: IconProfilo },
         ...(isAdminAzienda
-          ? [{ href: '/team', label: 'Team', icon: IconUtenti }]
+          ? [
+              { href: '/sedi', label: 'Sedi', icon: IconUtenti },
+              { href: '/team', label: 'Team', icon: IconUtenti },
+            ]
           : []),
       ],
     },

@@ -44,7 +44,10 @@ export function WizardProgress({
           />
         </div>
 
-        <ol className="mt-2.5 grid grid-cols-4 gap-2 text-[11.5px] sm:text-[12px]">
+        <ol
+          className="mt-2.5 grid gap-2 text-[11.5px] sm:text-[12px]"
+          style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+        >
           {steps.map((s) => {
             const isDone = current > s.id;
             const isCurrent = current === s.id;

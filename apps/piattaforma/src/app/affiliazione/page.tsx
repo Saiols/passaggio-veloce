@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { auth } from '@/auth';
+import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
@@ -41,11 +42,12 @@ export default async function AffiliazionePage() {
 
   const companyId = session.user.companyId!;
 
-  const earningsRendimento = await getRendimento(companyId, '12m', [
-    'CREDITO_AFFILIAZIONE',
-  ]);
+  // Multi-sede: il link di affiliazione è quello della sede operativa; le
+  // commissioni e i referral restano a livello madre (companyId). Il rendimento
+  // affiliazione viene dal wallet affiliazione della madre.
+  const operatingSede = await getOperatingSede();
 
-  const [company, referrals, commissioni, clickCount] = await Promise.all([
+  const [company, affWallet, sedeRow, referrals, commissioni, clickCount] = await Promise.all([
     prisma.company.findUnique({
       where: { id: companyId },
       select: {
@@ -54,6 +56,10 @@ export default async function AffiliazionePage() {
         referralCode: true,
       },
     }),
+    prisma.wallet.findUnique({ where: { companyId }, select: { id: true } }),
+    operatingSede
+      ? prisma.sede.findUnique({ where: { id: operatingSede.id }, select: { referralCode: true } })
+      : Promise.resolve(null),
     prisma.company.findMany({
       where: { referenteId: companyId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
@@ -83,13 +89,17 @@ export default async function AffiliazionePage() {
   const totaleAccreditatoCent = commissioni._sum.importoNettoCent ?? 0;
   const numCommissioni = commissioni._count._all;
 
+  const earningsRendimento = await getRendimento(affWallet?.id ?? null, '12m', [
+    'CREDITO_AFFILIAZIONE',
+  ]);
+
   // Base URL per il link di affiliazione: priorità env, fallback host attuale.
   // Punta a /r/<code> (non /register?ref=) per fare pixel tracking del click
   // prima del redirect al wizard.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const link = company.referralCode
-    ? `${appUrl}/r/${company.referralCode}`
-    : null;
+  // Codice referral della sede operativa (fallback: legacy Company.referralCode).
+  const referralCode = sedeRow?.referralCode ?? company.referralCode ?? null;
+  const link = referralCode ? `${appUrl}/r/${referralCode}` : null;
 
   // QR code generato server-side come data URL (no dipendenza da servizi esterni).
   const qrDataUrl = link
@@ -171,7 +181,7 @@ export default async function AffiliazionePage() {
                     <p className="mt-2">
                       <a
                         href={qrDataUrl}
-                        download={`pv-affiliazione-${company.referralCode}.png`}
+                        download={`pv-affiliazione-${referralCode}.png`}
                         className="font-semibold text-pv-navy-700 hover:underline"
                       >
                         Scarica PNG

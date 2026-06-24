@@ -110,6 +110,39 @@ export default async function AffiliazionePage() {
       })
     : null;
 
+  // Multi-sede: classifica delle sedi per affiliazione ("chi affilia di più").
+  const sediMadre = await prisma.sede.findMany({
+    where: { companyId, deletedAt: null },
+    select: { id: true, nome: true, referralCode: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const [clicksBySede, commBySede] = await Promise.all([
+    prisma.referralClick.groupBy({
+      by: ['sedeId'],
+      where: { companyId, sedeId: { not: null } },
+      _count: { _all: true },
+    }),
+    prisma.commissioneAffiliazione.groupBy({
+      by: ['referenteSedeId'],
+      where: { referenteId: companyId, stato: 'ACCREDITATA' },
+      _sum: { importoNettoCent: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const clickMap = new Map(clicksBySede.map((c) => [c.sedeId, c._count._all]));
+  const commMap = new Map(
+    commBySede.map((c) => [c.referenteSedeId, c._sum.importoNettoCent ?? 0]),
+  );
+  const sedeLeaderboard = sediMadre
+    .map((s) => ({
+      id: s.id,
+      nome: s.nome,
+      link: s.referralCode ? `${appUrl}/r/${s.referralCode}` : null,
+      clicks: clickMap.get(s.id) ?? 0,
+      commCent: commMap.get(s.id) ?? 0,
+    }))
+    .sort((a, b) => b.commCent - a.commCent || b.clicks - a.clicks);
+
   return (
     <AppShell session={session} activePath="/affiliazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -197,6 +230,44 @@ export default async function AffiliazionePage() {
             </p>
           )}
         </Card>
+
+        {sedeLeaderboard.length > 1 && (
+          <Card className="mb-6">
+            <h2 className="text-[15px] font-bold text-pv-navy-800">Classifica sedi</h2>
+            <p className="mt-1 text-[12.5px] text-pv-slate-500">
+              Quanto sta affiliando ciascuna sede della tua azienda. Ogni sede ha un proprio link.
+            </p>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-pv-slate-200 text-[11px] uppercase tracking-wider text-pv-slate-500">
+                    <th className="py-2 pr-3 font-bold">Sede</th>
+                    <th className="py-2 pr-3 font-bold">Click</th>
+                    <th className="py-2 pr-3 font-bold">Commissioni</th>
+                    <th className="py-2 font-bold">Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sedeLeaderboard.map((s, i) => (
+                    <tr key={s.id} className="border-b border-pv-slate-100">
+                      <td className="py-2 pr-3 font-semibold text-pv-navy-900">
+                        {i === 0 && s.commCent > 0 ? '🏆 ' : ''}
+                        {s.nome}
+                      </td>
+                      <td className="py-2 pr-3 text-pv-slate-600">{s.clicks}</td>
+                      <td className="py-2 pr-3 font-semibold text-pv-navy-800">
+                        {formatCurrencyCent(s.commCent)}
+                      </td>
+                      <td className="py-2 max-w-[260px] truncate text-[12px] text-pv-slate-500">
+                        {s.link ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
 
         {earningsRendimento.count > 0 && (
           <Card className="mb-6">

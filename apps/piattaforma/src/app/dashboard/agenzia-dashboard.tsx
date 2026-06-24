@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { Alert, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
+import { Alert, Card, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatRelative, formatCurrencyCent } from '@/lib/format';
 import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
 
@@ -51,6 +51,28 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
     }),
   ]);
 
+  // Multi-sede: breakdown pratiche per sede nella vista aggregata (owner, >1 sede).
+  const sedeBreakdown =
+    scopeIds.length > 1
+      ? await (async () => {
+          const [sedi, counts] = await Promise.all([
+            prisma.sede.findMany({
+              where: { id: { in: scopeIds } },
+              select: { id: true, nome: true },
+            }),
+            prisma.pratica.groupBy({
+              by: ['agenziaSedeId'],
+              where: { agenziaSedeId: { in: scopeIds }, deletedAt: null },
+              _count: { _all: true },
+            }),
+          ]);
+          const m = new Map(counts.map((c) => [c.agenziaSedeId, c._count._all]));
+          return sedi
+            .map((s) => ({ nome: s.nome, pratiche: m.get(s.id) ?? 0 }))
+            .sort((a, b) => b.pratiche - a.pratiche);
+        })()
+      : [];
+
   const ratingValue = rating._count._all >= 5 && rating._avg.stelle
     ? `${rating._avg.stelle.toFixed(1)} ⭐`
     : '—';
@@ -69,6 +91,23 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
           Pratiche da gestire
         </h1>
       </header>
+
+      {sedeBreakdown.length > 0 && (
+        <Card className="mb-6">
+          <h2 className="text-[15px] font-bold text-pv-navy-800">Pratiche per sede</h2>
+          <p className="mt-1 text-[12.5px] text-pv-slate-500">
+            Vista aggregata di tutte le tue sedi. Seleziona una sede in alto per i dettagli.
+          </p>
+          <ul className="mt-3 divide-y divide-pv-slate-100">
+            {sedeBreakdown.map((s) => (
+              <li key={s.nome} className="flex items-center justify-between py-2 text-[13px]">
+                <span className="font-semibold text-pv-navy-900">{s.nome}</span>
+                <span className="text-pv-slate-600">{s.pratiche} pratiche</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {(inArrivo > 0 || inCorso > 0) && (
         <div className="mb-6">

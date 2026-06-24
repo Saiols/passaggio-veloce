@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { Button, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
+import { Button, Card, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 
 export async function BrokerDashboard({
@@ -48,6 +48,28 @@ export async function BrokerDashboard({
     }),
   ]);
 
+  // Multi-sede: breakdown pratiche per sede nella vista aggregata (owner, >1 sede).
+  const sedeBreakdown =
+    scopeIds.length > 1
+      ? await (async () => {
+          const [sedi, counts] = await Promise.all([
+            prisma.sede.findMany({
+              where: { id: { in: scopeIds } },
+              select: { id: true, nome: true },
+            }),
+            prisma.pratica.groupBy({
+              by: ['brokerSedeId'],
+              where: { brokerSedeId: { in: scopeIds }, deletedAt: null },
+              _count: { _all: true },
+            }),
+          ]);
+          const m = new Map(counts.map((c) => [c.brokerSedeId, c._count._all]));
+          return sedi
+            .map((s) => ({ nome: s.nome, pratiche: m.get(s.id) ?? 0 }))
+            .sort((a, b) => b.pratiche - a.pratiche);
+        })()
+      : [];
+
   const count = (s: PraticaStato): number =>
     byStato.find((g) => g.stato === s)?._count._all ?? 0;
 
@@ -85,6 +107,23 @@ export async function BrokerDashboard({
           </Button>
         </Link>
       </header>
+
+      {sedeBreakdown.length > 0 && (
+        <Card className="mb-6">
+          <h2 className="text-[15px] font-bold text-pv-navy-800">Pratiche per sede</h2>
+          <p className="mt-1 text-[12.5px] text-pv-slate-500">
+            Vista aggregata di tutte le tue sedi. Seleziona una sede in alto per i dettagli.
+          </p>
+          <ul className="mt-3 divide-y divide-pv-slate-100">
+            {sedeBreakdown.map((s) => (
+              <li key={s.nome} className="flex items-center justify-between py-2 text-[13px]">
+                <span className="font-semibold text-pv-navy-900">{s.nome}</span>
+                <span className="text-pv-slate-600">{s.pratiche} pratiche</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {daValutare.length > 0 && (
         <div className="mb-6 rounded-[16px] border-[1.5px] border-pv-orange-500/40 bg-pv-orange-50/40 p-5 shadow-[var(--pv-shadow-card)]">

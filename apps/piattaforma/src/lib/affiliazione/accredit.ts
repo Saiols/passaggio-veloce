@@ -23,6 +23,9 @@ export type AccreditCommissioniInput = {
   /** Se il referente è sospeso/eliminato, NON viene accreditato (spec 3.3). */
   brokerReferente: { id: string; suspendedAt: Date | null; deletedAt: Date | null } | null;
   agenziaReferente: { id: string; suspendedAt: Date | null; deletedAt: Date | null } | null;
+  /** Multi-sede: sede della madre referente che ha affiliato (attribuzione/classifica). */
+  brokerReferenteSedeId?: string | null;
+  agenziaReferenteSedeId?: string | null;
 };
 
 /**
@@ -85,6 +88,7 @@ export async function accreditCommissioniAffiliazione(
           ref: eligibleBroker,
           tipo: 'REFERENTE_BROKER' as const,
           referralId: input.brokerId,
+          referenteSedeId: input.brokerReferenteSedeId ?? null,
         }
       : null,
     eligibleAgenzia
@@ -92,6 +96,7 @@ export async function accreditCommissioniAffiliazione(
           ref: eligibleAgenzia,
           tipo: 'REFERENTE_AGENZIA' as const,
           referralId: input.agenziaAssegnataId,
+          referenteSedeId: input.agenziaReferenteSedeId ?? null,
         }
       : null,
   ].filter((x): x is NonNullable<typeof x> => x !== null)) {
@@ -134,6 +139,7 @@ export async function accreditCommissioniAffiliazione(
       data: {
         praticaId: input.praticaId,
         referenteId: ref.ref.id,
+        referenteSedeId: ref.referenteSedeId,
         tipo: ref.tipo,
         stato: sospetta ? 'DA_REVISIONARE' : 'ACCREDITATA',
         importoLordoCent: quota,

@@ -275,6 +275,9 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         agenziaAssegnataId: pratica.agenziaAssegnataId,
         brokerReferente: pratica.broker.referente,
         agenziaReferente: pratica.agenziaAssegnata?.referente ?? null,
+        // Multi-sede: sede della madre referente che ha affiliato (attribuzione).
+        brokerReferenteSedeId: pratica.broker.referenteSedeId,
+        agenziaReferenteSedeId: pratica.agenziaAssegnata?.referenteSedeId ?? null,
       });
       accreditiResult = accreditOut.accrediti;
     });

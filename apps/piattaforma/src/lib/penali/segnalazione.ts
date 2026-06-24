@@ -142,10 +142,12 @@ export async function confermaAnnullamentoConPenaleAction(
     brokerEmail: string | null;
     brokerUserId: string | null;
     brokerCompanyId: string;
+    brokerSedeId: string | null;
     brokerNome: string;
     agenziaEmail: string | null;
     agenziaUserId: string | null;
     agenziaCompanyId: string | null;
+    agenziaSedeId: string | null;
     agenziaNome: string;
   } | null = null;
 
@@ -282,10 +284,12 @@ export async function confermaAnnullamentoConPenaleAction(
         brokerEmail: brokerUser?.email ?? null,
         brokerUserId: brokerUser?.id ?? null,
         brokerCompanyId: pratica.brokerId,
+        brokerSedeId: pratica.brokerSedeId,
         brokerNome: brokerUser?.nome ?? pratica.broker.ragioneSociale,
         agenziaEmail: agenziaUser?.email ?? null,
         agenziaUserId: agenziaUser?.id ?? null,
         agenziaCompanyId: pratica.agenziaAssegnataId,
+        agenziaSedeId: pratica.agenziaSedeId,
         agenziaNome:
           pratica.agenziaAssegnata?.ragioneSociale ?? '—',
       };
@@ -341,6 +345,7 @@ export async function confermaAnnullamentoConPenaleAction(
         eventoPraticaPenale({
           praticaId,
           targetCompanyId: payload.brokerCompanyId,
+          sedeId: payload.brokerSedeId,
           codicePratica: payload.codicePratica,
           ruolo: 'broker',
         }),
@@ -349,6 +354,7 @@ export async function confermaAnnullamentoConPenaleAction(
               eventoPraticaPenale({
                 praticaId,
                 targetCompanyId: payload.agenziaCompanyId,
+                sedeId: payload.agenziaSedeId,
                 codicePratica: payload.codicePratica,
                 ruolo: 'agenzia',
               }),

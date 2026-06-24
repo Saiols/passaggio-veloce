@@ -159,6 +159,7 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
         eventoPraticaLavorata({
           praticaId,
           brokerId: full.broker.id,
+          sedeId: full.brokerSedeId,
           codicePratica: full.codicePratica,
         }),
       ).catch(() => undefined);
@@ -403,6 +404,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           eventoPraticaFirmata({
             praticaId,
             brokerId: full.broker.id,
+            sedeId: full.brokerSedeId,
             codicePratica: full.codicePratica,
           }),
         ).catch(() => undefined);
@@ -521,7 +523,7 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
   try {
     const p = await prisma.pratica.findUnique({
       where: { id: praticaId },
-      select: { agenziaAssegnataId: true, codicePratica: true },
+      select: { agenziaAssegnataId: true, agenziaSedeId: true, codicePratica: true },
     });
     if (p?.agenziaAssegnataId && p.codicePratica) {
       await emitEventoPratica(
@@ -529,6 +531,7 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
         eventoPraticaAnnullata({
           praticaId,
           agenziaId: p.agenziaAssegnataId,
+          sedeId: p.agenziaSedeId,
           codicePratica: p.codicePratica,
         }),
       );

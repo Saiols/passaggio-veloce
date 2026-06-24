@@ -6,8 +6,11 @@ import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { SedeCell } from '@/components/fatturazione/sede-cell';
 
 export const dynamic = 'force-dynamic';
+
+const sedeSelect = { select: { nome: true, citta: true, provincia: true } } as const;
 
 function SearchBar({ q }: { q: string }) {
   return (
@@ -100,7 +103,9 @@ async function ListaAgenzia({
   const docs = await prisma.documentoFiscale.findMany({
     where,
     orderBy: { emessoAt: 'desc' },
-    include: { pratica: { select: { id: true, codicePratica: true } } },
+    include: {
+      pratica: { select: { id: true, codicePratica: true, agenziaSede: sedeSelect, brokerSede: sedeSelect } },
+    },
   });
 
   if (docs.length === 0) {
@@ -122,6 +127,7 @@ async function ListaAgenzia({
             <th className="py-2">N°</th>
             <th className="py-2">Tipo</th>
             <th className="py-2">Pratica</th>
+            <th className="py-2">Sede</th>
             <th className="py-2 text-right">Imponibile</th>
             <th className="py-2 text-right">IVA</th>
             <th className="py-2 text-right">Totale</th>
@@ -149,6 +155,9 @@ async function ListaAgenzia({
                 ) : (
                   '—'
                 )}
+              </td>
+              <td className="py-2">
+                <SedeCell doc={d} />
               </td>
               <td className="py-2 text-right">{formatCurrencyCent(d.imponibileCent ?? 0)}</td>
               <td className="py-2 text-right">{formatCurrencyCent(d.ivaCent ?? 0)}</td>
@@ -179,6 +188,7 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
           id: true,
           eseguitoAt: true,
           transazioni: { where: { tipo: 'CREDITO_PRATICA' }, select: { praticaId: true } },
+          wallet: { select: { sede: sedeSelect } },
         },
       },
     },
@@ -203,6 +213,7 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
             <th className="py-2">N°</th>
             <th className="py-2">Tipo</th>
             <th className="py-2">Pratiche</th>
+            <th className="py-2">Sede</th>
             <th className="py-2 text-right">Totale</th>
             <th className="py-2">Stato</th>
           </tr>
@@ -218,6 +229,9 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
               </td>
               <td className="py-2">{labelTipoDocumento(d.tipo)}</td>
               <td className="py-2">{d.payout?.transazioni.length ?? 0}</td>
+              <td className="py-2">
+                <SedeCell doc={d} />
+              </td>
               <td
                 className={`py-2 text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
               >

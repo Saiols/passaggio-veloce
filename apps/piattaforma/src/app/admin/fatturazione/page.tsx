@@ -8,10 +8,12 @@ import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { SedeCell } from '@/components/fatturazione/sede-cell';
 
 export const dynamic = 'force-dynamic';
 
 const TIPI: DocumentoFiscaleTipo[] = ['FATTURA_PV', 'DOC_BROKER', 'NOTA_VARIAZIONE', 'PENALE_BROKER'];
+const sedeSelect = { select: { nome: true, citta: true, provincia: true } } as const;
 
 export default async function AdminFatturazionePage({
   searchParams,
@@ -55,7 +57,10 @@ export default async function AdminFatturazionePage({
     where,
     orderBy: { emessoAt: 'desc' },
     take: 100,
-    include: { pratica: { select: { id: true, codicePratica: true } } },
+    include: {
+      pratica: { select: { id: true, codicePratica: true, agenziaSede: sedeSelect, brokerSede: sedeSelect } },
+      payout: { select: { wallet: { select: { sede: sedeSelect } } } },
+    },
   });
 
   // KPI (rispetta i filtri correnti). Dati documentali; la P&L definitiva è del commercialista.
@@ -158,6 +163,7 @@ export default async function AdminFatturazionePage({
                   <th className="py-2">Emittente</th>
                   <th className="py-2">Destinatario</th>
                   <th className="py-2">Pratica</th>
+                  <th className="py-2">Sede</th>
                   <th className="py-2 text-right">Totale</th>
                 </tr>
               </thead>
@@ -187,6 +193,9 @@ export default async function AdminFatturazionePage({
                         ) : (
                           '—'
                         )}
+                      </td>
+                      <td className="py-2">
+                        <SedeCell doc={d} />
                       </td>
                       <td
                         className={`py-2 text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}

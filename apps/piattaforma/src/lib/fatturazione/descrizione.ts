@@ -65,11 +65,16 @@ type SedeSnap = { nome: string; citta: string; provincia: string };
  */
 export type SedeRiferimento = SedeSnap & { lato: 'emittente' | 'destinatario' };
 
-/** Forma minima del documento necessaria a risolvere la sede di riferimento. */
+/**
+ * Forma minima del documento necessaria a risolvere la sede di riferimento.
+ * `pratica`/`payout` sono opzionali così che le liste che caricano solo una
+ * delle due relation (es. lista agenzia → pratica, lista broker → payout)
+ * possano passare il documento senza includere l'altra.
+ */
 export type SedeRiferimentoDoc = {
   tipo: DocumentoFiscaleTipo;
-  pratica: { agenziaSede: SedeSnap | null; brokerSede: SedeSnap | null } | null;
-  payout: { wallet: { sede: SedeSnap | null } | null } | null;
+  pratica?: { agenziaSede: SedeSnap | null; brokerSede: SedeSnap | null } | null;
+  payout?: { wallet: { sede: SedeSnap | null } | null } | null;
 };
 
 function snap(s: SedeSnap | null | undefined): SedeSnap | null {

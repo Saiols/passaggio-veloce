@@ -9,6 +9,7 @@ import { AdminShell } from '@/components/admin/admin-shell';
 import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
 import { BrokerShell } from '@/components/broker/broker-shell';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
+import { SedeSwitcher } from '@/components/sede/sede-switcher';
 
 export type AppShellSession = {
   user: {
@@ -129,6 +130,7 @@ export function AppShell({
         buildSha={buildSha}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
+        <SedeSwitcher />
         {children}
       </AgenziaShell>
     );
@@ -145,6 +147,7 @@ export function AppShell({
         buildSha={buildSha}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
+        <SedeSwitcher />
         {children}
       </BrokerShell>
     );

@@ -11,6 +11,7 @@ export async function emitEventoPratica(client: EventoClient, input: EventoPrati
     data: {
       praticaId: input.praticaId ?? null,
       targetCompanyId: input.targetCompanyId,
+      targetSedeId: input.targetSedeId ?? null,
       tipo: input.tipo,
       titolo: input.titolo,
       testo: input.testo,
@@ -30,6 +31,7 @@ export async function emitEventiPratica(
     data: inputs.map((input) => ({
       praticaId: input.praticaId ?? null,
       targetCompanyId: input.targetCompanyId,
+      targetSedeId: input.targetSedeId ?? null,
       tipo: input.tipo,
       titolo: input.titolo,
       testo: input.testo,

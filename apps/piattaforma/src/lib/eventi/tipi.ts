@@ -19,8 +19,10 @@ export type EventoTipo = (typeof EVENTO)[keyof typeof EVENTO];
 /** Dati per creare un EventoPratica (riga DB + contenuto della modale). */
 export type EventoPraticaInput = {
   praticaId?: string | null;
-  /** Azienda che deve vedere la modale (la controparte dell'operazione). */
+  /** Azienda madre che deve vedere la modale (la controparte dell'operazione). */
   targetCompanyId: string;
+  /** Multi-sede: sede operativa destinataria (se nota). Il watcher filtra per sede. */
+  targetSedeId?: string | null;
   tipo: EventoTipo;
   titolo: string;
   testo: string;

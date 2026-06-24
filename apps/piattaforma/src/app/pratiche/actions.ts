@@ -584,6 +584,9 @@ export async function submitValutazioneAction(formData: FormData): Promise<Actio
           praticaId,
           agenziaId: pratica.agenziaAssegnataId,
           dealerId,
+          // Multi-sede: sede agenzia valutata + sede broker che vota.
+          agenziaSedeId: pratica.agenziaSedeId,
+          brokerSedeId: pratica.brokerSedeId,
           stelle,
           note: note ?? null,
         },

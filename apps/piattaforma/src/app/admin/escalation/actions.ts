@@ -38,8 +38,8 @@ export async function assegnaEscalationAction(
   }
 
   try {
-    const notificaData: NotificaData & { agenziaCompanyId: string } = await prisma.$transaction(
-      async (tx) => {
+    const notificaData: NotificaData & { agenziaCompanyId: string; agenziaSedeId: string } =
+      await prisma.$transaction(async (tx) => {
         const pratica = await tx.pratica.findUnique({
           where: { id: praticaId },
           include: {
@@ -99,6 +99,7 @@ export async function assegnaEscalationAction(
 
         return {
           agenziaCompanyId: sede.companyId,
+          agenziaSedeId: sede.id,
           agenziaEmail: sede.email ?? sede.company.email,
           agenziaRagioneSociale: sede.nome,
         codicePratica: pratica.codicePratica,
@@ -146,6 +147,7 @@ export async function assegnaEscalationAction(
           eventoPraticaAssegnata({
             praticaId,
             agenziaId: notificaData.agenziaCompanyId,
+            sedeId: notificaData.agenziaSedeId,
             codicePratica: notificaData.codicePratica,
           }),
         );

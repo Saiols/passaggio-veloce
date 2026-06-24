@@ -5,6 +5,9 @@ import { EVENTO, type EventoPraticaInput } from './tipi';
  * il contenuto della modale (titolo/testo/CTA) e il target. Nessun accesso al
  * DB → testabili in isolamento. L'emissione è in `emit.ts`.
  *
+ * Multi-sede: oltre a `targetCompanyId` (azienda madre) ogni builder accetta un
+ * `sedeId` opzionale → `targetSedeId`, così il watcher filtra per sede operativa.
+ *
  * Convenzione CTA: gli eventi che richiedono un'azione sulla pratica linkano a
  * `/pratiche/{id}` (lato agenzia e broker la scheda è lì); i "nuovi lavori"
  * disponibili linkano all'`/inbox`; gli eventi puramente informativi non hanno CTA.
@@ -12,15 +15,17 @@ import { EVENTO, type EventoPraticaInput } from './tipi';
 
 const apriPratica = (praticaId: string) => ({ ctaLabel: 'Apri la pratica', ctaHref: `/pratiche/${praticaId}` });
 
-/** Broker invia → ogni agenzia selezionata vede "nuova pratica disponibile". */
+/** Broker invia → ogni sede agenzia selezionata vede "nuova pratica disponibile". */
 export function eventoNuovaPratica(args: {
   praticaId: string;
   agenziaId: string;
+  sedeId?: string | null;
   codicePratica: string;
 }): EventoPraticaInput {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.agenziaId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.NUOVA_PRATICA,
     titolo: 'Nuova pratica disponibile',
     testo: `È disponibile una nuova pratica (${args.codicePratica}) da accettare: sei tra le agenzie selezionate.`,
@@ -33,6 +38,7 @@ export function eventoNuovaPratica(args: {
 export function eventoPraticaAccettata(args: {
   praticaId: string;
   brokerId: string;
+  sedeId?: string | null;
   codicePratica: string;
   agenziaNome?: string | null;
 }): EventoPraticaInput {
@@ -40,6 +46,7 @@ export function eventoPraticaAccettata(args: {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.brokerId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_ACCETTATA,
     titolo: 'Pratica accettata',
     testo: `${chi} accettato la pratica ${args.codicePratica}.`,
@@ -51,11 +58,13 @@ export function eventoPraticaAccettata(args: {
 export function eventoPraticaLavorata(args: {
   praticaId: string;
   brokerId: string;
+  sedeId?: string | null;
   codicePratica: string;
 }): EventoPraticaInput {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.brokerId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_LAVORATA,
     titolo: 'Pratica lavorata',
     testo: `La pratica ${args.codicePratica} è stata lavorata dall'agenzia ed è in attesa di firma.`,
@@ -67,11 +76,13 @@ export function eventoPraticaLavorata(args: {
 export function eventoPraticaFirmata(args: {
   praticaId: string;
   brokerId: string;
+  sedeId?: string | null;
   codicePratica: string;
 }): EventoPraticaInput {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.brokerId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_FIRMATA,
     titolo: 'Firma avvenuta',
     testo: `La pratica ${args.codicePratica} è stata firmata: il credito è stato accreditato sul tuo wallet.`,
@@ -83,11 +94,13 @@ export function eventoPraticaFirmata(args: {
 export function eventoPraticaEscalation(args: {
   praticaId: string;
   brokerId: string;
+  sedeId?: string | null;
   codicePratica: string;
 }): EventoPraticaInput {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.brokerId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_ESCALATION,
     titolo: 'Nessuna agenzia disponibile',
     testo: `Per la pratica ${args.codicePratica} nessuna agenzia ha accettato: la gestiamo manualmente e ti aggiorniamo a breve.`,
@@ -95,15 +108,17 @@ export function eventoPraticaEscalation(args: {
   };
 }
 
-/** Admin assegna una pratica in escalation → l'agenzia lo vede. */
+/** Admin assegna una pratica in escalation → la sede agenzia lo vede. */
 export function eventoPraticaAssegnata(args: {
   praticaId: string;
   agenziaId: string;
+  sedeId?: string | null;
   codicePratica: string;
 }): EventoPraticaInput {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.agenziaId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_ASSEGNATA,
     titolo: 'Pratica assegnata',
     testo: `Ti è stata assegnata la pratica ${args.codicePratica}: trovi dettagli e documenti nella tua area.`,
@@ -111,15 +126,17 @@ export function eventoPraticaAssegnata(args: {
   };
 }
 
-/** Broker annulla una pratica già accettata → l'agenzia assegnata lo vede. */
+/** Broker annulla una pratica già accettata → la sede agenzia assegnata lo vede. */
 export function eventoPraticaAnnullata(args: {
   praticaId: string;
   agenziaId: string;
+  sedeId?: string | null;
   codicePratica: string;
 }): EventoPraticaInput {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.agenziaId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_ANNULLATA,
     titolo: 'Pratica annullata',
     testo: `Il broker ha annullato la pratica ${args.codicePratica}. Non sono richieste altre azioni.`,
@@ -132,6 +149,7 @@ export function eventoPraticaAnnullata(args: {
 export function eventoPraticaPenale(args: {
   praticaId: string;
   targetCompanyId: string;
+  sedeId?: string | null;
   codicePratica: string;
   ruolo: 'broker' | 'agenzia';
 }): EventoPraticaInput {
@@ -139,6 +157,7 @@ export function eventoPraticaPenale(args: {
   return {
     praticaId: args.praticaId,
     targetCompanyId: args.targetCompanyId,
+    targetSedeId: args.sedeId ?? null,
     tipo: EVENTO.PRATICA_PENALE,
     titolo: broker ? 'Penale addebitata' : 'Segnalazione confermata',
     testo: broker

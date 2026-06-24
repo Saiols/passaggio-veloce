@@ -143,6 +143,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
       where: { id: praticaId },
       select: {
         brokerId: true,
+        brokerSedeId: true,
         codicePratica: true,
         agenziaAssegnata: { select: { ragioneSociale: true } },
       },
@@ -153,6 +154,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
         eventoPraticaAccettata({
           praticaId,
           brokerId: p.brokerId,
+          sedeId: p.brokerSedeId,
           codicePratica: p.codicePratica,
           agenziaNome: p.agenziaAssegnata?.ragioneSociale,
         }),

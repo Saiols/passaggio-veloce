@@ -69,6 +69,19 @@ describe('builder eventi pratica — target e tipo', () => {
     expect(e.ctaLabel).toBeNull();
   });
 
+  it('targetSedeId: valorizzato se passato sedeId, altrimenti null', () => {
+    expect(
+      eventoNuovaPratica({ praticaId: P, agenziaId: 'ag-1', sedeId: 'sede-1', codicePratica: COD }).targetSedeId,
+    ).toBe('sede-1');
+    expect(
+      eventoNuovaPratica({ praticaId: P, agenziaId: 'ag-1', codicePratica: COD }).targetSedeId,
+    ).toBeNull();
+    expect(
+      eventoPraticaAccettata({ praticaId: P, brokerId: 'br-1', sedeId: 'sede-2', codicePratica: COD })
+        .targetSedeId,
+    ).toBe('sede-2');
+  });
+
   it('penale → titolo diverso per broker e agenzia, target corretto', () => {
     const broker = eventoPraticaPenale({ praticaId: P, targetCompanyId: 'br-1', codicePratica: COD, ruolo: 'broker' });
     const agenzia = eventoPraticaPenale({ praticaId: P, targetCompanyId: 'ag-1', codicePratica: COD, ruolo: 'agenzia' });

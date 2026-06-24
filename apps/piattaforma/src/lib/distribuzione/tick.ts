@@ -316,6 +316,7 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
         eventoNuovaPratica({
           praticaId: a.praticaId,
           agenziaId: a.agenzia.id,
+          sedeId: a.sedeId,
           codicePratica: a.pratica.codicePratica!,
         }),
       ),
@@ -383,6 +384,7 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
       eventoPraticaEscalation({
         praticaId,
         brokerId: pratica.broker.id,
+        sedeId: pratica.brokerSedeId,
         codicePratica: pratica.codicePratica,
       }),
     ).catch(() => undefined);

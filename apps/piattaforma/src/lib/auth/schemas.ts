@@ -95,7 +95,8 @@ export const registerSedeSchema = z.object({
   provincia: z.string().trim().length(2, 'Provincia (2 lettere)'),
   telefono: z.string().trim().optional().default(''),
   email: z.string().trim().optional().default(''),
-  iban: z.string().trim().optional().default(''),
+  // IBAN sede: opzionale, ma se compilato dev'essere un IBAN italiano valido.
+  iban: z.union([z.literal(''), ibanItSchema]).optional().default(''),
 });
 
 export type RegisterSedeInput = z.infer<typeof registerSedeSchema>;

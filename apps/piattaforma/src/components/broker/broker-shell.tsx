@@ -6,6 +6,7 @@ import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher
 import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
 import {
   IconAffiliazioni,
+  IconAgenzie,
   IconDashboard,
   IconFattura,
   IconNotifiche,
@@ -73,7 +74,7 @@ export function BrokerShell({
         { href: '/profilo', label: 'Profilo', icon: IconProfilo },
         ...(isAdminAzienda
           ? [
-              { href: '/sedi', label: 'Sedi', icon: IconUtenti },
+              { href: '/sedi', label: 'Sedi', icon: IconAgenzie },
               { href: '/team', label: 'Team', icon: IconUtenti },
             ]
           : []),

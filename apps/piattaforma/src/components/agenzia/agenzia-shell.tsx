@@ -8,6 +8,7 @@ import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
 import {
   IconAddebiti,
   IconAffiliazioni,
+  IconAgenzie,
   IconDashboard,
   IconFattura,
   IconFeedback,
@@ -86,7 +87,7 @@ export function AgenziaShell({
         { href: '/profilo', label: 'Profilo', icon: IconProfilo },
         ...(isAdminAzienda
           ? [
-              { href: '/sedi', label: 'Sedi', icon: IconUtenti },
+              { href: '/sedi', label: 'Sedi', icon: IconAgenzie },
               { href: '/team', label: 'Team', icon: IconUtenti },
             ]
           : []),

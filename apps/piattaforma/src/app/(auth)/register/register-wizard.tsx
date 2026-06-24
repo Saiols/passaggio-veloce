@@ -967,7 +967,16 @@ function SediStep({
   };
   const addSede = () => setSedi((arr) => [...arr, { ...EMPTY_SEDE }]);
   const removeSede = (i: number) => setSedi((arr) => arr.filter((_, idx) => idx !== i));
+  const applyAddress = (i: number, p: AddressParts) =>
+    setSedi((arr) =>
+      arr.map((s, idx) =>
+        idx === i
+          ? { ...s, indirizzo: p.indirizzo, civico: p.civico, citta: p.citta, cap: p.cap, provincia: p.provincia }
+          : s,
+      ),
+    );
 
+  const ibanOk = (v: string) => v.trim() === '' || /^IT\d{2}[A-Z0-9]{1,30}$/i.test(v.trim());
   const valid =
     sedi.length >= 1 &&
     sedi.every(
@@ -976,13 +985,16 @@ function SediStep({
         s.indirizzo.trim().length >= 2 &&
         s.citta.trim().length >= 2 &&
         s.cap.trim().length >= 4 &&
-        s.provincia.trim().length === 2,
+        s.provincia.trim().length === 2 &&
+        ibanOk(s.iban),
     );
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!valid) {
-      setError('Completa i campi obbligatori di ogni sede (nome, indirizzo, città, CAP, provincia).');
+      setError(
+        'Controlla i campi di ogni sede: nome, indirizzo, città, CAP, provincia sono obbligatori e l’IBAN (se inserito) deve essere un IBAN italiano valido.',
+      );
       return;
     }
     setError(null);
@@ -1013,6 +1025,9 @@ function SediStep({
               </button>
             )}
           </div>
+          <div className="mb-3">
+            <AddressAutocomplete onSelect={(p) => applyAddress(i, p)} />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Nome sede" required>
               <Input value={s.nome} onChange={(e) => update(i, 'nome', e.target.value)} />
@@ -1038,20 +1053,30 @@ function SediStep({
             <Field label="Email operativa">
               <Input value={s.email} onChange={(e) => update(i, 'email', e.target.value)} />
             </Field>
-            <Field label="IBAN dedicato (opzionale, altrimenti quello aziendale)">
-              <Input value={s.iban} onChange={(e) => update(i, 'iban', e.target.value)} />
+            <Field
+              label="IBAN dedicato (opzionale, altrimenti quello aziendale)"
+              error={!ibanOk(s.iban) ? 'IBAN italiano non valido' : undefined}
+            >
+              <Input
+                value={s.iban}
+                invalid={!ibanOk(s.iban)}
+                placeholder="IT60X0542811101000000123456"
+                onChange={(e) => update(i, 'iban', e.target.value)}
+              />
             </Field>
           </div>
         </div>
       ))}
 
-      <button
-        type="button"
-        onClick={addSede}
-        className="rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-      >
-        + Aggiungi un&apos;altra sede
-      </button>
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={addSede}
+          className="rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+        >
+          + Aggiungi un&apos;altra sede
+        </button>
+      </div>
 
       {error && <Alert variant="error">{error}</Alert>}
 

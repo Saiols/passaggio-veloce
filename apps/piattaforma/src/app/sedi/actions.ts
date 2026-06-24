@@ -47,6 +47,9 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   if (provincia.length !== 2) return { ok: false, error: 'Provincia: sigla di 2 lettere (es. VE)' };
 
   const iban = str(formData, 'iban') || null;
+  if (iban && !/^IT\d{2}[A-Z0-9]{1,30}$/i.test(iban)) {
+    return { ok: false, error: 'IBAN italiano non valido' };
+  }
   const civico = str(formData, 'civico') || null;
   const telefono = str(formData, 'telefono') || null;
   const email = str(formData, 'email') || null;

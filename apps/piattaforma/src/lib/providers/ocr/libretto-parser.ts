@@ -54,14 +54,116 @@ function parseOwner(data: string, prefix: string): OwnerInfo | undefined {
 }
 
 /** Telaio (VIN, 17 caratteri). I VIN non usano mai O/I/Q: se l'OCR li ha
- * introdotti (tipico: O al posto di 0) normalizziamo e ri-validiamo. */
+ * introdotti (tipico: O al posto di 0) normalizziamo e ri-validiamo.
+ *
+ * Sulla carta di circolazione il VIN è il campo (E) "numero di identificazione
+ * del veicolo". Il campo (D.2) "tipo/variante/versione" può però contenere un
+ * codice di omologazione di 17 caratteri alfanumerici che combacia col pattern
+ * del VIN e PRECEDE (E): una ricerca "primo token di 17 char" su tutto il testo
+ * aggancia il codice sbagliato. Ci ancoriamo quindi a (E) quando presente;
+ * altrimenti (ricevute PRA, testo libero) usiamo il primo token VIN-shaped. */
 function extractTelaio(data: string): string | undefined {
-  const strict = TELAIO_RE.exec(data)?.[1];
+  const eIdx = data.search(/\(E\)/);
+  const scope = eIdx >= 0 ? data.slice(eIdx) : data;
+  const strict = TELAIO_RE.exec(scope)?.[1];
   if (strict) return strict;
-  const m = /\b[A-Z0-9]{17}\b/.exec(data);
+  const m = /\b[A-Z0-9]{17}\b/.exec(scope);
   if (!m) return undefined;
   const norm = m[0].replace(/[OIQ]/g, (c) => (c === 'I' ? '1' : '0'));
   return TELAIO_RE.test(norm) ? norm : undefined;
+}
+
+// Etichetta di trasferimento di proprietà applicata sul retro del libretto: su
+// auto ex-noleggio/leasing il campo (C.2.1) resta la società locatrice, ma la
+// proprietà è stata trasferita a una persona tramite etichetta fisica
+// ("TRASFERIMENTO DI PROPRIETA'" → data → "PROPRIETARIO <cognome> <nome>" + CF).
+// Nella linearizzazione di Document AI l'etichetta finisce DOPO la legenda,
+// quindi va cercata su tutto il testo, non sulla sola sezione dati. L'etichetta
+// prevale SEMPRE sull'intestatario in (C.2.x); se ce ne sono più d'una (più
+// passaggi annotati nel riquadro in basso a sinistra) prevale quella con la
+// DATA PIÙ RECENTE, che è anche la data di acquisto dell'attuale proprietario
+// (→ regime pre/post-2015 del nuovo proprietario, non dell'immatricolazione).
+//
+// Discriminatori anti-legenda (la legenda contiene "(C.2) proprietario del
+// veicolo"): (a) il nome catturato non deve iniziare con una stopword ("DEL",
+// "DI", ...); (b) deve esserci un CF persona fisica VALIDO (check digit) nella
+// finestra dopo l'etichetta OPPURE il marcatore "TRASFERIMENTO" prima — la
+// legenda non ha né l'uno né l'altro.
+const STOPWORDS_DOPO_PROPRIETARIO = /^(?:DEL|DELLA|DELLO|DEI|DEGLI|DELLE|DI|E)\b/;
+const DATE_G = new RegExp(DATE, 'g');
+
+type StickerHit = { owner: OwnerInfo; date?: string };
+
+/** Data di trasferimento in una regione di testo: la data più recente che NON
+ * sia una data di nascita ("NATO/A IL ..."). Confronto su ISO yyyy-mm-dd =
+ * cronologico. Undefined se non ci sono date utili. */
+function transferDateInRegion(region: string): string | undefined {
+  let best: string | undefined;
+  let m: RegExpExecArray | null;
+  DATE_G.lastIndex = 0;
+  while ((m = DATE_G.exec(region))) {
+    const pre = region.slice(Math.max(0, m.index - 12), m.index);
+    if (/NAT[OA]\s+IL\s*$/.test(pre)) continue; // data di nascita, non di trasferimento
+    const iso = toIso(m[1]!, m[2]!, m[3]!);
+    if (!best || iso > best) best = iso;
+  }
+  return best;
+}
+
+/** Tutte le etichette di trasferimento valide nel testo, con la rispettiva data
+ * (best-effort). Persona fisica: cognome + nome nell'ordine dell'etichetta,
+ * separatore "*" o spazio. */
+function parseTrasferimentoStickers(upper: string): StickerHit[] {
+  const re = /PROPRIETARIO[ \t]+([A-Z*][A-Z'* \t]*)/g;
+  const hits: StickerHit[] = [];
+  let prevEnd = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(upper))) {
+    const anchorStart = m.index;
+    const anchorEnd = m.index + m[0].length;
+    const rawName = m[1]!.trim();
+    if (!rawName || STOPWORDS_DOPO_PROPRIETARIO.test(rawName)) {
+      prevEnd = anchorEnd;
+      continue;
+    }
+    const after = upper.slice(anchorEnd, anchorEnd + 160);
+    const cfM = CF_RE.exec(after);
+    const cf = cfM && isValidCodiceFiscale(cfM[1]!) ? cfM[1]! : undefined;
+    // Finestra "prima" del nome (dove stanno il marcatore TRASFERIMENTO e la
+    // data), limitata all'etichetta precedente per non sconfinare.
+    const back = upper.slice(Math.max(prevEnd, anchorStart - 200), anchorStart);
+    const ti = back.lastIndexOf('TRASFERIMENTO');
+    if (!cf && ti < 0) {
+      prevEnd = anchorEnd;
+      continue; // né CF valido né marcatore: non è un'etichetta
+    }
+    // Data dal blocco TRASFERIMENTO (se c'è) per non pescare le date della carta.
+    const date =
+      transferDateInRegion(ti >= 0 ? back.slice(ti) : back) ?? transferDateInRegion(after);
+    const tokens = rawName
+      .split(/[*\s]+/)
+      .map((t) => t.replace(/\*/g, '').trim())
+      .filter(Boolean);
+    if (tokens.length) {
+      const cognome = tokens[0]!;
+      const nome = tokens.length > 1 ? tokens.slice(1).join(' ') : undefined;
+      hits.push({
+        owner: { isPersonaGiuridica: false, cognome, nome, cf, display: tokens.join(' ') },
+        date,
+      });
+    }
+    prevEnd = anchorEnd;
+  }
+  return hits;
+}
+
+/** Etichetta vincente: la più recente per data; le datate battono le non datate;
+ * a parità/assenza di date, l'ultima nel testo. Undefined se non ce ne sono. */
+function pickStickerWinner(hits: StickerHit[]): StickerHit | undefined {
+  if (!hits.length) return undefined;
+  const dated = hits.filter((h) => h.date);
+  if (dated.length) return dated.reduce((a, b) => (b.date! > a.date! ? b : a));
+  return hits[hits.length - 1];
 }
 
 // Ricevuta PRA / minivoltura: "DOCUMENTO NON VALIDO PER LA CIRCOLAZIONE" +
@@ -125,12 +227,26 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
   let dataAcquisto: string | undefined;
   let annoAcquisto: number | undefined;
 
+  // Etichetta di trasferimento sul retro: se presente, l'intestatario
+  // dell'etichetta è l'attuale e SOSTITUISCE C.2.x (auto ex-noleggio rivendute a
+  // privati). Con più etichette vince la più recente. Cercata su TUTTO il testo
+  // (è dopo la legenda).
+  const sticker = isRicevutaPra ? undefined : pickStickerWinner(parseTrasferimentoStickers(upper));
+
   if (isRicevutaPra) {
     // Ricevuta PRA (venditore commerciante): intestatario = azienda;
     // acquisto = data della scrittura privata.
     const pra = parseRicevutaPra(data);
     proprietariInfo = pra.proprietariInfo;
     dataAcquisto = pra.dataAcquisto;
+    annoAcquisto = dataAcquisto ? Number(dataAcquisto.slice(0, 4)) : undefined;
+  } else if (sticker) {
+    // Etichetta di trasferimento: intestatario + data di acquisto dall'etichetta
+    // (la data del trasferimento determina il regime del NUOVO proprietario).
+    // Fallback a (I) solo se l'etichetta non riporta una data leggibile.
+    proprietariInfo = [sticker.owner];
+    const acquisto = dateAfter(data, String.raw`\((?:I|1|L)\)`);
+    dataAcquisto = sticker.date ?? acquisto?.iso;
     annoAcquisto = dataAcquisto ? Number(dataAcquisto.slice(0, 4)) : undefined;
   } else {
     // (I) data di immatricolazione cui si riferisce la carta = data di acquisto

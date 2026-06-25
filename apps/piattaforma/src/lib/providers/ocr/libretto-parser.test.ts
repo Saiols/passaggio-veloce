@@ -221,6 +221,210 @@ SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
   });
 });
 
+describe('parseLibrettoText — telaio da (E), non dal codice omologazione (D.2)', () => {
+  // Caso reale (Mod. MC 820 D): il campo (D.2) "tipo/variante/versione" riporta
+  // un codice di omologazione di 17 caratteri alfanumerici (FM6FM62S0347CP1CA)
+  // che combacia col pattern del VIN e PRECEDE (E). Il telaio vero è in (E)
+  // "numero di identificazione del veicolo". Il parser deve ancorarsi a (E).
+  const CARTA_D2_COLLISIONE = `Mod. MC 820 D
+REPUBBLICA ITALIANA
+CARTA DI CIRCOLAZIONE
+N° A106469MI25
+(A) FW248XP
+(D.1) VOLKSWAGEN
+(D.2) A1 DGTEXOAC4 FM6FM62S0347CP1CA
+(D.3) T-ROC
+(E) WVGZZZA1ZKV096161
+(F.2) 1890 (F.3) 3390 (G)
+(1) 12.02.2025
+(J) M1
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(E) numero di identificazione del veicolo`;
+
+  it('legge il telaio da (E), non il codice di (D.2)', () => {
+    const r = parseLibrettoText(CARTA_D2_COLLISIONE, 0.9);
+    expect(r.telaio).toBe('WVGZZZA1ZKV096161');
+    expect(r.telaio).not.toBe('FM6FM62S0347CP1CA');
+  });
+
+  it('targa da (A)', () => {
+    expect(parseLibrettoText(CARTA_D2_COLLISIONE, 0.9).targa).toBe('FW248XP');
+  });
+});
+
+describe('parseLibrettoText — proprietario da etichetta di trasferimento (retro)', () => {
+  // Caso reale (anonimizzato): auto ex-noleggio. (C.2.1) resta la società
+  // locatrice, ma la proprietà è stata trasferita a una persona tramite
+  // ETICHETTA applicata sul retro ("TRASFERIMENTO DI PROPRIETA'" → "PROPRIETARIO
+  // <cognome> <nome>" + CF). Nella linearizzazione OCR l'etichetta compare DOPO
+  // la legenda (che il parser normalmente scarta). La legenda contiene
+  // "proprietario del veicolo": è un'esca per falsi positivi che NON deve essere
+  // letta come intestatario. Il proprietario dell'etichetta SOSTITUISCE (C.2.x).
+  const TRASFERIMENTO_RETRO = `Mod MC 820 D
+REPUBBLICA ITALIANA
+CARTA DI CIRCOLAZIONE
+(A)
+A098020M117
+FK039PJ
+(B) 30.06.2017
+(C.2.1) NOLEGGIO AUTO ITALIA
+SPA
+(C.2.3) VIA GATTAMELATA 41
+MILANO (MI)
+(12345678903)
+(D.1) CITROEN
+(D.2) 3 ABHZ T/2SM
+(D.3) C4 PICASSO
+(E) VF73ABHZTHJ717960
+(1) 30.06.2017
+(J) M1
+(J.1) AUTOVETTURA PER TRASPORTO DI
+PERSONE USO DI TERZI DA
+LOCARE SENZA CONDUC.
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2) proprietario del veicolo
+(C.2.1) cognome o ragione sociale
+(E) numero di identificazione del veicolo
+*** TRASFERIMENTO DI PROPRIETA' E CAMBIO USO ***
+/19.09.2017
+NATO IL 12.12.1975 A MILANO
+PROPRIETARIO ROSSI MARA
+RES. MILANO
+(MI)
+-MI (RSSMRA80A01F205X)
+USO PROPRIO-AUTOVETTURA PER TRASPORTO DI PERSONE
+IND. VIA CUSTODI 4
+***********
+**
+*
+MILANO, 19.09.2017`;
+
+  const r = parseLibrettoText(TRASFERIMENTO_RETRO, 0.9);
+
+  it('legge il proprietario dall’etichetta, non la società in (C.2.1)', () => {
+    expect(r.proprietarioAttuale).toBe('ROSSI MARA');
+    expect(r.proprietarioAttuale).not.toMatch(/NOLEGGIO/);
+  });
+  it('estrae il CF persona fisica dall’etichetta', () => {
+    expect(r.proprietarioCf).toBe('RSSMRA80A01F205X');
+  });
+  it('l’etichetta SOSTITUISCE la società (non la affianca)', () => {
+    expect(r.proprietari).toEqual(['ROSSI MARA']);
+    expect(r.proprietariInfo).toEqual([
+      { isPersonaGiuridica: false, cognome: 'ROSSI', nome: 'MARA', cf: 'RSSMRA80A01F205X', display: 'ROSSI MARA' },
+    ]);
+  });
+  it('non legge la legenda "proprietario del veicolo" come intestatario', () => {
+    expect(r.proprietarioAttuale).not.toMatch(/VEICOLO|DEL/);
+  });
+  it('targa e telaio restano corretti', () => {
+    expect(r.targa).toBe('FK039PJ');
+    expect(r.telaio).toBe('VF73ABHZTHJ717960');
+  });
+  it('data acquisto = data dell’etichetta di trasferimento, non (I)', () => {
+    // (1) 30.06.2017 sulla carta, ma il trasferimento al privato è del 19.09.2017.
+    expect(r.dataAcquisto).toBe('2017-09-19');
+  });
+
+  it('gestisce il separatore "*" tra cognome e nome', () => {
+    const conAsterisco = TRASFERIMENTO_RETRO.replace('PROPRIETARIO ROSSI MARA', 'PROPRIETARIO ROSSI*MARA');
+    const r2 = parseLibrettoText(conAsterisco, 0.9);
+    expect(r2.proprietarioAttuale).toBe('ROSSI MARA');
+    expect(r2.proprietariInfo?.[0]).toMatchObject({ cognome: 'ROSSI', nome: 'MARA' });
+  });
+});
+
+describe('parseLibrettoText — regime dal trasferimento (ex-noleggio pre→post 2015)', () => {
+  // Auto immatricolata a una società nel 2012 (pre-2015) e trasferita a un
+  // privato nel 2016 (post-2015): il regime dell'ATTUALE proprietario è
+  // POST-2015. La data di acquisto deve venire dall'etichetta, non da (I)/(B).
+  const PRE_POST = `(A) AB123CD
+(B) 14.02.2012
+(C.2.1) NOLEGGIO AUTO ITALIA
+SPA
+(12345678903)
+(E) ZFA31200000999999
+(1) 14.02.2012
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2) proprietario del veicolo
+*** TRASFERIMENTO DI PROPRIETA' E CAMBIO USO ***
+/15.06.2016
+NATO IL 01.01.1980 A MILANO
+PROPRIETARIO ROSSI MARA
+RES. MILANO
+-MI (RSSMRA80A01F205X)`;
+  const r = parseLibrettoText(PRE_POST, 0.9);
+
+  it('data acquisto dal trasferimento (2016), non da (I)/(B) 2012', () => {
+    expect(r.dataAcquisto).toBe('2016-06-15');
+  });
+  it('preImm2015 = false (regime del trasferimento post-2015, non l’immatricolazione 2012)', () => {
+    expect(r.preImm2015).toBe(false);
+  });
+  it('proprietario = persona dell’etichetta', () => {
+    expect(r.proprietarioAttuale).toBe('ROSSI MARA');
+  });
+});
+
+describe('parseLibrettoText — più etichette: vince quella con la data più recente', () => {
+  // Più etichette di trasferimento affiancate nel riquadro in basso a sinistra:
+  // prevale quella con la DATA PIÙ RECENTE (l'ultimo trasferimento). Il regime
+  // segue la data del trasferimento vincente.
+  const MULTI = `(A) AB123CD
+(B) 14.02.2012
+(C.2.1) NOLEGGIO AUTO ITALIA
+SPA
+(12345678903)
+(E) ZFA31200000999999
+(1) 14.02.2012
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2) proprietario del veicolo
+*** TRASFERIMENTO DI PROPRIETA' E CAMBIO USO ***
+/10.03.2014
+NATO IL 10.01.1985 A MILANO
+PROPRIETARIO BIANCHI LUCA
+-MI (BNCLCU85T10A562O)
+*** TRASFERIMENTO DI PROPRIETA' E CAMBIO USO ***
+/20.05.2019
+NATO IL 01.01.1990 A MILANO
+PROPRIETARIO VERDI ANNA
+-MI (VRDNNA90A41F205M)`;
+
+  it('prevale l’etichetta più recente (VERDI 2019 vs BIANCHI 2014)', () => {
+    const r = parseLibrettoText(MULTI, 0.9);
+    expect(r.proprietarioAttuale).toBe('VERDI ANNA');
+    expect(r.proprietarioCf).toBe('VRDNNA90A41F205M');
+    expect(r.proprietari).toEqual(['VERDI ANNA']);
+  });
+  it('data acquisto + regime dalla data dell’etichetta vincente', () => {
+    const r = parseLibrettoText(MULTI, 0.9);
+    expect(r.dataAcquisto).toBe('2019-05-20');
+    expect(r.preImm2015).toBe(false);
+  });
+  it('è la data a decidere, non l’ordine nel testo', () => {
+    // Inverto l'ordine: la più recente (2019) appare PRIMA della più vecchia.
+    const inv = `(A) AB123CD
+(C.2.1) NOLEGGIO AUTO ITALIA
+SPA
+(12345678903)
+(E) ZFA31200000999999
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+*** TRASFERIMENTO DI PROPRIETA' ***
+/20.05.2019
+NATO IL 01.01.1990 A MILANO
+PROPRIETARIO VERDI ANNA
+-MI (VRDNNA90A41F205M)
+*** TRASFERIMENTO DI PROPRIETA' ***
+/10.03.2014
+NATO IL 10.01.1985 A MILANO
+PROPRIETARIO BIANCHI LUCA
+-MI (BNCLCU85T10A562O)`;
+    const r = parseLibrettoText(inv, 0.9);
+    expect(r.proprietarioAttuale).toBe('VERDI ANNA');
+    expect(r.dataAcquisto).toBe('2019-05-20');
+  });
+});
+
 describe('parseLibrettoText — pre-2015 da (I)', () => {
   it('(I) anteriore al 2015 → preImm2015 true', () => {
     const txt = '(B) 20.06.2009\n(C.2.1) BIANCHI\n(C.2.2) LUCA\n(A) FA123GH\n(1) 10.03.2010';

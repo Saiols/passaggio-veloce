@@ -39,6 +39,7 @@ import {
   extractIdentitaAction,
   extractVisuraAction,
   extractPermessoAction,
+  extractCodiceFiscaleAction,
   submitNuovaPraticaAction,
 } from './actions';
 
@@ -80,6 +81,8 @@ type IdentitaFiles = {
   permesso?: BlobSlot;
   /** Visura camerale (solo AZIENDA / OPERATORE_AUTO). */
   visura?: BlobSlot;
+  /** Tessera sanitaria / codice fiscale (fronte), quando l'identificazione non è CIE. */
+  codiceFiscale?: BlobSlot;
 };
 
 /**
@@ -107,7 +110,8 @@ function identitaUploading(files: IdentitaFiles): boolean {
     slotUploading(files.retro) ||
     slotUploading(files.single) ||
     slotUploading(files.permesso) ||
-    slotUploading(files.visura)
+    slotUploading(files.visura) ||
+    slotUploading(files.codiceFiscale)
   );
 }
 
@@ -198,6 +202,8 @@ type Parte = {
   identitaOcr?: IdentitaEstratta;
   visuraOcr?: VisuraEstratta;
   permessoOcr?: PermessoEstratto;
+  /** OCR tessera sanitaria / codice fiscale (fail-closed) per validaParte. */
+  codiceFiscaleOcr?: { codiceFiscale?: string };
 };
 
 const emptyParte = (): Parte => ({
@@ -213,6 +219,7 @@ const emptyParte = (): Parte => ({
   identitaOcr: undefined,
   visuraOcr: undefined,
   permessoOcr: undefined,
+  codiceFiscaleOcr: undefined,
 });
 
 /**
@@ -248,6 +255,7 @@ function identitaForStorage(f: IdentitaFiles): IdentitaFiles {
   if (f.single) out.single = slotForStorage(f.single);
   if (f.permesso) out.permesso = slotForStorage(f.permesso);
   if (f.visura) out.visura = slotForStorage(f.visura);
+  if (f.codiceFiscale) out.codiceFiscale = slotForStorage(f.codiceFiscale);
   return out;
 }
 
@@ -780,6 +788,21 @@ export function WizardNuovaPratica({
     }
   };
 
+  // Verifica documentale — OCR tessera sanitaria / codice fiscale. Salva il
+  // risultato grezzo (`codiceFiscaleOcr`) per validaParte. Re-OCR solo al cambio file.
+  const runCfOcr = async <P extends Parte>(
+    ref: BlobRef,
+    onChange: (updater: (p: P) => P) => void,
+  ) => {
+    try {
+      const res = await extractCodiceFiscaleAction(ref);
+      if (!res.ok) return;
+      onChange((prev) => ({ ...prev, codiceFiscaleOcr: { codiceFiscale: res.data.codiceFiscale } }));
+    } catch {
+      // best-effort: il verdetto resterà ILLEGGIBILE finché non si ricarica
+    }
+  };
+
   const handleFinalSubmit = () => {
     // Tutti i libretti devono avere la BlobRef pronta (nessun upload a metà).
     if (veicoli.some((v) => !v.libretto.ref)) return;
@@ -876,6 +899,7 @@ export function WizardNuovaPratica({
       }
       if (v.identita.permesso?.ref) blobRefs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
       if (v.identita.visura?.ref) blobRefs[`VEND${n}_VISURA`] = v.identita.visura.ref;
+      if (v.identita.codiceFiscale?.ref) blobRefs[`VEND${n}_CF`] = v.identita.codiceFiscale.ref;
     });
 
     // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
@@ -888,6 +912,7 @@ export function WizardNuovaPratica({
     }
     if (acquirenteIdentita.permesso?.ref) blobRefs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
     if (acquirenteIdentita.visura?.ref) blobRefs['ACQ_VISURA'] = acquirenteIdentita.visura.ref;
+    if (acquirenteIdentita.codiceFiscale?.ref) blobRefs['ACQ_CF'] = acquirenteIdentita.codiceFiscale.ref;
 
     // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
     fd.append('blobRefs', JSON.stringify(blobRefs));
@@ -963,10 +988,11 @@ export function WizardNuovaPratica({
   // l'acquirente, calcolato dai campi inseriti + OCR salvati. `now` unico per
   // tutta la render così i verdetti sono coerenti tra gate e Alert.
   const now = new Date();
-  const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, now));
+  const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, v.docId, now));
   // Gate ATECO solo per l'acquirente della minivoltura (operatore auto).
   const verdettoAcquirente = verificaDocumentaleParte(
     acquirente,
+    acquirenteDocId,
     now,
     tipo === 'MINIVOLTURA' ? atecoAllowed : undefined,
   );
@@ -1039,6 +1065,16 @@ export function WizardNuovaPratica({
         onInvalidatePermesso={() =>
           setVenditori((prev) =>
             prev.map((vv, i) => (i === idx ? { ...vv, permessoOcr: undefined } : vv)),
+          )
+        }
+        onCfRef={(ref) =>
+          runCfOcr<VenditoreInput>(ref, (upd) =>
+            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+          )
+        }
+        onInvalidateCf={() =>
+          setVenditori((prev) =>
+            prev.map((vv, i) => (i === idx ? { ...vv, codiceFiscaleOcr: undefined } : vv)),
           )
         }
         onInvalidateIdentita={() =>
@@ -1523,6 +1559,12 @@ export function WizardNuovaPratica({
               }
               onInvalidatePermesso={() =>
                 setAcquirente((prev) => ({ ...prev, permessoOcr: undefined }))
+              }
+              onCfRef={(ref) =>
+                runCfOcr(ref, (updater) => setAcquirente((prev) => updater(prev)))
+              }
+              onInvalidateCf={() =>
+                setAcquirente((prev) => ({ ...prev, codiceFiscaleOcr: undefined }))
               }
               onInvalidateIdentita={() =>
                 setAcquirente((prev) => ({ ...prev, identitaOcr: undefined }))
@@ -2279,6 +2321,8 @@ function IdentitaSection({
   onInvalidateIdentita,
   onInvalidateVisura,
   onInvalidatePermesso,
+  onCfRef,
+  onInvalidateCf,
 }: {
   titolo: string;
   docId: DocIdTipo;
@@ -2293,10 +2337,17 @@ function IdentitaSection({
   onInvalidateIdentita: () => void;
   onInvalidateVisura: () => void;
   onInvalidatePermesso: () => void;
+  onCfRef: (ref: BlobRef) => void;
+  onInvalidateCf: () => void;
 }) {
   const mostraVisura =
     isPG || tipoSoggetto === 'AZIENDA' || tipoSoggetto === 'OPERATORE_AUTO';
   const mostraPermesso = tipoSoggetto === 'STRANIERO_EXTRA_UE';
+  const mostraCodiceFiscale = documentiRichiestiParte({
+    isPersonaGiuridica: isPG,
+    tipoSoggetto,
+    documentoIdentita: docId,
+  }).codiceFiscale;
 
   // Upload di un singolo campo su Blob, aggiornando lo slot via `onFiles`. Al
   // termine chiama `afterUpload(ref)` (es. OCR). `onInvalidate` azzera l'OCR
@@ -2387,6 +2438,20 @@ function IdentitaSection({
         )}
       </div>
 
+      {/* Tessera sanitaria / codice fiscale: quando l'identificazione non è CIE
+          (CI cartacea, passaporto, patente). Basta il fronte. L'OCR alimenta il
+          match fail-closed col CF inserito (validaParte). */}
+      {mostraCodiceFiscale && (
+        <div className="mt-3">
+          <UploadCard
+            label="Tessera sanitaria / Codice fiscale (fronte)"
+            slot={files.codiceFiscale}
+            onSelect={(f) => handleField('codiceFiscale', f, onCfRef, onInvalidateCf)}
+            onRemove={() => handleField('codiceFiscale', null, onCfRef, onInvalidateCf)}
+          />
+        </div>
+      )}
+
       {/* Visura camerale: solo per AZIENDA / OPERATORE_AUTO. L'OCR alimenta il
           cross-check denominazione/P.IVA + freschezza ≤6 mesi (validaParte). */}
       {mostraVisura && (
@@ -2449,8 +2514,10 @@ function parteCompleta(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): boo
   const req = documentiRichiestiParte({
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,
+    documentoIdentita: docId,
   });
   if (req.identita && !identitaPresente(docId, identita)) return false;
+  if (req.codiceFiscale && !identita.codiceFiscale?.ref) return false;
   if (req.visura && !identita.visura?.ref) return false;
   if (req.permesso && !identita.permesso?.ref) return false;
   return true;
@@ -2471,8 +2538,10 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
   const req = documentiRichiestiParte({
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,
+    documentoIdentita: docId,
   });
   if (req.identita && !identitaPresente(docId, identita)) m.push("documento d'identità");
+  if (req.codiceFiscale && !identita.codiceFiscale?.ref) m.push('tessera sanitaria / codice fiscale');
   if (req.visura && !identita.visura?.ref) m.push('visura camerale');
   if (req.permesso && !identita.permesso?.ref) m.push('permesso di soggiorno');
   if (identitaUploading(identita)) m.push('caricamento documenti in corso');
@@ -2487,12 +2556,14 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
  */
 function verificaDocumentaleParte(
   p: Parte,
+  docId: DocIdTipo,
   now: Date,
   atecoAllowed?: AllowedAteco[],
 ): { ok: boolean; problemi: string[] } {
   const parteDati: ParteDati = {
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,
+    documentoIdentita: docId,
     nome: p.nome,
     cognome: p.cognome,
     cf: p.cf,
@@ -2503,6 +2574,7 @@ function verificaDocumentaleParte(
     identita: p.identitaOcr,
     visura: p.visuraOcr,
     permesso: p.permessoOcr,
+    codiceFiscale: p.codiceFiscaleOcr,
   };
   return validaParte(parteDati, ocr, now, atecoAllowed ? { atecoAllowed } : undefined);
 }

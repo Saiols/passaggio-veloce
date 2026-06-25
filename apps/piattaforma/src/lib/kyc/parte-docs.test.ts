@@ -303,4 +303,17 @@ describe('validaParte — tessera sanitaria / CF fail-closed', () => {
     expect(r.ok).toBe(true);
     expect(r.problemi).toEqual([]);
   });
+  it('azienda rep passaporto: CF mancante → blocco', () => {
+    const r = validaParte(
+      { ...AZIENDA, documentoIdentita: 'PASSAPORTO' },
+      {
+        identita: { nome: 'Mario', cognome: 'Rossi' },
+        visura: { partitaIva: '12345678901', denominazione: 'Auto Veloci SRL', dataEmissione: '2026-05-01' },
+        // codiceFiscale intenzionalmente assente
+      },
+      NOW,
+    );
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/Tessera sanitaria/);
+  });
 });

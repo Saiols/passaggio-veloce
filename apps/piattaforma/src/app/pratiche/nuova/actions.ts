@@ -28,6 +28,7 @@ import { extractVisura } from '@/lib/kyc/visura-parser';
 import { parsePermessoText } from '@/lib/kyc/extract-permesso';
 import {
   validaParte,
+  documentiRichiestiParte,
   type VisuraEstratta,
   type PermessoEstratto,
   type ParteDati,
@@ -642,7 +643,7 @@ export async function submitNuovaPraticaAction(
   // e li mappiamo al rispettivo DocumentoTipo. Il permesso di soggiorno è
   // opzionale (la presenza per stranieri è già gestita dall'engine via BLOCCO).
   type IdentitaDocCandidate = {
-    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'PERMESSO_SOGGIORNO' | 'VISURA_CAMERALE';
+    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'CODICE_FISCALE' | 'PERMESSO_SOGGIORNO' | 'VISURA_CAMERALE';
     owner: 'VENDITORE' | 'ACQUIRENTE';
     // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
     // documento appartiene (serve per il linkage Documento.venditoreId).
@@ -674,6 +675,7 @@ export async function submitNuovaPraticaAction(
     prefix: string,
     documentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
     labelParte: string,
+    richiedeCf: boolean,
     venditoreOrdine?: number,
   ): void => {
     const missingMsg = `/pratiche/nuova?error=${encodeURIComponent(
@@ -710,6 +712,23 @@ export async function submitNuovaPraticaAction(
       });
     }
 
+    if (richiedeCf) {
+      const cf = getRef(`${prefix}_CF`);
+      if (!cf || cf.size === 0) {
+        redirect(
+          `/pratiche/nuova?error=${encodeURIComponent(
+            `Tessera sanitaria / codice fiscale mancante per ${labelParte}`,
+          )}`,
+        );
+      }
+      identitaCandidates.push({
+        tipo: 'CODICE_FISCALE',
+        owner,
+        venditoreOrdine,
+        ref: validateIdentitaRef(cf!, 'tessera sanitaria / codice fiscale'),
+      });
+    }
+
     const permesso = getRef(`${prefix}_PERMESSO`);
     if (permesso && permesso.size > 0) {
       identitaCandidates.push({
@@ -737,9 +756,19 @@ export async function submitNuovaPraticaAction(
   for (const v of venditori) {
     const label =
       venditori.length > 1 ? `il venditore ${v.ordine}` : 'il venditore';
-    collectIdentita('VENDITORE', `VEND${v.ordine}`, v.docId, label, v.ordine);
+    const richiedeCf = documentiRichiestiParte({
+      isPersonaGiuridica: v.isPG,
+      tipoSoggetto: v.tipoSoggetto ?? null,
+      documentoIdentita: v.docId,
+    }).codiceFiscale;
+    collectIdentita('VENDITORE', `VEND${v.ordine}`, v.docId, label, richiedeCf, v.ordine);
   }
-  collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente");
+  const richiedeCfAcq = documentiRichiestiParte({
+    isPersonaGiuridica: d.acquirenteIsPG,
+    tipoSoggetto: d.acquirenteTipoSoggetto ?? null,
+    documentoIdentita: d.acquirenteDocumentoIdentita,
+  }).codiceFiscale;
+  collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente", richiedeCfAcq);
 
   // Cross-check insiemistico venditori ↔ intestatari PER VEICOLO (server-side,
   // autoritativo): i venditori del veicolo i devono coincidere con gli
@@ -812,6 +841,17 @@ export async function submitNuovaPraticaAction(
       ).text;
       out.permesso = parsePermessoText(text);
     }
+    const cfRef = getRef(`${prefix}_CF`);
+    if (cfRef) {
+      const text = (
+        await (await getOcr()).extractText({
+          buffer: await storageGetBuffer(cfRef.key),
+          mimeType: cfRef.type,
+          originalFilename: cfRef.name,
+        })
+      ).text;
+      out.codiceFiscale = { codiceFiscale: extractCf(text).codiceFiscale };
+    }
     return out;
   };
 
@@ -843,6 +883,7 @@ export async function submitNuovaPraticaAction(
         cf: v.cf ?? undefined,
         ragioneSociale: v.ragioneSociale ?? undefined,
         piva: v.piva ?? undefined,
+        documentoIdentita: v.docId,
       } satisfies ParteDati,
       prefix: `VEND${v.ordine}`,
       docId: v.docId,
@@ -857,6 +898,7 @@ export async function submitNuovaPraticaAction(
         cf: d.acquirenteCF,
         ragioneSociale: d.acquirenteRagioneSociale,
         piva: d.acquirentePIVA,
+        documentoIdentita: d.acquirenteDocumentoIdentita,
       } satisfies ParteDati,
       prefix: 'ACQ',
       docId: d.acquirenteDocumentoIdentita,

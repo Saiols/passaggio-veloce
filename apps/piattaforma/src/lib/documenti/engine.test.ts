@@ -70,7 +70,7 @@ describe('calcolaDocumentiRichiesti — casi base', () => {
 });
 
 describe('calcolaDocumentiRichiesti — straniero / azienda (emissione documenti)', () => {
-  it('venditore straniero richiede CI F+R + permesso (validità verificata altrove)', () => {
+  it('venditore straniero richiede CI F+R + permesso + CF (validità verificata altrove)', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
         venditori: [{ ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'CI' }],
@@ -82,6 +82,7 @@ describe('calcolaDocumentiRichiesti — straniero / azienda (emissione documenti
     expect(venditore.map((d) => d.tipo).sort()).toEqual([
       'CI_FRONTE',
       'CI_RETRO',
+      'CODICE_FISCALE',
       'PERMESSO_SOGGIORNO',
     ]);
   });
@@ -327,7 +328,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
     expect(tipiVend).not.toContain('CI_FRONTE');
   });
 
-  it('CI cartacea con passaporto scelto: niente CODICE_FISCALE separato', () => {
+  it('CI cartacea con passaporto scelto: aggiunge comunque CODICE_FISCALE', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
         venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'PASSAPORTO' }],
@@ -337,6 +338,78 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
     if (r.kind !== 'OK') return;
     const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
     expect(tipiVend).toContain('PASSAPORTO');
-    expect(tipiVend).not.toContain('CODICE_FISCALE');
+    expect(tipiVend).toContain('CODICE_FISCALE');
+  });
+
+  it('venditore passaporto (CIE): PASSAPORTO + CODICE_FISCALE', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PASSAPORTO' }] }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+    expect(tipiVend).toContain('PASSAPORTO');
+    expect(tipiVend).toContain('CODICE_FISCALE');
+  });
+
+  it('venditore patente: PATENTE + CODICE_FISCALE', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PATENTE' }] }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+    expect(tipiVend).toContain('PATENTE');
+    expect(tipiVend).toContain('CODICE_FISCALE');
+  });
+
+  it('acquirente patente: PATENTE + CODICE_FISCALE', () => {
+    const r = calcolaDocumentiRichiesti(baseInput({ acquirenteDocumentoIdentita: 'PATENTE' }));
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiAcq = r.documentiRichiesti.filter((d) => d.parte === 'ACQUIRENTE').map((d) => d.tipo);
+    expect(tipiAcq).toContain('PATENTE');
+    expect(tipiAcq).toContain('CODICE_FISCALE');
+  });
+
+  it('CIE + CI: nessun CODICE_FISCALE (venditore e acquirente)', () => {
+    const r = calcolaDocumentiRichiesti(baseInput());
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    expect(r.documentiRichiesti.map((d) => d.tipo)).not.toContain('CODICE_FISCALE');
+  });
+
+  it('straniero extra-UE + CI: CODICE_FISCALE richiesto', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'CI' }] }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+    expect(tipiVend).toContain('CODICE_FISCALE');
+  });
+
+  it('rep azienda con CI: nessun CODICE_FISCALE (CI del rappresentante trattata come CIE)', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'CI' }] }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiAmm = r.documentiRichiesti
+      .filter((d) => d.parte === 'AMMINISTRATORE_VENDITORE')
+      .map((d) => d.tipo);
+    expect(tipiAmm).not.toContain('CODICE_FISCALE');
+  });
+
+  it('rep operatore auto con passaporto: CODICE_FISCALE richiesto', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'OPERATORE_AUTO', documentoIdentita: 'PASSAPORTO' }] }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiAmm = r.documentiRichiesti
+      .filter((d) => d.parte === 'AMMINISTRATORE_VENDITORE')
+      .map((d) => d.tipo);
+    expect(tipiAmm).toContain('CODICE_FISCALE');
   });
 });

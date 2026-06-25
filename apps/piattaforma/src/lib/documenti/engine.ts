@@ -83,6 +83,20 @@ export type EsitoSchemaDocumentale =
   | { kind: 'BLOCCO'; motivo: string; soluzione: string }
   | { kind: 'INPUT_INCOMPLETO'; mancanti: string[] };
 
+/**
+ * Regola unica tessera sanitaria / codice fiscale: richiesto SEMPRE tranne
+ * quando il documento è una CI e il soggetto è identificato con CIE (la CIE
+ * contiene già il codice fiscale). Vale per passaporto/patente di qualsiasi
+ * soggetto e per la CI cartacea. Single source of truth condivisa con
+ * lib/kyc/parte-docs.
+ */
+export function richiedeCodiceFiscale(
+  tipoSoggetto: TipoSoggetto,
+  docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
+): boolean {
+  return !(docIdentita === 'CI' && tipoSoggetto === 'PRIVATO_ITALIANO_CIE');
+}
+
 function emettiIdentita(
   out: DocumentoRichiesto[],
   parte: ParteDocumento,
@@ -93,16 +107,19 @@ function emettiIdentita(
 ): void {
   if (docIdentita === 'PASSAPORTO') {
     out.push({ tipo: 'PASSAPORTO', parte, motivo: `${motivoPrefix}: passaporto`, venditoreOrdine });
-    return;
-  }
-  if (docIdentita === 'PATENTE') {
+  } else if (docIdentita === 'PATENTE') {
     out.push({ tipo: 'PATENTE', parte, motivo: `${motivoPrefix}: patente`, venditoreOrdine });
-    return;
+  } else {
+    out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte`, venditoreOrdine });
+    out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro`, venditoreOrdine });
   }
-  out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte`, venditoreOrdine });
-  out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro`, venditoreOrdine });
-  if (tipoSoggetto === 'PRIVATO_ITALIANO_CARTACEA') {
-    out.push({ tipo: 'CODICE_FISCALE', parte, motivo: `${motivoPrefix}: tessera CF`, venditoreOrdine });
+  if (richiedeCodiceFiscale(tipoSoggetto, docIdentita)) {
+    out.push({
+      tipo: 'CODICE_FISCALE',
+      parte,
+      motivo: `${motivoPrefix}: tessera sanitaria / codice fiscale`,
+      venditoreOrdine,
+    });
   }
 }
 

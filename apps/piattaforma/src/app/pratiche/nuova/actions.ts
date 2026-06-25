@@ -33,6 +33,7 @@ import {
   type ParteDati,
   type OcrParte,
 } from '@/lib/kyc/parte-docs';
+import { extractCf } from '@/lib/kyc/extract-cf';
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { computeFees } from '@/lib/pricing';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
@@ -269,6 +270,32 @@ export async function extractPermessoAction(ref: FileRef): Promise<ExtractPermes
   } catch (e) {
     console.error('[ocr] extractPermesso failed:', (e as Error).message);
     return { ok: false, error: 'OCR non riuscito sul permesso. Ricarica un file leggibile.' };
+  }
+}
+
+export type ExtractCodiceFiscaleResult =
+  | { ok: true; data: { codiceFiscale?: string } }
+  | { ok: false; error: string };
+
+/**
+ * OCR della tessera sanitaria / codice fiscale (fronte). Estrae il CF per il
+ * cross-check col soggetto (parte-docs). Richiesto quando l'identificazione non
+ * è CIE (CI cartacea, passaporto, patente).
+ */
+export async function extractCodiceFiscaleAction(ref: FileRef): Promise<ExtractCodiceFiscaleResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  if (!ref?.key || ref.size === 0) return { ok: false, error: 'File tessera sanitaria mancante' };
+  if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
+  if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+  try {
+    const buffer = await storageGetBuffer(ref.key);
+    const ocr = await getOcr();
+    const text = (await ocr.extractText({ buffer, mimeType: ref.type, originalFilename: ref.name })).text;
+    return { ok: true, data: { codiceFiscale: extractCf(text).codiceFiscale } };
+  } catch (e) {
+    console.error('[ocr] extractCodiceFiscale failed:', (e as Error).message);
+    return { ok: false, error: 'OCR non riuscito sulla tessera sanitaria. Ricarica un file leggibile.' };
   }
 }
 

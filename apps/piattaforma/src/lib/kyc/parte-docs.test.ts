@@ -4,6 +4,7 @@ import {
   verificaIdentita,
   verificaVisura,
   verificaPermesso,
+  verificaCodiceFiscale,
   validaParte,
   type ParteDati,
 } from './parte-docs';
@@ -31,15 +32,35 @@ const AZIENDA: ParteDati = {
 };
 
 describe('documentiRichiestiParte', () => {
-  it('privato → solo identità', () => {
-    expect(documentiRichiestiParte(PRIVATO)).toEqual({ identita: true, visura: false, permesso: false });
+  it('privato CIE+CI → identità, niente CF', () => {
+    expect(documentiRichiestiParte(PRIVATO)).toEqual({
+      identita: true, visura: false, permesso: false, codiceFiscale: false,
+    });
   });
-  it('straniero → identità + permesso', () => {
-    expect(documentiRichiestiParte(STRANIERO)).toEqual({ identita: true, visura: false, permesso: true });
+  it('privato cartacea+CI → CF richiesto', () => {
+    expect(
+      documentiRichiestiParte({ ...PRIVATO, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA' }).codiceFiscale,
+    ).toBe(true);
   });
-  it('azienda/operatore → identità + visura', () => {
-    expect(documentiRichiestiParte(AZIENDA)).toEqual({ identita: true, visura: true, permesso: false });
+  it('privato CIE + passaporto → CF richiesto', () => {
+    expect(documentiRichiestiParte({ ...PRIVATO, documentoIdentita: 'PASSAPORTO' }).codiceFiscale).toBe(true);
+  });
+  it('privato CIE + patente → CF richiesto', () => {
+    expect(documentiRichiestiParte({ ...PRIVATO, documentoIdentita: 'PATENTE' }).codiceFiscale).toBe(true);
+  });
+  it('straniero (default CI) → identità + permesso + CF', () => {
+    expect(documentiRichiestiParte(STRANIERO)).toEqual({
+      identita: true, visura: false, permesso: true, codiceFiscale: true,
+    });
+  });
+  it('azienda rep CI → identità + visura, niente CF', () => {
+    expect(documentiRichiestiParte(AZIENDA)).toEqual({
+      identita: true, visura: true, permesso: false, codiceFiscale: false,
+    });
     expect(documentiRichiestiParte({ ...AZIENDA, tipoSoggetto: 'OPERATORE_AUTO' }).visura).toBe(true);
+  });
+  it('azienda rep passaporto → CF richiesto', () => {
+    expect(documentiRichiestiParte({ ...AZIENDA, documentoIdentita: 'PASSAPORTO' }).codiceFiscale).toBe(true);
   });
 });
 
@@ -113,10 +134,14 @@ describe('validaParte (fail-closed)', () => {
     expect(r.ok).toBe(false);
     expect(r.problemi.join(' ')).toMatch(/Permesso/);
   });
-  it('straniero: identità + permesso validi → ok', () => {
+  it('straniero: identità + permesso + CF validi → ok', () => {
     const r = validaParte(
       STRANIERO,
-      { identita: { nome: 'John', cognome: 'Smith' }, permesso: { nome: 'John', cognome: 'Smith', scadenza: '2027-01-01' } },
+      {
+        identita: { nome: 'John', cognome: 'Smith' },
+        permesso: { nome: 'John', cognome: 'Smith', scadenza: '2027-01-01' },
+        codiceFiscale: { codiceFiscale: 'SMTJHN80A01Z404X' },
+      },
       NOW,
     );
     expect(r.ok).toBe(true);
@@ -227,5 +252,55 @@ describe('validaParte — gate ATECO acquirente operatore auto (minivoltura)', (
       atecoAllowed: ALLOWED_DEALER,
     });
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('verificaCodiceFiscale', () => {
+  it('CF estratto uguale a quello inserito → MATCH', () => {
+    expect(verificaCodiceFiscale('RSSMRA80A01F205Z', { codiceFiscale: 'rssmra80a01f205z' })).toBe('MATCH');
+  });
+  it('CF estratto diverso → MISMATCH', () => {
+    expect(verificaCodiceFiscale('RSSMRA80A01F205Z', { codiceFiscale: 'BNCLNZ70A01F205X' })).toBe('MISMATCH');
+  });
+  it('niente CF estratto → ILLEGGIBILE', () => {
+    expect(verificaCodiceFiscale('RSSMRA80A01F205Z', undefined)).toBe('ILLEGGIBILE');
+    expect(verificaCodiceFiscale('RSSMRA80A01F205Z', {})).toBe('ILLEGGIBILE');
+  });
+  it('CF atteso assente (rep PG senza CF anagrafico) ma estratto leggibile → MATCH', () => {
+    expect(verificaCodiceFiscale(undefined, { codiceFiscale: 'RSSMRA80A01F205Z' })).toBe('MATCH');
+  });
+});
+
+describe('validaParte — tessera sanitaria / CF fail-closed', () => {
+  const CARTACEA: ParteDati = {
+    isPersonaGiuridica: false,
+    tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA',
+    documentoIdentita: 'CI',
+    nome: 'Mario',
+    cognome: 'Rossi',
+    cf: 'RSSMRA80A01F205Z',
+  };
+  it('CF richiesto ma mancante → blocco', () => {
+    const r = validaParte(CARTACEA, { identita: { codiceFiscale: 'RSSMRA80A01F205Z' } }, NOW);
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/Tessera sanitaria/);
+  });
+  it('CF presente ma di altra persona → blocco', () => {
+    const r = validaParte(
+      CARTACEA,
+      { identita: { codiceFiscale: 'RSSMRA80A01F205Z' }, codiceFiscale: { codiceFiscale: 'BNCLNZ70A01F205X' } },
+      NOW,
+    );
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/Tessera sanitaria/);
+  });
+  it('CI + CF corrispondenti → ok', () => {
+    const r = validaParte(
+      CARTACEA,
+      { identita: { codiceFiscale: 'RSSMRA80A01F205Z' }, codiceFiscale: { codiceFiscale: 'RSSMRA80A01F205Z' } },
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    expect(r.problemi).toEqual([]);
   });
 });

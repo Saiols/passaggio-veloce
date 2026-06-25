@@ -1,5 +1,6 @@
 import { nameMatches, normalizeCf, companyMatches } from './match';
 import { isAtecoAllowed, type AllowedAteco } from './ateco';
+import { richiedeCodiceFiscale } from '../documenti/engine';
 
 /**
  * Verifica documentale di una parte (venditore/acquirente): confronta i dati
@@ -20,6 +21,7 @@ export type TipoSoggettoParte =
 export type ParteDati = {
   isPersonaGiuridica: boolean;
   tipoSoggetto: TipoSoggettoParte;
+  documentoIdentita?: 'CI' | 'PASSAPORTO' | 'PATENTE';
   nome?: string;
   cognome?: string;
   cf?: string;
@@ -42,11 +44,12 @@ export type OcrParte = {
   identita?: IdentitaEstratta;
   visura?: VisuraEstratta;
   permesso?: PermessoEstratto;
+  codiceFiscale?: { codiceFiscale?: string };
 };
 
 export type Verdetto = 'MATCH' | 'MISMATCH' | 'ILLEGGIBILE' | 'SCADUTO';
 
-export type DocRequisiti = { identita: boolean; visura: boolean; permesso: boolean };
+export type DocRequisiti = { identita: boolean; visura: boolean; permesso: boolean; codiceFiscale: boolean };
 
 const VISURA_VALIDITA_MESI = 6;
 
@@ -58,12 +61,17 @@ function isPG(p: ParteDati): boolean {
   );
 }
 
-/** Documenti richiesti per la parte in base al tipo soggetto. */
+/** Documenti richiesti per la parte in base al tipo soggetto + documento scelto. */
 export function documentiRichiestiParte(p: ParteDati): DocRequisiti {
+  const pg = isPG(p);
+  // Per la PG il documento d'identità è del legale rappresentante: la sua CI è
+  // trattata come CIE (niente CF), ma passaporto/patente richiedono comunque il CF.
+  const tipoEffettivo = pg ? 'PRIVATO_ITALIANO_CIE' : (p.tipoSoggetto ?? 'PRIVATO_ITALIANO_CIE');
   return {
     identita: true,
-    visura: isPG(p),
+    visura: pg,
     permesso: p.tipoSoggetto === 'STRANIERO_EXTRA_UE',
+    codiceFiscale: richiedeCodiceFiscale(tipoEffettivo, p.documentoIdentita ?? 'CI'),
   };
 }
 
@@ -105,6 +113,21 @@ export function verificaIdentita(
   const b = fullName(e.nome, e.cognome);
   if (!a || !b) return 'ILLEGGIBILE';
   return nameMatches(a, b) ? 'MATCH' : 'MISMATCH';
+}
+
+/**
+ * Verifica la tessera sanitaria / codice fiscale estratta. Presenza + match
+ * fail-closed: senza CF estratto → ILLEGGIBILE; se è atteso un CF (persona
+ * fisica: CF inserito; rep PG: CF amministratore della visura) il match è
+ * vincolante; senza CF atteso bastano presenza + leggibilità.
+ */
+export function verificaCodiceFiscale(
+  expectedCf: string | undefined,
+  e: { codiceFiscale?: string } | undefined,
+): Verdetto {
+  if (!e || !e.codiceFiscale) return 'ILLEGGIBILE';
+  if (!expectedCf) return 'MATCH';
+  return normalizeCf(expectedCf) === normalizeCf(e.codiceFiscale) ? 'MATCH' : 'MISMATCH';
 }
 
 /** Confronta la visura estratta con l'azienda inserita + freschezza ≤6 mesi. */
@@ -214,8 +237,17 @@ export function validaParte(
         }
       }
     }
+    if (req.codiceFiscale) {
+      push(
+        'Tessera sanitaria / Codice fiscale',
+        verificaCodiceFiscale(ocr.visura?.amministratore?.codiceFiscale, ocr.codiceFiscale),
+      );
+    }
   } else {
     push("Documento d'identità", verificaIdentita(p, ocr.identita));
+    if (req.codiceFiscale) {
+      push('Tessera sanitaria / Codice fiscale', verificaCodiceFiscale(p.cf, ocr.codiceFiscale));
+    }
   }
 
   if (req.permesso) push('Permesso di soggiorno', verificaPermesso(p, ocr.permesso, now));

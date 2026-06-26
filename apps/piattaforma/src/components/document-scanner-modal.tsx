@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Button } from '@/components/ui';
 import { isImageFile, imageFileToCanvas, canvasToJpegFile, type Preset } from '@/lib/scanner/process';
+import { isPdfFile, pdfPageCount, renderPdfPage } from '@/lib/scanner/pdf-render';
 import { warpImage, type Corners, type Pt } from '@/lib/scanner/scanner-client';
 
 type HandleKey = keyof Corners;
@@ -17,7 +18,7 @@ const HANDLE_ORDER: HandleKey[] = [
 /** Decisione di routing alla selezione di un file (puro, testabile). */
 export function routeSelection(file: File | null): 'editor' | 'passthrough' | 'noop' {
   if (!file) return 'noop';
-  return isImageFile(file) ? 'editor' : 'passthrough';
+  return isImageFile(file) || isPdfFile(file) ? 'editor' : 'passthrough';
 }
 
 /**
@@ -91,7 +92,11 @@ export function DocumentScannerModal({
   };
   const dragging = useRef<HandleKey | null>(null);
 
-  // Carica l'immagine e rende l'editor SUBITO usabile (ritaglio manuale).
+  const isPdf = isPdfFile(file);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
+
+  // Carica l'immagine/PDF e rende l'editor SUBITO usabile (ritaglio manuale).
   // L'auto-detect dei bordi gira nel Web Worker (OpenCV fuori dal main thread):
   // la UI non si blocca mai.
   useEffect(() => {
@@ -101,11 +106,16 @@ export function DocumentScannerModal({
       setErrorMsg(null);
       let canvas: HTMLCanvasElement;
       try {
-        canvas = await imageFileToCanvas(file);
+        if (isPdf) {
+          if (pageIndex === 0) setPageCount(await pdfPageCount(file));
+          canvas = await renderPdfPage(file, pageIndex, 2);
+        } else {
+          canvas = await imageFileToCanvas(file);
+        }
       } catch {
         if (!cancelled) {
           setStatus('error');
-          setErrorMsg('Immagine non leggibile.');
+          setErrorMsg(isPdf ? 'PDF non leggibile.' : 'Immagine non leggibile.');
         }
         return;
       }
@@ -122,7 +132,7 @@ export function DocumentScannerModal({
     return () => {
       cancelled = true;
     };
-  }, [file]);
+  }, [file, pageIndex, isPdf]);
 
   // Ricalcola la scala quando la finestra cambia dimensione.
   useEffect(() => {
@@ -185,6 +195,15 @@ export function DocumentScannerModal({
       setStatus('ready');
       setErrorMsg('Elaborazione fallita: puoi caricare l’originale o riprovare.');
     }
+  };
+
+  const usaOriginale = async () => {
+    if (!isPdf) return onConfirm(file);
+    if (!src) return;
+    const out = document.createElement('canvas');
+    out.width = src.canvas.width; out.height = src.canvas.height;
+    out.getContext('2d')!.drawImage(src.canvas, 0, 0);
+    onConfirm(await canvasToJpegFile(out, file.name));
   };
 
   const handlePx = (p: Pt) => ({ left: p.x * scale, top: p.y * scale });
@@ -258,19 +277,32 @@ export function DocumentScannerModal({
         </div>
 
         <div className="flex flex-col gap-2 border-t border-pv-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            onClick={rotate}
-            disabled={!src || status === 'working'}
-            className="inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-pv-slate-200 px-3 py-2 text-[13px] font-semibold text-pv-navy-700 transition hover:border-pv-navy-400 disabled:opacity-50"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-              <path d="M21 3v5h-5" />
-            </svg>
-            Ruota
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={rotate}
+              disabled={!src || status === 'working'}
+              className="inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-pv-slate-200 px-3 py-2 text-[13px] font-semibold text-pv-navy-700 transition hover:border-pv-navy-400 disabled:opacity-50"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v5h-5" />
+              </svg>
+              Ruota
+            </button>
+            {isPdf && pageCount > 1 && (
+              <div className="flex items-center gap-2 text-[13px] text-pv-navy-700">
+                <button type="button" disabled={pageIndex <= 0 || status === 'working'}
+                  onClick={() => setPageIndex((i) => Math.max(0, i - 1))}
+                  className="rounded-[8px] border border-pv-slate-200 px-2 py-1 disabled:opacity-50">‹</button>
+                <span>Pagina {pageIndex + 1} / {pageCount}</span>
+                <button type="button" disabled={pageIndex >= pageCount - 1 || status === 'working'}
+                  onClick={() => setPageIndex((i) => Math.min(pageCount - 1, i + 1))}
+                  className="rounded-[8px] border border-pv-slate-200 px-2 py-1 disabled:opacity-50">›</button>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => onConfirm(file)} disabled={status === 'working'}>
+            <Button variant="secondary" onClick={usaOriginale} disabled={status === 'working'}>
               Usa originale
             </Button>
             <Button

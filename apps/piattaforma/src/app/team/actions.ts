@@ -299,6 +299,8 @@ export async function updateTeamUserAction(
   email: string,
   nome: string,
   cognome: string,
+  sedeId?: string,
+  ruoloSede?: 'ADMIN_SEDE' | 'OPERATORE',
 ): Promise<UpdateTeamUserResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -332,13 +334,36 @@ export async function updateTeamUserAction(
     }
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      email: emailLower,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-    },
+  // Multi-sede: aggiorna la membership (sede + ruolo) per gli UTENTE_AZIENDA. Il
+  // proprietario (ADMIN_AZIENDA) ha accesso implicito a tutte le sedi → niente
+  // membership. La sede deve appartenere all'azienda.
+  const aggiornaMembership = target.role !== 'ADMIN_AZIENDA' && sedeId !== undefined;
+  if (aggiornaMembership) {
+    const sede = await prisma.sede.findFirst({
+      where: { id: sedeId, companyId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!sede) return { ok: false, error: 'Sede non valida' };
+  }
+  const ruolo = ruoloSede ?? 'OPERATORE';
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { email: emailLower, nome: nome.trim(), cognome: cognome.trim() },
+    });
+    if (aggiornaMembership) {
+      // Modello "una sede per utente": l'utente appartiene a una sola sede. Per
+      // evitare conflitti con @@unique([userId, sedeId]) quando si sposta sede,
+      // collassiamo a un'unica membership con la sede/ruolo scelti.
+      const existing = await tx.userSede.findFirst({ where: { userId } });
+      if (existing && existing.sedeId === sedeId) {
+        await tx.userSede.update({ where: { id: existing.id }, data: { ruolo } });
+      } else {
+        await tx.userSede.deleteMany({ where: { userId } });
+        await tx.userSede.create({ data: { userId, sedeId: sedeId!, ruolo } });
+      }
+    }
   });
 
   revalidatePath('/team');

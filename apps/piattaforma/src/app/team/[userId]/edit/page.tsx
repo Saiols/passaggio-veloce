@@ -36,6 +36,19 @@ export default async function TeamUserEditPage({
 
   if (!target || target.companyId !== companyId) notFound();
 
+  // Multi-sede: membership corrente (sede + ruolo) e sedi dell'azienda per i
+  // selettori. Il proprietario (ADMIN_AZIENDA) ha accesso implicito a tutte le
+  // sedi e non ha membership: per lui i selettori non si applicano.
+  const isOwnerTarget = target.role === 'ADMIN_AZIENDA';
+  const [membership, sedi] = await Promise.all([
+    prisma.userSede.findFirst({ where: { userId }, select: { sedeId: true, ruolo: true } }),
+    prisma.sede.findMany({
+      where: { companyId, deletedAt: null },
+      select: { id: true, nome: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  ]);
+
   return (
     <AppShell session={session} activePath="/team">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -64,7 +77,9 @@ export default async function TeamUserEditPage({
         <Card className="mb-5">
           <h2 className="text-[15px] font-bold text-pv-navy-800">Dati anagrafici</h2>
           <p className="mt-1 text-[12.5px] text-pv-slate-500">
-            Aggiorna nome, cognome ed email. Le modifiche sono immediate.
+            {isOwnerTarget
+              ? 'Aggiorna nome, cognome ed email. Le modifiche sono immediate.'
+              : 'Aggiorna nome, cognome, email, sede di appartenenza e ruolo. Le modifiche sono immediate.'}
           </p>
           <div className="mt-4">
             <TeamEditForm
@@ -72,6 +87,10 @@ export default async function TeamUserEditPage({
               defaultEmail={target.email}
               defaultNome={target.nome}
               defaultCognome={target.cognome}
+              isOwner={isOwnerTarget}
+              sedi={sedi}
+              defaultSedeId={membership?.sedeId ?? ''}
+              defaultRuolo={membership?.ruolo ?? 'OPERATORE'}
             />
           </div>
         </Card>

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
+import { parseSedeFields } from '@/lib/sedi/form';
 
 export type SedeActionResult = { ok: true } | { ok: false; error: string };
 
@@ -17,8 +18,13 @@ function genReferralCode(): string {
   return c;
 }
 
-function str(form: FormData, key: string): string {
-  return String(form.get(key) ?? '').trim();
+/** Mappa i campi del form sede in un oggetto stringa per parseSedeFields. */
+function sedeFormRaw(form: FormData): Record<string, string> {
+  const keys = [
+    'nome', 'indirizzo', 'civico', 'citta', 'cap', 'provincia',
+    'telefono', 'email', 'codiceInterno', 'iban', 'payoutThresholdEuro',
+  ];
+  return Object.fromEntries(keys.map((k) => [k, String(form.get(k) ?? '')]));
 }
 
 /** Crea una nuova sede sotto l'azienda madre (solo proprietario). */
@@ -36,23 +42,9 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   });
   if (!company) return { ok: false, error: 'Azienda non trovata' };
 
-  const nome = str(formData, 'nome');
-  const indirizzo = str(formData, 'indirizzo');
-  const citta = str(formData, 'citta');
-  const cap = str(formData, 'cap');
-  const provincia = str(formData, 'provincia').toUpperCase();
-  if (!nome || !indirizzo || !citta || !cap || !provincia) {
-    return { ok: false, error: 'Nome, indirizzo, città, CAP e provincia sono obbligatori' };
-  }
-  if (provincia.length !== 2) return { ok: false, error: 'Provincia: sigla di 2 lettere (es. VE)' };
-
-  const iban = str(formData, 'iban') || null;
-  if (iban && !/^IT\d{2}[A-Z0-9]{1,30}$/i.test(iban)) {
-    return { ok: false, error: 'IBAN italiano non valido' };
-  }
-  const civico = str(formData, 'civico') || null;
-  const telefono = str(formData, 'telefono') || null;
-  const email = str(formData, 'email') || null;
+  const parsed = parseSedeFields(sedeFormRaw(formData));
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const f = parsed.data;
 
   // referralCode univoco con retry su collisione.
   let referralCode = genReferralCode();
@@ -69,20 +61,68 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
     data: {
       companyId,
       type: company.type,
-      nome,
-      indirizzo,
-      civico,
-      citta,
-      cap,
-      provincia,
-      telefono,
-      email,
-      iban,
+      nome: f.nome,
+      indirizzo: f.indirizzo,
+      civico: f.civico,
+      citta: f.citta,
+      cap: f.cap,
+      provincia: f.provincia,
+      telefono: f.telefono,
+      email: f.email,
+      codiceInterno: f.codiceInterno,
+      iban: f.iban,
+      payoutThresholdCent: f.payoutThresholdCent,
       referralCode,
     },
   });
 
   revalidatePath('/sedi');
+  return { ok: true };
+}
+
+/** Aggiorna i dati anagrafici/pagamenti di una sede (solo proprietario). */
+export async function updateSedeAction(
+  sedeId: string,
+  formData: FormData,
+): Promise<SedeActionResult> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (session.user.role !== 'ADMIN_AZIENDA') {
+    return { ok: false, error: 'Solo il proprietario può modificare le sedi' };
+  }
+  const companyId = session.user.companyId!;
+
+  const sede = await prisma.sede.findUnique({
+    where: { id: sedeId },
+    select: { companyId: true },
+  });
+  if (!sede || sede.companyId !== companyId) {
+    return { ok: false, error: 'Sede non trovata' };
+  }
+
+  const parsed = parseSedeFields(sedeFormRaw(formData));
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const f = parsed.data;
+
+  await prisma.sede.update({
+    where: { id: sedeId },
+    data: {
+      nome: f.nome,
+      indirizzo: f.indirizzo,
+      civico: f.civico,
+      citta: f.citta,
+      cap: f.cap,
+      provincia: f.provincia,
+      telefono: f.telefono,
+      email: f.email,
+      codiceInterno: f.codiceInterno,
+      iban: f.iban,
+      payoutThresholdCent: f.payoutThresholdCent,
+    },
+  });
+
+  revalidatePath('/sedi');
+  revalidatePath(`/sedi/${sedeId}`);
   return { ok: true };
 }
 

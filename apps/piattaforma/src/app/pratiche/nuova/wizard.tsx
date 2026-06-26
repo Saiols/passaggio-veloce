@@ -15,6 +15,7 @@ import {
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
+import type { SedeRef } from '@/lib/sedi/scope';
 import { intestatariPerVeicolo, crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
   delegatoDocKey,
@@ -83,6 +84,8 @@ type IdentitaFiles = {
   visura?: BlobSlot;
   /** Tessera sanitaria / codice fiscale (fronte), quando l'identificazione non è CIE. */
   codiceFiscale?: BlobSlot;
+  /** Tessera sanitaria / codice fiscale (retro), raccolto insieme al fronte. */
+  codiceFiscaleRetro?: BlobSlot;
 };
 
 /**
@@ -111,7 +114,8 @@ function identitaUploading(files: IdentitaFiles): boolean {
     slotUploading(files.single) ||
     slotUploading(files.permesso) ||
     slotUploading(files.visura) ||
-    slotUploading(files.codiceFiscale)
+    slotUploading(files.codiceFiscale) ||
+    slotUploading(files.codiceFiscaleRetro)
   );
 }
 
@@ -256,6 +260,7 @@ function identitaForStorage(f: IdentitaFiles): IdentitaFiles {
   if (f.permesso) out.permesso = slotForStorage(f.permesso);
   if (f.visura) out.visura = slotForStorage(f.visura);
   if (f.codiceFiscale) out.codiceFiscale = slotForStorage(f.codiceFiscale);
+  if (f.codiceFiscaleRetro) out.codiceFiscaleRetro = slotForStorage(f.codiceFiscaleRetro);
   return out;
 }
 
@@ -283,6 +288,7 @@ type WizardDraftState = {
   acquirenteIdentita: IdentitaFiles;
   acquirenteResidenzaDiversa: boolean;
   acquirenteIndirizzoResidenza: string;
+  brokerSedeId: string;
   comune: string;
   provincia: string;
   documenti: Record<string, BlobSlot>;
@@ -346,12 +352,21 @@ const TIPO_CARDS: {
 export function WizardNuovaPratica({
   error,
   atecoAllowed,
+  sedi,
+  defaultSedeId,
 }: {
   error?: string;
   /** Allowlist ATECO DEALER (admin /admin/ateco): gate operatore auto minivoltura. */
   atecoAllowed: AllowedAteco[];
+  /** Sedi del dealer; il selettore "Sede di partenza" appare solo con più d'una. */
+  sedi: SedeRef[];
+  /** Sede pre-selezionata (sede operativa corrente, o la prima accessibile). */
+  defaultSedeId?: string;
 }) {
   const [step, setStep] = useState(1);
+  // Multi-sede: sede broker da cui parte la pratica (selettore in step 4).
+  const multiSede = sedi.length > 1;
+  const [brokerSedeId, setBrokerSedeId] = useState(defaultSedeId ?? '');
 
   // Al cambio step riporta la pagina in cima: gli step sono lunghi (upload +
   // OCR + verifiche) e l'utente deve ripartire dall'inizio della sezione.
@@ -517,6 +532,7 @@ export function WizardNuovaPratica({
           setAcquirenteResidenzaDiversa(d.acquirenteResidenzaDiversa);
         if (typeof d.acquirenteIndirizzoResidenza === 'string')
           setAcquirenteIndirizzoResidenza(d.acquirenteIndirizzoResidenza);
+        if (typeof d.brokerSedeId === 'string' && d.brokerSedeId) setBrokerSedeId(d.brokerSedeId);
         if (typeof d.comune === 'string') setComune(d.comune);
         if (typeof d.provincia === 'string') setProvincia(d.provincia);
         if (d.documenti) setDocumenti(d.documenti);
@@ -545,6 +561,7 @@ export function WizardNuovaPratica({
           acquirenteIdentita: identitaForStorage(acquirenteIdentita),
           acquirenteResidenzaDiversa,
           acquirenteIndirizzoResidenza,
+          brokerSedeId,
           comune,
           provincia,
           documenti: Object.fromEntries(
@@ -570,6 +587,7 @@ export function WizardNuovaPratica({
     acquirenteIdentita,
     acquirenteResidenzaDiversa,
     acquirenteIndirizzoResidenza,
+    brokerSedeId,
     comune,
     provincia,
     documenti,
@@ -900,6 +918,8 @@ export function WizardNuovaPratica({
       if (v.identita.permesso?.ref) blobRefs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
       if (v.identita.visura?.ref) blobRefs[`VEND${n}_VISURA`] = v.identita.visura.ref;
       if (v.identita.codiceFiscale?.ref) blobRefs[`VEND${n}_CF`] = v.identita.codiceFiscale.ref;
+      if (v.identita.codiceFiscaleRetro?.ref)
+        blobRefs[`VEND${n}_CF_RETRO`] = v.identita.codiceFiscaleRetro.ref;
     });
 
     // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
@@ -913,12 +933,18 @@ export function WizardNuovaPratica({
     if (acquirenteIdentita.permesso?.ref) blobRefs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
     if (acquirenteIdentita.visura?.ref) blobRefs['ACQ_VISURA'] = acquirenteIdentita.visura.ref;
     if (acquirenteIdentita.codiceFiscale?.ref) blobRefs['ACQ_CF'] = acquirenteIdentita.codiceFiscale.ref;
+    if (acquirenteIdentita.codiceFiscaleRetro?.ref)
+      blobRefs['ACQ_CF_RETRO'] = acquirenteIdentita.codiceFiscaleRetro.ref;
 
     // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
     fd.append('blobRefs', JSON.stringify(blobRefs));
 
     fd.append('comune', comune);
     fd.append('provincia', provincia);
+
+    // Multi-sede: sede broker di partenza (il server la valida e ricade sulla
+    // sede operativa se vuota). Inviata solo se selezionabile.
+    if (brokerSedeId) fd.append('brokerSedeId', brokerSedeId);
 
     // Sistema Penali Broker: payload di accettazione popup (versione + flag)
     fd.append('dichiarazioneAccettata', 'true');
@@ -988,13 +1014,19 @@ export function WizardNuovaPratica({
   // l'acquirente, calcolato dai campi inseriti + OCR salvati. `now` unico per
   // tutta la render così i verdetti sono coerenti tra gate e Alert.
   const now = new Date();
-  const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, v.docId, now));
-  // Gate ATECO solo per l'acquirente della minivoltura (operatore auto).
+  // L'allowlist ATECO è passata a tutte le società (serve a decidere la
+  // freschezza ≤6 mesi della visura: solo per i commercianti d'auto). Il blocco
+  // "deve essere commerciante" (richiedeOperatoreAuto) resta solo per
+  // l'acquirente della minivoltura.
+  const verdettiVenditori = venditori.map((v) =>
+    verificaDocumentaleParte(v, v.docId, now, atecoAllowed, false),
+  );
   const verdettoAcquirente = verificaDocumentaleParte(
     acquirente,
     acquirenteDocId,
     now,
-    tipo === 'MINIVOLTURA' ? atecoAllowed : undefined,
+    atecoAllowed,
+    tipo === 'MINIVOLTURA',
   );
 
   // Blocco UI di un singolo venditore (riusato dal layout singolo e dall'accordion
@@ -1166,6 +1198,7 @@ export function WizardNuovaPratica({
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
   // SchemaDocumentalePreview così il broker capisce cosa correggere.
   const canSubmit =
+    (!multiSede || brokerSedeId.length > 0) &&
     comune.trim().length > 0 &&
     /^[A-Za-z]{2}$/.test(provincia.trim()) &&
     esitoSchema.kind === 'OK';
@@ -1223,6 +1256,7 @@ export function WizardNuovaPratica({
   };
   const mancanzeStep4 = (): string[] => {
     const m: string[] = [];
+    if (multiSede && !brokerSedeId) m.push('sede di partenza');
     if (!comune.trim()) m.push('comune');
     if (!/^[A-Za-z]{2}$/.test(provincia.trim())) m.push('provincia (2 lettere)');
     if (esitoSchema.kind !== 'OK') m.push('documenti richiesti incompleti');
@@ -1270,7 +1304,7 @@ export function WizardNuovaPratica({
           <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                Tipo pratica
+                Tipo pratica (Seleziona la tipologia di pratica)
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {TIPO_CARDS.map((card) => {
@@ -1675,6 +1709,32 @@ export function WizardNuovaPratica({
 
         {step === 4 && (
           <div className="space-y-5">
+            {multiSede && (
+              <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+                <h2 className="mb-1 text-[15px] font-bold text-pv-navy-800">Sede di partenza</h2>
+                <p className="mb-3 text-[12.5px] text-pv-slate-500">
+                  La tua sede da cui nasce la pratica (per wallet, fatturazione e statistiche).
+                  Non c’entra col comune di destinazione qui sotto.
+                </p>
+                <Field label="Sede" required>
+                  <Select
+                    value={brokerSedeId}
+                    onChange={(e) => setBrokerSedeId(e.target.value)}
+                    invalid={!brokerSedeId}
+                  >
+                    <option value="" disabled>
+                      Seleziona una sede…
+                    </option>
+                    {sedi.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            )}
+
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
               {hasMaps ? (
@@ -1728,6 +1788,12 @@ export function WizardNuovaPratica({
                   label="Acquirente"
                   value={parteNome(acquirente)}
                 />
+                {multiSede && (
+                  <RiepilogoRow
+                    label="Sede di partenza"
+                    value={sedi.find((s) => s.id === brokerSedeId)?.nome || '—'}
+                  />
+                )}
                 <RiepilogoRow label="Comune" value={comune || '—'} />
               </dl>
               <div className="mt-3 space-y-2">
@@ -2439,15 +2505,22 @@ function IdentitaSection({
       </div>
 
       {/* Tessera sanitaria / codice fiscale: quando l'identificazione non è CIE
-          (CI cartacea, passaporto, patente). Basta il fronte. L'OCR alimenta il
-          match fail-closed col CF inserito (validaParte). */}
+          (CI cartacea, passaporto, patente). Servono fronte + retro. L'OCR del
+          fronte alimenta il match fail-closed col CF inserito (validaParte); il
+          retro è solo raccolto. */}
       {mostraCodiceFiscale && (
-        <div className="mt-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <UploadCard
             label="Tessera sanitaria / Codice fiscale (fronte)"
             slot={files.codiceFiscale}
             onSelect={(f) => handleField('codiceFiscale', f, onCfRef, onInvalidateCf)}
             onRemove={() => handleField('codiceFiscale', null, onCfRef, onInvalidateCf)}
+          />
+          <UploadCard
+            label="Tessera sanitaria / Codice fiscale (retro)"
+            slot={files.codiceFiscaleRetro}
+            onSelect={(f) => handleField('codiceFiscaleRetro', f)}
+            onRemove={() => handleField('codiceFiscaleRetro', null)}
           />
         </div>
       )}
@@ -2517,7 +2590,8 @@ function parteCompleta(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): boo
     documentoIdentita: docId,
   });
   if (req.identita && !identitaPresente(docId, identita)) return false;
-  if (req.codiceFiscale && !identita.codiceFiscale?.ref) return false;
+  if (req.codiceFiscale && (!identita.codiceFiscale?.ref || !identita.codiceFiscaleRetro?.ref))
+    return false;
   if (req.visura && !identita.visura?.ref) return false;
   if (req.permesso && !identita.permesso?.ref) return false;
   return true;
@@ -2541,7 +2615,10 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
     documentoIdentita: docId,
   });
   if (req.identita && !identitaPresente(docId, identita)) m.push("documento d'identità");
-  if (req.codiceFiscale && !identita.codiceFiscale?.ref) m.push('tessera sanitaria / codice fiscale');
+  if (req.codiceFiscale && !identita.codiceFiscale?.ref)
+    m.push('tessera sanitaria / codice fiscale (fronte)');
+  if (req.codiceFiscale && !identita.codiceFiscaleRetro?.ref)
+    m.push('tessera sanitaria / codice fiscale (retro)');
   if (req.visura && !identita.visura?.ref) m.push('visura camerale');
   if (req.permesso && !identita.permesso?.ref) m.push('permesso di soggiorno');
   if (identitaUploading(identita)) m.push('caricamento documenti in corso');
@@ -2559,6 +2636,7 @@ function verificaDocumentaleParte(
   docId: DocIdTipo,
   now: Date,
   atecoAllowed?: AllowedAteco[],
+  richiedeOperatoreAuto?: boolean,
 ): { ok: boolean; problemi: string[] } {
   const parteDati: ParteDati = {
     isPersonaGiuridica: p.isPG,
@@ -2576,7 +2654,7 @@ function verificaDocumentaleParte(
     permesso: p.permessoOcr,
     codiceFiscale: p.codiceFiscaleOcr,
   };
-  return validaParte(parteDati, ocr, now, atecoAllowed ? { atecoAllowed } : undefined);
+  return validaParte(parteDati, ocr, now, { atecoAllowed, richiedeOperatoreAuto });
 }
 
 function parteNome(p: Parte): string {

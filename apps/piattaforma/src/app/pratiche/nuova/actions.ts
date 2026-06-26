@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { resolveOperatingSede } from '@/lib/sedi/scope';
+import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import {
@@ -457,10 +457,18 @@ export async function submitNuovaPraticaAction(
   const brokerId = session.user.companyId!;
   const userId = session.user.id!;
 
-  // Multi-sede: la pratica è creata dalla sede broker operativa corrente.
+  // Multi-sede: la pratica è creata da una sede broker. Il wizard invia la sede
+  // scelta nel selettore "Sede di partenza" (campo brokerSedeId); il server la
+  // valida contro le sedi accessibili. Senza id (dealer con una sola sede o
+  // vista già su una singola sede) si ricade sulla sede operativa.
   const ctx = await getSessionContext();
+  const submittedSedeId = formData.get('brokerSedeId');
   const operatingSede = ctx
-    ? resolveOperatingSede({ currentSede: ctx.currentSede, accessibleSedi: ctx.accessibleSedi })
+    ? resolveSubmittedSede({
+        submittedId: typeof submittedSedeId === 'string' ? submittedSedeId : null,
+        currentSede: ctx.currentSede,
+        accessibleSedi: ctx.accessibleSedi,
+      })
     : null;
   if (!operatingSede) {
     redirect(
@@ -643,7 +651,15 @@ export async function submitNuovaPraticaAction(
   // e li mappiamo al rispettivo DocumentoTipo. Il permesso di soggiorno è
   // opzionale (la presenza per stranieri è già gestita dall'engine via BLOCCO).
   type IdentitaDocCandidate = {
-    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'CODICE_FISCALE' | 'PERMESSO_SOGGIORNO' | 'VISURA_CAMERALE';
+    tipo:
+      | 'CI_FRONTE'
+      | 'CI_RETRO'
+      | 'PASSAPORTO'
+      | 'PATENTE'
+      | 'CODICE_FISCALE'
+      | 'CODICE_FISCALE_RETRO'
+      | 'PERMESSO_SOGGIORNO'
+      | 'VISURA_CAMERALE';
     owner: 'VENDITORE' | 'ACQUIRENTE';
     // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
     // documento appartiene (serve per il linkage Documento.venditoreId).
@@ -714,10 +730,11 @@ export async function submitNuovaPraticaAction(
 
     if (richiedeCf) {
       const cf = getRef(`${prefix}_CF`);
-      if (!cf || cf.size === 0) {
+      const cfRetro = getRef(`${prefix}_CF_RETRO`);
+      if (!cf || cf.size === 0 || !cfRetro || cfRetro.size === 0) {
         redirect(
           `/pratiche/nuova?error=${encodeURIComponent(
-            `Tessera sanitaria / codice fiscale mancante per ${labelParte}`,
+            `Tessera sanitaria / codice fiscale (fronte e retro) mancante per ${labelParte}`,
           )}`,
         );
       }
@@ -726,6 +743,12 @@ export async function submitNuovaPraticaAction(
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(cf!, 'tessera sanitaria / codice fiscale'),
+      });
+      identitaCandidates.push({
+        tipo: 'CODICE_FISCALE_RETRO',
+        owner,
+        venditoreOrdine,
+        ref: validateIdentitaRef(cfRetro!, 'tessera sanitaria / codice fiscale (retro)'),
       });
     }
 
@@ -855,24 +878,21 @@ export async function submitNuovaPraticaAction(
     return out;
   };
 
-  // Gate ATECO (minivoltura): l'acquirente è un operatore auto; la sua attività
-  // (visura) deve rientrare tra i codici ammessi per i commercianti auto
-  // (allowlist DEALER, gestita da admin in /admin/ateco). Stesso controllo della
-  // registrazione. Sulle pratiche SEMPLICI il gate non si applica.
-  const atecoAllowedDealer: AllowedAteco[] =
-    d.tipo === 'MINIVOLTURA'
-      ? await prisma.atecoAllowedCode.findMany({
-          where: { companyType: 'DEALER', active: true },
-          select: { companyType: true, code: true, active: true },
-        })
-      : [];
+  // ATECO commercianti auto (allowlist DEALER, gestita da admin in /admin/ateco).
+  // Serve per OGNI società coinvolta: decide se la visura è di un commerciante
+  // d'auto e quindi se applicare la freschezza ≤6 mesi. Il BLOCCO "deve essere
+  // commerciante" resta solo per l'acquirente della minivoltura (richiedeOperatoreAuto).
+  const atecoAllowedDealer: AllowedAteco[] = await prisma.atecoAllowedCode.findMany({
+    where: { companyType: 'DEALER', active: true },
+    select: { companyType: true, code: true, active: true },
+  });
 
   const partiDaVerificare: {
     parte: ParteDati;
     prefix: string;
     docId: 'CI' | 'PASSAPORTO' | 'PATENTE';
     label: string;
-    atecoAllowed?: AllowedAteco[];
+    richiedeOperatoreAuto: boolean;
   }[] = [
     ...venditori.map((v) => ({
       parte: {
@@ -888,6 +908,7 @@ export async function submitNuovaPraticaAction(
       prefix: `VEND${v.ordine}`,
       docId: v.docId,
       label: venditori.length > 1 ? `Venditore ${v.ordine}` : 'Venditore',
+      richiedeOperatoreAuto: false,
     })),
     {
       parte: {
@@ -903,20 +924,18 @@ export async function submitNuovaPraticaAction(
       prefix: 'ACQ',
       docId: d.acquirenteDocumentoIdentita,
       label: 'Acquirente',
-      // Solo l'acquirente della minivoltura passa per il gate ATECO.
-      atecoAllowed: d.tipo === 'MINIVOLTURA' ? atecoAllowedDealer : undefined,
+      // L'acquirente della minivoltura DEVE essere commerciante d'auto.
+      richiedeOperatoreAuto: d.tipo === 'MINIVOLTURA',
     },
   ];
 
   const verificheParti = await Promise.all(
     partiDaVerificare.map(async (x) => ({
       label: x.label,
-      esito: validaParte(
-        x.parte,
-        await ocrParteServer(x.prefix, x.docId),
-        new Date(),
-        x.atecoAllowed ? { atecoAllowed: x.atecoAllowed } : undefined,
-      ),
+      esito: validaParte(x.parte, await ocrParteServer(x.prefix, x.docId), new Date(), {
+        atecoAllowed: atecoAllowedDealer,
+        richiedeOperatoreAuto: x.richiedeOperatoreAuto,
+      }),
     })),
   );
   const parteKo = verificheParti.find((v) => !v.esito.ok);

@@ -29,6 +29,7 @@ export type DocumentoTipoEngine =
   | 'CI_FRONTE'
   | 'CI_RETRO'
   | 'CODICE_FISCALE'
+  | 'CODICE_FISCALE_RETRO'
   | 'PROCURA'
   | 'PERMESSO_SOGGIORNO'
   | 'VISURA_CAMERALE'

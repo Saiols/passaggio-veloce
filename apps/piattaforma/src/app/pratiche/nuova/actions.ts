@@ -6,9 +6,10 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { resolveOperatingSede } from '@/lib/sedi/scope';
+import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
+import { parseLibrettoText } from '@/lib/providers/ocr/libretto-parser';
 import {
   extractIdentita,
   type IdentitaData,
@@ -91,28 +92,25 @@ export type ExtractLibrettoResult =
   | { ok: false; error: string };
 
 export async function extractLibrettoAction(
-  ref: FileRef,
+  fronte: FileRef,
+  retro: FileRef,
 ): Promise<ExtractLibrettoResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
 
-  if (!ref?.key || ref.size === 0) {
-    return { ok: false, error: 'File libretto mancante' };
-  }
-  if (ref.size > MAX_LIBRETTO_BYTES) {
-    return { ok: false, error: 'File troppo grande (max 10 MB)' };
-  }
-  if (!ACCEPTED_MIME.includes(ref.type)) {
-    return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+  for (const [ref, label] of [[fronte, 'fronte'], [retro, 'retro']] as const) {
+    if (!ref?.key || ref.size === 0) {
+      return { ok: false, error: `File libretto ${label} mancante` };
+    }
+    if (ref.size > MAX_LIBRETTO_BYTES) {
+      return { ok: false, error: 'File troppo grande (max 10 MB)' };
+    }
+    if (!ACCEPTED_MIME.includes(ref.type)) {
+      return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+    }
   }
 
-  const buffer = await storageGetBuffer(ref.key);
   const ocr = await getOcr();
-  const input = {
-    buffer,
-    mimeType: ref.type,
-    originalFilename: ref.name,
-  };
 
   type AttemptResult =
     | { ok: true; data: LibrettoCircolazioneData }
@@ -128,7 +126,21 @@ export async function extractLibrettoAction(
   const startedAt = Date.now();
   const attemptExtract = async (): Promise<AttemptResult> => {
     try {
-      const data = await ocr.extractLibretto(input);
+      const tFronte = (
+        await ocr.extractText({
+          buffer: await storageGetBuffer(fronte.key),
+          mimeType: fronte.type,
+          originalFilename: fronte.name,
+        })
+      ).text;
+      const tRetro = (
+        await ocr.extractText({
+          buffer: await storageGetBuffer(retro.key),
+          mimeType: retro.type,
+          originalFilename: retro.name,
+        })
+      ).text;
+      const data = parseLibrettoText(`${tFronte}\n${tRetro}`, 1);
       return { ok: true, data };
     } catch (e) {
       const elapsedMs = Date.now() - startedAt;
@@ -457,10 +469,18 @@ export async function submitNuovaPraticaAction(
   const brokerId = session.user.companyId!;
   const userId = session.user.id!;
 
-  // Multi-sede: la pratica è creata dalla sede broker operativa corrente.
+  // Multi-sede: la pratica è creata da una sede broker. Il wizard invia la sede
+  // scelta nel selettore "Sede di partenza" (campo brokerSedeId); il server la
+  // valida contro le sedi accessibili. Senza id (dealer con una sola sede o
+  // vista già su una singola sede) si ricade sulla sede operativa.
   const ctx = await getSessionContext();
+  const submittedSedeId = formData.get('brokerSedeId');
   const operatingSede = ctx
-    ? resolveOperatingSede({ currentSede: ctx.currentSede, accessibleSedi: ctx.accessibleSedi })
+    ? resolveSubmittedSede({
+        submittedId: typeof submittedSedeId === 'string' ? submittedSedeId : null,
+        currentSede: ctx.currentSede,
+        accessibleSedi: ctx.accessibleSedi,
+      })
     : null;
   if (!operatingSede) {
     redirect(
@@ -512,17 +532,25 @@ export async function submitNuovaPraticaAction(
     );
   }
 
-  // Libretto per ciascun veicolo: slot LIBRETTO_1..LIBRETTO_<n> (in ordine).
-  const librettoRefs: FileRef[] = [];
+  // Libretto per ciascun veicolo: fronte + retro (slot LIBRETTO_<i>_FRONTE e
+  // LIBRETTO_<i>_RETRO). Entrambi obbligatori — il retro può portare etichette
+  // di trasferimento che sovrascrivono il fronte nell'OCR combinato.
+  const librettoFronteRefs: FileRef[] = [];
+  const librettoRetroRefs: FileRef[] = [];
   for (let i = 1; i <= veicoli.length; i++) {
-    const r = getRef(`LIBRETTO_${i}`);
-    if (!r || r.size === 0) {
-      redirect(`/pratiche/nuova?error=Libretto%20veicolo%20${i}%20mancante`);
+    const rFronte = getRef(`LIBRETTO_${i}_FRONTE`);
+    const rRetro = getRef(`LIBRETTO_${i}_RETRO`);
+    if (!rFronte || rFronte.size === 0) {
+      redirect(`/pratiche/nuova?error=Libretto%20fronte%20veicolo%20${i}%20mancante`);
     }
-    if (r!.size > MAX_LIBRETTO_BYTES) {
+    if (!rRetro || rRetro.size === 0) {
+      redirect(`/pratiche/nuova?error=Libretto%20retro%20veicolo%20${i}%20mancante`);
+    }
+    if (rFronte!.size > MAX_LIBRETTO_BYTES || rRetro!.size > MAX_LIBRETTO_BYTES) {
       redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
     }
-    librettoRefs.push(r!);
+    librettoFronteRefs.push(rFronte!);
+    librettoRetroRefs.push(rRetro!);
   }
 
   // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
@@ -643,7 +671,16 @@ export async function submitNuovaPraticaAction(
   // e li mappiamo al rispettivo DocumentoTipo. Il permesso di soggiorno è
   // opzionale (la presenza per stranieri è già gestita dall'engine via BLOCCO).
   type IdentitaDocCandidate = {
-    tipo: 'CI_FRONTE' | 'CI_RETRO' | 'PASSAPORTO' | 'PATENTE' | 'CODICE_FISCALE' | 'PERMESSO_SOGGIORNO' | 'VISURA_CAMERALE';
+    tipo:
+      | 'CI_FRONTE'
+      | 'CI_RETRO'
+      | 'PASSAPORTO'
+      | 'PATENTE'
+      | 'PATENTE_RETRO'
+      | 'CODICE_FISCALE'
+      | 'CODICE_FISCALE_RETRO'
+      | 'PERMESSO_SOGGIORNO'
+      | 'VISURA_CAMERALE';
     owner: 'VENDITORE' | 'ACQUIRENTE';
     // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
     // documento appartiene (serve per il linkage Documento.venditoreId).
@@ -667,8 +704,8 @@ export async function submitNuovaPraticaAction(
   };
 
   // Raccoglie i file identità di una parte secondo il tipo di documento scelto.
-  // Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO; passaporto/patente:
-  // <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO. Per i venditori
+  // Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO; patente: _ID_FRONTE/_ID_RETRO;
+  // passaporto: <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO. Per i venditori
   // `venditoreOrdine` tagga i candidati per il successivo linkage al Venditore.
   const collectIdentita = (
     owner: 'VENDITORE' | 'ACQUIRENTE',
@@ -681,31 +718,35 @@ export async function submitNuovaPraticaAction(
     const missingMsg = `/pratiche/nuova?error=${encodeURIComponent(
       `Documento d'identità mancante per ${labelParte}`,
     )}`;
-    if (documentoIdentita === 'CI') {
+    if (documentoIdentita === 'CI' || documentoIdentita === 'PATENTE') {
       const fronte = getRef(`${prefix}_ID_FRONTE`);
       const retro = getRef(`${prefix}_ID_RETRO`);
       if (!fronte || fronte.size === 0 || !retro || retro.size === 0) {
         redirect(missingMsg);
       }
+      const [tFronte, tRetro] = documentoIdentita === 'CI'
+        ? (['CI_FRONTE', 'CI_RETRO'] as const)
+        : (['PATENTE', 'PATENTE_RETRO'] as const);
       identitaCandidates.push({
-        tipo: 'CI_FRONTE',
+        tipo: tFronte,
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(fronte!, "documento d'identità"),
       });
       identitaCandidates.push({
-        tipo: 'CI_RETRO',
+        tipo: tRetro,
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(retro!, "documento d'identità"),
       });
     } else {
+      // solo PASSAPORTO: slot singolo _ID → tipo 'PASSAPORTO'
       const id = getRef(`${prefix}_ID`);
       if (!id || id.size === 0) {
         redirect(missingMsg);
       }
       identitaCandidates.push({
-        tipo: documentoIdentita === 'PASSAPORTO' ? 'PASSAPORTO' : 'PATENTE',
+        tipo: 'PASSAPORTO',
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(id!, "documento d'identità"),
@@ -714,10 +755,11 @@ export async function submitNuovaPraticaAction(
 
     if (richiedeCf) {
       const cf = getRef(`${prefix}_CF`);
-      if (!cf || cf.size === 0) {
+      const cfRetro = getRef(`${prefix}_CF_RETRO`);
+      if (!cf || cf.size === 0 || !cfRetro || cfRetro.size === 0) {
         redirect(
           `/pratiche/nuova?error=${encodeURIComponent(
-            `Tessera sanitaria / codice fiscale mancante per ${labelParte}`,
+            `Tessera sanitaria / codice fiscale (fronte e retro) mancante per ${labelParte}`,
           )}`,
         );
       }
@@ -726,6 +768,12 @@ export async function submitNuovaPraticaAction(
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(cf!, 'tessera sanitaria / codice fiscale'),
+      });
+      identitaCandidates.push({
+        tipo: 'CODICE_FISCALE_RETRO',
+        owner,
+        venditoreOrdine,
+        ref: validateIdentitaRef(cfRetro!, 'tessera sanitaria / codice fiscale (retro)'),
       });
     }
 
@@ -811,7 +859,7 @@ export async function submitNuovaPraticaAction(
     docId: 'CI' | 'PASSAPORTO' | 'PATENTE',
   ): Promise<OcrParte> => {
     const out: OcrParte = {};
-    const idRef = docId === 'CI' ? getRef(`${prefix}_ID_FRONTE`) : getRef(`${prefix}_ID`);
+    const idRef = docId === 'CI' || docId === 'PATENTE' ? getRef(`${prefix}_ID_FRONTE`) : getRef(`${prefix}_ID`);
     if (idRef) {
       const text = (
         await (await getOcr()).extractText({
@@ -855,24 +903,21 @@ export async function submitNuovaPraticaAction(
     return out;
   };
 
-  // Gate ATECO (minivoltura): l'acquirente è un operatore auto; la sua attività
-  // (visura) deve rientrare tra i codici ammessi per i commercianti auto
-  // (allowlist DEALER, gestita da admin in /admin/ateco). Stesso controllo della
-  // registrazione. Sulle pratiche SEMPLICI il gate non si applica.
-  const atecoAllowedDealer: AllowedAteco[] =
-    d.tipo === 'MINIVOLTURA'
-      ? await prisma.atecoAllowedCode.findMany({
-          where: { companyType: 'DEALER', active: true },
-          select: { companyType: true, code: true, active: true },
-        })
-      : [];
+  // ATECO commercianti auto (allowlist DEALER, gestita da admin in /admin/ateco).
+  // Serve per OGNI società coinvolta: decide se la visura è di un commerciante
+  // d'auto e quindi se applicare la freschezza ≤6 mesi. Il BLOCCO "deve essere
+  // commerciante" resta solo per l'acquirente della minivoltura (richiedeOperatoreAuto).
+  const atecoAllowedDealer: AllowedAteco[] = await prisma.atecoAllowedCode.findMany({
+    where: { companyType: 'DEALER', active: true },
+    select: { companyType: true, code: true, active: true },
+  });
 
   const partiDaVerificare: {
     parte: ParteDati;
     prefix: string;
     docId: 'CI' | 'PASSAPORTO' | 'PATENTE';
     label: string;
-    atecoAllowed?: AllowedAteco[];
+    richiedeOperatoreAuto: boolean;
   }[] = [
     ...venditori.map((v) => ({
       parte: {
@@ -888,6 +933,7 @@ export async function submitNuovaPraticaAction(
       prefix: `VEND${v.ordine}`,
       docId: v.docId,
       label: venditori.length > 1 ? `Venditore ${v.ordine}` : 'Venditore',
+      richiedeOperatoreAuto: false,
     })),
     {
       parte: {
@@ -903,20 +949,18 @@ export async function submitNuovaPraticaAction(
       prefix: 'ACQ',
       docId: d.acquirenteDocumentoIdentita,
       label: 'Acquirente',
-      // Solo l'acquirente della minivoltura passa per il gate ATECO.
-      atecoAllowed: d.tipo === 'MINIVOLTURA' ? atecoAllowedDealer : undefined,
+      // L'acquirente della minivoltura DEVE essere commerciante d'auto.
+      richiedeOperatoreAuto: d.tipo === 'MINIVOLTURA',
     },
   ];
 
   const verificheParti = await Promise.all(
     partiDaVerificare.map(async (x) => ({
       label: x.label,
-      esito: validaParte(
-        x.parte,
-        await ocrParteServer(x.prefix, x.docId),
-        new Date(),
-        x.atecoAllowed ? { atecoAllowed: x.atecoAllowed } : undefined,
-      ),
+      esito: validaParte(x.parte, await ocrParteServer(x.prefix, x.docId), new Date(), {
+        atecoAllowed: atecoAllowedDealer,
+        richiedeOperatoreAuto: x.richiedeOperatoreAuto,
+      }),
     })),
   );
   const parteKo = verificheParti.find((v) => !v.esito.ok);
@@ -940,7 +984,8 @@ export async function submitNuovaPraticaAction(
   // Mappiamo ogni BlobRef nella forma StoragePutResult attesa dalle create
   // Documento (storageKey = chiave Blob, niente trasferimento di byte).
   const ocrManuale = formData.get('ocrManuale') === 'true';
-  const librettoUploads = librettoRefs.map(refToPut);
+  const librettoFronteUploads = librettoFronteRefs.map(refToPut);
+  const librettoRetroUploads = librettoRetroRefs.map(refToPut);
 
   // Schema Documentale v7 (SD-B): documenti richiesti.
   const docUploads = docCandidates.map(({ d: docReq, ref }) => ({
@@ -1022,11 +1067,14 @@ export async function submitNuovaPraticaAction(
     },
   });
 
-    // Un Veicolo per elemento (ordine 1..n) + il libretto collegato.
+    // Un Veicolo per elemento (ordine 1..n) + i libretti (fronte + retro)
+    // collegati come due righe Documento: LIBRETTO_CIRCOLAZIONE (fronte) e
+    // LIBRETTO_CIRCOLAZIONE_RETRO (retro).
     const veicoloIdByOrdine = new Map<number, string>();
     for (let i = 0; i < veicoli.length; i++) {
       const v = veicoli[i]!;
-      const upload = librettoUploads[i]!;
+      const uploadFronte = librettoFronteUploads[i]!;
+      const uploadRetro = librettoRetroUploads[i]!;
       const veicolo = await tx.veicolo.create({
         data: {
           praticaId: created.id,
@@ -1058,21 +1106,38 @@ export async function submitNuovaPraticaAction(
         ocrManuale,
       };
 
+      // Fronte: porta l'OCR snapshot e il verdict.
       await tx.documento.create({
         data: {
           tipo: 'LIBRETTO_CIRCOLAZIONE',
           praticaId: created.id,
           veicoloId: veicolo.id,
-          storageKey: upload.storageKey,
-          storageProvider: upload.storageProvider,
-          mimeType: upload.mimeType,
-          sizeBytes: upload.sizeBytes,
-          originalFilename: upload.originalFilename,
+          storageKey: uploadFronte.storageKey,
+          storageProvider: uploadFronte.storageProvider,
+          mimeType: uploadFronte.mimeType,
+          sizeBytes: uploadFronte.sizeBytes,
+          originalFilename: uploadFronte.originalFilename,
           uploadedById: userId,
           ocrStato: ocrManuale ? 'FAILED' : 'SUCCESS',
           ocrProvider: env.OCR_PROVIDER,
           ocrData: ocrSnapshot,
           ocrAt: now,
+          gatingStato: 'PASSED',
+        },
+      });
+      // Retro: nessun OCR autonomo (contribuisce all'OCR combinato del fronte).
+      await tx.documento.create({
+        data: {
+          tipo: 'LIBRETTO_CIRCOLAZIONE_RETRO',
+          praticaId: created.id,
+          veicoloId: veicolo.id,
+          storageKey: uploadRetro.storageKey,
+          storageProvider: uploadRetro.storageProvider,
+          mimeType: uploadRetro.mimeType,
+          sizeBytes: uploadRetro.sizeBytes,
+          originalFilename: uploadRetro.originalFilename,
+          uploadedById: userId,
+          ocrStato: 'NONE',
           gatingStato: 'PASSED',
         },
       });

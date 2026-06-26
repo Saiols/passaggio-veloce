@@ -4,8 +4,9 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
-import { formatCurrencyCent, formatDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { suspendSedeAction, reactivateSedeAction } from '../actions';
+import { SedeEdit } from './sede-edit';
 
 export default async function SedeDetailPage({
   params,
@@ -70,32 +71,22 @@ export default async function SedeDetailPage({
           </div>
         </header>
 
-        <Card className="mb-5">
-          <h2 className="mb-4 text-[15px] font-bold text-pv-navy-800">Anagrafica</h2>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-            <Row label="Nome sede" value={sede.nome} />
-            <Row label="Indirizzo" value={[sede.indirizzo, sede.civico].filter(Boolean).join(', ')} />
-            <Row label="Città" value={`${sede.citta} (${sede.provincia})`} />
-            <Row label="CAP" value={sede.cap} />
-            <Row label="Telefono" value={sede.telefono ?? '—'} />
-            <Row label="Email operativa" value={sede.email ?? '—'} />
-            <Row label="Codice interno" value={sede.codiceInterno ?? '—'} />
-          </dl>
-        </Card>
-
-        <Card className="mb-5">
-          <h2 className="mb-4 text-[15px] font-bold text-pv-navy-800">Pagamenti</h2>
-          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-            <Row
-              label="IBAN"
-              value={sede.iban ?? 'Usa l’IBAN aziendale (madre)'}
-            />
-            <Row
-              label="Soglia payout automatico"
-              value={formatCurrencyCent(sede.payoutThresholdCent)}
-            />
-          </dl>
-        </Card>
+        <SedeEdit
+          sedeId={sede.id}
+          data={{
+            nome: sede.nome,
+            indirizzo: sede.indirizzo,
+            civico: sede.civico ?? '',
+            citta: sede.citta,
+            cap: sede.cap,
+            provincia: sede.provincia,
+            telefono: sede.telefono ?? '',
+            email: sede.email ?? '',
+            codiceInterno: sede.codiceInterno ?? '',
+            iban: sede.iban ?? '',
+            payoutThresholdCent: sede.payoutThresholdCent,
+          }}
+        />
 
         <Card>
           <h2 className="mb-2 text-[15px] font-bold text-pv-navy-800">Affiliazione</h2>
@@ -109,14 +100,5 @@ export default async function SedeDetailPage({
         </Card>
       </div>
     </AppShell>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">{label}</dt>
-      <dd className="mt-0.5 truncate text-[14px] text-pv-navy-900">{value}</dd>
-    </div>
   );
 }

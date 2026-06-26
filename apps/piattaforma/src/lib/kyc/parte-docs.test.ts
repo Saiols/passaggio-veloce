@@ -98,6 +98,25 @@ describe('verificaVisura', () => {
   it('niente estratto → ILLEGGIBILE', () => {
     expect(verificaVisura(AZIENDA, undefined, NOW)).toBe('ILLEGGIBILE');
   });
+  it('requireFreshness=false: visura > 6 mesi → MATCH (niente controllo data)', () => {
+    expect(
+      verificaVisura(AZIENDA, { ...fresca, dataEmissione: '2025-11-01' }, NOW, { requireFreshness: false }),
+    ).toBe('MATCH');
+  });
+  it('requireFreshness=false: senza data → MATCH (niente controllo data)', () => {
+    expect(
+      verificaVisura(AZIENDA, { partitaIva: '12345678901', denominazione: 'Auto Veloci SRL' }, NOW, {
+        requireFreshness: false,
+      }),
+    ).toBe('MATCH');
+  });
+  it('requireFreshness=false ma azienda diversa → MISMATCH (il match resta)', () => {
+    expect(
+      verificaVisura(AZIENDA, { partitaIva: '99999999999', denominazione: 'Altra SPA' }, NOW, {
+        requireFreshness: false,
+      }),
+    ).toBe('MISMATCH');
+  });
 });
 
 describe('verificaPermesso', () => {
@@ -213,44 +232,74 @@ describe('validaParte — gate ATECO acquirente operatore auto (minivoltura)', (
     },
   });
 
+  // L'acquirente minivoltura DEVE essere commerciante d'auto: flag dedicato.
+  const MINI = { atecoAllowed: ALLOWED_DEALER, richiedeOperatoreAuto: true };
+
   it('codice ATECO ammesso → ok', () => {
-    const r = validaParte(OPERATORE, ocrConAteco(['45.11.01']), NOW, {
-      atecoAllowed: ALLOWED_DEALER,
-    });
+    const r = validaParte(OPERATORE, ocrConAteco(['45.11.01']), NOW, MINI);
     expect(r.ok).toBe(true);
     expect(r.problemi).toEqual([]);
   });
 
   it('basta che UNO dei codici della visura sia ammesso → ok', () => {
-    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00', '47.81.10']), NOW, {
-      atecoAllowed: ALLOWED_DEALER,
-    });
+    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00', '47.81.10']), NOW, MINI);
     expect(r.ok).toBe(true);
   });
 
   it('nessun codice ATECO ammesso → blocco con i codici nel messaggio', () => {
-    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00', '70.22.09']), NOW, {
-      atecoAllowed: ALLOWED_DEALER,
-    });
+    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00', '70.22.09']), NOW, MINI);
     expect(r.ok).toBe(false);
     expect(r.problemi.join(' ')).toMatch(/ATECO/);
     expect(r.problemi.join(' ')).toMatch(/62\.01\.00/);
   });
 
   it('visura senza ATECO estraibile → nessun blocco ATECO (parità registrazione)', () => {
-    expect(validaParte(OPERATORE, ocrConAteco([]), NOW, { atecoAllowed: ALLOWED_DEALER }).ok).toBe(true);
-    expect(validaParte(OPERATORE, ocrConAteco(undefined), NOW, { atecoAllowed: ALLOWED_DEALER }).ok).toBe(true);
+    expect(validaParte(OPERATORE, ocrConAteco([]), NOW, MINI).ok).toBe(true);
+    expect(validaParte(OPERATORE, ocrConAteco(undefined), NOW, MINI).ok).toBe(true);
   });
 
-  it('senza opts.atecoAllowed → il gate ATECO non si attiva', () => {
-    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00']), NOW);
+  it('senza richiedeOperatoreAuto → il gate ATECO non blocca', () => {
+    const r = validaParte(OPERATORE, ocrConAteco(['62.01.00']), NOW, { atecoAllowed: ALLOWED_DEALER });
     expect(r.ok).toBe(true);
   });
 
-  it('parte AZIENDA (non operatore auto) → ATECO mai controllato anche con allowlist', () => {
+  it('parte AZIENDA (non operatore auto) → ATECO mai bloccante anche con allowlist', () => {
     const r = validaParte({ ...AZIENDA }, ocrConAteco(['62.01.00']), NOW, {
       atecoAllowed: ALLOWED_DEALER,
     });
+    expect(r.ok).toBe(true);
+  });
+
+  // --- Freshness ≤6 mesi condizionata all'essere commerciante d'auto ---
+  const visuraVecchia = (atecoCodes?: string[]) => ({
+    identita: { nome: 'Mario', cognome: 'Rossi' },
+    visura: {
+      partitaIva: '12345678901',
+      denominazione: 'Auto Veloci SRL',
+      dataEmissione: '2025-11-01', // > 6 mesi prima di NOW (2026-06-06)
+      atecoCodes,
+    },
+  });
+
+  it('commerciante (ATECO dealer) con visura vecchia → SCADUTO', () => {
+    const r = validaParte(OPERATORE, visuraVecchia(['45.11.01']), NOW, MINI);
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/scadut/i);
+  });
+
+  it('acquirente minivoltura: visura vecchia → SCADUTO anche se ATECO non estraibile', () => {
+    const r = validaParte(OPERATORE, visuraVecchia([]), NOW, MINI);
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/scadut/i);
+  });
+
+  it('società NON commerciante: visura vecchia → ok (niente controllo data)', () => {
+    const r = validaParte(AZIENDA, visuraVecchia(['62.01.00']), NOW, { atecoAllowed: ALLOWED_DEALER });
+    expect(r.ok).toBe(true);
+  });
+
+  it('società con ATECO non estraibile (non confermata commerciante): visura vecchia → ok', () => {
+    const r = validaParte(AZIENDA, visuraVecchia(undefined), NOW, { atecoAllowed: ALLOWED_DEALER });
     expect(r.ok).toBe(true);
   });
 });

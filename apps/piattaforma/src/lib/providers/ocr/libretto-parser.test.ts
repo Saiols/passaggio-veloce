@@ -439,6 +439,30 @@ describe('parseLibrettoText — pre-2015 da (I)', () => {
   });
 });
 
+describe('parseLibrettoText — testo combinato fronte+retro', () => {
+  const fronte = `(A) FW248XP
+(D.2) A1 DGTEXOAC4 FM6FM62S0347CP1CA
+(E) WVGZZZA1ZKV096161
+(C.2.1) NOLEGGIO AUTO ITALIA
+SPA
+(12345678903)`;
+  const retro = `SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2) proprietario del veicolo
+*** TRASFERIMENTO DI PROPRIETA' ***
+/19.09.2017
+NATO IL 12.12.1975 A MILANO
+PROPRIETARIO ROSSI MARA
+-MI (RSSMRA80A01F205X)`;
+  const r = parseLibrettoText(`${fronte}\n${retro}`, 0.9);
+  it('telaio da (E) del fronte', () => {
+    expect(r.telaio).toBe('WVGZZZA1ZKV096161');
+  });
+  it('proprietario dall’etichetta del retro (override C.2.1)', () => {
+    expect(r.proprietarioAttuale).toBe('ROSSI MARA');
+    expect(r.proprietarioCf).toBe('RSSMRA80A01F205X');
+  });
+});
+
 describe('parseLibrettoText — robustezza', () => {
   it('campi assenti restano undefined senza lanciare', () => {
     const r = parseLibrettoText('TESTO SENZA DATI', 0.5);

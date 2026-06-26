@@ -326,7 +326,8 @@ function labelDocumento(t: string): string {
     LIBRETTO_CIRCOLAZIONE: 'Libretto circolazione',
     CI_FRONTE: 'CI fronte',
     CI_RETRO: 'CI retro',
-    CODICE_FISCALE: 'Codice fiscale',
+    CODICE_FISCALE: 'Codice fiscale (fronte)',
+    CODICE_FISCALE_RETRO: 'Codice fiscale (retro)',
     PROCURA: 'Procura',
     PERMESSO_SOGGIORNO: 'Permesso di soggiorno',
     VISURA_CAMERALE: 'Visura camerale',
@@ -334,6 +335,10 @@ function labelDocumento(t: string): string {
     ALTRO: 'Altro',
     DELEGA_VENDITA: 'Procura a vendere',
     DOCUMENTO_DELEGATO: 'Documento delegato',
+    PATENTE: 'Patente (fronte)',
+    PATENTE_RETRO: 'Patente (retro)',
+    PASSAPORTO: 'Passaporto',
+    LIBRETTO_CIRCOLAZIONE_RETRO: 'Libretto (retro)',
   };
   return map[t] ?? t;
 }

@@ -130,11 +130,16 @@ export function verificaCodiceFiscale(
   return normalizeCf(expectedCf) === normalizeCf(e.codiceFiscale) ? 'MATCH' : 'MISMATCH';
 }
 
-/** Confronta la visura estratta con l'azienda inserita + freschezza ≤6 mesi. */
+/**
+ * Confronta la visura estratta con l'azienda inserita. La freschezza ≤6 mesi
+ * (`requireFreshness`, default true) si applica solo ai commercianti d'auto:
+ * per le altre società la data non viene controllata (vedi validaParte).
+ */
 export function verificaVisura(
   p: ParteDati,
   e: VisuraEstratta | undefined,
   now: Date,
+  opts?: { requireFreshness?: boolean },
 ): Verdetto {
   if (!e || (!e.denominazione && !e.partitaIva)) return 'ILLEGGIBILE';
   const ok = companyMatches(
@@ -142,8 +147,10 @@ export function verificaVisura(
     { denominazione: p.ragioneSociale ?? '', partitaIva: p.piva ?? '' },
   );
   if (!ok) return 'MISMATCH';
-  if (!e.dataEmissione) return 'ILLEGGIBILE';
-  if (!entroUltimiMesi(e.dataEmissione, VISURA_VALIDITA_MESI, now)) return 'SCADUTO';
+  if (opts?.requireFreshness ?? true) {
+    if (!e.dataEmissione) return 'ILLEGGIBILE';
+    if (!entroUltimiMesi(e.dataEmissione, VISURA_VALIDITA_MESI, now)) return 'SCADUTO';
+  }
   return 'MATCH';
 }
 
@@ -188,7 +195,14 @@ function messaggio(label: string, v: Verdetto): string {
  * ATECO sull'acquirente operatore auto della minivoltura: si passa solo per
  * quella parte; le altre non vengono mai controllate sull'ATECO.
  */
-export type ValidaParteOpts = { atecoAllowed?: AllowedAteco[] };
+export type ValidaParteOpts = {
+  /** Allowlist ATECO commercianti auto: passata per ogni società. Determina se
+   *  la visura è di un commerciante d'auto (→ freschezza ≤6 mesi richiesta). */
+  atecoAllowed?: AllowedAteco[];
+  /** True SOLO per l'acquirente minivoltura: deve essere commerciante d'auto
+   *  (blocco se l'ATECO non lo conferma) e la freschezza è sempre richiesta. */
+  richiedeOperatoreAuto?: boolean;
+};
 
 export function validaParte(
   p: ParteDati,
@@ -203,23 +217,26 @@ export function validaParte(
   };
 
   if (req.visura) {
-    push('Visura camerale', verificaVisura(p, ocr.visura, now));
+    const codici = ocr.visura?.atecoCodes ?? [];
+    // Commerciante d'auto = almeno un codice ATECO della visura è nell'allowlist
+    // DEALER. Determina la freschezza richiesta (e, per la minivoltura, il blocco).
+    const isCommerciante =
+      !!opts?.atecoAllowed &&
+      codici.some((c) => isAtecoAllowed(c, 'DEALER', opts.atecoAllowed!));
+    // Freschezza ≤6 mesi solo per i commercianti d'auto; l'acquirente minivoltura
+    // (richiedeOperatoreAuto) è commerciante per definizione → sempre richiesta.
+    const requireFreshness = isCommerciante || !!opts?.richiedeOperatoreAuto;
+    push('Visura camerale', verificaVisura(p, ocr.visura, now, { requireFreshness }));
 
-    // Gate ATECO (minivoltura): l'acquirente operatore auto deve esercitare
-    // un'attività ammessa per i commercianti auto (allowlist DEALER). Stesso
-    // controllo della registrazione: match per prefisso, passa se ALMENO uno dei
-    // codici della visura è ammesso. Se la visura non espone codici ATECO non
-    // blocchiamo qui (lo coprono gli altri verdetti visura).
-    if (opts?.atecoAllowed && p.tipoSoggetto === 'OPERATORE_AUTO') {
-      const codici = ocr.visura?.atecoCodes ?? [];
-      if (
-        codici.length > 0 &&
-        !codici.some((c) => isAtecoAllowed(c, 'DEALER', opts.atecoAllowed!))
-      ) {
-        problemi.push(
-          `Il codice ATECO (${codici.join(', ')}) non rientra tra le attività ammesse per i commercianti auto.`,
-        );
-      }
+    // Gate ATECO: l'acquirente minivoltura DEVE essere commerciante d'auto.
+    // Match per prefisso sull'allowlist DEALER. Se la visura espone codici e
+    // nessuno è ammesso → blocco; senza codici non blocchiamo (come in
+    // registrazione). Gli OPERATORE_AUTO non-minivoltura (es. venditore) non
+    // vengono bloccati: per loro l'ATECO serve solo a decidere la freschezza.
+    if (opts?.richiedeOperatoreAuto && opts.atecoAllowed && codici.length > 0 && !isCommerciante) {
+      problemi.push(
+        `Il codice ATECO (${codici.join(', ')}) non rientra tra le attività ammesse per i commercianti auto.`,
+      );
     }
     // CI del legale rappresentante: dev'essere presente e leggibile; se la
     // visura espone un amministratore, dev'essere coerente.

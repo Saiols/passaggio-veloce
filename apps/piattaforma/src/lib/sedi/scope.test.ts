@@ -6,6 +6,7 @@ import {
   canSelectSede,
   sedeScopeIds,
   resolveOperatingSede,
+  resolveSubmittedSede,
   type SedeRef,
 } from './scope';
 
@@ -143,6 +144,60 @@ describe('resolveOperatingSede', () => {
 
   it('nessuna sede → null', () => {
     expect(resolveOperatingSede({ currentSede: null, accessibleSedi: [] })).toBeNull();
+  });
+});
+
+describe('resolveSubmittedSede', () => {
+  // Sede broker per una scrittura (creazione pratica) quando il client può
+  // inviare esplicitamente l'id sede scelto nel wizard.
+  it('id inviato e accessibile → quella sede', () => {
+    expect(
+      resolveSubmittedSede({
+        submittedId: 'b',
+        currentSede: { kind: 'ALL' },
+        accessibleSedi: companySedi,
+      }),
+    ).toEqual(sedeB);
+  });
+
+  it('id inviato NON accessibile → null (nessun fallback silenzioso)', () => {
+    expect(
+      resolveSubmittedSede({
+        submittedId: 'zzz',
+        currentSede: { kind: 'ONE', sede: sedeA },
+        accessibleSedi: companySedi,
+      }),
+    ).toBeNull();
+  });
+
+  it('nessun id inviato, vista ONE → la sede operativa', () => {
+    expect(
+      resolveSubmittedSede({
+        submittedId: null,
+        currentSede: { kind: 'ONE', sede: sedeB },
+        accessibleSedi: companySedi,
+      }),
+    ).toEqual(sedeB);
+  });
+
+  it('nessun id inviato, ALL con una sola sede → quella sede', () => {
+    expect(
+      resolveSubmittedSede({
+        submittedId: undefined,
+        currentSede: { kind: 'ALL' },
+        accessibleSedi: [sedeA],
+      }),
+    ).toEqual(sedeA);
+  });
+
+  it('nessun id inviato, ALL con più sedi → null (serve selezione)', () => {
+    expect(
+      resolveSubmittedSede({
+        submittedId: '',
+        currentSede: { kind: 'ALL' },
+        accessibleSedi: companySedi,
+      }),
+    ).toBeNull();
   });
 });
 

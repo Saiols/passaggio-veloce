@@ -98,6 +98,25 @@ export function resolveOperatingSede(args: {
 }
 
 /**
+ * Sede broker da usare per una SCRITTURA quando il client può inviare
+ * esplicitamente l'id sede scelto (es. selettore "Sede di partenza" nel wizard
+ * pratica). Se l'id è presente dev'essere tra le sedi accessibili (no fallback
+ * silenzioso, è un controllo di accesso); se assente si ricade sulla sede
+ * operativa del contesto (ONE, oppure ALL con una sola sede).
+ */
+export function resolveSubmittedSede(args: {
+  submittedId: string | null | undefined;
+  currentSede: CurrentSede | null;
+  accessibleSedi: SedeRef[];
+}): SedeRef | null {
+  const { submittedId, currentSede, accessibleSedi } = args;
+  if (submittedId) {
+    return accessibleSedi.find((s) => s.id === submittedId) ?? null;
+  }
+  return resolveOperatingSede({ currentSede, accessibleSedi });
+}
+
+/**
  * True se l'utente può selezionare `target` come sede corrente.
  * `target` = 'ALL' è permesso solo al proprietario; altrimenti dev'essere
  * una sede accessibile.

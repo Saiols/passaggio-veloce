@@ -103,6 +103,7 @@ enum DocumentoTipo {
   CI_FRONTE
   CI_RETRO
   CODICE_FISCALE
+  CODICE_FISCALE_RETRO
   PROCURA
   PERMESSO_SOGGIORNO
   VISURA_CAMERALE
@@ -116,6 +117,8 @@ enum DocumentoTipo {
   ALTRO
   PASSAPORTO
   PATENTE
+  PATENTE_RETRO
+  LIBRETTO_CIRCOLAZIONE_RETRO
   // Delega/procura a vendere (allegati pratica, no engine/gating)
   DELEGA_VENDITA
   DOCUMENTO_DELEGATO

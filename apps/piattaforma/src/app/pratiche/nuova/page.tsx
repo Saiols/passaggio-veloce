@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { resolveOperatingSede } from '@/lib/sedi/scope';
 import { WizardNuovaPratica } from './wizard';
 
 // Vercel function timeout: 60s su Hobby plan (max), 300s su Pro.
@@ -27,9 +29,24 @@ export default async function NuovaPraticaPage({
     select: { companyType: true, code: true, active: true },
   });
 
+  // Multi-sede: sedi del dealer per il selettore "Sede di partenza" nel wizard
+  // (mostrato solo con più di una sede). Default = sede operativa corrente se
+  // c'è (utente scoped a una sede); in vista "Tutte le sedi" resta vuoto, così
+  // il proprietario sceglie consapevolmente (niente attribuzione silenziosa).
+  const ctx = await getSessionContext();
+  const sedi = ctx?.accessibleSedi ?? [];
+  const defaultSedeId = ctx
+    ? resolveOperatingSede({ currentSede: ctx.currentSede, accessibleSedi: ctx.accessibleSedi })?.id
+    : undefined;
+
   return (
     <AppShell session={session} activePath="/pratiche">
-      <WizardNuovaPratica error={sp.error} atecoAllowed={atecoAllowed} />
+      <WizardNuovaPratica
+        error={sp.error}
+        atecoAllowed={atecoAllowed}
+        sedi={sedi}
+        defaultSedeId={defaultSedeId}
+      />
     </AppShell>
   );
 }

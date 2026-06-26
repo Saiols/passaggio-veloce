@@ -155,30 +155,31 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
 
   // ─── Emittente / Destinatario ────────────────────────────────────
   const colW = (PAGE_W - MARGIN * 2 - 20) / 2;
+  // Gap di sicurezza: i campi vanno a capo entro la colonna così i valori
+  // lunghi (ragione sociale, indirizzo, PEC) non arrivano al bordo laterale.
+  const PARTE_GAP = 6;
   const drawParte = (titolo: string, d: DatiFiscali, x: number, sede?: SedeRiferimento | null): void => {
     let yy = y;
     text(page, titolo, x, yy, { font: helvBold, size: 9, color: SLATE_500 });
     yy -= 15;
-    text(page, d.ragioneSociale, x, yy, { font: helvBold, size: 11, color: NAVY });
-    if (sede) {
-      yy -= 13;
-      text(page, `Sede: ${sedeLinea(sede)}`, x, yy, { font: helvBold, size: 9, color: NAVY_700 });
-    }
-    yy -= 14;
-    text(page, `P.IVA ${d.partitaIva}`, x, yy, { size: 9 });
+    // Disegna un campo andando a capo entro la larghezza colonna; avanza yy
+    // di una riga per ogni riga prodotta.
+    const drawField = (
+      value: string,
+      opts: { font?: PDFFont; size?: number; color?: ReturnType<typeof rgb> },
+      lh: number,
+    ): void => {
+      const lines = wrapText(value, opts.font ?? helv, opts.size ?? 9, colW - PARTE_GAP);
+      lines.forEach((ln, i) => text(page, ln, x, yy - i * lh, opts));
+      yy -= lines.length * lh;
+    };
+    drawField(d.ragioneSociale, { font: helvBold, size: 11, color: NAVY }, 14);
+    if (sede) drawField(`Sede: ${sedeLinea(sede)}`, { font: helvBold, size: 9, color: NAVY_700 }, 13);
+    drawField(`P.IVA ${d.partitaIva}`, { size: 9 }, 12);
     const addr = indirizzoLinea(d);
-    if (addr) {
-      yy -= 12;
-      text(page, addr, x, yy, { size: 9 });
-    }
-    if (d.codiceSdi) {
-      yy -= 12;
-      text(page, `SDI ${d.codiceSdi}`, x, yy, { size: 9 });
-    }
-    if (d.pec) {
-      yy -= 12;
-      text(page, `PEC ${d.pec}`, x, yy, { size: 9 });
-    }
+    if (addr) drawField(addr, { size: 9 }, 12);
+    if (d.codiceSdi) drawField(`SDI ${d.codiceSdi}`, { size: 9 }, 12);
+    if (d.pec) drawField(`PEC ${d.pec}`, { size: 9 }, 12);
   };
   drawParte('EMITTENTE', input.emittente, MARGIN, input.sede?.lato === 'emittente' ? input.sede : null);
   drawParte(

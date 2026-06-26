@@ -15,6 +15,7 @@ import {
   type TipoSoggetto,
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
+import type { SedeRef } from '@/lib/sedi/scope';
 import { intestatariPerVeicolo, crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
   delegatoDocKey,
@@ -83,6 +84,8 @@ type IdentitaFiles = {
   visura?: BlobSlot;
   /** Tessera sanitaria / codice fiscale (fronte), quando l'identificazione non è CIE. */
   codiceFiscale?: BlobSlot;
+  /** Tessera sanitaria / codice fiscale (retro), raccolto insieme al fronte. */
+  codiceFiscaleRetro?: BlobSlot;
 };
 
 /**
@@ -91,14 +94,14 @@ type IdentitaFiles = {
  * Se la stringa è una sola parola, la usiamo come cognome (caso edge).
  */
 /**
- * A7: presenza documento d'identità per parte. Per la CI servono ENTRAMBE le
- * facciate (fronte+retro) — coerente con la validazione server-side; per
- * passaporto/patente basta il file singolo. Il permesso è opzionale.
- * "Presente" significa BlobRef caricata (non basta aver scelto il file: serve
- * che l'upload su Blob sia completato).
+ * A7: presenza documento d'identità per parte. Per la CI e la PATENTE servono
+ * ENTRAMBE le facciate (fronte+retro) — coerente con la validazione
+ * server-side; per il passaporto basta il file singolo. Il permesso è
+ * opzionale. "Presente" significa BlobRef caricata (non basta aver scelto il
+ * file: serve che l'upload su Blob sia completato).
  */
 function identitaPresente(docId: DocIdTipo, files: IdentitaFiles): boolean {
-  return docId === 'CI'
+  return docId === 'CI' || docId === 'PATENTE'
     ? !!files.fronte?.ref && !!files.retro?.ref
     : !!files.single?.ref;
 }
@@ -111,7 +114,8 @@ function identitaUploading(files: IdentitaFiles): boolean {
     slotUploading(files.single) ||
     slotUploading(files.permesso) ||
     slotUploading(files.visura) ||
-    slotUploading(files.codiceFiscale)
+    slotUploading(files.codiceFiscale) ||
+    slotUploading(files.codiceFiscaleRetro)
   );
 }
 
@@ -132,9 +136,13 @@ type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
 
 /** Dati di un singolo veicolo nel wizard (libretto + estrazione + correzioni). */
 type VeicoloInput = {
-  /** BlobRef del libretto caricato su Blob (slot LIBRETTO_<n> al submit). */
+  /** BlobRef del fronte libretto caricato su Blob (slot LIBRETTO_<n>_FRONTE al submit). */
   libretto: BlobSlot;
+  /** BlobRef del retro libretto caricato su Blob (slot LIBRETTO_<n>_RETRO al submit).
+   *  Il retro può portare etichette di trasferimento di proprietà. */
+  librettoRetro: BlobSlot;
   fileName: string | null;
+  fileNameRetro: string | null;
   ocr?: LibrettoCircolazioneData;
   extracting: boolean;
   ocrError: string | null;
@@ -153,7 +161,9 @@ type VeicoloInput = {
 function emptyVeicolo(): VeicoloInput {
   return {
     libretto: emptySlot(),
+    librettoRetro: emptySlot(),
     fileName: null,
+    fileNameRetro: null,
     ocr: undefined,
     extracting: false,
     ocrError: null,
@@ -256,11 +266,18 @@ function identitaForStorage(f: IdentitaFiles): IdentitaFiles {
   if (f.permesso) out.permesso = slotForStorage(f.permesso);
   if (f.visura) out.visura = slotForStorage(f.visura);
   if (f.codiceFiscale) out.codiceFiscale = slotForStorage(f.codiceFiscale);
+  if (f.codiceFiscaleRetro) out.codiceFiscaleRetro = slotForStorage(f.codiceFiscaleRetro);
   return out;
 }
 
 function veicoloForStorage(v: VeicoloInput): VeicoloInput {
-  return { ...v, libretto: slotForStorage(v.libretto), extracting: false, ocrError: null };
+  return {
+    ...v,
+    libretto: slotForStorage(v.libretto),
+    librettoRetro: slotForStorage(v.librettoRetro),
+    extracting: false,
+    ocrError: null,
+  };
 }
 
 /** Firma degli intestatari (deve coincidere con l'effect di prefill venditori). */
@@ -283,6 +300,7 @@ type WizardDraftState = {
   acquirenteIdentita: IdentitaFiles;
   acquirenteResidenzaDiversa: boolean;
   acquirenteIndirizzoResidenza: string;
+  brokerSedeId: string;
   comune: string;
   provincia: string;
   documenti: Record<string, BlobSlot>;
@@ -346,12 +364,21 @@ const TIPO_CARDS: {
 export function WizardNuovaPratica({
   error,
   atecoAllowed,
+  sedi,
+  defaultSedeId,
 }: {
   error?: string;
   /** Allowlist ATECO DEALER (admin /admin/ateco): gate operatore auto minivoltura. */
   atecoAllowed: AllowedAteco[];
+  /** Sedi del dealer; il selettore "Sede di partenza" appare solo con più d'una. */
+  sedi: SedeRef[];
+  /** Sede pre-selezionata (sede operativa corrente, o la prima accessibile). */
+  defaultSedeId?: string;
 }) {
   const [step, setStep] = useState(1);
+  // Multi-sede: sede broker da cui parte la pratica (selettore in step 4).
+  const multiSede = sedi.length > 1;
+  const [brokerSedeId, setBrokerSedeId] = useState(defaultSedeId ?? '');
 
   // Al cambio step riporta la pagina in cima: gli step sono lunghi (upload +
   // OCR + verifiche) e l'utente deve ripartire dall'inizio della sezione.
@@ -429,7 +456,7 @@ export function WizardNuovaPratica({
     setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
 
   // Documento d'identità per parte (A7): tipo scelto + file caricati. Il file
-  // principale (fronte CI / single passaporto-patente) avvia l'OCR di pre-fill.
+  // fronte (CI e patente) o il file singolo (passaporto) avvia l'OCR di pre-fill.
   const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
   const [acquirenteIdentita, setAcquirenteIdentita] = useState<IdentitaFiles>({});
 
@@ -517,6 +544,7 @@ export function WizardNuovaPratica({
           setAcquirenteResidenzaDiversa(d.acquirenteResidenzaDiversa);
         if (typeof d.acquirenteIndirizzoResidenza === 'string')
           setAcquirenteIndirizzoResidenza(d.acquirenteIndirizzoResidenza);
+        if (typeof d.brokerSedeId === 'string' && d.brokerSedeId) setBrokerSedeId(d.brokerSedeId);
         if (typeof d.comune === 'string') setComune(d.comune);
         if (typeof d.provincia === 'string') setProvincia(d.provincia);
         if (d.documenti) setDocumenti(d.documenti);
@@ -545,6 +573,7 @@ export function WizardNuovaPratica({
           acquirenteIdentita: identitaForStorage(acquirenteIdentita),
           acquirenteResidenzaDiversa,
           acquirenteIndirizzoResidenza,
+          brokerSedeId,
           comune,
           provincia,
           documenti: Object.fromEntries(
@@ -570,6 +599,7 @@ export function WizardNuovaPratica({
     acquirenteIdentita,
     acquirenteResidenzaDiversa,
     acquirenteIndirizzoResidenza,
+    brokerSedeId,
     comune,
     provincia,
     documenti,
@@ -637,49 +667,13 @@ export function WizardNuovaPratica({
     acquirenteDocId,
   ]);
 
-  // Upload del libretto su Blob (client upload) → poi OCR sulla BlobRef. Lo
-  // stato del veicolo tiene lo slot (ref/progress/error) + l'estrazione. Se
-  // l'upload fallisce, niente OCR (mostra l'errore sul libretto). Se cambia il
-  // file, invalida anche l'OCR precedente.
-  const onFileSelected = async (idx: number, file: File | undefined) => {
-    if (!file) return;
-    // Reset stato veicolo: nuovo libretto in caricamento + OCR azzerato.
-    updateVeicolo(idx, {
-      libretto: { ref: null, file, uploading: true, progress: 0, error: null },
-      fileName: file.name,
-      ocr: undefined,
-      ocrError: null,
-      ocrManuale: false,
-      extracting: false,
-    });
-    let ref: BlobRef;
+  // Avvia OCR combinato fronte+retro quando entrambe le BlobRef sono pronte.
+  // Viene chiamato dopo ogni upload (fronte o retro); se l'altra ref manca ancora,
+  // l'OCR non parte. Invalida l'OCR precedente se uno dei file cambia.
+  const runLibrettoOcr = async (idx: number, fronteRef: BlobRef, retroRef: BlobRef) => {
+    updateVeicolo(idx, { extracting: true, ocr: undefined, ocrError: null });
     try {
-      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
-        setVeicoli((prev) =>
-          prev.map((v, i) =>
-            i === idx ? { ...v, libretto: { ...v.libretto, progress: pct } } : v,
-          ),
-        );
-      });
-    } catch (err) {
-      updateVeicolo(idx, {
-        libretto: {
-          ref: null,
-          file,
-          uploading: false,
-          progress: 0,
-          error: (err as Error).message,
-        },
-      });
-      return;
-    }
-    // Upload OK: salva la ref e avvia l'estrazione OCR sulla BlobRef.
-    updateVeicolo(idx, {
-      libretto: { ref, file, uploading: false, progress: 100, error: null },
-      extracting: true,
-    });
-    try {
-      const res = await extractLibrettoAction(ref);
+      const res = await extractLibrettoAction(fronteRef, retroRef);
       if (res.ok) {
         // Se l'OCR non estrae NULLA di utile (né targa, né telaio, né
         // intestatari) il documento non è un libretto leggibile/corretto:
@@ -719,6 +713,111 @@ export function WizardNuovaPratica({
         ocrError: (err as Error).message,
       });
     }
+  };
+
+  // Upload del fronte libretto su Blob. Dopo l'upload avvia OCR se anche il
+  // retro è già pronto; altrimenti aspetta il retro. Invalidando sempre l'OCR
+  // al cambio di fronte, si garantisce il re-OCR.
+  // I-1: se file=undefined (remove), azzera lo slot e invalida l'OCR.
+  const onFronteSelected = async (idx: number, file: File | undefined) => {
+    if (!file) {
+      // Rimozione: azzera fronte + stato OCR (step-1 gate richiede ref+ocr).
+      updateVeicolo(idx, {
+        libretto: emptySlot(),
+        fileName: null,
+        ocr: undefined,
+        ocrError: null,
+        extracting: false,
+      });
+      return;
+    }
+    updateVeicolo(idx, {
+      libretto: { ref: null, file, uploading: true, progress: 0, error: null },
+      fileName: file.name,
+      ocr: undefined,
+      ocrError: null,
+      ocrManuale: false,
+      extracting: false,
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx ? { ...v, libretto: { ...v.libretto, progress: pct } } : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        libretto: { ref: null, file, uploading: false, progress: 0, error: (err as Error).message },
+      });
+      return;
+    }
+    // I-2: applica il nuovo ref e legge il retro dalla stessa snapshot aggiornata
+    // in un'unica functional update, così il check è deterministic (niente race).
+    setVeicoli((prev) => {
+      const updated = prev.map((v, i) =>
+        i === idx ? { ...v, libretto: { ref, file, uploading: false, progress: 100, error: null } } : v,
+      );
+      const retroRef = updated[idx]?.librettoRetro?.ref;
+      if (retroRef) {
+        void runLibrettoOcr(idx, ref, retroRef);
+      }
+      return updated;
+    });
+  };
+
+  // Upload del retro libretto su Blob. Dopo l'upload avvia OCR se anche il
+  // fronte è già pronto; altrimenti aspetta il fronte.
+  // I-1: se file=undefined (remove), azzera lo slot e invalida l'OCR.
+  const onRetroSelected = async (idx: number, file: File | undefined) => {
+    if (!file) {
+      // Rimozione: azzera retro + stato OCR (step-1 gate richiede ref+ocr).
+      updateVeicolo(idx, {
+        librettoRetro: emptySlot(),
+        fileNameRetro: null,
+        ocr: undefined,
+        ocrError: null,
+        extracting: false,
+      });
+      return;
+    }
+    updateVeicolo(idx, {
+      librettoRetro: { ref: null, file, uploading: true, progress: 0, error: null },
+      fileNameRetro: file.name,
+      ocr: undefined,
+      ocrError: null,
+      ocrManuale: false,
+      extracting: false,
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx ? { ...v, librettoRetro: { ...v.librettoRetro, progress: pct } } : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        librettoRetro: { ref: null, file, uploading: false, progress: 0, error: (err as Error).message },
+      });
+      return;
+    }
+    // I-2: applica il nuovo ref e legge il fronte dalla stessa snapshot aggiornata
+    // in un'unica functional update, così il check è deterministic (niente race).
+    setVeicoli((prev) => {
+      const updated = prev.map((v, i) =>
+        i === idx ? { ...v, librettoRetro: { ref, file, uploading: false, progress: 100, error: null } } : v,
+      );
+      const fronteRef = updated[idx]?.libretto?.ref;
+      if (fronteRef) {
+        void runLibrettoOcr(idx, fronteRef, ref);
+      }
+      return updated;
+    });
   };
 
   // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte +
@@ -804,8 +903,8 @@ export function WizardNuovaPratica({
   };
 
   const handleFinalSubmit = () => {
-    // Tutti i libretti devono avere la BlobRef pronta (nessun upload a metà).
-    if (veicoli.some((v) => !v.libretto.ref)) return;
+    // Tutti i libretti (fronte e retro) devono avere la BlobRef pronta.
+    if (veicoli.some((v) => !v.libretto.ref || !v.librettoRetro.ref)) return;
     const fd = new FormData();
     fd.append('tipo', tipo);
     fd.append('numeroVeicoli', String(numeroVeicoli));
@@ -828,7 +927,8 @@ export function WizardNuovaPratica({
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
     veicoli.forEach((v, i) => {
-      if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}`] = v.libretto.ref;
+      if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}_FRONTE`] = v.libretto.ref;
+      if (v.librettoRetro.ref) blobRefs[`LIBRETTO_${i + 1}_RETRO`] = v.librettoRetro.ref;
     });
 
     // ocrManuale: true se almeno un veicolo è stato compilato a mano.
@@ -891,7 +991,7 @@ export function WizardNuovaPratica({
     // VEND<n>_* (BlobRef). Il tipo documento (docId) viaggia nel JSON `venditori`.
     venditori.forEach((v, i) => {
       const n = i + 1;
-      if (v.docId === 'CI') {
+      if (v.docId === 'CI' || v.docId === 'PATENTE') {
         if (v.identita.fronte?.ref) blobRefs[`VEND${n}_ID_FRONTE`] = v.identita.fronte.ref;
         if (v.identita.retro?.ref) blobRefs[`VEND${n}_ID_RETRO`] = v.identita.retro.ref;
       } else if (v.identita.single?.ref) {
@@ -900,11 +1000,13 @@ export function WizardNuovaPratica({
       if (v.identita.permesso?.ref) blobRefs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
       if (v.identita.visura?.ref) blobRefs[`VEND${n}_VISURA`] = v.identita.visura.ref;
       if (v.identita.codiceFiscale?.ref) blobRefs[`VEND${n}_CF`] = v.identita.codiceFiscale.ref;
+      if (v.identita.codiceFiscaleRetro?.ref)
+        blobRefs[`VEND${n}_CF_RETRO`] = v.identita.codiceFiscaleRetro.ref;
     });
 
     // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
     fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
-    if (acquirenteDocId === 'CI') {
+    if (acquirenteDocId === 'CI' || acquirenteDocId === 'PATENTE') {
       if (acquirenteIdentita.fronte?.ref) blobRefs['ACQ_ID_FRONTE'] = acquirenteIdentita.fronte.ref;
       if (acquirenteIdentita.retro?.ref) blobRefs['ACQ_ID_RETRO'] = acquirenteIdentita.retro.ref;
     } else if (acquirenteIdentita.single?.ref) {
@@ -913,12 +1015,18 @@ export function WizardNuovaPratica({
     if (acquirenteIdentita.permesso?.ref) blobRefs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
     if (acquirenteIdentita.visura?.ref) blobRefs['ACQ_VISURA'] = acquirenteIdentita.visura.ref;
     if (acquirenteIdentita.codiceFiscale?.ref) blobRefs['ACQ_CF'] = acquirenteIdentita.codiceFiscale.ref;
+    if (acquirenteIdentita.codiceFiscaleRetro?.ref)
+      blobRefs['ACQ_CF_RETRO'] = acquirenteIdentita.codiceFiscaleRetro.ref;
 
     // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
     fd.append('blobRefs', JSON.stringify(blobRefs));
 
     fd.append('comune', comune);
     fd.append('provincia', provincia);
+
+    // Multi-sede: sede broker di partenza (il server la valida e ricade sulla
+    // sede operativa se vuota). Inviata solo se selezionabile.
+    if (brokerSedeId) fd.append('brokerSedeId', brokerSedeId);
 
     // Sistema Penali Broker: payload di accettazione popup (versione + flag)
     fd.append('dichiarazioneAccettata', 'true');
@@ -935,16 +1043,19 @@ export function WizardNuovaPratica({
 
   const current = STEPS.find((s) => s.id === step)!;
 
-  // Tutti i veicoli devono avere il libretto caricato (BlobRef) + campi
-  // obbligatori (targa/telaio/proprietario/data) prima di proseguire. Nessun
-  // upload del libretto deve essere ancora in corso.
-  const librettiUploading = veicoli.some((v) => v.libretto.uploading);
+  // Tutti i veicoli devono avere ENTRAMBI fronte e retro caricati (BlobRef) +
+  // campi obbligatori (targa/telaio/proprietario/data) prima di proseguire.
+  // Nessun upload del libretto deve essere ancora in corso.
+  const librettiUploading = veicoli.some(
+    (v) => v.libretto.uploading || v.librettoRetro.uploading,
+  );
   const veicoliValidi =
     veicoli.length === numeroVeicoli &&
     veicoli.every(
       (v) =>
         !!v.libretto.ref &&
-        !!v.ocr && // l'OCR deve aver letto il libretto (no compilazione manuale di un doc illeggibile)
+        !!v.librettoRetro.ref &&
+        !!v.ocr && // l'OCR deve aver letto entrambi i lati (no compilazione manuale di un doc illeggibile)
         v.targa.length >= 5 &&
         v.telaio.length >= 11 &&
         v.proprietarioAttuale.length > 0 &&
@@ -988,13 +1099,19 @@ export function WizardNuovaPratica({
   // l'acquirente, calcolato dai campi inseriti + OCR salvati. `now` unico per
   // tutta la render così i verdetti sono coerenti tra gate e Alert.
   const now = new Date();
-  const verdettiVenditori = venditori.map((v) => verificaDocumentaleParte(v, v.docId, now));
-  // Gate ATECO solo per l'acquirente della minivoltura (operatore auto).
+  // L'allowlist ATECO è passata a tutte le società (serve a decidere la
+  // freschezza ≤6 mesi della visura: solo per i commercianti d'auto). Il blocco
+  // "deve essere commerciante" (richiedeOperatoreAuto) resta solo per
+  // l'acquirente della minivoltura.
+  const verdettiVenditori = venditori.map((v) =>
+    verificaDocumentaleParte(v, v.docId, now, atecoAllowed, false),
+  );
   const verdettoAcquirente = verificaDocumentaleParte(
     acquirente,
     acquirenteDocId,
     now,
-    tipo === 'MINIVOLTURA' ? atecoAllowed : undefined,
+    atecoAllowed,
+    tipo === 'MINIVOLTURA',
   );
 
   // Blocco UI di un singolo venditore (riusato dal layout singolo e dall'accordion
@@ -1166,6 +1283,7 @@ export function WizardNuovaPratica({
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
   // SchemaDocumentalePreview così il broker capisce cosa correggere.
   const canSubmit =
+    (!multiSede || brokerSedeId.length > 0) &&
     comune.trim().length > 0 &&
     /^[A-Za-z]{2}$/.test(provincia.trim()) &&
     esitoSchema.kind === 'OK';
@@ -1185,7 +1303,8 @@ export function WizardNuovaPratica({
     const m: string[] = [];
     veicoli.forEach((v, i) => {
       const tag = veicoli.length > 1 ? ` (veicolo ${i + 1})` : '';
-      if (!v.libretto.ref) m.push(`libretto${tag}`);
+      if (!v.libretto.ref) m.push(`libretto fronte${tag}`);
+      else if (!v.librettoRetro.ref) m.push(`libretto retro${tag}`);
       else if (!v.ocr) m.push(`OCR libretto non riuscito${tag}`);
       if (v.targa.length < 5) m.push(`targa${tag}`);
       if (v.telaio.length < 11) m.push(`telaio${tag}`);
@@ -1223,6 +1342,7 @@ export function WizardNuovaPratica({
   };
   const mancanzeStep4 = (): string[] => {
     const m: string[] = [];
+    if (multiSede && !brokerSedeId) m.push('sede di partenza');
     if (!comune.trim()) m.push('comune');
     if (!/^[A-Za-z]{2}$/.test(provincia.trim())) m.push('provincia (2 lettere)');
     if (esitoSchema.kind !== 'OK') m.push('documenti richiesti incompleti');
@@ -1270,7 +1390,7 @@ export function WizardNuovaPratica({
           <div className="space-y-5">
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                Tipo pratica
+                Tipo pratica (Seleziona la tipologia di pratica)
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {TIPO_CARDS.map((card) => {
@@ -1326,7 +1446,8 @@ export function WizardNuovaPratica({
                   ordine={idx + 1}
                   veicolo={v}
                   multiplo={multiplo}
-                  onFile={(file) => onFileSelected(idx, file)}
+                  onFronte={(file) => onFronteSelected(idx, file)}
+                  onRetro={(file) => onRetroSelected(idx, file)}
                   onChange={(patch) => {
                     // Delega → No: scarta gli allegati delega/procura già
                     // caricati per questo veicolo (niente blob orfani né slot
@@ -1675,6 +1796,32 @@ export function WizardNuovaPratica({
 
         {step === 4 && (
           <div className="space-y-5">
+            {multiSede && (
+              <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+                <h2 className="mb-1 text-[15px] font-bold text-pv-navy-800">Sede di partenza</h2>
+                <p className="mb-3 text-[12.5px] text-pv-slate-500">
+                  La tua sede da cui nasce la pratica (per wallet, fatturazione e statistiche).
+                  Non c’entra col comune di destinazione qui sotto.
+                </p>
+                <Field label="Sede" required>
+                  <Select
+                    value={brokerSedeId}
+                    onChange={(e) => setBrokerSedeId(e.target.value)}
+                    invalid={!brokerSedeId}
+                  >
+                    <option value="" disabled>
+                      Seleziona una sede…
+                    </option>
+                    {sedi.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            )}
+
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
               {hasMaps ? (
@@ -1728,6 +1875,12 @@ export function WizardNuovaPratica({
                   label="Acquirente"
                   value={parteNome(acquirente)}
                 />
+                {multiSede && (
+                  <RiepilogoRow
+                    label="Sede di partenza"
+                    value={sedi.find((s) => s.id === brokerSedeId)?.nome || '—'}
+                  />
+                )}
                 <RiepilogoRow label="Comune" value={comune || '—'} />
               </dl>
               <div className="mt-3 space-y-2">
@@ -1836,85 +1989,49 @@ export function WizardNuovaPratica({
 }
 
 /**
- * Sezione veicolo ripetuta: upload libretto → estrazione OCR → campi
- * editabili. Una istanza per veicolo (ordine 1..n).
+ * Sezione veicolo ripetuta: upload libretto fronte+retro → OCR combinato →
+ * campi editabili. Una istanza per veicolo (ordine 1..n).
  */
 function VeicoloSection({
   ordine,
   veicolo,
   multiplo,
-  onFile,
+  onFronte,
+  onRetro,
   onChange,
 }: {
   ordine: number;
   veicolo: VeicoloInput;
   multiplo: boolean;
-  onFile: (file: File | undefined) => void;
+  onFronte: (file: File | undefined) => void;
+  onRetro: (file: File | undefined) => void;
   onChange: (patch: Partial<VeicoloInput>) => void;
 }) {
   const hasOcr = !!veicolo.ocr;
-  const lib = veicolo.libretto;
-  // Foto (JPG/PNG) → editor di ritaglio/scansione come gli altri documenti; i
-  // PDF passano diretti (non sono immagini → niente ritaglio possibile).
-  const { pick, modal } = useDocumentScanner({ onFile: (f) => onFile(f ?? undefined) });
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
         {multiplo ? `Veicolo ${ordine}` : 'Veicolo'}
       </h2>
-      <Field label="Libretto di circolazione (PDF/JPG/PNG)" required>
-        <div className="flex flex-col gap-2 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
-          <span className="truncate text-pv-slate-700">
-            {veicolo.fileName ?? 'Seleziona file o scatta una foto del libretto'}
-          </span>
-          <div className="flex shrink-0 gap-2">
-            {/* Desktop / file picker classico (PDF/JPG/PNG) */}
-            <label className="cursor-pointer rounded-[8px] bg-pv-navy-700 px-3 py-1.5 font-semibold text-white hover:bg-pv-navy-800">
-              {veicolo.fileName ? 'Cambia' : 'Sfoglia'}
-              <input
-                type="file"
-                accept="application/pdf,image/jpeg,image/png"
-                onChange={(e) => {
-                  pick(e.target.files?.[0] ?? null);
-                  e.target.value = '';
-                }}
-                className="sr-only"
-              />
-            </label>
-            {/* Q-11: scansione mobile — capture forza la fotocamera
-                sui browser mobile, su desktop fa fallback al picker. */}
-            <label className="cursor-pointer rounded-[8px] border border-pv-navy-700 bg-white px-3 py-1.5 font-semibold text-pv-navy-700 hover:bg-pv-slate-50">
-              Scansiona
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                capture="environment"
-                onChange={(e) => {
-                  pick(e.target.files?.[0] ?? null);
-                  e.target.value = '';
-                }}
-                className="sr-only"
-              />
-            </label>
-          </div>
-        </div>
-      </Field>
-      {modal}
-
-      {/* Stato upload del libretto su Blob (prima dell'OCR). */}
-      {lib.uploading && (
-        <p className="mt-2 text-[12px] font-semibold text-pv-navy-700" role="status" aria-live="polite">
-          Caricamento libretto… {lib.progress}%
-        </p>
-      )}
-      {!lib.uploading && lib.ref && (
-        <p className="mt-2 text-[12px] font-semibold text-pv-green-500">✓ Libretto caricato</p>
-      )}
-      {lib.error && (
-        <div className="mt-2">
-          <Alert variant="error">{lib.error}</Alert>
-        </div>
-      )}
+      <p className="mb-3 text-[12.5px] text-pv-slate-500">
+        Carica entrambe le facciate del libretto di circolazione. Il retro può
+        riportare etichette di trasferimento di proprietà che verranno lette
+        dall&apos;OCR.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <UploadCard
+          label="Libretto — fronte"
+          slot={veicolo.libretto}
+          onSelect={(f) => onFronte(f ?? undefined)}
+          onRemove={() => onFronte(undefined)}
+        />
+        <UploadCard
+          label="Libretto — retro"
+          slot={veicolo.librettoRetro}
+          onSelect={(f) => onRetro(f ?? undefined)}
+          onRemove={() => onRetro(undefined)}
+        />
+      </div>
 
       {veicolo.extracting && (
         <div
@@ -2297,8 +2414,8 @@ function UploadCard({
 
 /**
  * A7 + Verifica documentale: sezione "Documento d'identità" sotto ciascuna
- * parte. Il broker sceglie il tipo documento; per la CI servono fronte+retro,
- * per passaporto/patente un file unico. In base al tipo soggetto compaiono i
+ * parte. Il broker sceglie il tipo documento; per la CI e la patente servono
+ * fronte+retro; per il passaporto basta un file singolo. In base al tipo soggetto compaiono i
  * blocchi condizionali: Visura camerale (AZIENDA / OPERATORE_AUTO) e Permesso
  * di soggiorno (STRANIERO_EXTRA_UE). Ogni file viene caricato subito su Blob
  * (client upload) e ne teniamo la BlobRef. Al completamento dell'upload parte
@@ -2413,16 +2530,16 @@ function IdentitaSection({
       </Field>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {docId === 'CI' ? (
+        {docId === 'CI' || docId === 'PATENTE' ? (
           <>
             <UploadCard
-              label="Fronte"
+              label={docId === 'PATENTE' ? 'Patente (fronte)' : 'Fronte'}
               slot={files.fronte}
               onSelect={(f) => handleField('fronte', f, onMainRef, onInvalidateIdentita)}
               onRemove={() => handleField('fronte', null, onMainRef, onInvalidateIdentita)}
             />
             <UploadCard
-              label="Retro"
+              label={docId === 'PATENTE' ? 'Patente (retro)' : 'Retro'}
               slot={files.retro}
               onSelect={(f) => handleField('retro', f)}
               onRemove={() => handleField('retro', null)}
@@ -2430,7 +2547,7 @@ function IdentitaSection({
           </>
         ) : (
           <UploadCard
-            label={docId === 'PASSAPORTO' ? 'Passaporto' : 'Patente'}
+            label="Passaporto"
             slot={files.single}
             onSelect={(f) => handleField('single', f, onMainRef, onInvalidateIdentita)}
             onRemove={() => handleField('single', null, onMainRef, onInvalidateIdentita)}
@@ -2439,15 +2556,22 @@ function IdentitaSection({
       </div>
 
       {/* Tessera sanitaria / codice fiscale: quando l'identificazione non è CIE
-          (CI cartacea, passaporto, patente). Basta il fronte. L'OCR alimenta il
-          match fail-closed col CF inserito (validaParte). */}
+          (CI cartacea, passaporto, patente). Servono fronte + retro. L'OCR del
+          fronte alimenta il match fail-closed col CF inserito (validaParte); il
+          retro è solo raccolto. */}
       {mostraCodiceFiscale && (
-        <div className="mt-3">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <UploadCard
             label="Tessera sanitaria / Codice fiscale (fronte)"
             slot={files.codiceFiscale}
             onSelect={(f) => handleField('codiceFiscale', f, onCfRef, onInvalidateCf)}
             onRemove={() => handleField('codiceFiscale', null, onCfRef, onInvalidateCf)}
+          />
+          <UploadCard
+            label="Tessera sanitaria / Codice fiscale (retro)"
+            slot={files.codiceFiscaleRetro}
+            onSelect={(f) => handleField('codiceFiscaleRetro', f)}
+            onRemove={() => handleField('codiceFiscaleRetro', null)}
           />
         </div>
       )}
@@ -2517,7 +2641,8 @@ function parteCompleta(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): boo
     documentoIdentita: docId,
   });
   if (req.identita && !identitaPresente(docId, identita)) return false;
-  if (req.codiceFiscale && !identita.codiceFiscale?.ref) return false;
+  if (req.codiceFiscale && (!identita.codiceFiscale?.ref || !identita.codiceFiscaleRetro?.ref))
+    return false;
   if (req.visura && !identita.visura?.ref) return false;
   if (req.permesso && !identita.permesso?.ref) return false;
   return true;
@@ -2541,7 +2666,10 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
     documentoIdentita: docId,
   });
   if (req.identita && !identitaPresente(docId, identita)) m.push("documento d'identità");
-  if (req.codiceFiscale && !identita.codiceFiscale?.ref) m.push('tessera sanitaria / codice fiscale');
+  if (req.codiceFiscale && !identita.codiceFiscale?.ref)
+    m.push('tessera sanitaria / codice fiscale (fronte)');
+  if (req.codiceFiscale && !identita.codiceFiscaleRetro?.ref)
+    m.push('tessera sanitaria / codice fiscale (retro)');
   if (req.visura && !identita.visura?.ref) m.push('visura camerale');
   if (req.permesso && !identita.permesso?.ref) m.push('permesso di soggiorno');
   if (identitaUploading(identita)) m.push('caricamento documenti in corso');
@@ -2559,6 +2687,7 @@ function verificaDocumentaleParte(
   docId: DocIdTipo,
   now: Date,
   atecoAllowed?: AllowedAteco[],
+  richiedeOperatoreAuto?: boolean,
 ): { ok: boolean; problemi: string[] } {
   const parteDati: ParteDati = {
     isPersonaGiuridica: p.isPG,
@@ -2576,7 +2705,7 @@ function verificaDocumentaleParte(
     permesso: p.permessoOcr,
     codiceFiscale: p.codiceFiscaleOcr,
   };
-  return validaParte(parteDati, ocr, now, atecoAllowed ? { atecoAllowed } : undefined);
+  return validaParte(parteDati, ocr, now, { atecoAllowed, richiedeOperatoreAuto });
 }
 
 function parteNome(p: Parte): string {

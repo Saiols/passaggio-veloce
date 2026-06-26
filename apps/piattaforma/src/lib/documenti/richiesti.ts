@@ -7,8 +7,8 @@ export function docKey(d: DocumentoRichiesto): string {
 // Documenti raccolti e validati nello step parte (Venditore/Acquirente), NON
 // come card dello step Documenti: identità, permesso e visura camerale.
 const TIPI_RACCOLTI_NELLA_PARTE: ReadonlySet<string> = new Set([
-  'LIBRETTO_CIRCOLAZIONE', 'CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'PASSAPORTO', 'PATENTE',
-  'PERMESSO_SOGGIORNO', 'VISURA_CAMERALE',
+  'LIBRETTO_CIRCOLAZIONE', 'CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'CODICE_FISCALE_RETRO',
+  'PASSAPORTO', 'PATENTE', 'PATENTE_RETRO', 'LIBRETTO_CIRCOLAZIONE_RETRO', 'PERMESSO_SOGGIORNO', 'VISURA_CAMERALE',
 ]);
 
 export function requiredUploadDocs(esito: EsitoSchemaDocumentale): DocumentoRichiesto[] {
@@ -26,7 +26,8 @@ const TIPO_LABEL: Record<DocumentoTipoEngine, string> = {
   LIBRETTO_CIRCOLAZIONE: 'Libretto di circolazione',
   CI_FRONTE: "Carta d'identità (fronte)",
   CI_RETRO: "Carta d'identità (retro)",
-  CODICE_FISCALE: 'Codice fiscale / Tessera sanitaria',
+  CODICE_FISCALE: 'Codice fiscale / Tessera sanitaria (fronte)',
+  CODICE_FISCALE_RETRO: 'Codice fiscale / Tessera sanitaria (retro)',
   PROCURA: 'Procura',
   PERMESSO_SOGGIORNO: 'Permesso di soggiorno',
   VISURA_CAMERALE: 'Visura camerale',
@@ -38,6 +39,8 @@ const TIPO_LABEL: Record<DocumentoTipoEngine, string> = {
   AUTORIZZAZIONE_TUTORE: 'Autorizzazione del tutore',
   PASSAPORTO: 'Passaporto',
   PATENTE: 'Patente',
+  PATENTE_RETRO: 'Patente (retro)',
+  LIBRETTO_CIRCOLAZIONE_RETRO: 'Libretto di circolazione (retro)',
 };
 
 const PARTE_LABEL: Record<Exclude<ParteDocumento, 'VEICOLO'>, string> = {

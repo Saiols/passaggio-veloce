@@ -29,6 +29,7 @@ export type DocumentoTipoEngine =
   | 'CI_FRONTE'
   | 'CI_RETRO'
   | 'CODICE_FISCALE'
+  | 'CODICE_FISCALE_RETRO'
   | 'PROCURA'
   | 'PERMESSO_SOGGIORNO'
   | 'VISURA_CAMERALE'
@@ -39,7 +40,9 @@ export type DocumentoTipoEngine =
   | 'DICHIARAZIONE_QUALITA_EREDE'
   | 'AUTORIZZAZIONE_TUTORE'
   | 'PASSAPORTO'
-  | 'PATENTE';
+  | 'PATENTE'
+  | 'PATENTE_RETRO'
+  | 'LIBRETTO_CIRCOLAZIONE_RETRO';
 
 export type ParteDocumento =
   | 'VEICOLO'
@@ -108,7 +111,8 @@ function emettiIdentita(
   if (docIdentita === 'PASSAPORTO') {
     out.push({ tipo: 'PASSAPORTO', parte, motivo: `${motivoPrefix}: passaporto`, venditoreOrdine });
   } else if (docIdentita === 'PATENTE') {
-    out.push({ tipo: 'PATENTE', parte, motivo: `${motivoPrefix}: patente`, venditoreOrdine });
+    out.push({ tipo: 'PATENTE', parte, motivo: `${motivoPrefix}: patente fronte`, venditoreOrdine });
+    out.push({ tipo: 'PATENTE_RETRO', parte, motivo: `${motivoPrefix}: patente retro`, venditoreOrdine });
   } else {
     out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte`, venditoreOrdine });
     out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro`, venditoreOrdine });

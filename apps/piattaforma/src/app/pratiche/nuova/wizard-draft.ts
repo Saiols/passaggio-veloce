@@ -6,8 +6,13 @@
  */
 
 export const DRAFT_KEY = 'pv-pratica-nuova-draft';
-/** Bump ad ogni cambio della forma dello stato persistito (invalida le bozze vecchie). */
-export const DRAFT_VERSION = 1;
+/**
+ * Bump ad ogni cambio della forma dello stato persistito (invalida le bozze
+ * vecchie, evitando crash al ripristino di una bozza con forma obsoleta).
+ * v2: aggiunti veicoli.librettoRetro/fileNameRetro e identita.codiceFiscaleRetro
+ *     (fronte/retro libretto + tessera sanitaria).
+ */
+export const DRAFT_VERSION = 2;
 /** Oltre questa età la bozza viene ignorata (e ripulita). */
 export const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni
 

@@ -8,7 +8,7 @@ export function docKey(d: DocumentoRichiesto): string {
 // come card dello step Documenti: identità, permesso e visura camerale.
 const TIPI_RACCOLTI_NELLA_PARTE: ReadonlySet<string> = new Set([
   'LIBRETTO_CIRCOLAZIONE', 'CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'CODICE_FISCALE_RETRO',
-  'PASSAPORTO', 'PATENTE', 'PERMESSO_SOGGIORNO', 'VISURA_CAMERALE',
+  'PASSAPORTO', 'PATENTE', 'PATENTE_RETRO', 'LIBRETTO_CIRCOLAZIONE_RETRO', 'PERMESSO_SOGGIORNO', 'VISURA_CAMERALE',
 ]);
 
 export function requiredUploadDocs(esito: EsitoSchemaDocumentale): DocumentoRichiesto[] {
@@ -39,6 +39,8 @@ const TIPO_LABEL: Record<DocumentoTipoEngine, string> = {
   AUTORIZZAZIONE_TUTORE: 'Autorizzazione del tutore',
   PASSAPORTO: 'Passaporto',
   PATENTE: 'Patente',
+  PATENTE_RETRO: 'Patente (retro)',
+  LIBRETTO_CIRCOLAZIONE_RETRO: 'Libretto di circolazione (retro)',
 };
 
 const PARTE_LABEL: Record<Exclude<ParteDocumento, 'VEICOLO'>, string> = {

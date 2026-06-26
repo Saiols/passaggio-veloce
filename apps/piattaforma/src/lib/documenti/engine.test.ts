@@ -290,6 +290,17 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
     expect(tipiVend).not.toContain('CI_FRONTE');
   });
 
+  it('patente: aggiunge PATENTE + PATENTE_RETRO', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PATENTE' }] }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const tipiVend = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE').map((d) => d.tipo);
+    expect(tipiVend).toContain('PATENTE');
+    expect(tipiVend).toContain('PATENTE_RETRO');
+  });
+
   it('acquirente con passaporto: richiede PASSAPORTO non CI', () => {
     const r = calcolaDocumentiRichiesti(baseInput({ acquirenteDocumentoIdentita: 'PASSAPORTO' }));
     expect(r.kind).toBe('OK');

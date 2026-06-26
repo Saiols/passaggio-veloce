@@ -605,6 +605,8 @@ function labelDocumento(t: string): string {
     ALTRO: 'Altro',
     DELEGA_VENDITA: 'Procura a vendere',
     DOCUMENTO_DELEGATO: 'Documento delegato',
+    PATENTE_RETRO: 'Patente (retro)',
+    LIBRETTO_CIRCOLAZIONE_RETRO: 'Libretto (retro)',
   };
   return map[t] ?? t;
 }

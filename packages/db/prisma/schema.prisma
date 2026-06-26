@@ -117,6 +117,8 @@ enum DocumentoTipo {
   ALTRO
   PASSAPORTO
   PATENTE
+  PATENTE_RETRO
+  LIBRETTO_CIRCOLAZIONE_RETRO
   // Delega/procura a vendere (allegati pratica, no engine/gating)
   DELEGA_VENDITA
   DOCUMENTO_DELEGATO

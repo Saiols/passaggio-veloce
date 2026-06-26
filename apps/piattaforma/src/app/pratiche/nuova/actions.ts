@@ -656,6 +656,7 @@ export async function submitNuovaPraticaAction(
       | 'CI_RETRO'
       | 'PASSAPORTO'
       | 'PATENTE'
+      | 'PATENTE_RETRO'
       | 'CODICE_FISCALE'
       | 'CODICE_FISCALE_RETRO'
       | 'PERMESSO_SOGGIORNO'
@@ -697,31 +698,35 @@ export async function submitNuovaPraticaAction(
     const missingMsg = `/pratiche/nuova?error=${encodeURIComponent(
       `Documento d'identità mancante per ${labelParte}`,
     )}`;
-    if (documentoIdentita === 'CI') {
+    if (documentoIdentita === 'CI' || documentoIdentita === 'PATENTE') {
       const fronte = getRef(`${prefix}_ID_FRONTE`);
       const retro = getRef(`${prefix}_ID_RETRO`);
       if (!fronte || fronte.size === 0 || !retro || retro.size === 0) {
         redirect(missingMsg);
       }
+      const [tFronte, tRetro] = documentoIdentita === 'CI'
+        ? (['CI_FRONTE', 'CI_RETRO'] as const)
+        : (['PATENTE', 'PATENTE_RETRO'] as const);
       identitaCandidates.push({
-        tipo: 'CI_FRONTE',
+        tipo: tFronte,
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(fronte!, "documento d'identità"),
       });
       identitaCandidates.push({
-        tipo: 'CI_RETRO',
+        tipo: tRetro,
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(retro!, "documento d'identità"),
       });
     } else {
+      // solo PASSAPORTO: slot singolo _ID → tipo 'PASSAPORTO'
       const id = getRef(`${prefix}_ID`);
       if (!id || id.size === 0) {
         redirect(missingMsg);
       }
       identitaCandidates.push({
-        tipo: documentoIdentita === 'PASSAPORTO' ? 'PASSAPORTO' : 'PATENTE',
+        tipo: 'PASSAPORTO',
         owner,
         venditoreOrdine,
         ref: validateIdentitaRef(id!, "documento d'identità"),
@@ -834,7 +839,7 @@ export async function submitNuovaPraticaAction(
     docId: 'CI' | 'PASSAPORTO' | 'PATENTE',
   ): Promise<OcrParte> => {
     const out: OcrParte = {};
-    const idRef = docId === 'CI' ? getRef(`${prefix}_ID_FRONTE`) : getRef(`${prefix}_ID`);
+    const idRef = docId === 'CI' || docId === 'PATENTE' ? getRef(`${prefix}_ID_FRONTE`) : getRef(`${prefix}_ID`);
     if (idRef) {
       const text = (
         await (await getOcr()).extractText({

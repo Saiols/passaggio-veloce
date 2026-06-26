@@ -16,6 +16,7 @@ import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { PraticaToasts } from './pratica-toasts';
 import { BackButton } from '@/components/back-button';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
@@ -66,7 +67,15 @@ export default async function PraticaDetailPage({
       },
       valutazione: true,
       documentiFiscali: {
-        select: { id: true, tipo: true, numeroProgressivo: true, anno: true, importoLordoCent: true },
+        select: {
+          id: true,
+          tipo: true,
+          numeroProgressivo: true,
+          anno: true,
+          importoLordoCent: true,
+          emittenteCompanyId: true,
+          destinatarioCompanyId: true,
+        },
         orderBy: { emessoAt: 'desc' },
       },
       veicoli: { orderBy: { ordine: 'asc' } },
@@ -75,6 +84,16 @@ export default async function PraticaDetailPage({
   });
 
   if (!pratica) notFound();
+
+  // Mostra solo le fatture che il viewer può effettivamente aprire (admin / sua
+  // emittente / sua destinataria): un broker non deve vedere/cliccare la
+  // FATTURA_PV PV→agenzia della pratica (darebbe 404 sul dettaglio).
+  const fattureVisibili = pratica.documentiFiscali.filter((d) =>
+    canViewDocumentoFiscale(d, {
+      companyId,
+      isAdminPiattaforma: session.user.role === 'ADMIN_PIATTAFORMA',
+    }),
+  );
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
@@ -214,11 +233,11 @@ export default async function PraticaDetailPage({
         )}
         <PraticaToasts />
 
-        {pratica.documentiFiscali.length > 0 && (
+        {fattureVisibili.length > 0 && (
           <Card className="mb-5">
             <h2 className="text-[15px] font-bold text-pv-navy-800">Documenti fiscali</h2>
             <ul className="mt-2 divide-y divide-pv-slate-100 text-[13px]">
-              {pratica.documentiFiscali.map((d) => (
+              {fattureVisibili.map((d) => (
                 <li key={d.id} className="flex items-center justify-between py-2">
                   <Link
                     href={`/fatturazione/${d.id}`}

@@ -8,6 +8,7 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { resolveSedeRiferimento, type SedeRiferimento } from '@/lib/fatturazione/descrizione';
+import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 import { BackButton } from '@/components/back-button';
 
@@ -76,12 +77,9 @@ export default async function DocumentoFiscaleDetailPage({
   if (!doc) notFound();
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
-  const cid = session.user.companyId;
-  const allowed =
-    isAdmin ||
-    (doc.emittenteCompanyId && doc.emittenteCompanyId === cid) ||
-    (doc.destinatarioCompanyId && doc.destinatarioCompanyId === cid);
-  if (!allowed) notFound();
+  if (!canViewDocumentoFiscale(doc, { companyId: session.user.companyId, isAdminPiattaforma: isAdmin })) {
+    notFound();
+  }
 
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;

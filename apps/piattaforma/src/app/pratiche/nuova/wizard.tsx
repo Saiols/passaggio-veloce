@@ -101,7 +101,7 @@ type IdentitaFiles = {
  * che l'upload su Blob sia completato).
  */
 function identitaPresente(docId: DocIdTipo, files: IdentitaFiles): boolean {
-  return docId === 'CI'
+  return docId === 'CI' || docId === 'PATENTE'
     ? !!files.fronte?.ref && !!files.retro?.ref
     : !!files.single?.ref;
 }
@@ -909,7 +909,7 @@ export function WizardNuovaPratica({
     // VEND<n>_* (BlobRef). Il tipo documento (docId) viaggia nel JSON `venditori`.
     venditori.forEach((v, i) => {
       const n = i + 1;
-      if (v.docId === 'CI') {
+      if (v.docId === 'CI' || v.docId === 'PATENTE') {
         if (v.identita.fronte?.ref) blobRefs[`VEND${n}_ID_FRONTE`] = v.identita.fronte.ref;
         if (v.identita.retro?.ref) blobRefs[`VEND${n}_ID_RETRO`] = v.identita.retro.ref;
       } else if (v.identita.single?.ref) {
@@ -924,7 +924,7 @@ export function WizardNuovaPratica({
 
     // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
     fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
-    if (acquirenteDocId === 'CI') {
+    if (acquirenteDocId === 'CI' || acquirenteDocId === 'PATENTE') {
       if (acquirenteIdentita.fronte?.ref) blobRefs['ACQ_ID_FRONTE'] = acquirenteIdentita.fronte.ref;
       if (acquirenteIdentita.retro?.ref) blobRefs['ACQ_ID_RETRO'] = acquirenteIdentita.retro.ref;
     } else if (acquirenteIdentita.single?.ref) {
@@ -2479,16 +2479,16 @@ function IdentitaSection({
       </Field>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {docId === 'CI' ? (
+        {docId === 'CI' || docId === 'PATENTE' ? (
           <>
             <UploadCard
-              label="Fronte"
+              label={docId === 'PATENTE' ? 'Patente (fronte)' : 'Fronte'}
               slot={files.fronte}
               onSelect={(f) => handleField('fronte', f, onMainRef, onInvalidateIdentita)}
               onRemove={() => handleField('fronte', null, onMainRef, onInvalidateIdentita)}
             />
             <UploadCard
-              label="Retro"
+              label={docId === 'PATENTE' ? 'Patente (retro)' : 'Retro'}
               slot={files.retro}
               onSelect={(f) => handleField('retro', f)}
               onRemove={() => handleField('retro', null)}
@@ -2496,7 +2496,7 @@ function IdentitaSection({
           </>
         ) : (
           <UploadCard
-            label={docId === 'PASSAPORTO' ? 'Passaporto' : 'Patente'}
+            label="Passaporto"
             slot={files.single}
             onSelect={(f) => handleField('single', f, onMainRef, onInvalidateIdentita)}
             onRemove={() => handleField('single', null, onMainRef, onInvalidateIdentita)}

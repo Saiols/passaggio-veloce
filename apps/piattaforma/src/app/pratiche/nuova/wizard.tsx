@@ -136,9 +136,13 @@ type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
 
 /** Dati di un singolo veicolo nel wizard (libretto + estrazione + correzioni). */
 type VeicoloInput = {
-  /** BlobRef del libretto caricato su Blob (slot LIBRETTO_<n> al submit). */
+  /** BlobRef del fronte libretto caricato su Blob (slot LIBRETTO_<n>_FRONTE al submit). */
   libretto: BlobSlot;
+  /** BlobRef del retro libretto caricato su Blob (slot LIBRETTO_<n>_RETRO al submit).
+   *  Il retro può portare etichette di trasferimento di proprietà. */
+  librettoRetro: BlobSlot;
   fileName: string | null;
+  fileNameRetro: string | null;
   ocr?: LibrettoCircolazioneData;
   extracting: boolean;
   ocrError: string | null;
@@ -157,7 +161,9 @@ type VeicoloInput = {
 function emptyVeicolo(): VeicoloInput {
   return {
     libretto: emptySlot(),
+    librettoRetro: emptySlot(),
     fileName: null,
+    fileNameRetro: null,
     ocr: undefined,
     extracting: false,
     ocrError: null,
@@ -265,7 +271,13 @@ function identitaForStorage(f: IdentitaFiles): IdentitaFiles {
 }
 
 function veicoloForStorage(v: VeicoloInput): VeicoloInput {
-  return { ...v, libretto: slotForStorage(v.libretto), extracting: false, ocrError: null };
+  return {
+    ...v,
+    libretto: slotForStorage(v.libretto),
+    librettoRetro: slotForStorage(v.librettoRetro),
+    extracting: false,
+    ocrError: null,
+  };
 }
 
 /** Firma degli intestatari (deve coincidere con l'effect di prefill venditori). */
@@ -655,49 +667,13 @@ export function WizardNuovaPratica({
     acquirenteDocId,
   ]);
 
-  // Upload del libretto su Blob (client upload) → poi OCR sulla BlobRef. Lo
-  // stato del veicolo tiene lo slot (ref/progress/error) + l'estrazione. Se
-  // l'upload fallisce, niente OCR (mostra l'errore sul libretto). Se cambia il
-  // file, invalida anche l'OCR precedente.
-  const onFileSelected = async (idx: number, file: File | undefined) => {
-    if (!file) return;
-    // Reset stato veicolo: nuovo libretto in caricamento + OCR azzerato.
-    updateVeicolo(idx, {
-      libretto: { ref: null, file, uploading: true, progress: 0, error: null },
-      fileName: file.name,
-      ocr: undefined,
-      ocrError: null,
-      ocrManuale: false,
-      extracting: false,
-    });
-    let ref: BlobRef;
+  // Avvia OCR combinato fronte+retro quando entrambe le BlobRef sono pronte.
+  // Viene chiamato dopo ogni upload (fronte o retro); se l'altra ref manca ancora,
+  // l'OCR non parte. Invalida l'OCR precedente se uno dei file cambia.
+  const runLibrettoOcr = async (idx: number, fronteRef: BlobRef, retroRef: BlobRef) => {
+    updateVeicolo(idx, { extracting: true, ocr: undefined, ocrError: null });
     try {
-      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
-        setVeicoli((prev) =>
-          prev.map((v, i) =>
-            i === idx ? { ...v, libretto: { ...v.libretto, progress: pct } } : v,
-          ),
-        );
-      });
-    } catch (err) {
-      updateVeicolo(idx, {
-        libretto: {
-          ref: null,
-          file,
-          uploading: false,
-          progress: 0,
-          error: (err as Error).message,
-        },
-      });
-      return;
-    }
-    // Upload OK: salva la ref e avvia l'estrazione OCR sulla BlobRef.
-    updateVeicolo(idx, {
-      libretto: { ref, file, uploading: false, progress: 100, error: null },
-      extracting: true,
-    });
-    try {
-      const res = await extractLibrettoAction(ref);
+      const res = await extractLibrettoAction(fronteRef, retroRef);
       if (res.ok) {
         // Se l'OCR non estrae NULLA di utile (né targa, né telaio, né
         // intestatari) il documento non è un libretto leggibile/corretto:
@@ -737,6 +713,88 @@ export function WizardNuovaPratica({
         ocrError: (err as Error).message,
       });
     }
+  };
+
+  // Upload del fronte libretto su Blob. Dopo l'upload avvia OCR se anche il
+  // retro è già pronto; altrimenti aspetta il retro. Invalidando sempre l'OCR
+  // al cambio di fronte, si garantisce il re-OCR.
+  const onFronteSelected = async (idx: number, file: File | undefined) => {
+    if (!file) return;
+    updateVeicolo(idx, {
+      libretto: { ref: null, file, uploading: true, progress: 0, error: null },
+      fileName: file.name,
+      ocr: undefined,
+      ocrError: null,
+      ocrManuale: false,
+      extracting: false,
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx ? { ...v, libretto: { ...v.libretto, progress: pct } } : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        libretto: { ref: null, file, uploading: false, progress: 0, error: (err as Error).message },
+      });
+      return;
+    }
+    updateVeicolo(idx, {
+      libretto: { ref, file, uploading: false, progress: 100, error: null },
+    });
+    // Leggi lo stato corrente del retro per capire se possiamo avviare l'OCR.
+    setVeicoli((prev) => {
+      const retroRef = prev[idx]?.librettoRetro?.ref;
+      if (retroRef) {
+        // Schedula l'OCR dopo il flush di stato (Promise micro-task).
+        void runLibrettoOcr(idx, ref, retroRef);
+      }
+      return prev;
+    });
+  };
+
+  // Upload del retro libretto su Blob. Dopo l'upload avvia OCR se anche il
+  // fronte è già pronto; altrimenti aspetta il fronte.
+  const onRetroSelected = async (idx: number, file: File | undefined) => {
+    if (!file) return;
+    updateVeicolo(idx, {
+      librettoRetro: { ref: null, file, uploading: true, progress: 0, error: null },
+      fileNameRetro: file.name,
+      ocr: undefined,
+      ocrError: null,
+      ocrManuale: false,
+      extracting: false,
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx ? { ...v, librettoRetro: { ...v.librettoRetro, progress: pct } } : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        librettoRetro: { ref: null, file, uploading: false, progress: 0, error: (err as Error).message },
+      });
+      return;
+    }
+    updateVeicolo(idx, {
+      librettoRetro: { ref, file, uploading: false, progress: 100, error: null },
+    });
+    // Leggi lo stato corrente del fronte per capire se possiamo avviare l'OCR.
+    setVeicoli((prev) => {
+      const fronteRef = prev[idx]?.libretto?.ref;
+      if (fronteRef) {
+        void runLibrettoOcr(idx, fronteRef, ref);
+      }
+      return prev;
+    });
   };
 
   // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte +
@@ -822,8 +880,8 @@ export function WizardNuovaPratica({
   };
 
   const handleFinalSubmit = () => {
-    // Tutti i libretti devono avere la BlobRef pronta (nessun upload a metà).
-    if (veicoli.some((v) => !v.libretto.ref)) return;
+    // Tutti i libretti (fronte e retro) devono avere la BlobRef pronta.
+    if (veicoli.some((v) => !v.libretto.ref || !v.librettoRetro.ref)) return;
     const fd = new FormData();
     fd.append('tipo', tipo);
     fd.append('numeroVeicoli', String(numeroVeicoli));
@@ -846,7 +904,8 @@ export function WizardNuovaPratica({
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
     veicoli.forEach((v, i) => {
-      if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}`] = v.libretto.ref;
+      if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}_FRONTE`] = v.libretto.ref;
+      if (v.librettoRetro.ref) blobRefs[`LIBRETTO_${i + 1}_RETRO`] = v.librettoRetro.ref;
     });
 
     // ocrManuale: true se almeno un veicolo è stato compilato a mano.
@@ -961,16 +1020,19 @@ export function WizardNuovaPratica({
 
   const current = STEPS.find((s) => s.id === step)!;
 
-  // Tutti i veicoli devono avere il libretto caricato (BlobRef) + campi
-  // obbligatori (targa/telaio/proprietario/data) prima di proseguire. Nessun
-  // upload del libretto deve essere ancora in corso.
-  const librettiUploading = veicoli.some((v) => v.libretto.uploading);
+  // Tutti i veicoli devono avere ENTRAMBI fronte e retro caricati (BlobRef) +
+  // campi obbligatori (targa/telaio/proprietario/data) prima di proseguire.
+  // Nessun upload del libretto deve essere ancora in corso.
+  const librettiUploading = veicoli.some(
+    (v) => v.libretto.uploading || v.librettoRetro.uploading,
+  );
   const veicoliValidi =
     veicoli.length === numeroVeicoli &&
     veicoli.every(
       (v) =>
         !!v.libretto.ref &&
-        !!v.ocr && // l'OCR deve aver letto il libretto (no compilazione manuale di un doc illeggibile)
+        !!v.librettoRetro.ref &&
+        !!v.ocr && // l'OCR deve aver letto entrambi i lati (no compilazione manuale di un doc illeggibile)
         v.targa.length >= 5 &&
         v.telaio.length >= 11 &&
         v.proprietarioAttuale.length > 0 &&
@@ -1218,7 +1280,8 @@ export function WizardNuovaPratica({
     const m: string[] = [];
     veicoli.forEach((v, i) => {
       const tag = veicoli.length > 1 ? ` (veicolo ${i + 1})` : '';
-      if (!v.libretto.ref) m.push(`libretto${tag}`);
+      if (!v.libretto.ref) m.push(`libretto fronte${tag}`);
+      else if (!v.librettoRetro.ref) m.push(`libretto retro${tag}`);
       else if (!v.ocr) m.push(`OCR libretto non riuscito${tag}`);
       if (v.targa.length < 5) m.push(`targa${tag}`);
       if (v.telaio.length < 11) m.push(`telaio${tag}`);
@@ -1360,7 +1423,8 @@ export function WizardNuovaPratica({
                   ordine={idx + 1}
                   veicolo={v}
                   multiplo={multiplo}
-                  onFile={(file) => onFileSelected(idx, file)}
+                  onFronte={(file) => onFronteSelected(idx, file)}
+                  onRetro={(file) => onRetroSelected(idx, file)}
                   onChange={(patch) => {
                     // Delega → No: scarta gli allegati delega/procura già
                     // caricati per questo veicolo (niente blob orfani né slot
@@ -1902,85 +1966,49 @@ export function WizardNuovaPratica({
 }
 
 /**
- * Sezione veicolo ripetuta: upload libretto → estrazione OCR → campi
- * editabili. Una istanza per veicolo (ordine 1..n).
+ * Sezione veicolo ripetuta: upload libretto fronte+retro → OCR combinato →
+ * campi editabili. Una istanza per veicolo (ordine 1..n).
  */
 function VeicoloSection({
   ordine,
   veicolo,
   multiplo,
-  onFile,
+  onFronte,
+  onRetro,
   onChange,
 }: {
   ordine: number;
   veicolo: VeicoloInput;
   multiplo: boolean;
-  onFile: (file: File | undefined) => void;
+  onFronte: (file: File | undefined) => void;
+  onRetro: (file: File | undefined) => void;
   onChange: (patch: Partial<VeicoloInput>) => void;
 }) {
   const hasOcr = !!veicolo.ocr;
-  const lib = veicolo.libretto;
-  // Foto (JPG/PNG) → editor di ritaglio/scansione come gli altri documenti; i
-  // PDF passano diretti (non sono immagini → niente ritaglio possibile).
-  const { pick, modal } = useDocumentScanner({ onFile: (f) => onFile(f ?? undefined) });
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
         {multiplo ? `Veicolo ${ordine}` : 'Veicolo'}
       </h2>
-      <Field label="Libretto di circolazione (PDF/JPG/PNG)" required>
-        <div className="flex flex-col gap-2 rounded-[10px] border-[1.5px] border-dashed border-pv-slate-300 bg-pv-slate-50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:justify-between">
-          <span className="truncate text-pv-slate-700">
-            {veicolo.fileName ?? 'Seleziona file o scatta una foto del libretto'}
-          </span>
-          <div className="flex shrink-0 gap-2">
-            {/* Desktop / file picker classico (PDF/JPG/PNG) */}
-            <label className="cursor-pointer rounded-[8px] bg-pv-navy-700 px-3 py-1.5 font-semibold text-white hover:bg-pv-navy-800">
-              {veicolo.fileName ? 'Cambia' : 'Sfoglia'}
-              <input
-                type="file"
-                accept="application/pdf,image/jpeg,image/png"
-                onChange={(e) => {
-                  pick(e.target.files?.[0] ?? null);
-                  e.target.value = '';
-                }}
-                className="sr-only"
-              />
-            </label>
-            {/* Q-11: scansione mobile — capture forza la fotocamera
-                sui browser mobile, su desktop fa fallback al picker. */}
-            <label className="cursor-pointer rounded-[8px] border border-pv-navy-700 bg-white px-3 py-1.5 font-semibold text-pv-navy-700 hover:bg-pv-slate-50">
-              Scansiona
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                capture="environment"
-                onChange={(e) => {
-                  pick(e.target.files?.[0] ?? null);
-                  e.target.value = '';
-                }}
-                className="sr-only"
-              />
-            </label>
-          </div>
-        </div>
-      </Field>
-      {modal}
-
-      {/* Stato upload del libretto su Blob (prima dell'OCR). */}
-      {lib.uploading && (
-        <p className="mt-2 text-[12px] font-semibold text-pv-navy-700" role="status" aria-live="polite">
-          Caricamento libretto… {lib.progress}%
-        </p>
-      )}
-      {!lib.uploading && lib.ref && (
-        <p className="mt-2 text-[12px] font-semibold text-pv-green-500">✓ Libretto caricato</p>
-      )}
-      {lib.error && (
-        <div className="mt-2">
-          <Alert variant="error">{lib.error}</Alert>
-        </div>
-      )}
+      <p className="mb-3 text-[12.5px] text-pv-slate-500">
+        Carica entrambe le facciate del libretto di circolazione. Il retro può
+        riportare etichette di trasferimento di proprietà che verranno lette
+        dall&apos;OCR.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <UploadCard
+          label="Libretto — fronte"
+          slot={veicolo.libretto}
+          onSelect={(f) => onFronte(f ?? undefined)}
+          onRemove={() => onFronte(undefined)}
+        />
+        <UploadCard
+          label="Libretto — retro"
+          slot={veicolo.librettoRetro}
+          onSelect={(f) => onRetro(f ?? undefined)}
+          onRemove={() => onRetro(undefined)}
+        />
+      </div>
 
       {veicolo.extracting && (
         <div

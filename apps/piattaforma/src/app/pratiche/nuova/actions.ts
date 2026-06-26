@@ -9,6 +9,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
+import { parseLibrettoText } from '@/lib/providers/ocr/libretto-parser';
 import {
   extractIdentita,
   type IdentitaData,
@@ -91,28 +92,25 @@ export type ExtractLibrettoResult =
   | { ok: false; error: string };
 
 export async function extractLibrettoAction(
-  ref: FileRef,
+  fronte: FileRef,
+  retro: FileRef,
 ): Promise<ExtractLibrettoResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
 
-  if (!ref?.key || ref.size === 0) {
-    return { ok: false, error: 'File libretto mancante' };
-  }
-  if (ref.size > MAX_LIBRETTO_BYTES) {
-    return { ok: false, error: 'File troppo grande (max 10 MB)' };
-  }
-  if (!ACCEPTED_MIME.includes(ref.type)) {
-    return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+  for (const [ref, label] of [[fronte, 'fronte'], [retro, 'retro']] as const) {
+    if (!ref?.key || ref.size === 0) {
+      return { ok: false, error: `File libretto ${label} mancante` };
+    }
+    if (ref.size > MAX_LIBRETTO_BYTES) {
+      return { ok: false, error: 'File troppo grande (max 10 MB)' };
+    }
+    if (!ACCEPTED_MIME.includes(ref.type)) {
+      return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+    }
   }
 
-  const buffer = await storageGetBuffer(ref.key);
   const ocr = await getOcr();
-  const input = {
-    buffer,
-    mimeType: ref.type,
-    originalFilename: ref.name,
-  };
 
   type AttemptResult =
     | { ok: true; data: LibrettoCircolazioneData }
@@ -128,7 +126,21 @@ export async function extractLibrettoAction(
   const startedAt = Date.now();
   const attemptExtract = async (): Promise<AttemptResult> => {
     try {
-      const data = await ocr.extractLibretto(input);
+      const tFronte = (
+        await ocr.extractText({
+          buffer: await storageGetBuffer(fronte.key),
+          mimeType: fronte.type,
+          originalFilename: fronte.name,
+        })
+      ).text;
+      const tRetro = (
+        await ocr.extractText({
+          buffer: await storageGetBuffer(retro.key),
+          mimeType: retro.type,
+          originalFilename: retro.name,
+        })
+      ).text;
+      const data = parseLibrettoText(`${tFronte}\n${tRetro}`, 1);
       return { ok: true, data };
     } catch (e) {
       const elapsedMs = Date.now() - startedAt;
@@ -520,17 +532,25 @@ export async function submitNuovaPraticaAction(
     );
   }
 
-  // Libretto per ciascun veicolo: slot LIBRETTO_1..LIBRETTO_<n> (in ordine).
-  const librettoRefs: FileRef[] = [];
+  // Libretto per ciascun veicolo: fronte + retro (slot LIBRETTO_<i>_FRONTE e
+  // LIBRETTO_<i>_RETRO). Entrambi obbligatori — il retro può portare etichette
+  // di trasferimento che sovrascrivono il fronte nell'OCR combinato.
+  const librettoFronteRefs: FileRef[] = [];
+  const librettoRetroRefs: FileRef[] = [];
   for (let i = 1; i <= veicoli.length; i++) {
-    const r = getRef(`LIBRETTO_${i}`);
-    if (!r || r.size === 0) {
-      redirect(`/pratiche/nuova?error=Libretto%20veicolo%20${i}%20mancante`);
+    const rFronte = getRef(`LIBRETTO_${i}_FRONTE`);
+    const rRetro = getRef(`LIBRETTO_${i}_RETRO`);
+    if (!rFronte || rFronte.size === 0) {
+      redirect(`/pratiche/nuova?error=Libretto%20fronte%20veicolo%20${i}%20mancante`);
     }
-    if (r!.size > MAX_LIBRETTO_BYTES) {
+    if (!rRetro || rRetro.size === 0) {
+      redirect(`/pratiche/nuova?error=Libretto%20retro%20veicolo%20${i}%20mancante`);
+    }
+    if (rFronte!.size > MAX_LIBRETTO_BYTES || rRetro!.size > MAX_LIBRETTO_BYTES) {
       redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
     }
-    librettoRefs.push(r!);
+    librettoFronteRefs.push(rFronte!);
+    librettoRetroRefs.push(rRetro!);
   }
 
   // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
@@ -964,7 +984,8 @@ export async function submitNuovaPraticaAction(
   // Mappiamo ogni BlobRef nella forma StoragePutResult attesa dalle create
   // Documento (storageKey = chiave Blob, niente trasferimento di byte).
   const ocrManuale = formData.get('ocrManuale') === 'true';
-  const librettoUploads = librettoRefs.map(refToPut);
+  const librettoFronteUploads = librettoFronteRefs.map(refToPut);
+  const librettoRetroUploads = librettoRetroRefs.map(refToPut);
 
   // Schema Documentale v7 (SD-B): documenti richiesti.
   const docUploads = docCandidates.map(({ d: docReq, ref }) => ({
@@ -1046,11 +1067,13 @@ export async function submitNuovaPraticaAction(
     },
   });
 
-    // Un Veicolo per elemento (ordine 1..n) + il libretto collegato.
+    // Un Veicolo per elemento (ordine 1..n) + i libretti (fronte + retro)
+    // collegati come due righe Documento (LIBRETTO_CIRCOLAZIONE).
     const veicoloIdByOrdine = new Map<number, string>();
     for (let i = 0; i < veicoli.length; i++) {
       const v = veicoli[i]!;
-      const upload = librettoUploads[i]!;
+      const uploadFronte = librettoFronteUploads[i]!;
+      const uploadRetro = librettoRetroUploads[i]!;
       const veicolo = await tx.veicolo.create({
         data: {
           praticaId: created.id,
@@ -1082,21 +1105,38 @@ export async function submitNuovaPraticaAction(
         ocrManuale,
       };
 
+      // Fronte: porta l'OCR snapshot e il verdict.
       await tx.documento.create({
         data: {
           tipo: 'LIBRETTO_CIRCOLAZIONE',
           praticaId: created.id,
           veicoloId: veicolo.id,
-          storageKey: upload.storageKey,
-          storageProvider: upload.storageProvider,
-          mimeType: upload.mimeType,
-          sizeBytes: upload.sizeBytes,
-          originalFilename: upload.originalFilename,
+          storageKey: uploadFronte.storageKey,
+          storageProvider: uploadFronte.storageProvider,
+          mimeType: uploadFronte.mimeType,
+          sizeBytes: uploadFronte.sizeBytes,
+          originalFilename: uploadFronte.originalFilename,
           uploadedById: userId,
           ocrStato: ocrManuale ? 'FAILED' : 'SUCCESS',
           ocrProvider: env.OCR_PROVIDER,
           ocrData: ocrSnapshot,
           ocrAt: now,
+          gatingStato: 'PASSED',
+        },
+      });
+      // Retro: nessun OCR autonomo (contribuisce all'OCR combinato del fronte).
+      await tx.documento.create({
+        data: {
+          tipo: 'LIBRETTO_CIRCOLAZIONE',
+          praticaId: created.id,
+          veicoloId: veicolo.id,
+          storageKey: uploadRetro.storageKey,
+          storageProvider: uploadRetro.storageProvider,
+          mimeType: uploadRetro.mimeType,
+          sizeBytes: uploadRetro.sizeBytes,
+          originalFilename: uploadRetro.originalFilename,
+          uploadedById: userId,
+          ocrStato: 'NONE',
           gatingStato: 'PASSED',
         },
       });

@@ -704,8 +704,8 @@ export async function submitNuovaPraticaAction(
   };
 
   // Raccoglie i file identità di una parte secondo il tipo di documento scelto.
-  // Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO; passaporto/patente:
-  // <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO. Per i venditori
+  // Slot CI: <PREFIX>_ID_FRONTE + <PREFIX>_ID_RETRO; patente: _ID_FRONTE/_ID_RETRO;
+  // passaporto: <PREFIX>_ID. Permesso opzionale: <PREFIX>_PERMESSO. Per i venditori
   // `venditoreOrdine` tagga i candidati per il successivo linkage al Venditore.
   const collectIdentita = (
     owner: 'VENDITORE' | 'ACQUIRENTE',
@@ -1068,7 +1068,8 @@ export async function submitNuovaPraticaAction(
   });
 
     // Un Veicolo per elemento (ordine 1..n) + i libretti (fronte + retro)
-    // collegati come due righe Documento (LIBRETTO_CIRCOLAZIONE).
+    // collegati come due righe Documento: LIBRETTO_CIRCOLAZIONE (fronte) e
+    // LIBRETTO_CIRCOLAZIONE_RETRO (retro).
     const veicoloIdByOrdine = new Map<number, string>();
     for (let i = 0; i < veicoli.length; i++) {
       const v = veicoli[i]!;

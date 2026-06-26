@@ -94,11 +94,11 @@ type IdentitaFiles = {
  * Se la stringa è una sola parola, la usiamo come cognome (caso edge).
  */
 /**
- * A7: presenza documento d'identità per parte. Per la CI servono ENTRAMBE le
- * facciate (fronte+retro) — coerente con la validazione server-side; per
- * passaporto/patente basta il file singolo. Il permesso è opzionale.
- * "Presente" significa BlobRef caricata (non basta aver scelto il file: serve
- * che l'upload su Blob sia completato).
+ * A7: presenza documento d'identità per parte. Per la CI e la PATENTE servono
+ * ENTRAMBE le facciate (fronte+retro) — coerente con la validazione
+ * server-side; per il passaporto basta il file singolo. Il permesso è
+ * opzionale. "Presente" significa BlobRef caricata (non basta aver scelto il
+ * file: serve che l'upload su Blob sia completato).
  */
 function identitaPresente(docId: DocIdTipo, files: IdentitaFiles): boolean {
   return docId === 'CI' || docId === 'PATENTE'
@@ -456,7 +456,7 @@ export function WizardNuovaPratica({
     setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
 
   // Documento d'identità per parte (A7): tipo scelto + file caricati. Il file
-  // principale (fronte CI / single passaporto-patente) avvia l'OCR di pre-fill.
+  // fronte (CI e patente) o il file singolo (passaporto) avvia l'OCR di pre-fill.
   const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
   const [acquirenteIdentita, setAcquirenteIdentita] = useState<IdentitaFiles>({});
 
@@ -2414,8 +2414,8 @@ function UploadCard({
 
 /**
  * A7 + Verifica documentale: sezione "Documento d'identità" sotto ciascuna
- * parte. Il broker sceglie il tipo documento; per la CI servono fronte+retro,
- * per passaporto/patente un file unico. In base al tipo soggetto compaiono i
+ * parte. Il broker sceglie il tipo documento; per la CI e la patente servono
+ * fronte+retro; per il passaporto basta un file singolo. In base al tipo soggetto compaiono i
  * blocchi condizionali: Visura camerale (AZIENDA / OPERATORE_AUTO) e Permesso
  * di soggiorno (STRANIERO_EXTRA_UE). Ogni file viene caricato subito su Blob
  * (client upload) e ne teniamo la BlobRef. Al completamento dell'upload parte

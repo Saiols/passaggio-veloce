@@ -1127,7 +1127,7 @@ export async function submitNuovaPraticaAction(
       // Retro: nessun OCR autonomo (contribuisce all'OCR combinato del fronte).
       await tx.documento.create({
         data: {
-          tipo: 'LIBRETTO_CIRCOLAZIONE',
+          tipo: 'LIBRETTO_CIRCOLAZIONE_RETRO',
           praticaId: created.id,
           veicoloId: veicolo.id,
           storageKey: uploadRetro.storageKey,

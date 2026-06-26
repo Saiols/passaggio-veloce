@@ -718,8 +718,19 @@ export function WizardNuovaPratica({
   // Upload del fronte libretto su Blob. Dopo l'upload avvia OCR se anche il
   // retro è già pronto; altrimenti aspetta il retro. Invalidando sempre l'OCR
   // al cambio di fronte, si garantisce il re-OCR.
+  // I-1: se file=undefined (remove), azzera lo slot e invalida l'OCR.
   const onFronteSelected = async (idx: number, file: File | undefined) => {
-    if (!file) return;
+    if (!file) {
+      // Rimozione: azzera fronte + stato OCR (step-1 gate richiede ref+ocr).
+      updateVeicolo(idx, {
+        libretto: emptySlot(),
+        fileName: null,
+        ocr: undefined,
+        ocrError: null,
+        extracting: false,
+      });
+      return;
+    }
     updateVeicolo(idx, {
       libretto: { ref: null, file, uploading: true, progress: 0, error: null },
       fileName: file.name,
@@ -743,24 +754,35 @@ export function WizardNuovaPratica({
       });
       return;
     }
-    updateVeicolo(idx, {
-      libretto: { ref, file, uploading: false, progress: 100, error: null },
-    });
-    // Leggi lo stato corrente del retro per capire se possiamo avviare l'OCR.
+    // I-2: applica il nuovo ref e legge il retro dalla stessa snapshot aggiornata
+    // in un'unica functional update, così il check è deterministic (niente race).
     setVeicoli((prev) => {
-      const retroRef = prev[idx]?.librettoRetro?.ref;
+      const updated = prev.map((v, i) =>
+        i === idx ? { ...v, libretto: { ref, file, uploading: false, progress: 100, error: null } } : v,
+      );
+      const retroRef = updated[idx]?.librettoRetro?.ref;
       if (retroRef) {
-        // Schedula l'OCR dopo il flush di stato (Promise micro-task).
         void runLibrettoOcr(idx, ref, retroRef);
       }
-      return prev;
+      return updated;
     });
   };
 
   // Upload del retro libretto su Blob. Dopo l'upload avvia OCR se anche il
   // fronte è già pronto; altrimenti aspetta il fronte.
+  // I-1: se file=undefined (remove), azzera lo slot e invalida l'OCR.
   const onRetroSelected = async (idx: number, file: File | undefined) => {
-    if (!file) return;
+    if (!file) {
+      // Rimozione: azzera retro + stato OCR (step-1 gate richiede ref+ocr).
+      updateVeicolo(idx, {
+        librettoRetro: emptySlot(),
+        fileNameRetro: null,
+        ocr: undefined,
+        ocrError: null,
+        extracting: false,
+      });
+      return;
+    }
     updateVeicolo(idx, {
       librettoRetro: { ref: null, file, uploading: true, progress: 0, error: null },
       fileNameRetro: file.name,
@@ -784,16 +806,17 @@ export function WizardNuovaPratica({
       });
       return;
     }
-    updateVeicolo(idx, {
-      librettoRetro: { ref, file, uploading: false, progress: 100, error: null },
-    });
-    // Leggi lo stato corrente del fronte per capire se possiamo avviare l'OCR.
+    // I-2: applica il nuovo ref e legge il fronte dalla stessa snapshot aggiornata
+    // in un'unica functional update, così il check è deterministic (niente race).
     setVeicoli((prev) => {
-      const fronteRef = prev[idx]?.libretto?.ref;
+      const updated = prev.map((v, i) =>
+        i === idx ? { ...v, librettoRetro: { ref, file, uploading: false, progress: 100, error: null } } : v,
+      );
+      const fronteRef = updated[idx]?.libretto?.ref;
       if (fronteRef) {
         void runLibrettoOcr(idx, fronteRef, ref);
       }
-      return prev;
+      return updated;
     });
   };
 

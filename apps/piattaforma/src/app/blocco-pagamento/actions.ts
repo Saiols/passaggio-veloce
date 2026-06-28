@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
-import { processFeeAddebito } from '@/lib/fee/process';
+import { ritentaAddebitiAgenzia } from '@/lib/fee/retry';
 import { applySepaMandateToAgency } from '@/lib/providers/payment/stripe-mandate';
 
 export type RimedioResult = { ok: true } | { ok: false; error: string };
@@ -17,28 +17,27 @@ async function getAgenziaIdLoggata(): Promise<string | null> {
   return u.companyId;
 }
 
-/** Ri-processa tutti gli addebiti scoperti (FAILED/RETRY) dell'agenzia. */
-async function ritentaAddebitiScoperti(agenziaId: string): Promise<void> {
-  const scoperti = await prisma.feeAddebito.findMany({
-    where: { agenziaId, stato: { in: ['FAILED', 'RETRY'] } },
-    select: { id: true },
-  });
-  for (const f of scoperti) {
-    await prisma.feeAddebito.update({
-      where: { id: f.id },
-      data: { stato: 'SCHEDULED', scheduledAt: new Date(), tentativi: { increment: 1 }, errorMessage: null },
-    });
-    await processFeeAddebito(f.id);
-  }
-}
-
 /** Riprova l'addebito col mandato esistente (l'agenzia ha sistemato con la banca). */
 export async function ritentaAddebitoAction(): Promise<RimedioResult> {
   const agenziaId = await getAgenziaIdLoggata();
   if (!agenziaId) return { ok: false, error: 'Non autorizzato' };
-  await ritentaAddebitiScoperti(agenziaId);
+  await ritentaAddebitiAgenzia(agenziaId);
   revalidatePath('/blocco-pagamento');
   return { ok: true };
+}
+
+/**
+ * Valida un IBAN con l'algoritmo MOD97 (ISO 13616).
+ * Restituisce true se l'IBAN è strutturalmente valido.
+ */
+function isIbanMod97Valid(iban: string): boolean {
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  const numeric = rearranged.replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let remainder = 0;
+  for (const ch of numeric) {
+    remainder = (remainder * 10 + parseInt(ch, 10)) % 97;
+  }
+  return remainder === 1;
 }
 
 const ibanSchema = z.object({
@@ -53,6 +52,7 @@ export async function aggiornaIbanERitentaAction(formData: FormData): Promise<Ri
   const parsed = ibanSchema.safeParse({ iban: formData.get('iban') });
   if (!parsed.success) return { ok: false, error: 'IBAN non valido' };
   const iban = parsed.data.iban;
+  if (!isIbanMod97Valid(iban)) return { ok: false, error: "IBAN non valido: il checksum non è corretto. Verifica di aver copiato l'IBAN per intero." };
 
   const agenzia = await prisma.company.findUnique({
     where: { id: agenziaId },
@@ -83,7 +83,7 @@ export async function aggiornaIbanERitentaAction(formData: FormData): Promise<Ri
     return { ok: true };
   }
   // ACTIVE → riprova subito
-  await ritentaAddebitiScoperti(agenziaId);
+  await ritentaAddebitiAgenzia(agenziaId);
   revalidatePath('/blocco-pagamento');
   return { ok: true };
 }

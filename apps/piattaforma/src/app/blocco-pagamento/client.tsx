@@ -24,8 +24,11 @@ export function BloccoPagamentoClient({
     setError(null);
     start(async () => {
       const r = await ritentaAddebitoAction();
-      if (!r.ok) setError(r.error);
-      router.refresh();
+      if (!r.ok) {
+        setError(r.error);
+      } else {
+        router.refresh();
+      }
     });
   };
 
@@ -33,8 +36,11 @@ export function BloccoPagamentoClient({
     setError(null);
     start(async () => {
       const r = await aggiornaIbanERitentaAction(formData);
-      if (!r.ok) setError(r.error);
-      router.refresh();
+      if (!r.ok) {
+        setError(r.error);
+      } else {
+        router.refresh();
+      }
     });
   };
 

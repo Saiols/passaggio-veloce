@@ -4,12 +4,16 @@ import { sendNotification } from '@/lib/notifiche';
 import { env } from '@/env';
 
 /** Stati di un FeeAddebito che tengono l'agenzia bloccata (scoperto o in volo). */
-const STATI_SCOPERTI = ['FAILED', 'RETRY', 'IN_LAVORAZIONE'] as const;
+export const STATI_SCOPERTI = ['FAILED', 'RETRY', 'IN_LAVORAZIONE'] as const;
 
 /**
  * Blocca l'agenzia per un addebito non riuscito. Best-effort, idempotente:
  * setta bloccoPagamentoAt solo alla prima transizione (e allora invia N9);
  * se già bloccata aggiorna solo il motivo. Non propaga errori.
+ *
+ * SAFETY: se il mandato SEPA non è ACTIVE (es. ancora PENDING o setup FAILED),
+ * l'addebito non è mai avvenuto davvero — è un gap di configurazione, non un
+ * rifiuto della banca. In quel caso NON blocchiamo l'agenzia.
  */
 export async function bloccaAgenziaPerAddebito(feeId: string, motivo: string): Promise<void> {
   try {
@@ -20,9 +24,11 @@ export async function bloccaAgenziaPerAddebito(feeId: string, motivo: string): P
     if (!fee) return;
     const agenzia = await prisma.company.findUnique({
       where: { id: fee.agenziaId },
-      select: { id: true, ragioneSociale: true, email: true, bloccoPagamentoAt: true },
+      select: { id: true, ragioneSociale: true, email: true, bloccoPagamentoAt: true, sepaMandateStatus: true },
     });
     if (!agenzia) return;
+    // Skip: mandato non attivo → gap di setup, non rifiuto bancario.
+    if (agenzia.sepaMandateStatus !== 'ACTIVE') return;
     const giaBloccata = !!agenzia.bloccoPagamentoAt;
     await prisma.company.update({
       where: { id: agenzia.id },
@@ -48,24 +54,19 @@ export async function bloccaAgenziaPerAddebito(feeId: string, motivo: string): P
 
 /**
  * Sblocca l'agenzia se non ha più alcun addebito scoperto o in volo
- * (FAILED/RETRY/IN_LAVORAZIONE). Best-effort, idempotente.
+ * (FAILED/RETRY/IN_LAVORAZIONE). Operazione ATOMICA: un singolo updateMany
+ * con filtro relazione elimina la race condition count→update. Best-effort.
  */
 export async function rivalutaBloccoAgenzia(agenziaId: string): Promise<void> {
   try {
-    const agenzia = await prisma.company.findUnique({
-      where: { id: agenziaId },
-      select: { bloccoPagamentoAt: true },
+    await prisma.company.updateMany({
+      where: {
+        id: agenziaId,
+        bloccoPagamentoAt: { not: null },
+        feeAddebiti: { none: { stato: { in: [...STATI_SCOPERTI] } } },
+      },
+      data: { bloccoPagamentoAt: null, bloccoPagamentoMotivo: null },
     });
-    if (!agenzia?.bloccoPagamentoAt) return;
-    const scoperti = await prisma.feeAddebito.count({
-      where: { agenziaId, stato: { in: STATI_SCOPERTI as unknown as any } },
-    });
-    if (scoperti === 0) {
-      await prisma.company.update({
-        where: { id: agenziaId },
-        data: { bloccoPagamentoAt: null, bloccoPagamentoMotivo: null },
-      });
-    }
   } catch {
     // best-effort
   }

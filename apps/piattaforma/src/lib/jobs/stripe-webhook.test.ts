@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { feeUpdateMany, feeFindUnique, companyUpdateMany, blocca, rivaluta } = vi.hoisted(() => ({
+const { feeUpdateMany, feeFindUnique, companyUpdateMany, blocca, rivaluta, isBloccata, ritentaMock } = vi.hoisted(() => ({
   feeUpdateMany: vi.fn(),
   feeFindUnique: vi.fn(),
   companyUpdateMany: vi.fn(),
   blocca: vi.fn(),
   rivaluta: vi.fn(),
+  isBloccata: vi.fn(),
+  ritentaMock: vi.fn(),
 }));
 vi.mock('@pv/db', () => ({
   prisma: {
@@ -13,7 +15,12 @@ vi.mock('@pv/db', () => ({
     company: { updateMany: companyUpdateMany },
   },
 }));
-vi.mock('@/lib/fee/blocco', () => ({ bloccaAgenziaPerAddebito: blocca, rivalutaBloccoAgenzia: rivaluta }));
+vi.mock('@/lib/fee/blocco', () => ({
+  bloccaAgenziaPerAddebito: blocca,
+  rivalutaBloccoAgenzia: rivaluta,
+  isAgenziaBloccata: isBloccata,
+}));
+vi.mock('@/lib/fee/retry', () => ({ ritentaAddebitiAgenzia: ritentaMock }));
 
 import { handleStripeEvent } from './stripe-webhook';
 
@@ -24,10 +31,14 @@ describe('handleStripeEvent', () => {
     companyUpdateMany.mockReset();
     blocca.mockReset();
     rivaluta.mockReset();
+    isBloccata.mockReset();
+    ritentaMock.mockReset();
     feeUpdateMany.mockResolvedValue({ count: 1 });
     feeFindUnique.mockResolvedValue({ agenziaId: 'a1' });
     blocca.mockResolvedValue(undefined);
     rivaluta.mockResolvedValue(undefined);
+    isBloccata.mockResolvedValue(false);
+    ritentaMock.mockResolvedValue(undefined);
   });
 
   it('payment_intent.succeeded → fee SUCCESS via metadata', async () => {
@@ -61,6 +72,25 @@ describe('handleStripeEvent', () => {
       where: { id: 'co-1' },
       data: { sepaMandateStatus: 'ACTIVE' },
     });
+  });
+
+  it('setup_intent.succeeded → non chiama retry se agenzia non bloccata', async () => {
+    isBloccata.mockResolvedValue(false);
+    await handleStripeEvent({
+      type: 'setup_intent.succeeded',
+      data: { object: { id: 'seti_1', metadata: { companyId: 'co-1' } } },
+    } as never);
+    expect(ritentaMock).not.toHaveBeenCalled();
+  });
+
+  it('setup_intent.succeeded → auto-retry se agenzia era bloccata (PENDING→ACTIVE)', async () => {
+    isBloccata.mockResolvedValue(true);
+    await handleStripeEvent({
+      type: 'setup_intent.succeeded',
+      data: { object: { id: 'seti_1', metadata: { companyId: 'co-1' } } },
+    } as never);
+    expect(isBloccata).toHaveBeenCalledWith('co-1');
+    expect(ritentaMock).toHaveBeenCalledWith('co-1');
   });
 
   it('setup_intent.setup_failed → mandato FAILED', async () => {

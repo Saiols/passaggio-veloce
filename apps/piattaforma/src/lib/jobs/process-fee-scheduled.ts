@@ -1,8 +1,7 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import { getPayment } from '@/lib/providers/payment';
 import { isPaymentLive } from './payment-live';
-import { feeOutcomeFromResult } from './fee-outcome';
+import { processFeeAddebito } from '@/lib/fee/process';
 
 const BATCH_SIZE = 30;
 
@@ -27,52 +26,11 @@ export async function processFeeScheduled(): Promise<ProcessFeeResult> {
 
   let succeeded = 0;
   let failed = 0;
-  const payment = getPayment();
 
   for (const fee of fees) {
-    await prisma.feeAddebito.update({
-      where: { id: fee.id },
-      data: { stato: 'IN_LAVORAZIONE' },
-    });
-
-    const result = await payment.chargeFee({
-      feeAddebitoId: fee.id,
-      importoCent: fee.importoCent,
-      agenziaId: fee.agenziaId,
-      tentativo: fee.tentativi,
-    });
-
-    const outcome = feeOutcomeFromResult(result);
-    if (outcome.status === 'SUCCESS') {
-      await prisma.feeAddebito.update({
-        where: { id: fee.id },
-        data: {
-          stato: 'SUCCESS',
-          providerRef: outcome.providerRef,
-          executedAt: new Date(),
-          errorMessage: null,
-        },
-      });
-      succeeded++;
-      // TODO: invia N8_AGENZIA_ADDEBITO — richiede query pratica+agenzia per payload
-    } else if (outcome.status === 'PENDING') {
-      // SEPA in settlement: resta IN_LAVORAZIONE, il webhook payment_intent.*
-      // finalizzerà SUCCESS/FAILED. Salviamo solo il providerRef.
-      await prisma.feeAddebito.update({
-        where: { id: fee.id },
-        data: { providerRef: outcome.providerRef },
-      });
-    } else {
-      await prisma.feeAddebito.update({
-        where: { id: fee.id },
-        data: {
-          stato: outcome.status,
-          errorMessage: outcome.error,
-          executedAt: new Date(),
-        },
-      });
-      failed++;
-    }
+    const status = await processFeeAddebito(fee.id);
+    if (status === 'SUCCESS') succeeded++;
+    else if (status === 'RETRY' || status === 'FAILED') failed++;
   }
 
   return { processed: fees.length, succeeded, failed };

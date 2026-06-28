@@ -30,6 +30,9 @@ export default async function AdminCompanyDetailPage({
       },
       wallet: true,
       referente: { select: { id: true, ragioneSociale: true } },
+      mandatoFatturazione: {
+        include: { firmatario: { select: { nome: true, cognome: true, email: true } } },
+      },
       _count: {
         select: {
           praticheCreate: true,
@@ -159,6 +162,32 @@ export default async function AdminCompanyDetailPage({
             showPayoutThreshold={session.user.role === 'ADMIN_PIATTAFORMA'}
           />
         </Card>
+
+        <section className="mb-6 rounded-2xl border border-pv-slate-200 bg-white p-5">
+          <h2 className="text-[13px] font-bold uppercase tracking-wider text-pv-slate-500">
+            Mandato fatturazione conto terzi
+          </h2>
+          {company.mandatoFatturazione ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-[13px] text-pv-slate-700">
+              <div>
+                <p className="font-semibold text-pv-green-600">Firmato</p>
+                <p className="text-pv-slate-500">
+                  da {company.mandatoFatturazione.firmatario.nome}{' '}
+                  {company.mandatoFatturazione.firmatario.cognome}
+                  {' · '}il {formatDate(company.mandatoFatturazione.firmatoAt)}
+                </p>
+              </div>
+              <a
+                href={`/api/admin/mandato/${company.id}/pdf`}
+                className="rounded-lg bg-pv-navy-700 px-3 py-1.5 text-sm font-semibold text-white"
+              >
+                Scarica PDF
+              </a>
+            </div>
+          ) : (
+            <p className="mt-3 text-[13px] text-pv-slate-500">Non ancora firmato.</p>
+          )}
+        </section>
 
         <Card>
           <h2 className="text-[15px] font-bold text-pv-navy-800">

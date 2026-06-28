@@ -395,7 +395,13 @@ function AccountStep({
       </div>
 
       <Field label="Codice Fiscale" required error={errors.codiceFiscale?.message}>
-        <Input invalid={!!errors.codiceFiscale} {...register('codiceFiscale')} />
+        <Input
+          invalid={!!errors.codiceFiscale}
+          className="uppercase"
+          {...register('codiceFiscale', {
+            setValueAs: (v) => (typeof v === 'string' ? v.toUpperCase() : v),
+          })}
+        />
       </Field>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

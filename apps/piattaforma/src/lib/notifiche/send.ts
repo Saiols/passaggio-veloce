@@ -30,6 +30,7 @@ import {
   tplN6AgenziaNuova,
   tplN7AgenziaPromemoriaCountdown,
   tplN8AgenziaAddebito,
+  tplN9AgenziaAddebitoFallito,
   type N10AdminEscalationPayload,
   type N11BrokerEscalationPayload,
   type N12AffiliazioneCommissionePayload,
@@ -55,6 +56,7 @@ import {
   type N6AgenziaNuovaPayload,
   type N7AgenziaPromemoriaCountdownPayload,
   type N8AgenziaAddebitoPayload,
+  type N9AgenziaAddebitoFallitoPayload,
   type NotificaContent,
 } from './templates';
 
@@ -72,6 +74,7 @@ type SendInput =
   | { tipo: 'N6_AGENZIA_NUOVA_PRATICA'; target: Target; payload: N6AgenziaNuovaPayload }
   | { tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN'; target: Target; payload: N7AgenziaPromemoriaCountdownPayload }
   | { tipo: 'N8_AGENZIA_ADDEBITO'; target: Target; payload: N8AgenziaAddebitoPayload }
+  | { tipo: 'N9_AGENZIA_ADDEBITO_FALLITO'; target: Target; payload: N9AgenziaAddebitoFallitoPayload }
   | { tipo: 'N10_ADMIN_ESCALATION'; target: Target; payload: N10AdminEscalationPayload }
   | { tipo: 'N11_BROKER_ESCALATION'; target: Target; payload: N11BrokerEscalationPayload }
   | {
@@ -171,6 +174,8 @@ function render(input: SendInput): NotificaContent {
       return tplN7AgenziaPromemoriaCountdown(input.payload);
     case 'N8_AGENZIA_ADDEBITO':
       return tplN8AgenziaAddebito(input.payload);
+    case 'N9_AGENZIA_ADDEBITO_FALLITO':
+      return tplN9AgenziaAddebitoFallito(input.payload);
     case 'N10_ADMIN_ESCALATION':
       return tplN10AdminEscalation(input.payload);
     case 'N11_BROKER_ESCALATION':

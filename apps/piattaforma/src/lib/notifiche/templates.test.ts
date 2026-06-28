@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento } from './templates';
+import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 
 describe('templates usano il nuovo layout', () => {
@@ -78,5 +78,20 @@ describe('N40 cliente avanzamento', () => {
     });
     expect(text).toContain('PV-1');
     expect(text).not.toContain('null');
+  });
+});
+
+describe('N9 addebito fallito agenzia', () => {
+  it('contiene il messaggio di sospensione, l\'invito a aggiornare l\'IBAN e il CTA', () => {
+    const { subject, text, html } = tplN9AgenziaAddebitoFallito({
+      nomeAgenzia: 'Agenzia Rossi',
+      rimedioUrl: 'https://passaggioveloce.it/blocco-pagamento',
+    });
+    expect(subject.length).toBeGreaterThan(0);
+    const hay = `${subject}\n${text}\n${html}`.toLowerCase();
+    expect(hay).toContain('addebito');
+    expect(hay).toContain('iban');
+    expect(hay).toContain('sospeso');
+    expect(html).toContain('https://passaggioveloce.it/blocco-pagamento');
   });
 });

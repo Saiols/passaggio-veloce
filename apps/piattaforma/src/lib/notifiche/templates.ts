@@ -60,6 +60,11 @@ export type N8AgenziaAddebitoPayload = {
   nomeAgenzia: string;
 };
 
+export type N9AgenziaAddebitoFallitoPayload = {
+  nomeAgenzia: string;
+  rimedioUrl: string;
+};
+
 export type N10AdminEscalationPayload = {
   codicePratica: string;
   targa: string | null;
@@ -316,6 +321,26 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
       Auto-addebito: <strong>${formatDate(p.autoAddebitoAt)}</strong>
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">L'integrazione pagamenti SEPA sarà attiva in una fase successiva.</p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN9AgenziaAddebitoFallito(p: N9AgenziaAddebitoFallitoPayload): NotificaContent {
+  const subject = 'Addebito automatico non riuscito — account momentaneamente sospeso';
+  const text =
+    `Ciao ${p.nomeAgenzia},\n` +
+    `non ha funzionato l'addebito automatico, il tuo account è stato momentaneamente sospeso. ` +
+    `Aggiorna l'IBAN inserito nella piattaforma (o richiedi un nuovo tentativo se hai già sistemato con la banca).\n` +
+    `Vai a: ${p.rimedioUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Addebito automatico non riuscito</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      non ha funzionato l&apos;addebito automatico e il tuo account è stato
+      <strong>momentaneamente sospeso</strong>. Aggiorna l&apos;IBAN inserito nella
+      piattaforma, oppure richiedi un nuovo tentativo se hai già sistemato con la banca.
+    </p>
+    ${ctaButton(p.rimedioUrl, 'Aggiorna IBAN / Riprova')}
   `);
   return { subject, html, text };
 }

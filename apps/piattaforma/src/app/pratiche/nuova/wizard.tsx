@@ -2649,11 +2649,17 @@ function RiepilogoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Formato email base (non RFC completo): un token, @, dominio con punto. */
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 function parteValida(p: Parte): boolean {
   // Schema Documentale v7 (SD-B): tipoSoggetto obbligatorio + anagrafica
   // completa. La validità dei documenti (visura ≤6 mesi, permesso non scaduto)
   // è verificata via OCR nella verifica documentale (lib/kyc/parte-docs).
   if (!p.tipoSoggetto) return false;
+
+  // Contatti obbligatori (telefono + email valida) per ogni parte.
+  if (p.telefono.trim().length === 0 || !EMAIL_RE.test(p.email.trim())) return false;
 
   if (p.isPG) return p.ragioneSociale.trim().length > 0 && p.piva.length === 11;
   return (
@@ -2695,6 +2701,8 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
     if (!p.cognome.trim()) m.push('cognome');
     if (p.cf.trim().length !== 16) m.push('codice fiscale (16 caratteri)');
   }
+  if (!p.telefono.trim()) m.push('numero di telefono');
+  if (!EMAIL_RE.test(p.email.trim())) m.push('email valida');
   const req = documentiRichiestiParte({
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,

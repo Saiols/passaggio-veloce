@@ -366,8 +366,8 @@ const venditoreSchema = z.object({
   cf: z.string().trim().max(16).optional().nullable(),
   ragioneSociale: z.string().trim().max(160).optional().nullable(),
   piva: z.string().trim().max(11).optional().nullable(),
-  telefono: z.string().trim().max(30).optional().nullable(),
-  email: z.string().trim().max(120).optional().nullable(),
+  telefono: z.string().trim().min(1, 'Numero di telefono del venditore obbligatorio').max(30),
+  email: z.string().trim().min(1, 'Email del venditore obbligatoria').max(120).email('Email del venditore non valida'),
   docId: z.enum(['CI', 'PASSAPORTO', 'PATENTE']).default('CI'),
 });
 
@@ -419,8 +419,8 @@ const submitSchema = z.object({
   acquirenteCF: z.string().trim().max(16).optional(),
   acquirenteRagioneSociale: z.string().trim().max(160).optional(),
   acquirentePIVA: z.string().trim().max(11).optional(),
-  acquirenteTelefono: z.string().trim().max(30).optional(),
-  acquirenteEmail: z.string().trim().max(120).optional(),
+  acquirenteTelefono: z.string().trim().min(1, "Numero di telefono dell'acquirente obbligatorio").max(30),
+  acquirenteEmail: z.string().trim().min(1, "Email dell'acquirente obbligatoria").max(120).email("Email dell'acquirente non valida"),
   acquirenteIndirizzoResidenza: z.string().trim().max(250).optional(),
 
   // Flag

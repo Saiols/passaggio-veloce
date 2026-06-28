@@ -73,14 +73,23 @@ transizione e sparisce quando il nuovo render è committato.
   transizione termina comunque, `pending` torna `false`, l'overlay sparisce. Il
   comportamento d'errore resta quello attuale (nessun cambio); fuori scope.
 
-## Test
+## Test / verifica
 
-- Unit sul presentational `SedeSwitchOverlay` (collocazione co-locata, come gli
-  altri test componente del repo):
-  - `show={true}` → rende il testo "Aggiornamento sede…" e `role="status"`;
-  - `show={false}` → non rende nulla.
+Il repo **non** fa rendering DOM di componenti nei test (environment vitest
+`node`; convenzione: logica pura in `.ts` testata, componenti `.tsx`
+presentazionali non testati — es. `InlineSpinner` stesso non ha test). L'overlay
+è puramente presentazionale (nessuna logica oltre `show ? portal : null`):
+introdurre il primo test DOM solo per questo sarebbe fuori convenzione e
+sproporzionato (YAGNI).
+
+Verifica:
+- `pnpm --filter piattaforma run typecheck` pulito + `pnpm --filter piattaforma test`
+  (suite invariata, niente regressioni);
+- **check visivo manuale** (come il repo fa per i componenti visivi): da broker e
+  da agenzia, cambiare sede e confermare che compare l'overlay full-screen e
+  sparisce a dati aggiornati.
 
 ## File toccati
 
-- `apps/piattaforma/src/components/sede/sede-switch-overlay.tsx` — **nuovo** presentational + test
+- `apps/piattaforma/src/components/sede/sede-switch-overlay.tsx` — **nuovo** presentational
 - `apps/piattaforma/src/components/sede/sede-switcher-client.tsx` — render dell'overlay su `pending`

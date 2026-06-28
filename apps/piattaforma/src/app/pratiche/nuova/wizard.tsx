@@ -1140,7 +1140,6 @@ export function WizardNuovaPratica({
         <ParteForm
           parte={v}
           onChange={(p) => updateVenditore(idx, p)}
-          tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
         />
       </div>
 
@@ -1155,6 +1154,16 @@ export function WizardNuovaPratica({
         files={v.identita}
         isPG={v.isPG}
         tipoSoggetto={v.tipoSoggetto}
+        tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
+        onTipoSoggetto={(next) => {
+          const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
+          updateVenditore(idx, {
+            tipoSoggetto: next,
+            isPG,
+            visuraOcr: isPG ? v.visuraOcr : undefined,
+            permessoOcr: next === 'STRANIERO_EXTRA_UE' ? v.permessoOcr : undefined,
+          });
+        }}
         onFiles={(updater) =>
           setVenditori((prev) =>
             prev.map((vv, i) => (i === idx ? { ...vv, identita: updater(vv.identita) } : vv)),
@@ -1651,7 +1660,6 @@ export function WizardNuovaPratica({
               <ParteForm
                 parte={acquirente}
                 onChange={setAcquirente}
-                tipiSoggetto={acquirenteTipiSoggetto}
               />
             </div>
 
@@ -1662,6 +1670,17 @@ export function WizardNuovaPratica({
               files={acquirenteIdentita}
               isPG={acquirente.isPG}
               tipoSoggetto={acquirente.tipoSoggetto}
+              tipiSoggetto={acquirenteTipiSoggetto}
+              onTipoSoggetto={(next) => {
+                const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
+                setAcquirente((prev) => ({
+                  ...prev,
+                  tipoSoggetto: next,
+                  isPG,
+                  visuraOcr: isPG ? prev.visuraOcr : undefined,
+                  permessoOcr: next === 'STRANIERO_EXTRA_UE' ? prev.permessoOcr : undefined,
+                }));
+              }}
               onFiles={setAcquirenteIdentita}
               onMainRef={(ref) =>
                 runIdentitaOcr(ref, acquirenteDocId, (updater) =>
@@ -2177,49 +2196,16 @@ function VeicoloSection({
 function ParteForm({
   parte,
   onChange,
-  tipiSoggetto,
 }: {
   parte: Parte;
   onChange: (p: Parte) => void;
-  tipiSoggetto: { value: TipoSoggetto; label: string }[];
 }) {
-  // Schema Documentale v7 (SD-B): il select tipoSoggetto popola in cascata
-  // isPG/isPersonaGiuridica per backward compatibility con la rotta esistente.
-  // La validità di visura/permesso non si inserisce più a mano: è verificata via
-  // OCR nella verifica documentale (lib/kyc/parte-docs). Al cambio tipo soggetto
-  // invalidiamo gli OCR non più pertinenti così il verdetto resta coerente.
-  const handleTipoSoggetto = (next: TipoSoggetto): void => {
-    const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
-    onChange({
-      ...parte,
-      tipoSoggetto: next,
-      isPG,
-      visuraOcr: isPG ? parte.visuraOcr : undefined,
-      permessoOcr: next === 'STRANIERO_EXTRA_UE' ? parte.permessoOcr : undefined,
-    });
-  };
-
+  // Schema Documentale v7 (SD-B): il tipo soggetto (che popola isPG e determina
+  // quali documenti servono) è scelto nella sezione documenti — IdentitaSection,
+  // così da essere più visibile accanto agli upload. Qui restano solo l'anagrafica
+  // e i contatti della parte.
   return (
     <div>
-      <Field label="Tipo soggetto" required>
-        <Select
-          value={parte.tipoSoggetto ?? ''}
-          onChange={(e) =>
-            handleTipoSoggetto(e.target.value as TipoSoggetto)
-          }
-        >
-          <option value="" disabled>
-            Seleziona tipo…
-          </option>
-          {tipiSoggetto.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      <div className="my-3 h-px bg-pv-slate-200" />
       {parte.isPG ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Ragione sociale" required>
@@ -2257,7 +2243,7 @@ function ParteForm({
         </div>
       )}
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Telefono">
+        <Field label="Telefono" required>
           <Input
             type="tel"
             value={parte.telefono}
@@ -2265,7 +2251,7 @@ function ParteForm({
             placeholder="+39 333 1234567"
           />
         </Field>
-        <Field label="Email">
+        <Field label="Email" required>
           <Input
             type="email"
             value={parte.email}
@@ -2470,6 +2456,8 @@ function IdentitaSection({
   files,
   isPG,
   tipoSoggetto,
+  tipiSoggetto,
+  onTipoSoggetto,
   onFiles,
   onMainRef,
   onVisuraRef,
@@ -2486,6 +2474,8 @@ function IdentitaSection({
   files: IdentitaFiles;
   isPG: boolean;
   tipoSoggetto: TipoSoggetto | null;
+  tipiSoggetto: { value: TipoSoggetto; label: string }[];
+  onTipoSoggetto: (t: TipoSoggetto) => void;
   onFiles: (updater: (prev: IdentitaFiles) => IdentitaFiles) => void;
   onMainRef: (ref: BlobRef) => void;
   onVisuraRef: (ref: BlobRef) => void;
@@ -2555,6 +2545,24 @@ function IdentitaSection({
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">{titolo}</h2>
+      <Field label="Tipo soggetto" required>
+        <Select
+          value={tipoSoggetto ?? ''}
+          onChange={(e) => onTipoSoggetto(e.target.value as TipoSoggetto)}
+        >
+          <option value="" disabled>
+            Seleziona tipo…
+          </option>
+          {tipiSoggetto.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <div className="my-3 h-px bg-pv-slate-200" />
+
       <Field label="Tipo documento" required>
         <Select
           value={docId}

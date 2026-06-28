@@ -65,6 +65,27 @@ describe('notifyClientiAvanzamento', () => {
     expect(payload.agenziaProvincia).toBe('MI');
   });
 
+  it('preferisce l\'indirizzo della SEDE che ha accettato (multi-sede), con civico', async () => {
+    findUniqueMock.mockResolvedValue({
+      ...praticaPiena,
+      agenziaAssegnata: {
+        ragioneSociale: 'Auto Group SRL',
+        indirizzo: 'Via HQ', civico: '99', cap: '00100', citta: 'Roma', provincia: 'RM',
+      },
+      agenziaSede: {
+        nome: 'Filiale Corsico',
+        indirizzo: 'Via Roma', civico: '1', cap: '20094', citta: 'Corsico', provincia: 'MI',
+      },
+    });
+    await notifyClientiAvanzamento('p1', 'PRESA_IN_CARICO');
+    const payload = sendMock.mock.calls[0]![0].payload;
+    expect(payload.agenziaNome).toBe('Auto Group SRL'); // ragione sociale riconoscibile
+    expect(payload.agenziaIndirizzo).toBe('Via Roma 1'); // sede + civico, NON l'HQ
+    expect(payload.agenziaCap).toBe('20094');
+    expect(payload.agenziaCitta).toBe('Corsico');
+    expect(payload.agenziaProvincia).toBe('MI');
+  });
+
   it('non invia se codicePratica è null (pratica senza codice)', async () => {
     findUniqueMock.mockResolvedValue({ ...praticaPiena, codicePratica: null });
     await notifyClientiAvanzamento('p1', 'AVVIATA');

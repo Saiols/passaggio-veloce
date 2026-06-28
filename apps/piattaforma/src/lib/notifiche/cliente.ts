@@ -35,11 +35,24 @@ export async function notifyClientiAvanzamento(
           },
         },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
-        // Agenzia assegnata: serve l'indirizzo per dire al cliente dove recarsi.
+        // Indirizzo "dove recarsi": preferisci la SEDE che ha accettato (in
+        // multi-sede il cliente va lì, non all'azienda madre), con fallback
+        // all'azienda madre. Il nome mostrato resta la ragione sociale.
         agenziaAssegnata: {
           select: {
             ragioneSociale: true,
             indirizzo: true,
+            civico: true,
+            cap: true,
+            citta: true,
+            provincia: true,
+          },
+        },
+        agenziaSede: {
+          select: {
+            nome: true,
+            indirizzo: true,
+            civico: true,
             cap: true,
             citta: true,
             provincia: true,
@@ -57,7 +70,13 @@ export async function notifyClientiAvanzamento(
 
     const veicolo = veicoloDescrizione(pratica.veicoli);
     const codicePratica = pratica.codicePratica;
-    const agenzia = pratica.agenziaAssegnata;
+    const company = pratica.agenziaAssegnata;
+    const sede = pratica.agenziaSede;
+    // Indirizzo operativo: la sede che ha accettato (fallback azienda madre).
+    const addr = sede ?? company;
+    const agenziaIndirizzo = addr
+      ? [addr.indirizzo, addr.civico].filter(Boolean).join(' ') || null
+      : null;
 
     await Promise.all(
       recipients.map((r) =>
@@ -70,11 +89,11 @@ export async function notifyClientiAvanzamento(
             nomeDestinatario: r.nomeDestinatario,
             ruolo: r.ruolo,
             stato,
-            agenziaNome: agenzia?.ragioneSociale ?? null,
-            agenziaIndirizzo: agenzia?.indirizzo ?? null,
-            agenziaCap: agenzia?.cap ?? null,
-            agenziaCitta: agenzia?.citta ?? null,
-            agenziaProvincia: agenzia?.provincia ?? null,
+            agenziaNome: company?.ragioneSociale ?? sede?.nome ?? null,
+            agenziaIndirizzo,
+            agenziaCap: addr?.cap ?? null,
+            agenziaCitta: addr?.citta ?? null,
+            agenziaProvincia: addr?.provincia ?? null,
           },
         }).catch(() => undefined),
       ),

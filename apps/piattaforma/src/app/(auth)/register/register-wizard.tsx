@@ -32,6 +32,7 @@ type DocumentsData = {
   ciFronte: BlobRef;
   ciRetro: BlobRef;
   codiceFiscale: BlobRef;
+  codiceFiscaleRetro: BlobRef;
   visuraCamerale: BlobRef;
 };
 
@@ -150,6 +151,7 @@ export function RegisterWizard({
           CI_FRONTE: values.ciFronte,
           CI_RETRO: values.ciRetro,
           CODICE_FISCALE: values.codiceFiscale,
+          CODICE_FISCALE_RETRO: values.codiceFiscaleRetro,
           VISURA_CAMERALE: values.visuraCamerale,
         }),
       );
@@ -210,6 +212,7 @@ export function RegisterWizard({
           CI_FRONTE: docs.ciFronte,
           CI_RETRO: docs.ciRetro,
           CODICE_FISCALE: docs.codiceFiscale,
+          CODICE_FISCALE_RETRO: docs.codiceFiscaleRetro,
           VISURA_CAMERALE: docs.visuraCamerale,
         }),
       );
@@ -567,12 +570,16 @@ type DocSlotState = {
 
 const EMPTY_SLOT: DocSlotState = { file: null, ref: null, status: 'idle', progress: 0 };
 
-type SlotKey = 'ciFronte' | 'ciRetro' | 'codiceFiscale' | 'visuraCamerale';
+type SlotKey = 'ciFronte' | 'ciRetro' | 'codiceFiscale' | 'codiceFiscaleRetro' | 'visuraCamerale';
 
-const SLOT_TIPO: Record<SlotKey, 'CI_FRONTE' | 'CI_RETRO' | 'CODICE_FISCALE' | 'VISURA_CAMERALE'> = {
+const SLOT_TIPO: Record<
+  SlotKey,
+  'CI_FRONTE' | 'CI_RETRO' | 'CODICE_FISCALE' | 'CODICE_FISCALE_RETRO' | 'VISURA_CAMERALE'
+> = {
   ciFronte: 'CI_FRONTE',
   ciRetro: 'CI_RETRO',
   codiceFiscale: 'CODICE_FISCALE',
+  codiceFiscaleRetro: 'CODICE_FISCALE_RETRO',
   visuraCamerale: 'VISURA_CAMERALE',
 };
 
@@ -602,6 +609,9 @@ function DocumentsStep({
   const [codiceFiscale, setCodiceFiscale] = useState<DocSlotState>(
     fromRef(defaultValues?.codiceFiscale),
   );
+  const [codiceFiscaleRetro, setCodiceFiscaleRetro] = useState<DocSlotState>(
+    fromRef(defaultValues?.codiceFiscaleRetro),
+  );
   const [visuraCamerale, setVisuraCamerale] = useState<DocSlotState>(
     fromRef(defaultValues?.visuraCamerale),
   );
@@ -611,18 +621,20 @@ function DocumentsStep({
     ciFronte,
     ciRetro,
     codiceFiscale,
+    codiceFiscaleRetro,
     visuraCamerale,
   };
   const setters: Record<SlotKey, (s: DocSlotState) => void> = {
     ciFronte: setCiFronte,
     ciRetro: setCiRetro,
     codiceFiscale: setCodiceFiscale,
+    codiceFiscaleRetro: setCodiceFiscaleRetro,
     visuraCamerale: setVisuraCamerale,
   };
 
   // Validazione rule-based sulle ref caricate (mime/size dei file su Blob).
   const validation = useMemo(() => {
-    const keys: SlotKey[] = ['ciFronte', 'ciRetro', 'codiceFiscale', 'visuraCamerale'];
+    const keys: SlotKey[] = ['ciFronte', 'ciRetro', 'codiceFiscale', 'codiceFiscaleRetro', 'visuraCamerale'];
     if (keys.some((k) => slots[k].status === 'uploading')) {
       return { ok: false as const, error: 'Attendi il caricamento dei documenti' };
     }
@@ -638,7 +650,7 @@ function DocumentsStep({
       })),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ciFronte, ciRetro, codiceFiscale, visuraCamerale]);
+  }, [ciFronte, ciRetro, codiceFiscale, codiceFiscaleRetro, visuraCamerale]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -651,6 +663,7 @@ function DocumentsStep({
       ciFronte: ciFronte.ref!,
       ciRetro: ciRetro.ref!,
       codiceFiscale: codiceFiscale.ref!,
+      codiceFiscaleRetro: codiceFiscaleRetro.ref!,
       visuraCamerale: visuraCamerale.ref!,
     });
   };
@@ -739,6 +752,15 @@ function DocumentsStep({
             invalid={failedDocs.has('CF') || codiceFiscale.status === 'error'}
           />
           {uploadHint(codiceFiscale)}
+        </div>
+        <div>
+          <DocCard
+            label="Codice Fiscale / Tessera Sanitaria — Retro"
+            file={codiceFiscaleRetro.file}
+            onChange={onDocChange('codiceFiscaleRetro')}
+            invalid={failedDocs.has('CF') || codiceFiscaleRetro.status === 'error'}
+          />
+          {uploadHint(codiceFiscaleRetro)}
         </div>
         <div>
           <DocCard

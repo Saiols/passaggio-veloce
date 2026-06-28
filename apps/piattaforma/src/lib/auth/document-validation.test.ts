@@ -19,6 +19,7 @@ const allDocs = (): RegistrationDocInput[] => [
   validDoc('CI_FRONTE'),
   validDoc('CI_RETRO'),
   validDoc('CODICE_FISCALE'),
+  validDoc('CODICE_FISCALE_RETRO'),
   validDoc('VISURA_CAMERALE'),
 ];
 
@@ -73,12 +74,19 @@ describe('isVisuraDateValid (parametrico)', () => {
 });
 
 describe('validateRegistrationDocuments', () => {
-  it('passa con i 4 documenti validi', () => {
+  it('passa con i 5 documenti validi', () => {
     expect(validateRegistrationDocuments(allDocs())).toEqual({ ok: true });
   });
 
   it('fallisce se manca un documento richiesto', () => {
     const docs = allDocs().filter((d) => d.tipo !== 'CODICE_FISCALE');
+    const r = validateRegistrationDocuments(docs);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain('tutti i documenti');
+  });
+
+  it('fallisce se manca il retro del codice fiscale', () => {
+    const docs = allDocs().filter((d) => d.tipo !== 'CODICE_FISCALE_RETRO');
     const r = validateRegistrationDocuments(docs);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('tutti i documenti');

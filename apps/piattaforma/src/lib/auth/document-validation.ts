@@ -4,6 +4,7 @@ export type RegistrationDocTipo =
   | 'CI_FRONTE'
   | 'CI_RETRO'
   | 'CODICE_FISCALE'
+  | 'CODICE_FISCALE_RETRO'
   | 'VISURA_CAMERALE';
 
 export type RegistrationDocInput = {
@@ -19,6 +20,7 @@ export const REQUIRED_DOC_TIPI: readonly RegistrationDocTipo[] = [
   'CI_FRONTE',
   'CI_RETRO',
   'CODICE_FISCALE',
+  'CODICE_FISCALE_RETRO',
   'VISURA_CAMERALE',
 ];
 

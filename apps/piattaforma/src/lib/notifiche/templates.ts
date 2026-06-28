@@ -102,6 +102,17 @@ export type N13BrokerPraticaProcessataPayload = {
   nomeBroker: string;
 };
 
+export type ClienteAvanzamentoStato =
+  | 'AVVIATA' | 'PRESA_IN_CARICO' | 'PRONTA_FIRMA' | 'COMPLETATA' | 'ANNULLATA';
+export type ClienteAvanzamentoRuolo = 'ACQUIRENTE' | 'VENDITORE';
+export type N40ClienteAvanzamentoPayload = {
+  codicePratica: string;
+  veicoloDescrizione: string | null;
+  nomeDestinatario: string;
+  ruolo: ClienteAvanzamentoRuolo;
+  stato: ClienteAvanzamentoStato;
+};
+
 export type N14AccountSospesoPayload = {
   nomeUtente: string;
   ragioneSociale: string;
@@ -433,6 +444,56 @@ export function tplN13BrokerPraticaProcessata(
     </div>
   `);
   return { subject, html, text };
+}
+
+export function tplN40ClienteAvanzamento(p: N40ClienteAvanzamentoPayload): NotificaContent {
+  // Frammento veicolo (raw, usato nella prosa). La targa è alfanumerica;
+  // l'escape avviene a valle quando la prosa entra nell'HTML.
+  const veic = p.veicoloDescrizione ? ` del veicolo ${p.veicoloDescrizione}` : '';
+  const operazione = p.ruolo === 'ACQUIRENTE' ? "l'acquisto" : 'la vendita';
+
+  const M: Record<ClienteAvanzamentoStato, { titolo: string; subject: string; corpo: string }> = {
+    AVVIATA: {
+      titolo: 'Pratica avviata',
+      subject: `Pratica ${p.codicePratica} avviata`,
+      corpo: `abbiamo avviato la pratica per ${operazione}${veic}. Ti terremo aggiornato sui prossimi passaggi.`,
+    },
+    PRESA_IN_CARICO: {
+      titolo: 'Pratica presa in carico',
+      subject: `Pratica ${p.codicePratica} presa in carico`,
+      corpo: `un'agenzia partner ha preso in carico la pratica${veic} e si occuperà degli adempimenti.`,
+    },
+    PRONTA_FIRMA: {
+      titolo: 'Documenti pronti per la firma',
+      subject: `Pratica ${p.codicePratica}: documenti pronti per la firma`,
+      corpo: `i documenti della pratica${veic} sono pronti: a breve verrai contattato per la firma.`,
+    },
+    COMPLETATA: {
+      titolo: 'Passaggio di proprietà completato',
+      subject: `Pratica ${p.codicePratica} completata`,
+      corpo: `il passaggio di proprietà${veic} è stato completato con successo. Grazie per aver scelto Passaggio Veloce.`,
+    },
+    ANNULLATA: {
+      titolo: 'Pratica annullata',
+      subject: `Pratica ${p.codicePratica} annullata`,
+      corpo: `la pratica${veic} è stata annullata. Per maggiori informazioni puoi contattare il tuo riferimento.`,
+    },
+  };
+
+  const m = M[p.stato];
+  const text =
+    `Ciao ${p.nomeDestinatario},\n` +
+    `${m.corpo}\n` +
+    `Numero pratica: ${p.codicePratica}.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">${escapeHtml(m.titolo)}</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeDestinatario)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">${escapeHtml(m.corpo)}</p>
+    <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
+      Numero pratica: <strong>${escapeHtml(p.codicePratica)}</strong>
+    </div>
+  `);
+  return { subject: m.subject, html, text };
 }
 
 export function tplN14AccountSospeso(

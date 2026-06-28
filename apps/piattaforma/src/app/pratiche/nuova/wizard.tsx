@@ -1824,7 +1824,9 @@ export function WizardNuovaPratica({
             )}
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
+              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
+                Localizzazione (il comune dove desideri terminare il passaggio in agenzia)
+              </h2>
               {hasMaps ? (
                 <div>
                   <AddressAutocomplete
@@ -1842,7 +1844,9 @@ export function WizardNuovaPratica({
                       <strong>
                         {comune}
                         {provincia && ` (${provincia})`}
-                      </strong>
+                      </strong>{' '}
+                      (verrà inviata la richiesta alle agenzie di {comune} o alle più vicine
+                      disponibili)
                     </p>
                   )}
                 </div>

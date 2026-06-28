@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
-import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { storageGetBuffer } from '@/lib/providers/storage';
 
 export const runtime = 'nodejs';
@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ companyId: string }> },
 ): Promise<Response> {
   const session = await auth();
-  if (!session?.user || !isAdminPiattaforma(session.user.role)) {
+  if (!session?.user || !isAdminOrAssistente(session.user.role)) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 

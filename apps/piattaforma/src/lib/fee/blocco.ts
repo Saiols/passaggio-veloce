@@ -58,7 +58,7 @@ export async function rivalutaBloccoAgenzia(agenziaId: string): Promise<void> {
     });
     if (!agenzia?.bloccoPagamentoAt) return;
     const scoperti = await prisma.feeAddebito.count({
-      where: { agenziaId, stato: { in: ['FAILED', 'RETRY', 'IN_LAVORAZIONE'] } },
+      where: { agenziaId, stato: { in: STATI_SCOPERTI as unknown as any } },
     });
     if (scoperti === 0) {
       await prisma.company.update({

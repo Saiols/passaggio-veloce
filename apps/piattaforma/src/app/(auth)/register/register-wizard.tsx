@@ -744,6 +744,8 @@ function DocumentsStep({
           <DocCard
             label="Visura Camerale"
             file={visuraCamerale.file}
+            pdfOnly
+            subtitle="La visura camerale deve essere in formato PDF. Scaricala dal Registro Imprese e caricala qui."
             onChange={onDocChange('visuraCamerale')}
             invalid={failedDocs.has('VISURA') || visuraCamerale.status === 'error'}
           />

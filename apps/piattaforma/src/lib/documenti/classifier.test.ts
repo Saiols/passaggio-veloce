@@ -85,4 +85,21 @@ describe('classifyDocumento', () => {
       }),
     ).toEqual({ stato: 'PASSED' });
   });
+
+  it('fails VISURA_CAMERALE if not a PDF (immagine rifiutata)', () => {
+    const r = classifyDocumento({
+      tipo: 'VISURA_CAMERALE',
+      mimeType: 'image/jpeg',
+      sizeBytes: 200 * 1024,
+      originalFilename: 'visura.jpg',
+    });
+    expect(r.stato).toBe('FAILED');
+    if (r.stato === 'FAILED') expect(r.reason).toContain('PDF');
+  });
+
+  it('passes VISURA_CAMERALE in PDF', () => {
+    expect(
+      classifyDocumento({ ...baseValid, tipo: 'VISURA_CAMERALE', originalFilename: 'visura.pdf' }),
+    ).toEqual({ stato: 'PASSED' });
+  });
 });

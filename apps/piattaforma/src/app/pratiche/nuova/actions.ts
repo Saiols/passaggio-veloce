@@ -791,6 +791,15 @@ export async function submitNuovaPraticaAction(
     // obbligatoria per le PG è imposta dalla verifica fail-closed più sotto.
     const visura = getRef(`${prefix}_VISURA`);
     if (visura && visura.size > 0) {
+      // Solo PDF: la visura è multipagina e l'OCR deve leggerla tutta (ATECO,
+      // data, sede, rappresentante). Un'immagine/ritaglio perderebbe pagine.
+      if (visura.type !== 'application/pdf') {
+        redirect(
+          `/pratiche/nuova?error=${encodeURIComponent(
+            `La visura camerale di ${labelParte} deve essere in PDF (con tutte le pagine).`,
+          )}`,
+        );
+      }
       identitaCandidates.push({
         tipo: 'VISURA_CAMERALE',
         owner,

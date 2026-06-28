@@ -259,6 +259,7 @@ enum NotificaTipo {
   N6_AGENZIA_NUOVA_PRATICA
   N7_AGENZIA_PROMEMORIA_COUNTDOWN
   N8_AGENZIA_ADDEBITO
+  N9_AGENZIA_ADDEBITO_FALLITO
   N10_ADMIN_ESCALATION
   N11_BROKER_ESCALATION
   N12_AFFILIAZIONE_COMMISSIONE
@@ -350,6 +351,12 @@ model Company {
   /// A7: ultima nota admin sull'azione di sospensione/riattivazione.
   /// Audit semplificato: una sola nota, sovrascritta ad ogni transizione.
   suspensionLastNote String?
+
+  /// Blocco "soft" per addebito fee non riuscito: l'agenzia può ancora fare
+  /// login ma è confinata a /blocco-pagamento finché l'addebito non riesce.
+  /// Distinto da suspendedAt (sospensione admin che impedisce il login).
+  bloccoPagamentoAt     DateTime?
+  bloccoPagamentoMotivo String?
 
   // FASE 13 affiliazione: chi ha portato questa Company in piattaforma.
   // null = iscritto diretto. Auto-relazione (può puntare a broker o agenzia).
@@ -1087,6 +1094,10 @@ model FeeAddebito {
   executedAt   DateTime?
   errorMessage String?
   providerRef  String? // riferimento Stripe charge (post-integrazione)
+
+  /// Numero di tentativi di addebito (incrementato a ogni retry manuale).
+  /// Entra nell'idempotency key Stripe per forzare un nuovo PaymentIntent.
+  tentativi Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1129,7 +1129,7 @@ model MandatoFatturazione {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   firmatarioUserId String @db.Uuid
-  firmatario       User   @relation("MandatiFirmati", fields: [firmatarioUserId], references: [id])
+  firmatario       User   @relation("MandatiFirmati", fields: [firmatarioUserId], references: [id], onDelete: Restrict)
   firmatoAt        DateTime @default(now())
 
   storageKey      String

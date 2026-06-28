@@ -68,3 +68,15 @@ export function tplInvitoTeam(p: { ragioneSociale: string; inviteUrl: string }):
   const text = `Sei stato invitato in ${p.ragioneSociale} su Passaggio Veloce. Attiva il tuo account (valido 7 giorni): ${p.inviteUrl}`;
   return { subject, html, text };
 }
+
+export function tplOtpMandato(p: { codice: string }): EmailContent {
+  const subject = 'Passaggio Veloce — Codice per la firma del mandato';
+  const html = authLayout(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Codice di firma</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Per firmare il «Mandato per fatturazione per conto terzi» usa questo codice:</p>
+    <p style="margin:0 0 14px;font-size:28px;font-weight:800;letter-spacing:6px;color:#0a2540">${p.codice}</p>
+    <p style="margin:8px 0 0;font-size:12px;color:#64748b">Il codice è valido 10 minuti. Se non hai richiesto la firma, ignora questa email.</p>
+  `);
+  const text = `Codice per firmare il mandato fatturazione (valido 10 minuti): ${p.codice}`;
+  return { subject, html, text };
+}

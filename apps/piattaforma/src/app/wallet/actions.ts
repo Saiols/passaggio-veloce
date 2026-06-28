@@ -7,7 +7,7 @@ import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { WALLET, validatePayoutThresholdCent } from '@/lib/wallet/config';
 
-export type PayoutResult = { ok: true } | { ok: false; error: string };
+export type PayoutResult = { ok: true } | { ok: false; error: string } | { ok: false; requireMandato: true };
 
 export async function richiediPayoutAction(): Promise<PayoutResult> {
   const session = await auth();
@@ -33,6 +33,13 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
     where: { walletId: wallet.id, stato: { in: ['RICHIESTO', 'IN_LAVORAZIONE'] } },
   });
   if (inflight) return { ok: false, error: 'Payout già in corso, attendi' };
+
+  // Gate mandato fatturazione: alla PRIMA richiesta payout serve il contratto firmato.
+  const mandato = await prisma.mandatoFatturazione.findUnique({
+    where: { companyId: session.user.companyId! },
+    select: { id: true },
+  });
+  if (!mandato) return { ok: false, requireMandato: true };
 
   await prisma.payout.create({
     data: {

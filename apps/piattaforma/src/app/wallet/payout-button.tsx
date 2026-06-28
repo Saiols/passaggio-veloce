@@ -13,8 +13,15 @@ export function PayoutButton({ disabled }: { disabled: boolean }) {
     setSuccess(null);
     startTransition(async () => {
       const res = await richiediPayoutAction();
-      if (!res.ok) setError(res.error);
-      else setSuccess("Richiesta inviata. L'admin la processerà a breve.");
+      if (!res.ok) {
+        if ('requireMandato' in res) {
+          setError('Firma il mandato di fatturazione prima di richiedere il payout.');
+        } else {
+          setError(res.error);
+        }
+      } else {
+        setSuccess("Richiesta inviata. L'admin la processerà a breve.");
+      }
     });
   }
 

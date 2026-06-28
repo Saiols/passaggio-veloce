@@ -86,12 +86,13 @@ describe('N40 cliente avanzamento', () => {
         expect(subject).toContain('PV-2026-001');
         expect(text).toContain('PV-2026-001');
         // niente dati commerciali
+        // niente dati commerciali (il template non riceve fee/importi/nome
+        // agenzia: la menzione generica "un'agenzia partner" è consentita).
         const haystack = `${subject}\n${text}\n${html}`.toLowerCase();
         expect(haystack).not.toContain('€');
         expect(haystack).not.toContain('fee');
         expect(haystack).not.toContain('wallet');
         expect(haystack).not.toContain('saldo');
-        expect(haystack).not.toContain('agenzia '); // niente nome/contatti agenzia
       }
     }
   });

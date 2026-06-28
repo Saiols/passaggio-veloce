@@ -400,6 +400,9 @@ model Company {
   // Fee (agenzia)
   feeAddebiti FeeAddebito[]
 
+  // Mandato Fatturazione (firma OTP primo payout)
+  mandatoFatturazione MandatoFatturazione?
+
   // Valutazioni (agenzia che riceve / dealer che vota)
   valutazioniRicevute Valutazione[] @relation("ValutazioniAgenzia")
   valutazioniFatte    Valutazione[] @relation("ValutazioniDealer")
@@ -506,6 +509,13 @@ model User {
 
   // Multi-sede: sedi su cui questo utente può operare (login multi-sede).
   sediMembership UserSede[]
+
+  // Mandati fatturazione firmati (firma OTP primo payout)
+  mandatiFirmati MandatoFatturazione[] @relation("MandatiFirmati")
+
+  // OTP email per firma mandato fatturazione (ephemeral, hashato)
+  mandatoOtpHash      String?
+  mandatoOtpExpiresAt DateTime?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1107,6 +1117,35 @@ model FeeAddebito {
   @@index([praticaId])
   @@index([scheduledAt])
   @@map("fee_addebiti")
+}
+
+// ============================================================
+// MODELS — mandato fatturazione (firma OTP primo payout)
+// ============================================================
+
+model MandatoFatturazione {
+  id        String  @id @default(uuid()) @db.Uuid
+  companyId String  @unique @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  firmatarioUserId String @db.Uuid
+  firmatario       User   @relation("MandatiFirmati", fields: [firmatarioUserId], references: [id])
+  firmatoAt        DateTime @default(now())
+
+  storageKey      String
+  storageProvider String @default("local")
+  mimeType        String @default("application/pdf")
+  sizeBytes       Int
+
+  datiSnapshot Json
+
+  ip              String?
+  userAgent       String?
+  otpVerificatoAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@map("mandati_fatturazione")
 }
 
 // ============================================================

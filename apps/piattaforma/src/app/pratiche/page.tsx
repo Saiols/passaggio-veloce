@@ -9,6 +9,7 @@ import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { PraticheFilters } from './filters';
 import { QuickActionButton } from './quick-action-button';
 import { DownloadDocumentiButton } from './download-documenti-button';
+import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 
 const PAGE_SIZE = 15;
 
@@ -62,6 +63,7 @@ export default async function PratichePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  await redirectSeAgenziaBloccata();
 
   const sp = await searchParams;
   const companyType = session.user.companyType;

@@ -15,6 +15,7 @@ import {
   notifyPayoutThresholdCrossed,
 } from '@/lib/affiliazione/notifications';
 import { onPraticaFirmata } from '@/lib/crm/sync';
+import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
 import { fatturaPvAttachment } from '@/lib/fatturazione/documento-pdf';
 import { emitEventoPratica } from '@/lib/eventi/emit';
@@ -87,6 +88,7 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
     redirect('/dashboard');
   }
   const agenziaId = session.user.companyId!;
+  if (await isAgenziaBloccata(agenziaId)) redirect('/blocco-pagamento');
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -184,6 +186,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
     redirect('/dashboard');
   }
   const agenziaId = session.user.companyId!;
+  if (await isAgenziaBloccata(agenziaId)) redirect('/blocco-pagamento');
 
   let accreditiResult: AccreditoEseguito[] = [];
   let feeAgenziaCentFattura = 0;

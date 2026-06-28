@@ -6,6 +6,7 @@ import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { BrokerDashboard } from './broker-dashboard';
 import { AgenziaDashboard } from './agenzia-dashboard';
 import { AdminDashboard } from './admin-dashboard';
+import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 
 export default async function DashboardPage({
   searchParams,
@@ -21,6 +22,7 @@ export default async function DashboardPage({
   const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
+  await redirectSeAgenziaBloccata();
 
   const role = session.user.role;
   const companyType = session.user.companyType;

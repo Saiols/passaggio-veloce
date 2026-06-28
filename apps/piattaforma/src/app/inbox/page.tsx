@@ -7,10 +7,12 @@ import { AppShell } from '@/components/app-shell';
 import { StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from './actions';
+import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 
 export default async function InboxPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  await redirectSeAgenziaBloccata();
 
   if (session.user.companyType !== 'AGENZIA') {
     return (

@@ -158,7 +158,7 @@ async function avviaRound(
       suspendedAt: null,
       provincia: { in: provincieTarget as string[] },
       companyId: { notIn: Array.from(giaContattate) },
-      company: { deletedAt: null, suspendedAt: null },
+      company: { deletedAt: null, suspendedAt: null, bloccoPagamentoAt: null },
     },
     select: { id: true, createdAt: true, nome: true, provincia: true, companyId: true },
   });

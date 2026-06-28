@@ -7,6 +7,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { tickPratica } from '@/lib/distribuzione';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
+import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { emitEventoPratica, dismissNuovaPraticaEventi } from '@/lib/eventi/emit';
 import { eventoPraticaAccettata } from '@/lib/eventi/pratica-eventi';
 
@@ -20,6 +21,10 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
   }
   const agenziaId = session.user.companyId;
   if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
+
+  if (await isAgenziaBloccata(agenziaId)) {
+    return { ok: false, error: 'Account sospeso per addebito non riuscito: aggiorna l\'IBAN in /blocco-pagamento' };
+  }
 
   // Multi-sede: l'assegnazione da accettare è quella di una sede a cui l'utente
   // ha accesso (scopeIds). La sede accettante è registrata sulla pratica.

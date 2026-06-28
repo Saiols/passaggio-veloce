@@ -2614,7 +2614,7 @@ function IdentitaSection({
       {mostraVisura && (
         <div className="mt-3">
           <UploadCard
-            label="Visura camerale (ultimi 6 mesi)"
+            label="Visura camerale (se sei una azienda con codice ateco di commercio auto la visura deve essere degli ultimi 6 mesi da oggi)"
             slot={files.visura}
             pdfOnly
             subtitle="La visura camerale deve essere in formato PDF. Scaricala dal Registro Imprese e caricala qui."

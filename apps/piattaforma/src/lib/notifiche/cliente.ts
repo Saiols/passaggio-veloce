@@ -35,6 +35,16 @@ export async function notifyClientiAvanzamento(
           },
         },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+        // Agenzia assegnata: serve l'indirizzo per dire al cliente dove recarsi.
+        agenziaAssegnata: {
+          select: {
+            ragioneSociale: true,
+            indirizzo: true,
+            cap: true,
+            citta: true,
+            provincia: true,
+          },
+        },
       },
     });
     // Salta bozze senza codice (pratica mai distribuita). Nota: bozze con
@@ -47,6 +57,7 @@ export async function notifyClientiAvanzamento(
 
     const veicolo = veicoloDescrizione(pratica.veicoli);
     const codicePratica = pratica.codicePratica;
+    const agenzia = pratica.agenziaAssegnata;
 
     await Promise.all(
       recipients.map((r) =>
@@ -59,6 +70,11 @@ export async function notifyClientiAvanzamento(
             nomeDestinatario: r.nomeDestinatario,
             ruolo: r.ruolo,
             stato,
+            agenziaNome: agenzia?.ragioneSociale ?? null,
+            agenziaIndirizzo: agenzia?.indirizzo ?? null,
+            agenziaCap: agenzia?.cap ?? null,
+            agenziaCitta: agenzia?.citta ?? null,
+            agenziaProvincia: agenzia?.provincia ?? null,
           },
         }).catch(() => undefined),
       ),

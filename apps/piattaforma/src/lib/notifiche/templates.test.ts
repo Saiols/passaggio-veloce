@@ -79,6 +79,36 @@ describe('N40 cliente avanzamento', () => {
     expect(text).toContain('PV-1');
     expect(text).not.toContain('null');
   });
+
+  it('PRESA_IN_CARICO con agenzia: indica dove recarsi (indirizzo) + documenti originali', () => {
+    const { text, html } = tplN40ClienteAvanzamento({
+      codicePratica: 'PV-2026-009',
+      veicoloDescrizione: 'AB123CD',
+      nomeDestinatario: 'Mario Rossi',
+      ruolo: 'ACQUIRENTE',
+      stato: 'PRESA_IN_CARICO',
+      agenziaNome: 'Agenzia Corsico',
+      agenziaIndirizzo: 'Via Roma 1',
+      agenziaCap: '20094',
+      agenziaCitta: 'Corsico',
+      agenziaProvincia: 'MI',
+    });
+    expect(text).toContain('Via Roma 1');
+    expect(text).toContain('Corsico');
+    expect(text.toLowerCase()).toContain('documenti originali');
+    expect(html).toContain('Via Roma 1');
+    expect(html).toContain('Agenzia Corsico');
+    expect(html).toContain('20094 Corsico (MI)');
+  });
+
+  it('non mostra l\'indirizzo agenzia quando non c\'è agenzia (es. AVVIATA)', () => {
+    const { text, html } = tplN40ClienteAvanzamento({
+      codicePratica: 'PV-2026-010', veicoloDescrizione: 'AB123CD',
+      nomeDestinatario: 'Mario Rossi', ruolo: 'VENDITORE', stato: 'AVVIATA',
+    });
+    expect(`${text}\n${html}`).not.toContain('Via Roma');
+    expect(`${text}\n${html}`.toLowerCase()).not.toContain('dove recarti');
+  });
 });
 
 describe('N9 addebito fallito agenzia', () => {

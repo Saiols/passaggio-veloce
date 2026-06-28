@@ -45,6 +45,26 @@ describe('notifyClientiAvanzamento', () => {
     expect(first.payload.ruolo).toBe('ACQUIRENTE');
   });
 
+  it('include indirizzo dell\'agenzia assegnata nel payload (dove recarsi)', async () => {
+    findUniqueMock.mockResolvedValue({
+      ...praticaPiena,
+      agenziaAssegnata: {
+        ragioneSociale: 'Agenzia Corsico',
+        indirizzo: 'Via Roma 1',
+        cap: '20094',
+        citta: 'Corsico',
+        provincia: 'MI',
+      },
+    });
+    await notifyClientiAvanzamento('p1', 'PRESA_IN_CARICO');
+    const payload = sendMock.mock.calls[0]![0].payload;
+    expect(payload.agenziaNome).toBe('Agenzia Corsico');
+    expect(payload.agenziaIndirizzo).toBe('Via Roma 1');
+    expect(payload.agenziaCap).toBe('20094');
+    expect(payload.agenziaCitta).toBe('Corsico');
+    expect(payload.agenziaProvincia).toBe('MI');
+  });
+
   it('non invia se codicePratica è null (pratica senza codice)', async () => {
     findUniqueMock.mockResolvedValue({ ...praticaPiena, codicePratica: null });
     await notifyClientiAvanzamento('p1', 'AVVIATA');

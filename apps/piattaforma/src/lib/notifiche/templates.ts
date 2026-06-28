@@ -116,6 +116,13 @@ export type N40ClienteAvanzamentoPayload = {
   nomeDestinatario: string;
   ruolo: ClienteAvanzamentoRuolo;
   stato: ClienteAvanzamentoStato;
+  // Agenzia assegnata (presente da PRESA_IN_CARICO in poi): serve a indicare al
+  // cliente dove recarsi di persona con i documenti originali.
+  agenziaNome?: string | null;
+  agenziaIndirizzo?: string | null;
+  agenziaCap?: string | null;
+  agenziaCitta?: string | null;
+  agenziaProvincia?: string | null;
 };
 
 export type N14AccountSospesoPayload = {
@@ -506,17 +513,47 @@ export function tplN40ClienteAvanzamento(p: N40ClienteAvanzamentoPayload): Notif
   };
 
   const m = M[p.stato];
+
+  // Indirizzo agenzia: mostrato quando la pratica è presa in carico o pronta per
+  // la firma, per indicare al cliente dove recarsi di persona con gli originali.
+  const mostraAgenzia = p.stato === 'PRESA_IN_CARICO' || p.stato === 'PRONTA_FIRMA';
+  const cittaRiga = [
+    p.agenziaCap,
+    p.agenziaCitta,
+    p.agenziaProvincia ? `(${p.agenziaProvincia})` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const hasIndirizzo = mostraAgenzia && (!!p.agenziaIndirizzo || !!cittaRiga);
+  const indirizzoCompleto = [p.agenziaIndirizzo, cittaRiga].filter(Boolean).join(', ');
+
+  const agenziaText = hasIndirizzo
+    ? `\nRecati in agenzia con i documenti originali` +
+      `${p.agenziaNome ? ` presso ${p.agenziaNome}` : ''}, all'indirizzo: ${indirizzoCompleto}.`
+    : '';
+  const agenziaHtml = hasIndirizzo
+    ? `
+    <div style="margin-top:12px;background:#fff7ed;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
+      <strong>Dove recarti</strong><br>
+      ${p.agenziaNome ? `${escapeHtml(p.agenziaNome)}<br>` : ''}
+      ${p.agenziaIndirizzo ? `${escapeHtml(p.agenziaIndirizzo)}<br>` : ''}
+      ${cittaRiga ? `${escapeHtml(cittaRiga)}<br>` : ''}
+      Porta con te i <strong>documenti originali</strong>.
+    </div>`
+    : '';
+
   const text =
     `Ciao ${p.nomeDestinatario},\n` +
     `${m.corpo}\n` +
-    `Numero pratica: ${p.codicePratica}.`;
+    `Numero pratica: ${p.codicePratica}.` +
+    agenziaText;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">${escapeHtml(m.titolo)}</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeDestinatario)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">${escapeHtml(m.corpo)}</p>
     <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
       Numero pratica: <strong>${escapeHtml(p.codicePratica)}</strong>
-    </div>
+    </div>${agenziaHtml}
   `);
   return { subject: m.subject, html, text };
 }

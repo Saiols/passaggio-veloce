@@ -179,3 +179,35 @@ Tono generico, rassicurante, niente dati commerciali. Soggetto include
 - `apps/piattaforma/src/app/inbox/actions.ts` — trigger PRESA_IN_CARICO
 - `apps/piattaforma/src/app/pratiche/actions.ts` — trigger PRONTA_FIRMA / COMPLETATA / ANNULLATA
 - Test associati (collocazione secondo prassi del repo)
+
+## Aggiornamento post-implementazione (2026-06-28)
+
+Modifiche emerse in implementazione/review rispetto al design iniziale:
+
+1. **`NotificaInviata.tipo` è un enum Prisma `NotificaTipo`** (non String, come
+   ipotizzato). Quindi oltre al template/union è stato aggiunto il valore enum
+   `N40_CLIENTE_AVANZAMENTO` in `schema.prisma` + migration
+   `20260628120000_notifica_n40_cliente_avanzamento` (`ALTER TYPE … ADD VALUE`,
+   come N12/N13). **Da applicare a prod via `prisma migrate deploy` prima/insieme
+   al deploy del codice** (altrimenti gli insert N40 falliscono e — per
+   fire-and-log — le email cliente non partono finché la migration non è
+   applicata).
+
+2. **Helper destinatari estratti in modulo puro** `cliente-recipients.ts`
+   (testabile senza DB); `cliente.ts` resta l'orchestratore server-only.
+
+3. **Trigger su 8 punti, non 5** (decisione prodotto post-review): oltre ai 5
+   path principali, l'email cliente parte anche da:
+   - `app/admin/escalation/actions.ts` → **PRESA_IN_CARICO** (assegnazione
+     manuale admin, incondizionato).
+   - `lib/documenti/revisione.ts` → **ANNULLATA** (revisione chiusa come
+     annullata), solo se `esito === 'ANNULLATA' && pratica.stato !== 'BOZZA'`.
+   - `lib/penali/segnalazione.ts` → **ANNULLATA** (penale broker confermata,
+     incondizionato).
+
+4. **Guardia "mai distribuita" rafforzata**: una pratica nasce con
+   `codicePratica` già valorizzato ma `stato: 'BOZZA'`, e un "caso dubbio" può
+   restare BOZZA con codice. Quindi il guard `!codicePratica` dell'orchestratore
+   non copre tutto: i call-site annullamento guardano lo **stato precedente**
+   (`eraBozza` in `annullaPraticaAction`, `pratica.stato !== 'BOZZA'` in
+   revisione) e l'AVVIATA è condizionato a `round1.stato !== 'BOZZA'`.

@@ -8,6 +8,7 @@ import { StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from './actions';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
+import { STORICO_ESITI, storicoCutoff, labelEsito } from './storico';
 
 export default async function InboxPage() {
   const session = await auth();
@@ -42,9 +43,14 @@ export default async function InboxPage() {
       },
     }),
     prisma.praticaAssegnazione.findMany({
-      where: { sedeId: { in: scopeIds }, esito: { in: ['RIFIUTATA', 'ASSEGNATA_ALTRO', 'TIMEOUT'] } },
+      // Storico decisioni: accettate + rifiutate/non vinte degli ultimi 7 giorni.
+      where: {
+        sedeId: { in: scopeIds },
+        esito: { in: [...STORICO_ESITI] },
+        esitoAt: { gte: storicoCutoff(new Date()) },
+      },
       orderBy: { esitoAt: 'desc' },
-      take: 10,
+      take: 50,
       include: {
         pratica: {
           include: {
@@ -183,12 +189,4 @@ export default async function InboxPage() {
       </div>
     </AppShell>
   );
-}
-
-function labelEsito(e: string): string {
-  if (e === 'ACCETTATA') return 'Accettata';
-  if (e === 'RIFIUTATA') return 'Rifiutata';
-  if (e === 'TIMEOUT') return 'Scaduta';
-  if (e === 'ASSEGNATA_ALTRO') return 'Ad altra';
-  return e.toLowerCase();
 }

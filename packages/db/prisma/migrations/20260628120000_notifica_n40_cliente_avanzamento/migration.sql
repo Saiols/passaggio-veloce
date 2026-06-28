@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "NotificaTipo" ADD VALUE 'N40_CLIENTE_AVANZAMENTO';

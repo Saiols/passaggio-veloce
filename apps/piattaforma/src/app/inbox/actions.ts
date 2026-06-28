@@ -6,7 +6,7 @@ import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { tickPratica } from '@/lib/distribuzione';
-import { sendNotification } from '@/lib/notifiche';
+import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { emitEventoPratica, dismissNuovaPraticaEventi } from '@/lib/eventi/emit';
 import { eventoPraticaAccettata } from '@/lib/eventi/pratica-eventi';
 
@@ -134,6 +134,9 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
   } catch {
     // best-effort, non blocca
   }
+
+  // Email cliente: un'agenzia ha preso in carico la pratica.
+  await notifyClientiAvanzamento(praticaId, 'PRESA_IN_CARICO').catch(() => undefined);
 
   // Evento in-app (modale) per il broker + auto-dismiss dei "nuova pratica"
   // ancora non visti delle altre agenzie per questa pratica.

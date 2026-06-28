@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { sendNotification } from '@/lib/notifiche';
+import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import {
   accreditCommissioniAffiliazione,
   type AccreditoEseguito,
@@ -167,6 +167,9 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
   } catch {
     // best-effort
   }
+
+  // Email cliente: documenti pronti, si procede alla firma.
+  await notifyClientiAvanzamento(praticaId, 'PRONTA_FIRMA').catch(() => undefined);
 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');
@@ -472,6 +475,9 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
     // best-effort
   }
 
+  // Email cliente: passaggio di proprietà completato.
+  await notifyClientiAvanzamento(praticaId, 'COMPLETATA').catch(() => undefined);
+
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');
   revalidatePath(`/pratiche/${praticaId}`);
@@ -486,6 +492,8 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
   }
   const brokerId = session.user.companyId!;
 
+  let eraBozza = false;
+
   try {
     await prisma.$transaction(async (tx) => {
       const pratica = await tx.pratica.findUnique({ where: { id: praticaId } });
@@ -499,6 +507,8 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
       if (pratica.stato === 'ANNULLATA') {
         throw new Error('Pratica già annullata');
       }
+
+      eraBozza = pratica.stato === 'BOZZA';
 
       const now = new Date();
 
@@ -538,6 +548,12 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
     }
   } catch {
     // best-effort
+  }
+
+  // Email cliente: pratica annullata. Solo se era stata realmente inviata
+  // (mai notificato "avviata" per le bozze -> niente "annullata").
+  if (!eraBozza) {
+    await notifyClientiAvanzamento(praticaId, 'ANNULLATA').catch(() => undefined);
   }
 
   revalidatePath('/dashboard');

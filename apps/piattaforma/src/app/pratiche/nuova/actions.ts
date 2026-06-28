@@ -17,7 +17,7 @@ import {
 } from '@/lib/kyc/extract-identita';
 import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
-import { sendNotification } from '@/lib/notifiche';
+import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
@@ -1291,6 +1291,9 @@ export async function submitNuovaPraticaAction(
       },
     }).catch(() => undefined);
   }
+
+  // Email cliente (acquirente + venditori): pratica avviata.
+  await notifyClientiAvanzamento(pratica.id, 'AVVIATA').catch(() => undefined);
 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');

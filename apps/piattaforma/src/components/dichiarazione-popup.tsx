@@ -106,6 +106,16 @@ export function DichiarazionePopup({
           dal tuo wallet.
         </div>
 
+        <div className="mb-5 flex items-start gap-2.5 rounded-[12px] border border-pv-navy-600/20 bg-pv-navy-100 px-4 py-3 text-[12.5px] text-pv-navy-800">
+          <span aria-hidden className="mt-0.5 text-[15px]">
+            📄
+          </span>
+          <span>
+            Ricorda: <strong>tutti i documenti vanno portati in originale e di
+            persona, fisicamente in agenzia</strong>, al momento della firma.
+          </span>
+        </div>
+
         <label className="mb-5 flex cursor-pointer items-start gap-3 rounded-[12px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-4 py-3 transition-colors hover:bg-pv-slate-100">
           <input
             type="checkbox"

@@ -1505,9 +1505,10 @@ export function WizardNuovaPratica({
 
         {step === 2 && (
           <div className="space-y-5">
-            <Alert variant="info">
-              Ricorda: tutti i documenti vanno portati in originale, fisicamente
-              in agenzia, al momento della firma.
+            <Alert variant="warning" title="I documenti vanno portati in agenzia">
+              Tutti i documenti vanno consegnati <strong>in originale e di
+              persona, fisicamente in agenzia</strong>, al momento della firma.
+              Gli upload qui servono solo per avviare la pratica.
             </Alert>
 
             {multiplo ? (
@@ -1633,9 +1634,10 @@ export function WizardNuovaPratica({
 
         {step === 3 && (
           <div className="space-y-5">
-            <Alert variant="info">
-              Ricorda: tutti i documenti vanno portati in originale, fisicamente
-              in agenzia, al momento della firma.
+            <Alert variant="warning" title="I documenti vanno portati in agenzia">
+              Tutti i documenti vanno consegnati <strong>in originale e di
+              persona, fisicamente in agenzia</strong>, al momento della firma.
+              Gli upload qui servono solo per avviare la pratica.
             </Alert>
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">

@@ -2,10 +2,20 @@
 
 import { useState, useTransition } from 'react';
 import { richiediPayoutAction } from './actions';
+import { MandatoFirmaModal } from './mandato-firma-modal';
 
-export function PayoutButton({ disabled }: { disabled: boolean }) {
+export function PayoutButton({
+  disabled,
+  isTitolare,
+  ragioneSociale,
+}: {
+  disabled: boolean;
+  isTitolare: boolean;
+  ragioneSociale: string;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [mandatoOpen, setMandatoOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function handle() {
@@ -13,15 +23,15 @@ export function PayoutButton({ disabled }: { disabled: boolean }) {
     setSuccess(null);
     startTransition(async () => {
       const res = await richiediPayoutAction();
-      if (!res.ok) {
-        if ('requireMandato' in res) {
-          setError('Firma il mandato di fatturazione prima di richiedere il payout.');
-        } else {
-          setError(res.error);
-        }
-      } else {
+      if (res.ok) {
         setSuccess("Richiesta inviata. L'admin la processerà a breve.");
+        return;
       }
+      if ('requireMandato' in res) {
+        setMandatoOpen(true);
+        return;
+      }
+      setError(res.error);
     });
   }
 
@@ -37,6 +47,12 @@ export function PayoutButton({ disabled }: { disabled: boolean }) {
       </button>
       {error && <p className="text-xs text-pv-red-500">{error}</p>}
       {success && <p className="text-xs text-pv-green-500">{success}</p>}
+      <MandatoFirmaModal
+        open={mandatoOpen}
+        onClose={() => setMandatoOpen(false)}
+        isTitolare={isTitolare}
+        ragioneSociale={ragioneSociale}
+      />
     </div>
   );
 }

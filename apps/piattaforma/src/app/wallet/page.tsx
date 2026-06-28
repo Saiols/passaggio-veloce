@@ -12,6 +12,7 @@ import { getRendimento, type RendimentoPeriod } from './rendimento';
 import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
 import { RendicontoCard } from './rendiconto-card';
+import { isOwner } from '@/lib/auth/permissions';
 
 const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
 
@@ -60,7 +61,7 @@ export default async function WalletPage({
     );
   }
 
-  const [wallet, sedeRow] = await Promise.all([
+  const [wallet, sedeRow, company] = await Promise.all([
     prisma.wallet.findUnique({
       where: { sedeId: sede.id },
       include: {
@@ -87,6 +88,12 @@ export default async function WalletPage({
       where: { id: sede.id },
       select: { payoutThresholdCent: true },
     }),
+    session.user.companyId
+      ? prisma.company.findUnique({
+          where: { id: session.user.companyId },
+          select: { ragioneSociale: true },
+        })
+      : null,
   ]);
 
   const saldoCent = wallet?.saldoCent ?? 0;
@@ -209,7 +216,11 @@ export default async function WalletPage({
             Soglia automatica {formatCurrencyCent(thresholdAutoCent)}
           </p>
           <div className="mt-4">
-            <PayoutButton disabled={saldoCent < WALLET.MIN_PAYOUT_CENT} />
+            <PayoutButton
+              disabled={saldoCent < WALLET.MIN_PAYOUT_CENT}
+              isTitolare={isOwner(session.user.role as string)}
+              ragioneSociale={company?.ragioneSociale ?? ''}
+            />
           </div>
           {saldoNegativo && (
             <p className="mt-2 text-xs font-semibold text-pv-amber-500">

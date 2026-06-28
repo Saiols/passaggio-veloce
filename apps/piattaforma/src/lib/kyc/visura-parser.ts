@@ -82,8 +82,13 @@ function parseAmministratore(text: string): VisuraData['amministratore'] {
   // Carica (case-sensitive: nelle visure è "Amministratore Unico" maiuscolo) seguita
   // dal nome in MAIUSCOLO, fino a "Rappresentante"/"Nato"/"Codice fiscale". Le varianti
   // "Titolare …" (più lunghe prima) coprono le imprese individuali.
+  // GENDER-AGNOSTIC: una visura usa il femminile quando l'amministratore è una donna
+  // ("Amministratrice Unica", "Consigliera Delegata", "Socia Amministratrice",
+  // "Liquidatrice", "Presidentessa") — `(?:ore|rice)` / `Unic[ao]` / `[ae]` coprono
+  // entrambi i generi. Le forme "Unic[ao]"/"Delegat[ao]"/"Soci[ao] Amministrat…" vanno
+  // PRIMA della bare "Amministrat(?:ore|rice)" così la carica consuma anche "Unica/Delegata".
   const caricaRe =
-    /(?:Amministratore Unico|Amministratore Delegato|Consigliere Delegato|Amministratore|Presidente del Consiglio[^\n]{0,40}|Presidente|Liquidatore|Socio Amministratore|Titolare Firmatario|Titolare di impresa individuale|Titolare)\s+([A-ZÀ-Ù'’]{2,}(?:\s+[A-ZÀ-Ù'’]{2,}){1,3}?)\s+(?:Rappresentante|Nato|Nata|Codice fiscale)/;
+    /(?:Amministrat(?:ore|rice)\s+Unic[ao]|Amministrat(?:ore|rice)\s+Delegat[ao]|Consiglier[ae]\s+Delegat[ao]|Soci[ao]\s+Amministrat(?:ore|rice)|Amministrat(?:ore|rice)|Presidente del Consiglio[^\n]{0,40}|Presidentessa|Presidente|Liquidat(?:ore|rice)|Consiglier[ae]|Titolare Firmatario|Titolare di impresa individuale|Titolare)\s+([A-ZÀ-Ù'’]{2,}(?:\s+[A-ZÀ-Ù'’]{2,}){1,3}?)\s+(?:Rappresentante|Nato|Nata|Codice fiscale)/;
   const m = caricaRe.exec(region);
   let nome: string | undefined;
   let cognome: string | undefined;

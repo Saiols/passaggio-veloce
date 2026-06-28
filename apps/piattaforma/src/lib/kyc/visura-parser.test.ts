@@ -85,3 +85,47 @@ describe('parseVisuraText (impresa individuale: titolare al posto dell\'amminist
     expect(r.atecoCodes).toContain('45.11.01');
   });
 });
+
+// Fixture realistico per AMMINISTRATRICE DONNA (estratto e ridotto dalla visura
+// reale "PLANET AUTO S.R.L."): la carica è al FEMMINILE ("Amministratrice Unica"),
+// perché l'amministratore è una donna. Il nome resta COGNOME NOME maiuscolo e il
+// CF è presente. Regressione: il parser deve leggere nome+cognome anche al femminile.
+const AMMINISTRATRICE_DONNA = [
+  'viene esposto un estratto delle informazioni presenti in visura che non puo essere considerato esaustivo',
+  "VISURA ORDINARIA SOCIETA' DI CAPITALE PLANET AUTO S.R.L.",
+  'Indirizzo Sedelegale MAGENTA (MI) VIA A. VOLTA 10 CAP 20013',
+  'Codice fiscale e n.iscr. al Registro Imprese 13880060960 Partita IVA 13880060960',
+  'Amministratrice Unica SOLIANI LUIGIA Rappresentante dell Impresa',
+  'Codice ATECO 46.71.10 Codice NACE 2.1 46.71',
+  'Documento n . T 613996775 estratto dal Registro Imprese in data 30/05/2026',
+  'informazioni costitutive Denominazione: PLANET AUTO S.R.L. Data atto di costituzione: 04/12/2024',
+  '5 Amministratori Amministratrice Unica SOLIANI LUIGIA Rappresentante dell impresa',
+  'Organi amministrativi in carica amministratore unico Numero componenti: 1',
+  'Elenco amministratori Amministratrice Unica SOLIANI LUIGIA Rappresentante dell impresa Nata a SUZZARA (MN) il 04/07/1957 Codice fiscale: SLNLGU57L44L020L domicilio SANTO STEFANO TICINO (MI) VIA TRIESTE 21/C CAP 20010 carica amministratrice unica',
+  'Classificazione ATECO 2025 Codice: 46.71.10 - commercio all ingrosso di automobili e autoveicoli leggeri',
+].join(' ');
+
+describe('parseVisuraText (amministratrice donna: carica al femminile)', () => {
+  it('estrae nome+cognome+CF con carica "Amministratrice Unica"', () => {
+    const r = parseVisuraText(AMMINISTRATRICE_DONNA);
+    expect(r.amministratore?.cognome).toBe('SOLIANI');
+    expect(r.amministratore?.nome).toBe('LUIGIA');
+    expect(r.amministratore?.codiceFiscale).toBe('SLNLGU57L44L020L');
+  });
+
+  it('gestisce le altre cariche al femminile (Delegata / Consigliera / Socia / Liquidatrice)', () => {
+    const cariche = [
+      ['Amministratrice Delegata', 'BIANCHI', 'MARIA', 'BNCMRA80A41F205K'],
+      ['Consigliera Delegata', 'VERDI', 'ANNA', 'VRDNNA75T50F205Q'],
+      ['Socia Amministratrice', 'NERI', 'GIULIA', 'NREGLI82E45F205X'],
+      ['Liquidatrice', 'GALLI', 'SARA', 'GLLSRA79H62F205T'],
+    ] as const;
+    for (const [carica, cognome, nome, cf] of cariche) {
+      const text = `Elenco amministratori ${carica} ${cognome} ${nome} Rappresentante dell impresa Nata a MILANO (MI) Codice fiscale: ${cf} domicilio MILANO`;
+      const r = parseVisuraText(text);
+      expect(r.amministratore?.cognome).toBe(cognome);
+      expect(r.amministratore?.nome).toBe(nome);
+      expect(r.amministratore?.codiceFiscale).toBe(cf);
+    }
+  });
+});

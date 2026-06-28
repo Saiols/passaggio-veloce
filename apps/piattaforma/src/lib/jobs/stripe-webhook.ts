@@ -1,7 +1,7 @@
 import 'server-only';
 import { prisma } from '@pv/db';
 import type Stripe from 'stripe';
-import { bloccaAgenziaPerAddebito, rivalutaBloccoAgenzia, isAgenziaBloccata } from '@/lib/fee/blocco';
+import { bloccaAgenziaPerAddebito, rivalutaBloccoAgenzia } from '@/lib/fee/blocco';
 import { ritentaAddebitiAgenzia } from '@/lib/fee/retry';
 
 /** Routing idempotente degli eventi Stripe rilevanti. Fonte di verità per il
@@ -53,13 +53,12 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
           where: { id: companyId },
           data: { sepaMandateStatus: 'ACTIVE' },
         });
-        // Best-effort: se l'agenzia era bloccata per addebiti scoperti e il mandato
-        // era PENDING, ora che è ACTIVE rilanciamo i fee automaticamente.
+        // Best-effort: quando il mandato diventa ACTIVE, rilanciamo qualsiasi fee
+        // FAILED/RETRY outstanding — indipendentemente dallo stato di blocco.
+        // Se non ci sono fee pendenti è un no-op. Sicuro: ritentaAddebitiAgenzia
+        // tocca solo fee in stato FAILED/RETRY.
         try {
-          const bloccata = await isAgenziaBloccata(companyId);
-          if (bloccata) {
-            await ritentaAddebitiAgenzia(companyId);
-          }
+          await ritentaAddebitiAgenzia(companyId);
         } catch {
           // best-effort: non propagare
         }

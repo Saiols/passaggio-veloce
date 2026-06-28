@@ -41,7 +41,12 @@ function isIbanMod97Valid(iban: string): boolean {
 }
 
 const ibanSchema = z.object({
-  iban: z.string().trim().min(15).max(34).transform((s) => s.toUpperCase()),
+  // Rimuove tutti gli spazi interni (IBAN incollati con spazi tipo "IT60 X054 ...") PRIMA
+  // della validazione min/max, poi uppercasa. L'IBAN risultante è privo di spazi.
+  iban: z.preprocess(
+    (v) => (typeof v === 'string' ? v.replace(/\s+/g, '').toUpperCase() : v),
+    z.string().min(15).max(34),
+  ),
 });
 
 /** Aggiorna l'IBAN, ri-crea il mandato SEPA, poi riprova l'addebito. */

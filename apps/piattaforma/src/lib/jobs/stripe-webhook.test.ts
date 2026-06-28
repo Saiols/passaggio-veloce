@@ -74,23 +74,24 @@ describe('handleStripeEvent', () => {
     });
   });
 
-  it('setup_intent.succeeded → non chiama retry se agenzia non bloccata', async () => {
+  it('setup_intent.succeeded → chiama retry incondizionatamente anche se agenzia non bloccata', async () => {
     isBloccata.mockResolvedValue(false);
     await handleStripeEvent({
       type: 'setup_intent.succeeded',
       data: { object: { id: 'seti_1', metadata: { companyId: 'co-1' } } },
     } as never);
-    expect(ritentaMock).not.toHaveBeenCalled();
+    // Unconditional: qualsiasi fee FAILED/RETRY viene rilancito appena il mandato è ACTIVE
+    expect(ritentaMock).toHaveBeenCalledWith('co-1');
   });
 
-  it('setup_intent.succeeded → auto-retry se agenzia era bloccata (PENDING→ACTIVE)', async () => {
-    isBloccata.mockResolvedValue(true);
+  it('setup_intent.succeeded → auto-retry incondizionato (mandato PENDING→ACTIVE)', async () => {
     await handleStripeEvent({
       type: 'setup_intent.succeeded',
       data: { object: { id: 'seti_1', metadata: { companyId: 'co-1' } } },
     } as never);
-    expect(isBloccata).toHaveBeenCalledWith('co-1');
+    // Non dipende più dallo stato di blocco: ritenta sempre (no-op se non ci sono fee pendenti)
     expect(ritentaMock).toHaveBeenCalledWith('co-1');
+    expect(isBloccata).not.toHaveBeenCalled();
   });
 
   it('setup_intent.setup_failed → mandato FAILED', async () => {

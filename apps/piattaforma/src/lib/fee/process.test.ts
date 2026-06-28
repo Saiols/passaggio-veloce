@@ -1,14 +1,17 @@
 import { it, expect, vi, beforeEach } from 'vitest';
 
-const { feeFindUnique, feeUpdate, chargeFee, blocca, rivaluta } = vi.hoisted(() => ({
+const { feeFindUnique, feeUpdate, feeUpdateMany, chargeFee, blocca, rivaluta } = vi.hoisted(() => ({
   feeFindUnique: vi.fn(),
   feeUpdate: vi.fn(),
+  feeUpdateMany: vi.fn(),
   chargeFee: vi.fn(),
   blocca: vi.fn(),
   rivaluta: vi.fn(),
 }));
 
-vi.mock('@pv/db', () => ({ prisma: { feeAddebito: { findUnique: feeFindUnique, update: feeUpdate } } }));
+vi.mock('@pv/db', () => ({
+  prisma: { feeAddebito: { findUnique: feeFindUnique, update: feeUpdate, updateMany: feeUpdateMany } },
+}));
 vi.mock('@/lib/providers/payment', () => ({ getPayment: () => ({ chargeFee }) }));
 vi.mock('./blocco', () => ({ bloccaAgenziaPerAddebito: blocca, rivalutaBloccoAgenzia: rivaluta }));
 
@@ -19,6 +22,7 @@ const FEE = { id: 'f1', importoCent: 5000, agenziaId: 'a1', tentativi: 0, stato:
 beforeEach(() => {
   vi.clearAllMocks();
   feeUpdate.mockResolvedValue({});
+  feeUpdateMany.mockResolvedValue({ count: 1 }); // CAS success per default
   blocca.mockResolvedValue(undefined);
   rivaluta.mockResolvedValue(undefined);
   feeFindUnique.mockResolvedValue(FEE);
@@ -70,6 +74,13 @@ it('SKIPPED: fee già SUCCESS', async () => {
 
 it('SKIPPED: fee già ANNULLATO', async () => {
   feeFindUnique.mockResolvedValue({ ...FEE, stato: 'ANNULLATO' });
+  const s = await processFeeAddebito('f1');
+  expect(s).toBe('SKIPPED');
+  expect(chargeFee).not.toHaveBeenCalled();
+});
+
+it('SKIPPED: CAS updateMany restituisce count=0 (worker concorrente già ha il fee)', async () => {
+  feeUpdateMany.mockResolvedValue({ count: 0 });
   const s = await processFeeAddebito('f1');
   expect(s).toBe('SKIPPED');
   expect(chargeFee).not.toHaveBeenCalled();

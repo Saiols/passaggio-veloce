@@ -15,7 +15,11 @@ export async function processFeeAddebito(feeId: string): Promise<ProcessFeeStatu
   const fee = await prisma.feeAddebito.findUnique({ where: { id: feeId } });
   if (!fee || fee.stato === 'SUCCESS' || fee.stato === 'ANNULLATO') return 'SKIPPED';
 
-  await prisma.feeAddebito.update({ where: { id: feeId }, data: { stato: 'IN_LAVORAZIONE' } });
+  const claim = await prisma.feeAddebito.updateMany({
+    where: { id: feeId, stato: { notIn: ['IN_LAVORAZIONE', 'SUCCESS', 'ANNULLATO'] } },
+    data: { stato: 'IN_LAVORAZIONE' },
+  });
+  if (claim.count === 0) return 'SKIPPED'; // un altro worker ha già preso in carico questo fee
 
   const result = await getPayment().chargeFee({
     feeAddebitoId: fee.id,

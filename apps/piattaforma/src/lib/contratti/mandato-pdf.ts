@@ -86,7 +86,7 @@ export async function buildMandatoFatturazionePdf(input: MandatoPdfInput): Promi
   for (const c of MANDATO_CLAUSOLE) {
     draw(c.heading, bold, 11, NAVY);
     gap(2);
-    draw(c.body.replace('{{FORO}}', input.foro), helv, 10);
+    draw(c.body.replaceAll('{{FORO}}', input.foro), helv, 10);
     gap(8);
   }
 

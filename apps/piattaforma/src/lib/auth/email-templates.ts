@@ -69,6 +69,18 @@ export function tplInvitoTeam(p: { ragioneSociale: string; inviteUrl: string }):
   return { subject, html, text };
 }
 
+export function tplMandatoFirmatoConferma(p: { nomeAzienda: string }): EmailContent {
+  const subject = 'Passaggio Veloce — Mandato fatturazione firmato';
+  const html = authLayout(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Mandato firmato</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao,</p>
+    <p style="margin:0 0 18px;color:#334155;font-size:14px">Il mandato per la fatturazione per conto terzi di <strong>${escapeHtml(p.nomeAzienda)}</strong> è stato firmato con successo. In allegato trovi una copia del documento.</p>
+    <p style="margin:0 0 0;font-size:12px;color:#64748b">Conserva questo documento per i tuoi archivi. Per qualsiasi domanda, contatta il supporto di Passaggio Veloce.</p>
+  `);
+  const text = `Il mandato per la fatturazione per conto terzi di ${p.nomeAzienda} è stato firmato con successo. Trovi una copia del documento in allegato a questa email.`;
+  return { subject, html, text };
+}
+
 export function tplOtpMandato(p: { codice: string }): EmailContent {
   const subject = 'Passaggio Veloce — Codice per la firma del mandato';
   const html = authLayout(`

@@ -35,8 +35,9 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
   if (inflight) return { ok: false, error: 'Payout già in corso, attendi' };
 
   // Gate mandato fatturazione: alla PRIMA richiesta payout serve il contratto firmato.
+  if (!session.user.companyId) return { ok: false, error: 'Azienda non associata' };
   const mandato = await prisma.mandatoFatturazione.findUnique({
-    where: { companyId: session.user.companyId! },
+    where: { companyId: session.user.companyId },
     select: { id: true },
   });
   if (!mandato) return { ok: false, requireMandato: true };

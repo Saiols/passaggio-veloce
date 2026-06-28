@@ -2,6 +2,7 @@
 
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { createHash } from 'node:crypto';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
 import { env } from '@/env';
@@ -11,7 +12,7 @@ import { getEmail } from '@/lib/providers/email';
 import { getStorage } from '@/lib/providers/storage';
 import { generaCodiceOtp, otpScaduto, OTP_TTL_MS } from '@/lib/contratti/otp';
 import { buildMandatoFatturazionePdf } from '@/lib/contratti/mandato-pdf';
-import { tplOtpMandato } from '@/lib/auth/email-templates';
+import { tplOtpMandato, tplMandatoFirmatoConferma } from '@/lib/auth/email-templates';
 import { pvEmittente, snapshotCompany } from '@/lib/fatturazione/pv-emittente';
 
 type Esito = { ok: true } | { ok: false; error: string };
@@ -59,6 +60,11 @@ export async function firmaMandatoAction(codice: string): Promise<Esito> {
     select: { id: true },
   });
   if (esistente) {
+    // minor-C: clear any outstanding OTP so it doesn't remain dangling.
+    await prisma.user.update({
+      where: { id: u.id },
+      data: { mandatoOtpHash: null, mandatoOtpExpiresAt: null },
+    });
     revalidatePath('/wallet');
     return { ok: true };
   }
@@ -111,6 +117,9 @@ export async function firmaMandatoAction(codice: string): Promise<Esito> {
     otpAudit: { ip: ip ?? null },
   });
 
+  // I-2: sha256 integrità del PDF generato.
+  const sha256 = createHash('sha256').update(Buffer.from(pdfBytes)).digest('hex');
+
   const stored = await getStorage().put({
     scope: 'mandati',
     buffer: Buffer.from(pdfBytes),
@@ -136,6 +145,7 @@ export async function firmaMandatoAction(codice: string): Promise<Esito> {
           mandatario,
           firmatario: { nome: dbUser.nome, cognome: dbUser.cognome },
           foro,
+          sha256,
         },
         ip: ip ?? null,
         userAgent: hdrs.get('user-agent'),
@@ -146,6 +156,19 @@ export async function firmaMandatoAction(codice: string): Promise<Esito> {
     // P2002 = unique violation: il mandato è stato creato da una chiamata concorrente → idempotente.
     if ((e as { code?: string }).code !== 'P2002') throw e;
   }
+
+  // I-1: Invia una copia del PDF firmato al firmatario (best-effort: un errore email non invalida la firma).
+  const emailContent = tplMandatoFirmatoConferma({ nomeAzienda: company.ragioneSociale });
+  await getEmail()
+    .send({
+      to: u.email,
+      from: env.EMAIL_FROM,
+      subject: emailContent.subject,
+      html: emailContent.html,
+      text: emailContent.text,
+      attachments: [{ filename: 'mandato-fatturazione.pdf', content: pdfBytes, contentType: 'application/pdf' }],
+    })
+    .catch(() => undefined);
 
   // Consuma l'OTP.
   await prisma.user.update({

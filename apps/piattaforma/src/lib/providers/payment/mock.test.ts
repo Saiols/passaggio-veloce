@@ -9,6 +9,7 @@ describe('MockPaymentProvider', () => {
       feeAddebitoId: 'fee-1',
       importoCent: 5000,
       agenziaId: 'ag-1',
+      tentativo: 0,
     });
     expect(res.ok).toBe(true);
     if (res.ok) {
@@ -33,6 +34,7 @@ describe('MockPaymentProvider', () => {
       feeAddebitoId: 'fee-x',
       importoCent: -100,
       agenziaId: 'ag-x',
+      tentativo: 0,
     });
     expect(res.ok).toBe(false);
     if (!res.ok) {
@@ -49,6 +51,7 @@ describe('MockPaymentProvider', () => {
       feeAddebitoId: 'fee-zero',
       importoCent: 0,
       agenziaId: 'ag-zero',
+      tentativo: 0,
     });
     expect(res.ok).toBe(false);
     if (!res.ok) {

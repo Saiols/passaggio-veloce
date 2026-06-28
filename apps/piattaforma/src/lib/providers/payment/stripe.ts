@@ -45,7 +45,7 @@ export class StripePaymentProvider implements PaymentProvider {
           confirm: true,
           metadata: { feeAddebitoId: input.feeAddebitoId },
         },
-        { idempotencyKey: `charge-fee:${input.feeAddebitoId}` },
+        { idempotencyKey: `charge-fee:${input.feeAddebitoId}:${input.tentativo}` },
       );
       switch (pi.status) {
         case 'succeeded':

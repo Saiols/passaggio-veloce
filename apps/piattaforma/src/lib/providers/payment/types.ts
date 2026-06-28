@@ -4,6 +4,8 @@ export type ChargeFeeInput = {
   feeAddebitoId: string;
   importoCent: number;
   agenziaId: string;
+  /** Numero tentativo (0-based): entra nell'idempotency key per forzare un nuovo PaymentIntent al retry. */
+  tentativo: number;
 };
 
 export type ExecutePayoutInput = {

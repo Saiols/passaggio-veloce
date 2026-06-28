@@ -39,6 +39,7 @@ export async function processFeeScheduled(): Promise<ProcessFeeResult> {
       feeAddebitoId: fee.id,
       importoCent: fee.importoCent,
       agenziaId: fee.agenziaId,
+      tentativo: fee.tentativi,
     });
 
     const outcome = feeOutcomeFromResult(result);

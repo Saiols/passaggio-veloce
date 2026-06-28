@@ -14,7 +14,7 @@ vi.mock('@/env', () => ({ env: { STRIPE_SECRET_KEY: 'sk_test_x' } }));
 import { StripePaymentProvider } from './stripe';
 
 const provider = new StripePaymentProvider();
-const charge = { feeAddebitoId: 'fee-1', importoCent: 7500, agenziaId: 'ag-1' };
+const charge = { feeAddebitoId: 'fee-1', importoCent: 7500, agenziaId: 'ag-1', tentativo: 0 };
 const activeAgency = {
   stripeCustomerId: 'cus_1',
   stripePaymentMethodId: 'pm_1',

@@ -1,22 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { feeUpdateMany, companyUpdateMany } = vi.hoisted(() => ({
+const { feeUpdateMany, feeFindUnique, companyUpdateMany, blocca, rivaluta } = vi.hoisted(() => ({
   feeUpdateMany: vi.fn(),
+  feeFindUnique: vi.fn(),
   companyUpdateMany: vi.fn(),
+  blocca: vi.fn(),
+  rivaluta: vi.fn(),
 }));
 vi.mock('@pv/db', () => ({
   prisma: {
-    feeAddebito: { updateMany: feeUpdateMany },
+    feeAddebito: { updateMany: feeUpdateMany, findUnique: feeFindUnique },
     company: { updateMany: companyUpdateMany },
   },
 }));
+vi.mock('@/lib/fee/blocco', () => ({ bloccaAgenziaPerAddebito: blocca, rivalutaBloccoAgenzia: rivaluta }));
 
 import { handleStripeEvent } from './stripe-webhook';
 
 describe('handleStripeEvent', () => {
   beforeEach(() => {
     feeUpdateMany.mockReset();
+    feeFindUnique.mockReset();
     companyUpdateMany.mockReset();
+    blocca.mockReset();
+    rivaluta.mockReset();
+    feeUpdateMany.mockResolvedValue({ count: 1 });
+    feeFindUnique.mockResolvedValue({ agenziaId: 'a1' });
+    blocca.mockResolvedValue(undefined);
+    rivaluta.mockResolvedValue(undefined);
   });
 
   it('payment_intent.succeeded → fee SUCCESS via metadata', async () => {

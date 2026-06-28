@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { it, expect, vi, beforeEach } from 'vitest';
 
 const { feeFindUnique, feeUpdate, chargeFee, blocca, rivaluta } = vi.hoisted(() => ({
   feeFindUnique: vi.fn(),
@@ -63,6 +63,13 @@ it('passa il tentativo del fee a chargeFee', async () => {
 
 it('SKIPPED: fee già SUCCESS', async () => {
   feeFindUnique.mockResolvedValue({ ...FEE, stato: 'SUCCESS' });
+  const s = await processFeeAddebito('f1');
+  expect(s).toBe('SKIPPED');
+  expect(chargeFee).not.toHaveBeenCalled();
+});
+
+it('SKIPPED: fee già ANNULLATO', async () => {
+  feeFindUnique.mockResolvedValue({ ...FEE, stato: 'ANNULLATO' });
   const s = await processFeeAddebito('f1');
   expect(s).toBe('SKIPPED');
   expect(chargeFee).not.toHaveBeenCalled();

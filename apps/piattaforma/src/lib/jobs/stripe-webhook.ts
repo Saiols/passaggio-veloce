@@ -30,11 +30,15 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const pi = event.data.object as Stripe.PaymentIntent;
       const feeId = pi.metadata?.feeAddebitoId;
       if (feeId) {
-        await prisma.feeAddebito.updateMany({
+        const r = await prisma.feeAddebito.updateMany({
           where: { id: feeId, stato: { notIn: ['SUCCESS', 'FAILED'] } },
           data: { stato: 'FAILED', errorMessage: pi.last_payment_error?.message ?? 'SEPA payment failed' },
         });
-        await bloccaAgenziaPerAddebito(feeId, pi.last_payment_error?.message ?? 'SEPA payment failed');
+        if (r.count > 0) {
+          await bloccaAgenziaPerAddebito(feeId, pi.last_payment_error?.message ?? 'SEPA payment failed');
+        } else {
+          console.warn(`[stripe-webhook] payment_failed: nessun FeeAddebito aggiornato (id=${feeId}, pi=${pi.id})`);
+        }
       } else {
         console.warn(`[stripe-webhook] payment_intent.payment_failed senza metadata.feeAddebitoId (pi=${pi.id})`);
       }

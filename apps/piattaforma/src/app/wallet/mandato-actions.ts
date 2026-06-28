@@ -73,6 +73,8 @@ export async function firmaMandatoAction(codice: string): Promise<Esito> {
   if (!(await verifyPassword(codice.trim(), dbUser.mandatoOtpHash))) {
     return { ok: false, error: 'Codice non valido' };
   }
+  // FIX 2: timestamp preciso immediatamente dopo la verifica OTP.
+  const otpVerificatoAt = new Date();
 
   const company = await prisma.company.findUnique({
     where: { id: u.companyId },
@@ -116,26 +118,34 @@ export async function firmaMandatoAction(codice: string): Promise<Esito> {
     originalFilename: `mandato-fatturazione-${u.companyId}.pdf`,
   });
 
-  await prisma.mandatoFatturazione.create({
-    data: {
-      companyId: u.companyId,
-      firmatarioUserId: u.id,
-      firmatoAt,
-      storageKey: stored.storageKey,
-      storageProvider: stored.storageProvider,
-      mimeType: stored.mimeType,
-      sizeBytes: stored.sizeBytes,
-      datiSnapshot: {
-        mandante,
-        mandatario,
-        firmatario: { nome: dbUser.nome, cognome: dbUser.cognome },
-        foro,
+  // FIX 1: guarda contro P2002 (violazione unique companyId da chiamata concorrente).
+  // In caso di P2002 il mandato è già stato creato → idempotente: si prosegue.
+  // Qualsiasi altro errore viene rilanciato normalmente.
+  try {
+    await prisma.mandatoFatturazione.create({
+      data: {
+        companyId: u.companyId,
+        firmatarioUserId: u.id,
+        firmatoAt,
+        storageKey: stored.storageKey,
+        storageProvider: stored.storageProvider,
+        mimeType: stored.mimeType,
+        sizeBytes: stored.sizeBytes,
+        datiSnapshot: {
+          mandante,
+          mandatario,
+          firmatario: { nome: dbUser.nome, cognome: dbUser.cognome },
+          foro,
+        },
+        ip: ip ?? null,
+        userAgent: hdrs.get('user-agent'),
+        otpVerificatoAt,
       },
-      ip: ip ?? null,
-      userAgent: hdrs.get('user-agent'),
-      otpVerificatoAt: firmatoAt,
-    },
-  });
+    });
+  } catch (e: unknown) {
+    // P2002 = unique violation: il mandato è stato creato da una chiamata concorrente → idempotente.
+    if ((e as { code?: string }).code !== 'P2002') throw e;
+  }
 
   // Consuma l'OTP.
   await prisma.user.update({

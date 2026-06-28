@@ -16,6 +16,8 @@ export function PayoutButton({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [mandatoOpen, setMandatoOpen] = useState(false);
+  // FIX 3: key incrementale → React rimonta il modal ad ogni apertura, azzerando lo stato interno.
+  const [modalKey, setModalKey] = useState(0);
   const [pending, startTransition] = useTransition();
 
   function handle() {
@@ -28,6 +30,7 @@ export function PayoutButton({
         return;
       }
       if ('requireMandato' in res) {
+        setModalKey((k) => k + 1);
         setMandatoOpen(true);
         return;
       }
@@ -48,6 +51,7 @@ export function PayoutButton({
       {error && <p className="text-xs text-pv-red-500">{error}</p>}
       {success && <p className="text-xs text-pv-green-500">{success}</p>}
       <MandatoFirmaModal
+        key={modalKey}
         open={mandatoOpen}
         onClose={() => setMandatoOpen(false)}
         isTitolare={isTitolare}

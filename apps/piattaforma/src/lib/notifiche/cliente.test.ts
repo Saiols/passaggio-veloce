@@ -45,7 +45,7 @@ describe('notifyClientiAvanzamento', () => {
     expect(first.payload.ruolo).toBe('ACQUIRENTE');
   });
 
-  it('non invia se la pratica e in bozza (codicePratica null)', async () => {
+  it('non invia se codicePratica è null (pratica senza codice)', async () => {
     findUniqueMock.mockResolvedValue({ ...praticaPiena, codicePratica: null });
     await notifyClientiAvanzamento('p1', 'AVVIATA');
     expect(sendMock).not.toHaveBeenCalled();

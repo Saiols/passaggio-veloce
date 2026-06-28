@@ -1292,8 +1292,11 @@ export async function submitNuovaPraticaAction(
     }).catch(() => undefined);
   }
 
-  // Email cliente (acquirente + venditori): pratica avviata.
-  await notifyClientiAvanzamento(pratica.id, 'AVVIATA').catch(() => undefined);
+  // Email cliente: pratica avviata. Solo se è entrata in distribuzione
+  // (le pratiche "caso dubbio" restano BOZZA in attesa di revisione → niente email).
+  if (round1.stato !== 'BOZZA') {
+    await notifyClientiAvanzamento(pratica.id, 'AVVIATA').catch(() => undefined);
+  }
 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');

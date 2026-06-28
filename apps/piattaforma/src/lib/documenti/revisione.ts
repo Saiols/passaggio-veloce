@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
-import { sendNotification, getAdminEmails } from '@/lib/notifiche';
+import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
 
 export type MotivoRevisione =
   | 'DOCUMENTO_NON_STANDARD'
@@ -209,6 +209,12 @@ export async function risolviRevisioneAction(
     }
   } catch {
     // best-effort
+  }
+
+  // Email cliente: pratica annullata in revisione. Solo se era già stata
+  // distribuita (una bozza in revisione mai inviata non deve ricevere "annullata").
+  if (esito === 'ANNULLATA' && pratica.stato !== 'BOZZA') {
+    await notifyClientiAvanzamento(praticaId, 'ANNULLATA').catch(() => undefined);
   }
 
   revalidatePath('/admin/revisioni');

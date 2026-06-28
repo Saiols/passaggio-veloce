@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { sendNotification } from '@/lib/notifiche';
+import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoPraticaAssegnata } from '@/lib/eventi/pratica-eventi';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
@@ -155,6 +155,9 @@ export async function assegnaEscalationAction(
         // best-effort
       }
     }
+
+    // Email cliente: un'agenzia (assegnata dall'admin) ha preso in carico la pratica.
+    await notifyClientiAvanzamento(praticaId, 'PRESA_IN_CARICO').catch(() => undefined);
 
     revalidatePath('/admin/escalation');
     return { ok: true };

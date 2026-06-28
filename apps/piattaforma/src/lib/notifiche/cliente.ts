@@ -25,6 +25,7 @@ export async function notifyClientiAvanzamento(
         acquirenteIsPersonaGiuridica: true,
         acquirenteRagioneSociale: true,
         venditori: {
+          orderBy: { ordine: 'asc' },
           select: {
             email: true,
             nome: true,
@@ -36,6 +37,9 @@ export async function notifyClientiAvanzamento(
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
     });
+    // Salta bozze senza codice (pratica mai distribuita). Nota: bozze con
+    // codicePratica esistono (caso-dubbio); i call-site guardano anche
+    // su stato !== 'BOZZA' per non notificare quelle mai inviate.
     if (!pratica?.codicePratica) return;
 
     const recipients = buildClienteRecipients(pratica);

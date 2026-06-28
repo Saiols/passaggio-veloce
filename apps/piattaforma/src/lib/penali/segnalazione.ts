@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
-import { sendNotification, getAdminEmails } from '@/lib/notifiche';
+import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { PENALI } from './config';
@@ -365,6 +365,9 @@ export async function confermaAnnullamentoConPenaleAction(
       // best-effort
     }
   }
+
+  // Email cliente: pratica annullata a seguito di penale confermata.
+  await notifyClientiAvanzamento(praticaId, 'ANNULLATA').catch(() => undefined);
 
   revalidatePath('/admin/segnalazioni');
   revalidatePath('/admin/pratiche');

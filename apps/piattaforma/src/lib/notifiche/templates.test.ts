@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN31ValutaAgenzia } from './templates';
+import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento } from './templates';
+import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 
 describe('templates usano il nuovo layout', () => {
   it('N1 contiene header navy, logo, footer legale', () => {
@@ -24,5 +25,58 @@ describe('templates usano il nuovo layout', () => {
     });
     expect(html).toContain('https://passaggioveloce.it/pratiche/1');
     expect(html).toContain('#ff7a00');
+  });
+});
+
+describe('N40 cliente avanzamento', () => {
+  const STATI: ClienteAvanzamentoStato[] = [
+    'AVVIATA', 'PRESA_IN_CARICO', 'PRONTA_FIRMA', 'COMPLETATA', 'ANNULLATA',
+  ];
+  const RUOLI: ClienteAvanzamentoRuolo[] = ['ACQUIRENTE', 'VENDITORE'];
+
+  it('per ogni stato/ruolo: subject e text valorizzati, niente dati commerciali', () => {
+    for (const stato of STATI) {
+      for (const ruolo of RUOLI) {
+        const { subject, text, html } = tplN40ClienteAvanzamento({
+          codicePratica: 'PV-2026-001',
+          veicoloDescrizione: 'AB123CD',
+          nomeDestinatario: 'Mario Rossi',
+          ruolo,
+          stato,
+        });
+        expect(subject.length).toBeGreaterThan(0);
+        expect(text.length).toBeGreaterThan(0);
+        expect(subject).toContain('PV-2026-001');
+        expect(text).toContain('PV-2026-001');
+        // niente dati commerciali
+        // niente dati commerciali (il template non riceve fee/importi/nome
+        // agenzia: la menzione generica "un'agenzia partner" è consentita).
+        const haystack = `${subject}\n${text}\n${html}`.toLowerCase();
+        expect(haystack).not.toContain('€');
+        expect(haystack).not.toContain('fee');
+        expect(haystack).not.toContain('wallet');
+        expect(haystack).not.toContain('saldo');
+      }
+    }
+  });
+
+  it('differenzia acquisto vs vendita all-avvio', () => {
+    const base = {
+      codicePratica: 'PV-1', veicoloDescrizione: 'AB123CD', nomeDestinatario: 'Mario',
+      stato: 'AVVIATA' as const,
+    };
+    const acq = tplN40ClienteAvanzamento({ ...base, ruolo: 'ACQUIRENTE' });
+    const ven = tplN40ClienteAvanzamento({ ...base, ruolo: 'VENDITORE' });
+    expect(acq.text.toLowerCase()).toContain('acquisto');
+    expect(ven.text.toLowerCase()).toContain('vendita');
+  });
+
+  it('gestisce veicoloDescrizione null senza rompere', () => {
+    const { text } = tplN40ClienteAvanzamento({
+      codicePratica: 'PV-1', veicoloDescrizione: null, nomeDestinatario: 'Mario',
+      ruolo: 'ACQUIRENTE', stato: 'COMPLETATA',
+    });
+    expect(text).toContain('PV-1');
+    expect(text).not.toContain('null');
   });
 });

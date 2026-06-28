@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { getOperatingSede } from '@/lib/auth/session-context';
@@ -69,6 +70,7 @@ export default async function WalletPage({
           include: {
             pratica: {
               select: {
+                id: true,
                 codicePratica: true,
                 veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
               },
@@ -254,7 +256,12 @@ export default async function WalletPage({
                       {labelTipoTx(t.tipo)}
                       {t.pratica?.codicePratica && (
                         <span className="ml-2 font-mono text-[12px] font-normal text-pv-slate-500">
-                          {t.pratica.codicePratica}
+                          <Link
+                            href={`/pratiche/${t.pratica.id}`}
+                            className="font-semibold text-pv-navy-600 hover:underline"
+                          >
+                            {t.pratica.codicePratica}
+                          </Link>
                           {t.pratica.veicoli[0]?.targa
                             ? ` · ${t.pratica.veicoli[0].targa}${
                                 t.pratica.veicoli.length > 1

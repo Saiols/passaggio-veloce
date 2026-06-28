@@ -68,7 +68,17 @@ export function classifyDocumento(input: ClassifierInput): ClassifierResult {
     };
   }
 
-  // 3. Naming hints per CI
+  // 3. Visura camerale: SOLO PDF. La visura è multipagina e l'OCR deve leggerla
+  // tutta (ATECO, data emissione, sede legale, rappresentante); un'immagine
+  // (anche valida come MIME generico) perderebbe pagine → estrazione incompleta.
+  if (input.tipo === 'VISURA_CAMERALE' && input.mimeType !== 'application/pdf') {
+    return {
+      stato: 'FAILED',
+      reason: 'La visura camerale deve essere in formato PDF (con tutte le pagine).',
+    };
+  }
+
+  // 4. Naming hints per CI
   const filenameLower = input.originalFilename.toLowerCase();
   if (input.tipo === 'CI_FRONTE') {
     if (CI_FRONTE_HINTS.some((h) => filenameLower.includes(h))) {

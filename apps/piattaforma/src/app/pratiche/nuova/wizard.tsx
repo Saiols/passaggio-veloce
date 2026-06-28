@@ -9,6 +9,7 @@ import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
 import { docKey } from '@/lib/documenti/richiesti';
 import { useDocumentScanner } from '@/components/document-scanner-modal';
+import { isPdfFile } from '@/lib/scanner/pdf-render';
 import { AddressAutocomplete } from '@/components/address-autocomplete';
 import {
   calcolaDocumentiRichiesti,
@@ -1823,7 +1824,9 @@ export function WizardNuovaPratica({
             )}
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
-              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Localizzazione</h2>
+              <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
+                Localizzazione (il comune dove desideri terminare il passaggio in agenzia)
+              </h2>
               {hasMaps ? (
                 <div>
                   <AddressAutocomplete
@@ -1841,7 +1844,9 @@ export function WizardNuovaPratica({
                       <strong>
                         {comune}
                         {provincia && ` (${provincia})`}
-                      </strong>
+                      </strong>{' '}
+                      (verrà inviata la richiesta alle agenzie di {comune} o alle più vicine
+                      disponibili)
                     </p>
                   )}
                 </div>
@@ -2290,13 +2295,20 @@ function UploadCard({
   onSelect,
   onRemove,
   invalid = false,
+  pdfOnly = false,
+  subtitle,
 }: {
   label: string;
   slot: BlobSlot | undefined;
   onSelect: (file: File | null) => void;
   onRemove: () => void;
   invalid?: boolean;
+  /** Solo PDF + bypass editor (la visura va caricata intera, tutte le pagine). */
+  pdfOnly?: boolean;
+  /** Testo guida sotto il titolo della card. */
+  subtitle?: string;
 }) {
+  const [localErr, setLocalErr] = useState<string | null>(null);
   const file = slot?.file ?? null;
   const ref = slot?.ref ?? null;
   // Nome/dimensione: dal File se presente, altrimenti dalla BlobRef (bozza
@@ -2307,6 +2319,25 @@ function UploadCard({
   const hasDoc = !!file || !!ref;
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
   const { pick, modal } = useDocumentScanner({ onFile: onSelect });
+  // pdfOnly (visura): bypassa l'editor e carica il PDF intero (tutte le pagine);
+  // rifiuta i non-PDF. Altrimenti instrada allo scanner come al solito.
+  const handlePick = (f: File | null): void => {
+    if (!f) {
+      setLocalErr(null);
+      onSelect(null);
+      return;
+    }
+    if (pdfOnly) {
+      if (!isPdfFile(f)) {
+        setLocalErr('La visura deve essere in formato PDF.');
+        return;
+      }
+      setLocalErr(null);
+      onSelect(f);
+      return;
+    }
+    pick(f);
+  };
   const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   const previewUrl = useMemo(
     () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
@@ -2350,6 +2381,10 @@ function UploadCard({
         )}
       </div>
 
+      {subtitle && (
+        <p className="mt-1 text-[11px] leading-snug text-pv-slate-500">{subtitle}</p>
+      )}
+
       <div className="mt-3 flex items-center gap-3">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-pv-slate-200 bg-pv-slate-50">
           {previewUrl ? (
@@ -2372,10 +2407,12 @@ function UploadCard({
               )}
             </>
           ) : (
-            <p className="text-[12px] text-pv-slate-500">PDF, JPG o PNG · max 10 MB</p>
+            <p className="text-[12px] text-pv-slate-500">
+              {pdfOnly ? 'Solo PDF · max 10 MB' : 'PDF, JPG o PNG · max 10 MB'}
+            </p>
           )}
-          {erroreUpload && (
-            <p className="mt-0.5 text-[11px] font-semibold text-pv-red-500">{erroreUpload}</p>
+          {(erroreUpload || localErr) && (
+            <p className="mt-0.5 text-[11px] font-semibold text-pv-red-500">{erroreUpload ?? localErr}</p>
           )}
           <div className="mt-1.5 flex gap-3">
             <label
@@ -2400,10 +2437,10 @@ function UploadCard({
       <input
         id={inputId}
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/jpg"
+        accept={pdfOnly ? 'application/pdf' : 'application/pdf,image/jpeg,image/png,image/jpg'}
         className="sr-only"
         onChange={(e) => {
-          pick(e.target.files?.[0] ?? null);
+          handlePick(e.target.files?.[0] ?? null);
           e.target.value = '';
         }}
       />
@@ -2581,8 +2618,10 @@ function IdentitaSection({
       {mostraVisura && (
         <div className="mt-3">
           <UploadCard
-            label="Visura camerale (ultimi 6 mesi)"
+            label="Visura camerale (se sei una azienda con codice ateco di commercio auto la visura deve essere degli ultimi 6 mesi da oggi)"
             slot={files.visura}
+            pdfOnly
+            subtitle="La visura camerale deve essere in formato PDF. Scaricala dal Registro Imprese e caricala qui."
             onSelect={(f) => handleField('visura', f, onVisuraRef, onInvalidateVisura)}
             onRemove={() => handleField('visura', null, onVisuraRef, onInvalidateVisura)}
           />
@@ -2614,11 +2653,17 @@ function RiepilogoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Formato email base (non RFC completo): un token, @, dominio con punto. */
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
 function parteValida(p: Parte): boolean {
   // Schema Documentale v7 (SD-B): tipoSoggetto obbligatorio + anagrafica
   // completa. La validità dei documenti (visura ≤6 mesi, permesso non scaduto)
   // è verificata via OCR nella verifica documentale (lib/kyc/parte-docs).
   if (!p.tipoSoggetto) return false;
+
+  // Contatti obbligatori (telefono + email valida) per ogni parte.
+  if (p.telefono.trim().length === 0 || !EMAIL_RE.test(p.email.trim())) return false;
 
   if (p.isPG) return p.ragioneSociale.trim().length > 0 && p.piva.length === 11;
   return (
@@ -2660,6 +2705,8 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
     if (!p.cognome.trim()) m.push('cognome');
     if (p.cf.trim().length !== 16) m.push('codice fiscale (16 caratteri)');
   }
+  if (!p.telefono.trim()) m.push('numero di telefono');
+  if (!EMAIL_RE.test(p.email.trim())) m.push('email valida');
   const req = documentiRichiestiParte({
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,

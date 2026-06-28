@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useDocumentScanner } from '@/components/document-scanner-modal';
+import { isPdfFile } from '@/lib/scanner/pdf-render';
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/jpg';
 
@@ -10,15 +11,41 @@ export function DocCard({
   file,
   onChange,
   invalid = false,
+  pdfOnly = false,
+  subtitle,
 }: {
   label: string;
   file: File | null;
   onChange: (f: File | null) => void;
   /** Evidenzia la card quando il gate KYC ha segnalato un problema su questo documento. */
   invalid?: boolean;
+  /** Solo PDF + bypass editor (la visura va caricata intera, tutte le pagine). */
+  pdfOnly?: boolean;
+  /** Testo guida sotto il titolo della card. */
+  subtitle?: string;
 }) {
+  const [localErr, setLocalErr] = useState<string | null>(null);
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
   const { pick, modal } = useDocumentScanner({ onFile: onChange });
+  // pdfOnly (visura): bypassa l'editor e carica il PDF intero (tutte le pagine);
+  // rifiuta i non-PDF. Altrimenti instrada allo scanner come al solito.
+  const handlePick = (f: File | null): void => {
+    if (!f) {
+      setLocalErr(null);
+      onChange(null);
+      return;
+    }
+    if (pdfOnly) {
+      if (!isPdfFile(f)) {
+        setLocalErr('La visura deve essere in formato PDF.');
+        return;
+      }
+      setLocalErr(null);
+      onChange(f);
+      return;
+    }
+    pick(f);
+  };
   const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
   const previewUrl = useMemo(
     () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
@@ -57,6 +84,10 @@ export function DocCard({
         )}
       </div>
 
+      {subtitle && (
+        <p className="mt-1 text-[11px] leading-snug text-pv-slate-500">{subtitle}</p>
+      )}
+
       <div className="mt-3 flex items-center gap-3">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-pv-slate-200 bg-pv-slate-50">
           {previewUrl ? (
@@ -77,7 +108,12 @@ export function DocCard({
               </p>
             </>
           ) : (
-            <p className="text-[12px] text-pv-slate-500">PDF, JPG o PNG · max 10 MB</p>
+            <p className="text-[12px] text-pv-slate-500">
+              {pdfOnly ? 'Solo PDF · max 10 MB' : 'PDF, JPG o PNG · max 10 MB'}
+            </p>
+          )}
+          {localErr && (
+            <p className="mt-0.5 text-[11px] font-semibold text-pv-red-500">{localErr}</p>
           )}
           <div className="mt-1.5 flex gap-3">
             <label
@@ -102,10 +138,10 @@ export function DocCard({
       <input
         id={inputId}
         type="file"
-        accept={ACCEPT}
+        accept={pdfOnly ? 'application/pdf' : ACCEPT}
         className="sr-only"
         onChange={(e) => {
-          pick(e.target.files?.[0] ?? null);
+          handlePick(e.target.files?.[0] ?? null);
           e.target.value = '';
         }}
       />

@@ -17,7 +17,7 @@ import {
 } from '@/lib/kyc/extract-identita';
 import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
-import { sendNotification } from '@/lib/notifiche';
+import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
@@ -366,8 +366,8 @@ const venditoreSchema = z.object({
   cf: z.string().trim().max(16).optional().nullable(),
   ragioneSociale: z.string().trim().max(160).optional().nullable(),
   piva: z.string().trim().max(11).optional().nullable(),
-  telefono: z.string().trim().max(30).optional().nullable(),
-  email: z.string().trim().max(120).optional().nullable(),
+  telefono: z.string().trim().min(1, 'Numero di telefono del venditore obbligatorio').max(30),
+  email: z.string().trim().min(1, 'Email del venditore obbligatoria').max(120).email('Email del venditore non valida'),
   docId: z.enum(['CI', 'PASSAPORTO', 'PATENTE']).default('CI'),
 });
 
@@ -419,8 +419,8 @@ const submitSchema = z.object({
   acquirenteCF: z.string().trim().max(16).optional(),
   acquirenteRagioneSociale: z.string().trim().max(160).optional(),
   acquirentePIVA: z.string().trim().max(11).optional(),
-  acquirenteTelefono: z.string().trim().max(30).optional(),
-  acquirenteEmail: z.string().trim().max(120).optional(),
+  acquirenteTelefono: z.string().trim().min(1, "Numero di telefono dell'acquirente obbligatorio").max(30),
+  acquirenteEmail: z.string().trim().min(1, "Email dell'acquirente obbligatoria").max(120).email("Email dell'acquirente non valida"),
   acquirenteIndirizzoResidenza: z.string().trim().max(250).optional(),
 
   // Flag
@@ -791,6 +791,15 @@ export async function submitNuovaPraticaAction(
     // obbligatoria per le PG è imposta dalla verifica fail-closed più sotto.
     const visura = getRef(`${prefix}_VISURA`);
     if (visura && visura.size > 0) {
+      // Solo PDF: la visura è multipagina e l'OCR deve leggerla tutta (ATECO,
+      // data, sede, rappresentante). Un'immagine/ritaglio perderebbe pagine.
+      if (visura.type !== 'application/pdf') {
+        redirect(
+          `/pratiche/nuova?error=${encodeURIComponent(
+            `La visura camerale di ${labelParte} deve essere in PDF (con tutte le pagine).`,
+          )}`,
+        );
+      }
       identitaCandidates.push({
         tipo: 'VISURA_CAMERALE',
         owner,
@@ -1281,6 +1290,12 @@ export async function submitNuovaPraticaAction(
         nomeBroker: me.name?.split(' ')[0] ?? 'utente',
       },
     }).catch(() => undefined);
+  }
+
+  // Email cliente: pratica avviata. Solo se è entrata in distribuzione
+  // (le pratiche "caso dubbio" restano BOZZA in attesa di revisione → niente email).
+  if (round1.stato !== 'BOZZA') {
+    await notifyClientiAvanzamento(pratica.id, 'AVVIATA').catch(() => undefined);
   }
 
   revalidatePath('/dashboard');

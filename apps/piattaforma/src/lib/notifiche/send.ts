@@ -22,6 +22,7 @@ import {
   tplN24PayoutAffiliationAvailable,
   tplN25MonthlyAffiliationRecap,
   tplN31ValutaAgenzia,
+  tplN40ClienteAvanzamento,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -46,6 +47,7 @@ import {
   type N24PayoutAffiliationAvailablePayload,
   type N25MonthlyAffiliationRecapPayload,
   type N31ValutaAgenziaPayload,
+  type N40ClienteAvanzamentoPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -146,6 +148,11 @@ type SendInput =
       tipo: 'N31_VALUTA_AGENZIA';
       target: Target;
       payload: N31ValutaAgenziaPayload;
+    }
+  | {
+      tipo: 'N40_CLIENTE_AVANZAMENTO';
+      target: Target;
+      payload: N40ClienteAvanzamentoPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -198,6 +205,8 @@ function render(input: SendInput): NotificaContent {
       return tplN25MonthlyAffiliationRecap(input.payload);
     case 'N31_VALUTA_AGENZIA':
       return tplN31ValutaAgenzia(input.payload);
+    case 'N40_CLIENTE_AVANZAMENTO':
+      return tplN40ClienteAvanzamento(input.payload);
   }
 }
 

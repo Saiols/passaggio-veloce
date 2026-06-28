@@ -57,6 +57,16 @@ export default async function PraticaDetailPage({
     include: {
       broker: { select: { ragioneSociale: true, citta: true, provincia: true } },
       agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
+      agenziaSede: {
+        select: {
+          nome: true,
+          indirizzo: true,
+          civico: true,
+          citta: true,
+          cap: true,
+          provincia: true,
+        },
+      },
       assegnazioni: {
         include: { agenzia: { select: { ragioneSociale: true, citta: true } } },
         orderBy: [{ round: 'asc' }, { invioAt: 'asc' }],
@@ -94,6 +104,19 @@ export default async function PraticaDetailPage({
       isAdminPiattaforma: session.user.role === 'ADMIN_PIATTAFORMA',
     }),
   );
+
+  // Indirizzo fisico dell'agenzia assegnata (sede operativa), mostrato in chiaro
+  // nelle "Parti commerciali".
+  const as = pratica.agenziaSede;
+  const agenziaIndirizzo = as
+    ? [
+        [as.indirizzo, as.civico].filter(Boolean).join(' '),
+        [as.cap, as.citta].filter(Boolean).join(' '),
+        as.provincia ? `(${as.provincia})` : '',
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : undefined;
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
@@ -474,6 +497,12 @@ export default async function PraticaDetailPage({
                   label="Agenzia assegnata"
                   value={pratica.agenziaAssegnata?.ragioneSociale ?? '—'}
                 />
+                {as && (
+                  <InfoRow
+                    label="Indirizzo agenzia"
+                    value={agenziaIndirizzo || as.nome}
+                  />
+                )}
                 <InfoRow label="Comune" value={pratica.comune} />
                 {showFee && (
                   <>

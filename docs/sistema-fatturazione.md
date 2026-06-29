@@ -578,7 +578,7 @@ Sono i blocchi residui che impediscono il lancio in produzione. Da risolvere con
 
 ### Bundle FT-B — Generazione PDF + lista lato agenzia/broker
 7. `lib/fatturazione/generate.ts` orchestrator + `pdf.ts` (template PDF con logo, dati emittente/destinatario, importi, QR placeholder)
-8. `lib/fatturazione/numerator.ts` con SELECT FOR UPDATE
+8. `lib/fatturazione/numerazione.ts` con incremento atomico `INSERT … ON CONFLICT` su `contatori_fiscali` (vedi §6.5)
 9. Hook in `completaPratica`: generazione 1 o 2 `DocumentoFiscale` post-firma (no XML in questo bundle, solo PDF)
 10. Sezione `/fatturazione` agenzia: dashboard + lista + filtri base + download PDF
 11. Sezione `/fatturazione` broker: lista doc broker emessi + stato SDI manuale

@@ -13,7 +13,7 @@ WITH ordered AS (
 )
 UPDATE "companies" c SET "numeroSoggetto" = o.rn FROM ordered o WHERE c.id = o.id;
 
-SELECT setval('numero_soggetto_seq', (SELECT COALESCE(MAX("numeroSoggetto"), 0) FROM "companies"), true);
+SELECT setval('numero_soggetto_seq', (SELECT COALESCE(MAX("numeroSoggetto"), 0) FROM "companies") + 1, false);
 
 ALTER TABLE "companies" ALTER COLUMN "numeroSoggetto" SET DEFAULT nextval('numero_soggetto_seq');
 ALTER TABLE "companies" ALTER COLUMN "numeroSoggetto" SET NOT NULL;
@@ -26,7 +26,7 @@ CREATE UNIQUE INDEX "documenti_fiscali_numeroDocumentoStr_key" ON "documenti_fis
 -- 4) Enum + tabella contatori
 CREATE TYPE "ContatoreFiscaleTipo" AS ENUM ('FATTURA_PV', 'DOC_BROKER', 'NOTA_CREDITO', 'PENALE');
 CREATE TABLE "contatori_fiscali" (
-  "id"            UUID NOT NULL DEFAULT gen_random_uuid(),
+  "id"            UUID NOT NULL,
   "idSoggetto"    TEXT NOT NULL,
   "tipoDocumento" "ContatoreFiscaleTipo" NOT NULL,
   "anno"          INTEGER NOT NULL,
@@ -49,23 +49,22 @@ WHERE c."numeratoreFiscaleAnno" IS NOT NULL AND c."numeratoreFiscaleNum" IS NOT 
 INSERT INTO "contatori_fiscali" ("id","idSoggetto","tipoDocumento","anno","contatore","aggiornatoAt")
 SELECT gen_random_uuid(), 'PV', t.tipo, d."anno", MAX(d."numeroProgressivo"), now()
 FROM "documenti_fiscali" d
-CROSS JOIN (VALUES ('FATTURA_PV'::"ContatoreFiscaleTipo"), ('NOTA_CREDITO'::"ContatoreFiscaleTipo")) AS t(tipo)
+CROSS JOIN (VALUES ('FATTURA_PV'::"ContatoreFiscaleTipo"), ('NOTA_CREDITO'::"ContatoreFiscaleTipo"), ('PENALE'::"ContatoreFiscaleTipo")) AS t(tipo)
 WHERE d."emittenteCompanyId" IS NULL
 GROUP BY t.tipo, d."anno";
 
 -- 7) Backfill numeroDocumentoStr sui documenti esistenti (formato nuovo, progressivo storico)
 UPDATE "documenti_fiscali" d SET "numeroDocumentoStr" =
   CASE
-    WHEN d."tipo" = 'FATTURA_PV'   THEN 'PV-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
+    WHEN d."tipo" = 'FATTURA_PV'    THEN 'PV-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
     WHEN d."tipo" = 'PENALE_BROKER' THEN 'PN-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
-    WHEN d."emittenteCompanyId" IS NULL AND d."tipo" = 'NOTA_VARIAZIONE'
+    WHEN d."tipo" = 'NOTA_VARIAZIONE' AND d."emittenteCompanyId" IS NULL
       THEN 'NC-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
     WHEN d."tipo" = 'DOC_BROKER'
-      THEN 'PV-' || lpad(em."numeroSoggetto"::text, 4, '0') || '-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
+      THEN 'PV-' || lpad((SELECT "numeroSoggetto" FROM "companies" WHERE id = d."emittenteCompanyId")::text, 4, '0') || '-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
     WHEN d."tipo" = 'NOTA_VARIAZIONE'
-      THEN 'NC-' || lpad(em."numeroSoggetto"::text, 4, '0') || '-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
-  END
-FROM "companies" em WHERE em.id = d."emittenteCompanyId" OR d."emittenteCompanyId" IS NULL;
+      THEN 'NC-' || lpad((SELECT "numeroSoggetto" FROM "companies" WHERE id = d."emittenteCompanyId")::text, 4, '0') || '-' || d."anno" || '-' || lpad(d."numeroProgressivo"::text, 5, '0')
+  END;
 
 -- 8) Rimozione vecchie colonne (sostituite da contatori_fiscali)
 ALTER TABLE "companies" DROP COLUMN "numeratoreFiscaleAnno";

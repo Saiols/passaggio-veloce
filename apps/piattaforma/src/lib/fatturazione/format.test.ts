@@ -21,6 +21,11 @@ describe('numeroDocumento', () => {
   it('PENALE_BROKER → PN-<anno>-<5cifre>', () => {
     expect(numeroDocumento({ tipo: 'PENALE_BROKER', numeroProgressivo: 1, anno: 2026 })).toBe('PN-2026-00001');
   });
+  it('PENALE_BROKER broker → PN-<id4>-<anno>-<5cifre>', () => {
+    expect(
+      numeroDocumento({ tipo: 'PENALE_BROKER', numeroProgressivo: 1, anno: 2026, emittenteNumeroSoggetto: 47 }),
+    ).toBe('PN-0047-2026-00001');
+  });
 });
 
 describe('labelTipoDocumento', () => {

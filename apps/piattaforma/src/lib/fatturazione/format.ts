@@ -22,11 +22,16 @@ export function numeroDocumento(d: {
     case 'FATTURA_PV':
       return `PV-${d.anno}-${seq}`;
     case 'DOC_BROKER':
-      return `PV-${id ?? '0000'}-${d.anno}-${seq}`;
+      if (id == null) throw new Error('DOC_BROKER richiede emittenteNumeroSoggetto');
+      return `PV-${id}-${d.anno}-${seq}`;
     case 'NOTA_VARIAZIONE':
       return id ? `NC-${id}-${d.anno}-${seq}` : `NC-${d.anno}-${seq}`;
     case 'PENALE_BROKER':
       return id ? `PN-${id}-${d.anno}-${seq}` : `PN-${d.anno}-${seq}`;
+    default: {
+      const _exhaustive: never = d.tipo;
+      throw new Error(`Tipo documento non gestito: ${String(_exhaustive)}`);
+    }
   }
 }
 

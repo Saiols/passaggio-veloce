@@ -5,8 +5,9 @@ import { prossimoContatore } from './numerazione';
 const ID = 'TEST-NUMERAZIONE';
 const ANNO = 2999;
 
-// Integration: richiede il Postgres locale (DATABASE_URL). Salta in assenza di DB.
-describe.skipIf(!process.env.DATABASE_URL)('prossimoContatore (integration)', () => {
+// Integration: gira solo con opt-in esplicito (INTEGRATION_DB=1) + un DATABASE_URL reale.
+// Di default (CI / suite completa) viene skippato.
+describe.skipIf(!process.env.INTEGRATION_DB)('prossimoContatore (integration)', () => {
   afterAll(async () => {
     await prisma.contatoreFiscale.deleteMany({ where: { idSoggetto: ID } });
   });

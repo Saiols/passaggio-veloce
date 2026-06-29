@@ -1,13 +1,26 @@
+import 'server-only';
+import type { ContatoreFiscaleTipo, Prisma } from '@pv/db';
+
 /**
- * Logica pura: dato lo stato del registro {anno, num}, calcola il prossimo numero
- * per l'anno fiscale corrente. Nuovo anno → reset a 1.
+ * Prossimo numero progressivo per (idSoggetto, tipo, anno). Atomico: un singolo
+ * statement INSERT … ON CONFLICT … RETURNING; nessun altro processo può leggere
+ * o modificare il contatore nel mezzo. La riga inesistente parte da 1 (anche al
+ * cambio anno → reset automatico, perché l'anno fa parte della chiave). Va
+ * chiamato DENTRO la stessa transazione della create del documento: se la create
+ * fallisce, l'incremento fa rollback e il numero non viene consumato.
  */
-export function prossimoNumero(
-  registro: { anno: number | null; num: number | null },
-  annoCorrente: number,
-): { anno: number; num: number } {
-  if (registro.anno === annoCorrente && registro.num != null) {
-    return { anno: annoCorrente, num: registro.num + 1 };
-  }
-  return { anno: annoCorrente, num: 1 };
+export async function prossimoContatore(
+  tx: Prisma.TransactionClient,
+  idSoggetto: string,
+  tipo: ContatoreFiscaleTipo,
+  anno: number,
+): Promise<number> {
+  const rows = await tx.$queryRaw<{ contatore: number }[]>`
+    INSERT INTO "contatori_fiscali" ("id", "idSoggetto", "tipoDocumento", "anno", "contatore", "aggiornatoAt")
+    VALUES (gen_random_uuid(), ${idSoggetto}, ${tipo}::"ContatoreFiscaleTipo", ${anno}, 1, now())
+    ON CONFLICT ("idSoggetto", "tipoDocumento", "anno")
+    DO UPDATE SET "contatore" = "contatori_fiscali"."contatore" + 1, "aggiornatoAt" = now()
+    RETURNING "contatore"
+  `;
+  return rows[0].contatore;
 }

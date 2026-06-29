@@ -43,6 +43,7 @@ import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 import {
   extractLibrettoAction,
+  extractFoglioComplementareAction,
   extractIdentitaAction,
   extractVisuraAction,
   extractPermessoAction,
@@ -833,18 +834,29 @@ export function WizardNuovaPratica({
     });
   };
 
-  // Upload del foglio complementare: un solo PDF, niente OCR (i campi si
-  // inseriscono a mano finché non avremo la mappatura dedicata del documento).
+  // Upload del foglio complementare: un solo PDF. Dopo l'upload, OCR best-effort
+  // (parser dedicato): pre-compila targa/telaio/intestatario commerciante quando
+  // riesce; se fallisce, i campi restano da inserire a mano (niente blocco). La
+  // data di immatricolazione NON è sul foglio → resta sempre manuale.
   const onFoglioSelected = async (idx: number, file: File | undefined) => {
     if (!file) {
-      updateVeicolo(idx, { foglioComplementare: emptySlot() });
+      updateVeicolo(idx, {
+        foglioComplementare: emptySlot(),
+        ocr: undefined,
+        ocrError: null,
+        extracting: false,
+      });
       return;
     }
     updateVeicolo(idx, {
       foglioComplementare: { ref: null, file, uploading: true, progress: 0, error: null },
+      ocr: undefined,
+      ocrError: null,
+      extracting: false,
     });
+    let ref: BlobRef;
     try {
-      const ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
         setVeicoli((prev) =>
           prev.map((v, i) =>
             i === idx
@@ -852,9 +864,6 @@ export function WizardNuovaPratica({
               : v,
           ),
         );
-      });
-      updateVeicolo(idx, {
-        foglioComplementare: { ref, file, uploading: false, progress: 100, error: null },
       });
     } catch (err) {
       updateVeicolo(idx, {
@@ -866,6 +875,33 @@ export function WizardNuovaPratica({
           error: (err as Error).message,
         },
       });
+      return;
+    }
+    updateVeicolo(idx, {
+      foglioComplementare: { ref, file, uploading: false, progress: 100, error: null },
+      extracting: true,
+    });
+    // OCR best-effort: i campi appaiono comunque (mostraCampi = PDF caricato).
+    try {
+      const res = await extractFoglioComplementareAction(ref);
+      if (res.ok) {
+        const d = res.data;
+        const patch: Partial<VeicoloInput> = {
+          extracting: false,
+          ocrError: null,
+          ocr: d,
+          preImm2015: d.preImm2015,
+        };
+        if (d.targa) patch.targa = d.targa;
+        if (d.telaio) patch.telaio = d.telaio;
+        if (d.proprietarioAttuale) patch.proprietarioAttuale = d.proprietarioAttuale;
+        updateVeicolo(idx, patch);
+        // I venditori (commerciante) si rigenerano dagli intestatari via effect.
+      } else {
+        updateVeicolo(idx, { extracting: false, ocr: undefined, ocrError: null });
+      }
+    } catch {
+      updateVeicolo(idx, { extracting: false, ocr: undefined, ocrError: null });
     }
   };
 
@@ -992,8 +1028,8 @@ export function WizardNuovaPratica({
       flagComodatoDuso: v.flagComodatoDuso,
       flagDelegaVendita: v.flagDelegaVendita,
       prezzoVenditaCent: Math.round(Number(v.prezzoVendita) * 100),
-      // Niente OCR per il foglio complementare (mappatura dedicata in arrivo).
-      ocrData: v.tipoDocumento === 'FOGLIO_COMPLEMENTARE' ? null : v.ocr ?? null,
+      // OCR grezzo (libretto o foglio complementare), pre-correzione.
+      ocrData: v.ocr ?? null,
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
     veicoli.forEach((v, i) => {
@@ -1157,7 +1193,7 @@ export function WizardNuovaPratica({
   veicoli.forEach((v, i) => {
     proprietariPerVeicolo[i + 1] =
       v.tipoDocumento === 'FOGLIO_COMPLEMENTARE'
-        ? [] // niente cross-check intestatari sul foglio complementare (mappatura dedicata in arrivo)
+        ? v.ocr?.proprietari ?? [] // foglio: cross-check solo se l'OCR ha letto l'intestatario
         : v.ocr?.proprietari ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
   });
   const venditoriCC = venditori.map((v) => ({
@@ -2238,7 +2274,7 @@ function VeicoloSection({
               Estrazione dati in corso…
             </p>
             <p className="mt-0.5 text-[12px] text-pv-slate-600">
-              L’OCR analizza il libretto: l’operazione può richiedere fino a 30-60 secondi.
+              L’OCR analizza il documento: l’operazione può richiedere fino a 30-60 secondi.
               Non chiudere la pagina.
             </p>
           </div>

@@ -10,6 +10,7 @@ import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
 import { parseLibrettoText } from '@/lib/providers/ocr/libretto-parser';
+import { parseFoglioComplementareText } from '@/lib/providers/ocr/foglio-complementare-parser';
 import {
   extractIdentita,
   type IdentitaData,
@@ -170,6 +171,37 @@ export async function extractLibrettoAction(
     error:
       'OCR non riuscito sul documento. Compila manualmente i campi del veicolo.',
   };
+}
+
+/**
+ * OCR del foglio complementare (ricevuta PRA): un solo PDF. Estrae il testo via
+ * provider OCR e applica parseFoglioComplementareText. Best-effort: in caso di
+ * errore il wizard lascia l'inserimento manuale (niente blocco).
+ */
+export async function extractFoglioComplementareAction(
+  ref: FileRef,
+): Promise<ExtractLibrettoResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  if (!ref?.key || ref.size === 0) return { ok: false, error: 'File foglio complementare mancante' };
+  if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
+  if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
+
+  try {
+    const ocr = await getOcr();
+    const t = await ocr.extractText({
+      buffer: await storageGetBuffer(ref.key),
+      mimeType: ref.type,
+      originalFilename: ref.name,
+    });
+    return { ok: true, data: parseFoglioComplementareText(t.text, t.confidence) };
+  } catch (e) {
+    console.error('[ocr] extractFoglioComplementare failed:', (e as Error).message);
+    return {
+      ok: false,
+      error: 'OCR non riuscito sul foglio complementare. Compila manualmente i campi del veicolo.',
+    };
+  }
 }
 
 export type ExtractIdentitaResult =
@@ -847,17 +879,17 @@ export async function submitNuovaPraticaAction(
   // editabile. MISMATCH blocca il submit; OK/SCONOSCIUTO proseguono.
   const proprietariPerVeicolo: Record<number, string[]> = {};
   veicoli.forEach((v, i) => {
+    const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
+    const fromOcr = Array.isArray(raw)
+      ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+      : null;
     if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
-      // Niente cross-check intestatari sul foglio complementare (mappatura dedicata in arrivo).
-      proprietariPerVeicolo[i + 1] = [];
+      // Foglio: cross-check solo se l'OCR ha letto l'intestatario (niente
+      // fallback al proprietarioAttuale manuale, per evitare MISMATCH spuri).
+      proprietariPerVeicolo[i + 1] = fromOcr ?? [];
       return;
     }
-    const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
-    proprietariPerVeicolo[i + 1] = Array.isArray(raw)
-      ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-      : v.proprietarioAttuale
-        ? [v.proprietarioAttuale]
-        : [];
+    proprietariPerVeicolo[i + 1] = fromOcr ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
   });
   const cc = crossCheckPerVeicolo(
     venditori.map((v) => ({
@@ -1105,7 +1137,6 @@ export async function submitNuovaPraticaAction(
     for (let i = 0; i < veicoli.length; i++) {
       const v = veicoli[i]!;
       const docUp = veicoloDocUploads[i]!;
-      const isFoglio = docUp.tipo === 'FOGLIO_COMPLEMENTARE';
       const veicolo = await tx.veicolo.create({
         data: {
           praticaId: created.id,
@@ -1121,17 +1152,16 @@ export async function submitNuovaPraticaAction(
           flagComodatoDuso: v.flagComodatoDuso,
           flagDelegaVendita: v.flagDelegaVendita,
           prezzoVenditaCent: v.prezzoVenditaCent,
-          // Foglio complementare: niente OCR (mappatura dedicata in arrivo).
-          ocrData: isFoglio
-            ? undefined
-            : ((v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined),
-          ocrProvider: isFoglio ? null : env.OCR_PROVIDER,
-          ocrAt: isFoglio ? null : now,
+          // OCR: il libretto ce l'ha sempre; il foglio complementare solo se
+          // l'OCR best-effort è andato a buon fine.
+          ocrData: (v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined,
+          ocrProvider: v.ocrData ? env.OCR_PROVIDER : null,
+          ocrAt: v.ocrData ? now : null,
         },
       });
       veicoloIdByOrdine.set(i + 1, veicolo.id);
 
-      // Foglio complementare: un solo Documento, niente OCR né retro.
+      // Foglio complementare: un solo Documento, niente retro. OCR best-effort.
       if (docUp.tipo === 'FOGLIO_COMPLEMENTARE') {
         await tx.documento.create({
           data: {
@@ -1144,7 +1174,10 @@ export async function submitNuovaPraticaAction(
             sizeBytes: docUp.foglio.sizeBytes,
             originalFilename: docUp.foglio.originalFilename,
             uploadedById: userId,
-            ocrStato: 'NONE',
+            ocrStato: v.ocrData ? 'SUCCESS' : 'NONE',
+            ocrProvider: v.ocrData ? env.OCR_PROVIDER : null,
+            ocrData: (v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined,
+            ocrAt: v.ocrData ? now : null,
             gatingStato: 'PASSED',
           },
         });

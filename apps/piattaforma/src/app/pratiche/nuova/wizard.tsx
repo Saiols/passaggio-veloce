@@ -19,6 +19,11 @@ import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import type { SedeRef } from '@/lib/sedi/scope';
 import { intestatariPerVeicolo, crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
+  docVeicoloMancante,
+  docVeicoloCompleto,
+  type TipoDocumentoVeicolo,
+} from './veicolo-doc';
+import {
   delegatoDocKey,
   procuraDelegaDocKey,
   delegaDocsComplete,
@@ -137,11 +142,15 @@ type Tipo = 'SEMPLICE' | 'MINIVOLTURA';
 
 /** Dati di un singolo veicolo nel wizard (libretto + estrazione + correzioni). */
 type VeicoloInput = {
+  /** Tipo documento di circolazione: libretto standard o foglio complementare. */
+  tipoDocumento: TipoDocumentoVeicolo;
   /** BlobRef del fronte libretto caricato su Blob (slot LIBRETTO_<n>_FRONTE al submit). */
   libretto: BlobSlot;
   /** BlobRef del retro libretto caricato su Blob (slot LIBRETTO_<n>_RETRO al submit).
    *  Il retro può portare etichette di trasferimento di proprietà. */
   librettoRetro: BlobSlot;
+  /** BlobRef del PDF foglio complementare (slot FOGLIO_COMPLEMENTARE_<n> al submit). */
+  foglioComplementare: BlobSlot;
   fileName: string | null;
   fileNameRetro: string | null;
   ocr?: LibrettoCircolazioneData;
@@ -161,8 +170,10 @@ type VeicoloInput = {
 
 function emptyVeicolo(): VeicoloInput {
   return {
+    tipoDocumento: 'LIBRETTO',
     libretto: emptySlot(),
     librettoRetro: emptySlot(),
+    foglioComplementare: emptySlot(),
     fileName: null,
     fileNameRetro: null,
     ocr: undefined,
@@ -276,6 +287,7 @@ function veicoloForStorage(v: VeicoloInput): VeicoloInput {
     ...v,
     libretto: slotForStorage(v.libretto),
     librettoRetro: slotForStorage(v.librettoRetro),
+    foglioComplementare: slotForStorage(v.foglioComplementare),
     extracting: false,
     ocrError: null,
   };
@@ -821,6 +833,61 @@ export function WizardNuovaPratica({
     });
   };
 
+  // Upload del foglio complementare: un solo PDF, niente OCR (i campi si
+  // inseriscono a mano finché non avremo la mappatura dedicata del documento).
+  const onFoglioSelected = async (idx: number, file: File | undefined) => {
+    if (!file) {
+      updateVeicolo(idx, { foglioComplementare: emptySlot() });
+      return;
+    }
+    updateVeicolo(idx, {
+      foglioComplementare: { ref: null, file, uploading: true, progress: 0, error: null },
+    });
+    try {
+      const ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx
+              ? { ...v, foglioComplementare: { ...v.foglioComplementare, progress: pct } }
+              : v,
+          ),
+        );
+      });
+      updateVeicolo(idx, {
+        foglioComplementare: { ref, file, uploading: false, progress: 100, error: null },
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        foglioComplementare: {
+          ref: null,
+          file,
+          uploading: false,
+          progress: 0,
+          error: (err as Error).message,
+        },
+      });
+    }
+  };
+
+  // Cambio tipo documento del veicolo: azzera il ramo non più pertinente (slot +
+  // OCR) così il submit non trascina file orfani e il gate resta coerente.
+  const onTipoDocumentoSelected = (idx: number, t: TipoDocumentoVeicolo) => {
+    if (t === 'FOGLIO_COMPLEMENTARE') {
+      updateVeicolo(idx, {
+        tipoDocumento: t,
+        libretto: emptySlot(),
+        librettoRetro: emptySlot(),
+        fileName: null,
+        fileNameRetro: null,
+        ocr: undefined,
+        ocrError: null,
+        extracting: false,
+      });
+    } else {
+      updateVeicolo(idx, { tipoDocumento: t, foglioComplementare: emptySlot() });
+    }
+  };
+
   // A7: OCR del documento d'identità → pre-fill nome/cognome/CF della parte +
   // salvataggio del risultato grezzo (`identitaOcr`) per la verifica documentale
   // (validaParte). Chiamato quando la BlobRef del file principale (fronte CI o
@@ -916,6 +983,7 @@ export function WizardNuovaPratica({
 
     // Lista veicoli (JSON). I libretti vanno negli slot LIBRETTO_1..LIBRETTO_n.
     const veicoliPayload = veicoli.map((v) => ({
+      tipoDocumento: v.tipoDocumento,
       targa: v.targa,
       telaio: v.telaio,
       proprietarioAttuale: v.proprietarioAttuale,
@@ -924,10 +992,16 @@ export function WizardNuovaPratica({
       flagComodatoDuso: v.flagComodatoDuso,
       flagDelegaVendita: v.flagDelegaVendita,
       prezzoVenditaCent: Math.round(Number(v.prezzoVendita) * 100),
-      ocrData: v.ocr ?? null,
+      // Niente OCR per il foglio complementare (mappatura dedicata in arrivo).
+      ocrData: v.tipoDocumento === 'FOGLIO_COMPLEMENTARE' ? null : v.ocr ?? null,
     }));
     fd.append('veicoli', JSON.stringify(veicoliPayload));
     veicoli.forEach((v, i) => {
+      if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
+        if (v.foglioComplementare.ref)
+          blobRefs[`FOGLIO_COMPLEMENTARE_${i + 1}`] = v.foglioComplementare.ref;
+        return;
+      }
       if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}_FRONTE`] = v.libretto.ref;
       if (v.librettoRetro.ref) blobRefs[`LIBRETTO_${i + 1}_RETRO`] = v.librettoRetro.ref;
     });
@@ -1048,15 +1122,21 @@ export function WizardNuovaPratica({
   // campi obbligatori (targa/telaio/proprietario/data) prima di proseguire.
   // Nessun upload del libretto deve essere ancora in corso.
   const librettiUploading = veicoli.some(
-    (v) => v.libretto.uploading || v.librettoRetro.uploading,
+    (v) => v.libretto.uploading || v.librettoRetro.uploading || v.foglioComplementare.uploading,
   );
   const veicoliValidi =
     veicoli.length === numeroVeicoli &&
     veicoli.every(
       (v) =>
-        !!v.libretto.ref &&
-        !!v.librettoRetro.ref &&
-        !!v.ocr && // l'OCR deve aver letto entrambi i lati (no compilazione manuale di un doc illeggibile)
+        // Documento di circolazione completo: libretto fronte+retro+OCR, oppure
+        // foglio complementare (solo PDF, niente OCR).
+        docVeicoloCompleto({
+          tipoDocumento: v.tipoDocumento,
+          librettoFronte: !!v.libretto.ref,
+          librettoRetro: !!v.librettoRetro.ref,
+          ocr: !!v.ocr,
+          foglio: !!v.foglioComplementare.ref,
+        }) &&
         v.targa.length >= 5 &&
         v.telaio.length >= 11 &&
         v.proprietarioAttuale.length > 0 &&
@@ -1076,7 +1156,9 @@ export function WizardNuovaPratica({
   const proprietariPerVeicolo: Record<number, string[]> = {};
   veicoli.forEach((v, i) => {
     proprietariPerVeicolo[i + 1] =
-      v.ocr?.proprietari ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
+      v.tipoDocumento === 'FOGLIO_COMPLEMENTARE'
+        ? [] // niente cross-check intestatari sul foglio complementare (mappatura dedicata in arrivo)
+        : v.ocr?.proprietari ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
   });
   const venditoriCC = venditori.map((v) => ({
     veicoloOrdine: v.veicoloOrdine,
@@ -1309,13 +1391,18 @@ export function WizardNuovaPratica({
     );
   };
   const mancanzeStep1 = (): string[] => {
-    if (librettiUploading) return ['attendere il caricamento del libretto'];
+    if (librettiUploading) return ['attendere il caricamento del documento'];
     const m: string[] = [];
     veicoli.forEach((v, i) => {
       const tag = veicoli.length > 1 ? ` (veicolo ${i + 1})` : '';
-      if (!v.libretto.ref) m.push(`libretto fronte${tag}`);
-      else if (!v.librettoRetro.ref) m.push(`libretto retro${tag}`);
-      else if (!v.ocr) m.push(`OCR libretto non riuscito${tag}`);
+      const docManca = docVeicoloMancante({
+        tipoDocumento: v.tipoDocumento,
+        librettoFronte: !!v.libretto.ref,
+        librettoRetro: !!v.librettoRetro.ref,
+        ocr: !!v.ocr,
+        foglio: !!v.foglioComplementare.ref,
+      });
+      if (docManca) m.push(`${docManca}${tag}`);
       if (v.targa.length < 5) m.push(`targa${tag}`);
       if (v.telaio.length < 11) m.push(`telaio${tag}`);
       if (!v.proprietarioAttuale.trim()) m.push(`proprietario${tag}`);
@@ -1458,6 +1545,8 @@ export function WizardNuovaPratica({
                   multiplo={multiplo}
                   onFronte={(file) => onFronteSelected(idx, file)}
                   onRetro={(file) => onRetroSelected(idx, file)}
+                  onFoglio={(file) => onFoglioSelected(idx, file)}
+                  onTipoDocumento={(t) => onTipoDocumentoSelected(idx, t)}
                   onChange={(patch) => {
                     // Delega → No: scarta gli allegati delega/procura già
                     // caricati per questo veicolo (niente blob orfani né slot
@@ -2024,6 +2113,8 @@ function VeicoloSection({
   multiplo,
   onFronte,
   onRetro,
+  onFoglio,
+  onTipoDocumento,
   onChange,
 }: {
   ordine: number;
@@ -2031,33 +2122,90 @@ function VeicoloSection({
   multiplo: boolean;
   onFronte: (file: File | undefined) => void;
   onRetro: (file: File | undefined) => void;
+  onFoglio: (file: File | undefined) => void;
+  onTipoDocumento: (t: TipoDocumentoVeicolo) => void;
   onChange: (patch: Partial<VeicoloInput>) => void;
 }) {
   const hasOcr = !!veicolo.ocr;
+  const isFoglio = veicolo.tipoDocumento === 'FOGLIO_COMPLEMENTARE';
+  // Campi anagrafici editabili: per il libretto dopo l'OCR; per il foglio
+  // complementare appena il PDF è caricato (inserimento manuale).
+  const mostraCampi = isFoglio ? !!veicolo.foglioComplementare.ref : hasOcr;
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">
         {multiplo ? `Veicolo ${ordine}` : 'Veicolo'}
       </h2>
-      <p className="mb-3 text-[12.5px] text-pv-slate-500">
-        Carica entrambe le facciate del libretto di circolazione. Il retro può
-        riportare etichette di trasferimento di proprietà che verranno lette
-        dall&apos;OCR.
+      {/* La domanda precede gli upload: in base alla risposta cambia cosa caricare. */}
+      <p className="mb-2 text-[13px] font-semibold text-pv-navy-800">
+        Sei in possesso di un normale libretto auto o di un foglio complementare?
       </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <UploadCard
-          label="Libretto — fronte"
-          slot={veicolo.libretto}
-          onSelect={(f) => onFronte(f ?? undefined)}
-          onRemove={() => onFronte(undefined)}
-        />
-        <UploadCard
-          label="Libretto — retro"
-          slot={veicolo.librettoRetro}
-          onSelect={(f) => onRetro(f ?? undefined)}
-          onRemove={() => onRetro(undefined)}
-        />
+      <div className="mb-4 inline-flex overflow-hidden rounded-[10px] border border-pv-slate-300">
+        <button
+          type="button"
+          onClick={() => onTipoDocumento('LIBRETTO')}
+          className={`px-4 py-2 text-[13px] font-semibold transition ${
+            !isFoglio
+              ? 'bg-pv-navy-800 text-white'
+              : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+          }`}
+        >
+          Libretto auto
+        </button>
+        <button
+          type="button"
+          onClick={() => onTipoDocumento('FOGLIO_COMPLEMENTARE')}
+          className={`border-l border-pv-slate-300 px-4 py-2 text-[13px] font-semibold transition ${
+            isFoglio
+              ? 'bg-pv-navy-800 text-white'
+              : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+          }`}
+        >
+          Foglio complementare
+        </button>
       </div>
+
+      {isFoglio ? (
+        <>
+          <p className="mb-3 text-[12.5px] text-pv-slate-500">
+            Carica il <strong>foglio complementare</strong> in un unico PDF. Subentra
+            tipicamente quando vende un commerciante d&apos;auto. I dati del veicolo
+            vanno inseriti a mano qui sotto.
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            <UploadCard
+              label="Foglio complementare"
+              slot={veicolo.foglioComplementare}
+              pdfOnly
+              subtitle="Un solo file PDF con il foglio complementare."
+              onSelect={(f) => onFoglio(f ?? undefined)}
+              onRemove={() => onFoglio(undefined)}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-[12.5px] text-pv-slate-500">
+            Carica entrambe le facciate del libretto di circolazione. Il retro può
+            riportare etichette di trasferimento di proprietà che verranno lette
+            dall&apos;OCR.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <UploadCard
+              label="Libretto — fronte"
+              slot={veicolo.libretto}
+              onSelect={(f) => onFronte(f ?? undefined)}
+              onRemove={() => onFronte(undefined)}
+            />
+            <UploadCard
+              label="Libretto — retro"
+              slot={veicolo.librettoRetro}
+              onSelect={(f) => onRetro(f ?? undefined)}
+              onRemove={() => onRetro(undefined)}
+            />
+          </div>
+        </>
+      )}
 
       {veicolo.extracting && (
         <div
@@ -2102,10 +2250,10 @@ function VeicoloSection({
         </div>
       )}
 
-      {hasOcr && (
+      {mostraCampi && (
         <div className="mt-4 rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            Dati estratti — correggi se serve
+            {isFoglio ? 'Dati del veicolo — inseriscili a mano' : 'Dati estratti — correggi se serve'}
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Targa" required>

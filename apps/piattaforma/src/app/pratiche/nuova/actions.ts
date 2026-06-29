@@ -324,6 +324,7 @@ const formBool = z.preprocess(
  * file libretto corrispondente arriva nello slot `LIBRETTO_<ordine>`.
  */
 const veicoloSchema = z.object({
+  tipoDocumento: z.enum(['LIBRETTO', 'FOGLIO_COMPLEMENTARE']).default('LIBRETTO'),
   targa: z.string().trim().min(5).max(10),
   telaio: z.string().trim().min(11).max(17),
   proprietarioAttuale: z.string().trim().min(1).max(120),
@@ -532,12 +533,26 @@ export async function submitNuovaPraticaAction(
     );
   }
 
-  // Libretto per ciascun veicolo: fronte + retro (slot LIBRETTO_<i>_FRONTE e
-  // LIBRETTO_<i>_RETRO). Entrambi obbligatori — il retro può portare etichette
-  // di trasferimento che sovrascrivono il fronte nell'OCR combinato.
-  const librettoFronteRefs: FileRef[] = [];
-  const librettoRetroRefs: FileRef[] = [];
+  // Documento di circolazione per ciascun veicolo. Due forme:
+  //  - LIBRETTO: fronte + retro (slot LIBRETTO_<i>_FRONTE / _RETRO), entrambi
+  //    obbligatori (il retro può portare etichette di trasferimento).
+  //  - FOGLIO_COMPLEMENTARE: un solo PDF (slot FOGLIO_COMPLEMENTARE_<i>).
+  type VeicoloDocRef =
+    | { tipo: 'LIBRETTO'; fronte: FileRef; retro: FileRef }
+    | { tipo: 'FOGLIO_COMPLEMENTARE'; foglio: FileRef };
+  const veicoloDocRefs: VeicoloDocRef[] = [];
   for (let i = 1; i <= veicoli.length; i++) {
+    if (veicoli[i - 1]!.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
+      const rFoglio = getRef(`FOGLIO_COMPLEMENTARE_${i}`);
+      if (!rFoglio || rFoglio.size === 0) {
+        redirect(`/pratiche/nuova?error=Foglio%20complementare%20veicolo%20${i}%20mancante`);
+      }
+      if (rFoglio!.size > MAX_LIBRETTO_BYTES) {
+        redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+      }
+      veicoloDocRefs.push({ tipo: 'FOGLIO_COMPLEMENTARE', foglio: rFoglio! });
+      continue;
+    }
     const rFronte = getRef(`LIBRETTO_${i}_FRONTE`);
     const rRetro = getRef(`LIBRETTO_${i}_RETRO`);
     if (!rFronte || rFronte.size === 0) {
@@ -549,8 +564,7 @@ export async function submitNuovaPraticaAction(
     if (rFronte!.size > MAX_LIBRETTO_BYTES || rRetro!.size > MAX_LIBRETTO_BYTES) {
       redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
     }
-    librettoFronteRefs.push(rFronte!);
-    librettoRetroRefs.push(rRetro!);
+    veicoloDocRefs.push({ tipo: 'LIBRETTO', fronte: rFronte!, retro: rRetro! });
   }
 
   // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
@@ -833,6 +847,11 @@ export async function submitNuovaPraticaAction(
   // editabile. MISMATCH blocca il submit; OK/SCONOSCIUTO proseguono.
   const proprietariPerVeicolo: Record<number, string[]> = {};
   veicoli.forEach((v, i) => {
+    if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
+      // Niente cross-check intestatari sul foglio complementare (mappatura dedicata in arrivo).
+      proprietariPerVeicolo[i + 1] = [];
+      return;
+    }
     const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
     proprietariPerVeicolo[i + 1] = Array.isArray(raw)
       ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
@@ -993,8 +1012,11 @@ export async function submitNuovaPraticaAction(
   // Mappiamo ogni BlobRef nella forma StoragePutResult attesa dalle create
   // Documento (storageKey = chiave Blob, niente trasferimento di byte).
   const ocrManuale = formData.get('ocrManuale') === 'true';
-  const librettoFronteUploads = librettoFronteRefs.map(refToPut);
-  const librettoRetroUploads = librettoRetroRefs.map(refToPut);
+  const veicoloDocUploads = veicoloDocRefs.map((vd) =>
+    vd.tipo === 'FOGLIO_COMPLEMENTARE'
+      ? { tipo: 'FOGLIO_COMPLEMENTARE' as const, foglio: refToPut(vd.foglio) }
+      : { tipo: 'LIBRETTO' as const, fronte: refToPut(vd.fronte), retro: refToPut(vd.retro) },
+  );
 
   // Schema Documentale v7 (SD-B): documenti richiesti.
   const docUploads = docCandidates.map(({ d: docReq, ref }) => ({
@@ -1082,12 +1104,13 @@ export async function submitNuovaPraticaAction(
     const veicoloIdByOrdine = new Map<number, string>();
     for (let i = 0; i < veicoli.length; i++) {
       const v = veicoli[i]!;
-      const uploadFronte = librettoFronteUploads[i]!;
-      const uploadRetro = librettoRetroUploads[i]!;
+      const docUp = veicoloDocUploads[i]!;
+      const isFoglio = docUp.tipo === 'FOGLIO_COMPLEMENTARE';
       const veicolo = await tx.veicolo.create({
         data: {
           praticaId: created.id,
           ordine: i + 1,
+          tipoDocumento: v.tipoDocumento,
           targa: v.targa.toUpperCase(),
           telaio: v.telaio.toUpperCase(),
           proprietarioAttuale: v.proprietarioAttuale,
@@ -1098,12 +1121,38 @@ export async function submitNuovaPraticaAction(
           flagComodatoDuso: v.flagComodatoDuso,
           flagDelegaVendita: v.flagDelegaVendita,
           prezzoVenditaCent: v.prezzoVenditaCent,
-          ocrData: (v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined,
-          ocrProvider: env.OCR_PROVIDER,
-          ocrAt: now,
+          // Foglio complementare: niente OCR (mappatura dedicata in arrivo).
+          ocrData: isFoglio
+            ? undefined
+            : ((v.ocrData ?? undefined) as Prisma.InputJsonValue | undefined),
+          ocrProvider: isFoglio ? null : env.OCR_PROVIDER,
+          ocrAt: isFoglio ? null : now,
         },
       });
       veicoloIdByOrdine.set(i + 1, veicolo.id);
+
+      // Foglio complementare: un solo Documento, niente OCR né retro.
+      if (docUp.tipo === 'FOGLIO_COMPLEMENTARE') {
+        await tx.documento.create({
+          data: {
+            tipo: 'FOGLIO_COMPLEMENTARE',
+            praticaId: created.id,
+            veicoloId: veicolo.id,
+            storageKey: docUp.foglio.storageKey,
+            storageProvider: docUp.foglio.storageProvider,
+            mimeType: docUp.foglio.mimeType,
+            sizeBytes: docUp.foglio.sizeBytes,
+            originalFilename: docUp.foglio.originalFilename,
+            uploadedById: userId,
+            ocrStato: 'NONE',
+            gatingStato: 'PASSED',
+          },
+        });
+        continue;
+      }
+
+      const uploadFronte = docUp.fronte;
+      const uploadRetro = docUp.retro;
 
       const ocrSnapshot: Prisma.InputJsonValue = {
         targa: v.targa,

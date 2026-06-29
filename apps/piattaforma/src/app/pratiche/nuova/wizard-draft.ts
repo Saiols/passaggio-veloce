@@ -11,8 +11,10 @@ export const DRAFT_KEY = 'pv-pratica-nuova-draft';
  * vecchie, evitando crash al ripristino di una bozza con forma obsoleta).
  * v2: aggiunti veicoli.librettoRetro/fileNameRetro e identita.codiceFiscaleRetro
  *     (fronte/retro libretto + tessera sanitaria).
+ * v3: aggiunti veicoli.tipoDocumento e veicoli.foglioComplementare (foglio
+ *     complementare al posto del libretto).
  */
-export const DRAFT_VERSION = 2;
+export const DRAFT_VERSION = 3;
 /** Oltre questa età la bozza viene ignorata (e ripulita). */
 export const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni
 

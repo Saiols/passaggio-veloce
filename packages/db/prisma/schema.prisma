@@ -119,9 +119,19 @@ enum DocumentoTipo {
   PATENTE
   PATENTE_RETRO
   LIBRETTO_CIRCOLAZIONE_RETRO
+  // Foglio complementare (subentra al libretto, tipicamente quando vende un
+  // commerciante d'auto): un solo PDF, mappatura campi dedicata.
+  FOGLIO_COMPLEMENTARE
   // Delega/procura a vendere (allegati pratica, no engine/gating)
   DELEGA_VENDITA
   DOCUMENTO_DELEGATO
+}
+
+// Tipo di documento di circolazione del veicolo: il libretto standard (fronte+
+// retro) oppure il foglio complementare (un solo PDF).
+enum TipoDocumentoVeicolo {
+  LIBRETTO
+  FOGLIO_COMPLEMENTARE
 }
 
 // Schema Documentale v7: tipologia di soggetto (venditore o acquirente).
@@ -908,6 +918,7 @@ model Veicolo {
   praticaId            String    @db.Uuid
   pratica              Pratica   @relation(fields: [praticaId], references: [id], onDelete: Cascade)
   ordine               Int
+  tipoDocumento        TipoDocumentoVeicolo @default(LIBRETTO)
   targa                String?
   telaio               String?
   proprietarioAttuale  String?

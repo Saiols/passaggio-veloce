@@ -85,7 +85,7 @@ Per minivoltura: l'intero importo (€15) è ricavo PV, niente somme di terzi.
 | 2bis | Affiliazione | Quote già definite in `sistema-affiliazione.md` §3 — €10 lordi trapasso (€5+€5 doppio), €5 lordi minivoltura (€2,50+€2,50 doppio). Erogata via wallet, niente documento fiscale dedicato. |
 | 3 | Soglie payout | Coerenti con stato attuale: <€500 nessun payout, €500-999 manuale su richiesta, ≥€1000 automatico. |
 | 4 | Trasmissione SDI broker | **Responsabilità del broker**. PV genera PDF+XML pronti, il broker li scarica e li trasmette via proprio canale FE. Toggle "Segna come trasmesso" manuale lato dashboard broker per audit interno. |
-| 5 | Numerazione progressiva | Distinti registri: uno per PV (fatture €50/€15), uno **per ogni broker** (documenti €25 emessi per suo conto). Anno fiscale italiano. |
+| 5 | Numerazione progressiva | Schema ibrido prefisso + ID soggetto con reset annuale: `PV-<anno>-NNNNN` (fattura PV → agenzia), `PV-<id4>-<anno>-NNNNN` (documento broker conto terzi, `<id4>` = `Company.numeroSoggetto` zero-pad 4 cifre), `NC-<anno>-NNNNN` / `NC-<id4>-<anno>-NNNNN` (note di credito), `PN-…` (penale). Zero-pad 5 cifre sul progressivo. Granularità **per azienda madre** (`Company`, P.IVA unica — non per sede). Contatori in tabella dedicata `contatori_fiscali` (chiave `idSoggetto, tipoDocumento, anno`); incremento atomico `INSERT … ON CONFLICT … RETURNING` dentro la stessa transazione del documento (no buchi, no duplicati, rollback automatico se la create fallisce). `Company.numeroSoggetto` assegnato da Postgres `SEQUENCE` univoca (`numero_soggetto_seq`), mai riusata nemmeno alla chiusura account. Note di credito su sequenza separata (`tipoDocumento = NOTA_CREDITO`, distinta da `FATTURA_PV` / `DOC_BROKER`). Decisioni verbalizzate in `docs/numerazione-fatture-decisioni.md`. |
 | 6 | OTP agenzia | Verifica via SMS in fase di iscrizione agenzia, **obbligatoria** per autorizzare addebito automatico (clausola T&C). |
 | 7 | Retention | 10 anni (obbligo fiscale italiano), tutti i PDF+XML su storage sicuro con accesso via URL firmato a scadenza. |
 | 8 | Immutabilità | Documenti generati non modificabili. Errori → nota di variazione separata. |
@@ -111,12 +111,14 @@ model Company {
   /// Almeno uno dei due è obbligatorio per ricevere fatture elettroniche.
   /// Già presente: codiceSdi String?, pec String. Validazione applicativa.
 
-  /// Numerazione progressiva annuale dei documenti emessi PER CONTO di questa
-  /// company (broker). Esempio: broker X ha la sua sequenza 1/2026, 2/2026...
-  /// indipendente dalla numerazione PV (€50/€15) e dagli altri broker.
-  /// Counter materializzato per evitare race condition (vedi §6.2).
-  numeratoreFiscaleAnno Int?  // es. 2026
-  numeratoreFiscaleNum  Int   @default(0)
+  /// Numerazione (paper NumerazioneFatture): ID soggetto univoco a 4 cifre
+  /// nel numero documento broker (es. "PV-0047-2026-00001").
+  /// Assegnato da Postgres SEQUENCE `numero_soggetto_seq`; univoco, mai riusato.
+  /// I contatori progressivi per (soggetto, tipo, anno) sono nella tabella
+  /// `contatori_fiscali` (vedi §6.5 e `docs/numerazione-fatture-decisioni.md`).
+  /// Le vecchie colonne numeratoreFiscaleAnno / numeratoreFiscaleNum
+  /// sono state rimosse dalla migration `numerazione_paper`.
+  numeroSoggetto Int @unique // Postgres SEQUENCE numero_soggetto_seq
 
   /// OTP verificato in fase di iscrizione (obbligatorio per agenzie:
   /// abilita addebito automatico). Per broker: opzionale.
@@ -385,7 +387,8 @@ Nuovo modulo `lib/fatturazione/`:
 - `lib/fatturazione/pdf.ts` — generazione PDF con `pdf-lib` (riuso libreria già adottata in A6 `lib/pdf/rendiconto.ts`, **no Chromium/Puppeteer** per coerenza serverless Vercel)
 - `lib/fatturazione/xml-fatturapa.ts` — generazione XML FatturaPA conforme XSD ufficiale + validazione schema
 - `lib/fatturazione/qr.ts` — QR code di verifica autenticità nel PDF
-- `lib/fatturazione/numerator.ts` — incremento atomico numero progressivo per emittente/anno (transazione DB con SELECT FOR UPDATE su `Company.numeratoreFiscaleNum`)
+- `lib/fatturazione/numerazione.ts` — incremento atomico numero progressivo per `(idSoggetto, tipoDocumento, anno)` tramite `INSERT … ON CONFLICT … RETURNING` su `contatori_fiscali`; va chiamato dentro la stessa `$transaction` della create del documento
+- `lib/fatturazione/format.ts` — formatta la stringa `numeroDocumentoStr` congelata all'emissione (es. `PV-0047-2026-00003`); UI/PDF/XML la leggono dal campo persistito, non la ricalcolano
 - `lib/fatturazione/storage.ts` — upload PDF+XML su `StorageProvider` (riusa Vercel Blob già presente)
 
 ### 6.2 Hook trigger
@@ -466,26 +469,34 @@ function splitMinivoltura(tipo: "STANDARD" | "MULTIPLA", numVeicoli = 1) {
 - Non viene generato `DocumentoFiscale` per penale finché commercialista non chiarisce
 - Se serve documento → migrazione separata + logica ad hoc post-decisione
 
-### 6.5 Numerazione progressiva — pseudocodice
+### 6.5 Numerazione progressiva — implementazione effettiva
+
+Il counter risiede nella tabella `contatori_fiscali` (una riga per `idSoggetto` + `tipoDocumento` + `anno`). L'incremento è atomico via un singolo statement SQL, eseguito dentro la stessa `prisma.$transaction` della `create` del documento: se la create fallisce, la transazione fa rollback e il numero non viene consumato (no buchi).
 
 ```ts
-// In transazione, con SELECT FOR UPDATE per evitare race
-async function nextNumero(emittenteId: string, anno: number, tx: Tx) {
-  const c = await tx.company.update({
-    where: { id: emittenteId, /* ... */ },
-    data: {
-      numeratoreFiscaleAnno: anno,
-      numeratoreFiscaleNum: anno === company.numeratoreFiscaleAnno
-        ? { increment: 1 }
-        : 1, // reset al primo doc dell'anno nuovo
-    },
-    select: { numeratoreFiscaleNum: true, numeratoreFiscaleAnno: true },
-  });
-  return { numero: c.numeratoreFiscaleNum, anno: c.numeratoreFiscaleAnno };
+// lib/fatturazione/numerazione.ts — pattern effettivo (ON CONFLICT, non SELECT FOR UPDATE)
+export async function prossimoContatore(
+  tx: Prisma.TransactionClient,
+  idSoggetto: string,  // 'PV' per documenti propri, Company.id per documenti broker
+  tipo: ContatoreFiscaleTipo,
+  anno: number,
+): Promise<number> {
+  const rows = await tx.$queryRaw<{ contatore: number }[]>`
+    INSERT INTO "contatori_fiscali" ("id", "idSoggetto", "tipoDocumento", "anno", "contatore", "aggiornatoAt")
+    VALUES (gen_random_uuid(), ${idSoggetto}, ${tipo}::"ContatoreFiscaleTipo", ${anno}, 1, now())
+    ON CONFLICT ("idSoggetto", "tipoDocumento", "anno")
+    DO UPDATE SET "contatore" = "contatori_fiscali"."contatore" + 1, "aggiornatoAt" = now()
+    RETURNING "contatore"
+  `;
+  return rows[0].contatore;
 }
 ```
 
-Per **PV emittente** serve una "Company PV" persistita oppure costanti env (`PV_FISCAL_*`). Decisione: **persistere come Company singola con type `PIATTAFORMA`** (nuovo enum value) per uniformità ai broker. Migrazione dedicata di seed.
+Il reset annuale è implicito: cambiando `anno` nella chiave si crea una nuova riga che parte da 1.
+
+Per **PV emittente** l'`idSoggetto` è la costante letterale `'PV'` (non una Company dedicata): il contatore PV è una riga in `contatori_fiscali` con `idSoggetto = 'PV'`. La stringa numero (`PV-2026-00001`) viene formattata da `lib/fatturazione/format.ts → numeroDocumento(...)` e salvata immutabilmente nel campo `DocumentoFiscale.numeroDocumentoStr` all'emissione.
+
+> Per i dettagli del formato e le decisioni di numerazione vedere `docs/numerazione-fatture-decisioni.md`.
 
 ---
 

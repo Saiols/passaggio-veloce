@@ -345,7 +345,7 @@
 
 **Bundle FT-B — Generazione PDF + lista lato agenzia/broker** _(FATTO)_
 - [x] Engine `lib/fatturazione/` (`calcolo`/`numerazione`/`engine`) + `pdf.ts` PDF on-the-fly (pdf-lib, no Chromium) servito da `GET /api/fatturazione/[id]/pdf`
-- [~] Numerazione progressiva per emittente/anno (idempotente per pratica/payout via aggregate + `prossimoNumero`; non SELECT FOR UPDATE letterale)
+- [x] Numerazione progressiva per emittente/anno — **allineata al paper `NumerazioneFatture.docx`** (2026-06-29): schema ibrido `PV-<anno>-NNNNN` / `PV-<id4>-<anno>-NNNNN` con reset annuale; tabella `contatori_fiscali` con incremento atomico `INSERT … ON CONFLICT`; `Company.numeroSoggetto` da Postgres SEQUENCE; note di credito su sequenza separata. Stringa congelata in `DocumentoFiscale.numeroDocumentoStr`. Decisioni in `docs/numerazione-fatture-decisioni.md`.
 - [x] Hook in `completaPratica`/payout: split dinamico per regime, `FATTURA_PV` alla firma + `DOC_BROKER` aggregato al payout (best-effort)
 - [x] Sezione `/fatturazione` agenzia + broker (dettaglio documento, ricerca, access-control)
 - [x] Blocco "Documenti fiscali" nel dettaglio pratica (download PDF)

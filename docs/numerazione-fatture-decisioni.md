@@ -83,3 +83,26 @@ Le note di credito (tipo `NOTA_VARIAZIONE` nel DB, `NOTA_CREDITO` nell'enum `Con
 | `docs/PassaggioVeloce NumerazioneFatture.docx` (apr 2025) | Intero documento | Sostituito da queste decisioni per formato, reset e granularità. Conservato come riferimento storico. |
 | `docs/sistema-fatturazione.md` §2 decisione 5 (redazione precedente) | "Distinti registri: uno per PV, uno per ogni broker" | Sostituito con la descrizione del formato ibrido (§2 decisione 5 aggiornata). |
 | `docs/sistema-fatturazione.md` §6.5 (pseudocodice SELECT FOR UPDATE) | pseudocodice con `Company.numeratoreFiscaleNum` | Sostituito con il pattern `ON CONFLICT` e tabella `contatori_fiscali`. |
+
+---
+
+## Checklist pre-deploy prod (migration `numerazione_paper`) — GATE OBBLIGATORIO
+
+La migration è stata validata in locale solo su **DB vuoto** (`prisma migrate reset`). Il path di backfill su **companies popolate** (assegnazione `numeroSoggetto` via `ROW_NUMBER`, `setval`, `SET NOT NULL`, e backfill `numeroDocumentoStr` sui documenti storici) **non è stato esercitato su dati di forma prod**. Prima di `migrate deploy` in prod:
+
+1. **Conta documenti esistenti:** `SELECT count(*) FROM documenti_fiscali;` su prod. Se > 0, verificare con il commercialista la coerenza dei numeri storici riformattati (la migration li riscrive col nuovo formato mantenendo il progressivo storico). Se esistono note di credito broker storiche, confermare che la nuova chiave `(broker, NOTA_CREDITO, anno)` riparta sopra il loro max (garantito dal seed simmetrico Step 5).
+2. **Dry-run su Neon branch prod-shaped:** applicare la migration su un branch Neon (companies reali presenti) e verificare:
+   - `SELECT count(*) FROM companies WHERE "numeroSoggetto" IS NULL;` → **0**
+   - `SELECT count(*) FROM documenti_fiscali WHERE "numeroDocumentoStr" IS NULL;` → **0**
+   - `SELECT "numeroSoggetto", count(*) FROM companies GROUP BY 1 HAVING count(*) > 1;` → **0 righe** (univocità)
+3. Solo dopo l'esito pulito del dry-run: `prisma migrate deploy` sul DB prod Neon (`ep-solitary-night`).
+
+## Backlog minori (differiti dalla final review — non bloccanti)
+
+- **M1** — `Company.numeroSoggetto @default(dbgenerated("nextval('numero_soggetto_seq')"))` senza `::regclass`; possibile drift benigno su `migrate dev` (prod usa `migrate deploy`).
+- **M-d** — `contatori_fiscali.aggiornatoAt` ha `DEFAULT CURRENT_TIMESTAMP` nel DDL ma `@updatedAt` nello schema: stesso tipo di drift benigno.
+- **M3** — le select `notaVariazionePer` in `xml/route.ts` e `documento-pdf.ts` fetchano `numeroProgressivo`/`anno` ora inutilizzati.
+- **M-b** — la ricerca in `fatturazione/page.tsx` / `admin/fatturazione/page.tsx` filtra per `numeroProgressivo` (intero), mentre l'utente vede `PV-2026-00001`: la ricerca sulla stringa completa non matcha.
+- **M-c** — `documento-pdf.ts` costruisce il filename PDF da `numeroProgressivo-anno`, non da `numeroDocumentoStr` (cosmetico).
+- **M-e** — `numeroDocumentoStr` resta nullable: il backfill copre tutti i tipi, si potrebbe stringere a `NOT NULL` per irrobustire l'invariante.
+- **M-f** — il backfill formatta i `PENALE_BROKER` come `PN-<anno>-…` senza `id4`, mentre `format.ts` aggiungerebbe l'`id4`: incoerente ma inerte (nessun path di creazione penali oggi).

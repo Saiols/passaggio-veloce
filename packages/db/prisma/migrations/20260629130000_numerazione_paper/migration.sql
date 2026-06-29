@@ -37,10 +37,14 @@ CREATE TABLE "contatori_fiscali" (
 CREATE UNIQUE INDEX "contatori_fiscali_idSoggetto_tipoDocumento_anno_key"
   ON "contatori_fiscali"("idSoggetto", "tipoDocumento", "anno");
 
--- 5) Seed contatori broker (DOC_BROKER) dal vecchio stato Company.numeratoreFiscale*
+-- 5) Seed contatori broker (DOC_BROKER + NOTA_CREDITO) dal vecchio stato Company.numeratoreFiscale*.
+--    La vecchia numerazione broker era un registro condiviso (documenti + note interlacciate),
+--    quindi ENTRAMBI i contatori partono dallo stesso max storico per evitare collisioni con
+--    le note di credito broker già backfillate.
 INSERT INTO "contatori_fiscali" ("id","idSoggetto","tipoDocumento","anno","contatore","aggiornatoAt")
-SELECT gen_random_uuid(), c.id::text, 'DOC_BROKER', c."numeratoreFiscaleAnno", c."numeratoreFiscaleNum", now()
+SELECT gen_random_uuid(), c.id::text, t.tipo, c."numeratoreFiscaleAnno", c."numeratoreFiscaleNum", now()
 FROM "companies" c
+CROSS JOIN (VALUES ('DOC_BROKER'::"ContatoreFiscaleTipo"), ('NOTA_CREDITO'::"ContatoreFiscaleTipo")) AS t(tipo)
 WHERE c."numeratoreFiscaleAnno" IS NOT NULL AND c."numeratoreFiscaleNum" IS NOT NULL;
 
 -- 6) Seed contatori PV (FATTURA_PV e NOTA_CREDITO) dal max progressivo già usato

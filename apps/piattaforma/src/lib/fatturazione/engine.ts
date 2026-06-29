@@ -128,6 +128,7 @@ export async function createNotaCredito(input: {
       where: { id: input.documentoOriginaleId },
     });
     if (!orig || orig.tipo === 'NOTA_VARIAZIONE') return;
+    if (orig.statoPagamento === 'STORNATA') return;
 
     const isPv = orig.emittenteCompanyId == null;
     const idSoggetto = isPv ? ID_SOGGETTO_PV : orig.emittenteCompanyId!;
@@ -137,6 +138,7 @@ export async function createNotaCredito(input: {
           where: { id: orig.emittenteCompanyId! },
           select: { numeroSoggetto: true },
         });
+    if (!isPv && em == null) throw new Error('Emittente del documento originale non trovato');
     const num = await prossimoContatore(tx, idSoggetto, 'NOTA_CREDITO', anno);
     const numeroStr = numeroDocumento({
       tipo: 'NOTA_VARIAZIONE',

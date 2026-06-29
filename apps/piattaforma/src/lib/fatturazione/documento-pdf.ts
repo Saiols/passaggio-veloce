@@ -28,7 +28,7 @@ export const documentoPdfInclude = {
       wallet: { select: { sede: sedeSelect } },
     },
   },
-  notaVariazionePer: { select: { numeroProgressivo: true, anno: true } },
+  notaVariazionePer: { select: { numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },
 } satisfies Prisma.DocumentoFiscaleInclude;
 
 export type DocumentoPdfRecord = Prisma.DocumentoFiscaleGetPayload<{
@@ -44,6 +44,7 @@ export function documentoPdfInput(doc: DocumentoPdfRecord): DocumentoPdfInput {
     numeroProgressivo: doc.numeroProgressivo,
     anno: doc.anno,
     emessoAt: doc.emessoAt,
+    numeroDocumentoStr: doc.numeroDocumentoStr,
     emittente: doc.datiEmittente as unknown as DatiFiscali,
     destinatario: doc.datiDestinatario as unknown as DatiFiscali,
     imponibileCent: doc.imponibileCent,

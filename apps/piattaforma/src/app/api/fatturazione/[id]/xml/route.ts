@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { numeroDocumento } from '@/lib/fatturazione/format';
 import { descrizioneDocumento } from '@/lib/fatturazione/descrizione';
 import { toFatturaPaInput } from '@/lib/fatturazione/xml-mapper';
 import { buildFatturaPaXml } from '@/lib/fatturazione/xml-fatturapa';
@@ -43,7 +42,7 @@ export async function GET(
           },
         },
       },
-      notaVariazionePer: { select: { numeroProgressivo: true, anno: true } },
+      notaVariazionePer: { select: { numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },
     },
   });
   if (!doc) {
@@ -68,7 +67,7 @@ export async function GET(
 
   const input = toFatturaPaInput({
     fatturaPaTipo: doc.fatturaPaTipo as TipoXml,
-    numero: numeroDocumento(doc),
+    numero: doc.numeroDocumentoStr ?? '',
     numeroProgressivo: doc.numeroProgressivo,
     data: doc.emessoAt,
     emittente: doc.datiEmittente as unknown as DatiFiscali,

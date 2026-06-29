@@ -2,7 +2,7 @@ import 'server-only';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { DocumentoFiscaleTipo, FatturaPaTipo } from '@pv/db';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
-import { numeroDocumento, labelTipoDocumento } from './format';
+import { labelTipoDocumento } from './format';
 import { winAnsiSafe } from '@/lib/pdf/winansi';
 import type { DatiFiscali } from './pv-emittente';
 import type { SedeRiferimento } from './descrizione';
@@ -24,6 +24,8 @@ export type DocumentoPdfInput = {
   numeroProgressivo: number;
   anno: number;
   emessoAt: Date;
+  /** Numero documento già formattato (congelato al momento dell'emissione). */
+  numeroDocumentoStr: string | null;
   emittente: DatiFiscali;
   destinatario: DatiFiscali;
   imponibileCent: number | null;
@@ -89,7 +91,7 @@ export function wrapText(text: string, font: PDFFont, size: number, maxWidth: nu
 export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const tipoLabel = labelTipoDocumento(input.tipo);
-  const numero = numeroDocumento(input);
+  const numero = input.numeroDocumentoStr ?? '';
   pdf.setTitle(`${tipoLabel} N° ${numero} — ${input.emittente.ragioneSociale}`);
   pdf.setAuthor('Passaggio Veloce');
 

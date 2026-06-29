@@ -1,6 +1,6 @@
 import type { DocumentoFiscaleTipo } from '@pv/db';
 import { formatDate } from '@/lib/format';
-import { numeroDocumento, labelTipoDocumento } from './format';
+import { labelTipoDocumento } from './format';
 
 /** Forma minima del documento necessaria a comporre descrizione e riferimento. */
 export type DescrizioneDoc = {
@@ -10,7 +10,7 @@ export type DescrizioneDoc = {
     eseguitoAt: Date | null;
     transazioni: { pratica: { codicePratica: string | null } | null }[];
   } | null;
-  notaVariazionePer: { numeroProgressivo: number; anno: number } | null;
+  notaVariazionePer: { numeroDocumentoStr: string | null } | null;
 };
 
 /**
@@ -40,7 +40,7 @@ export function descrizioneDocumento(doc: DescrizioneDoc): {
     case 'NOTA_VARIAZIONE':
       return {
         descrizione: doc.notaVariazionePer
-          ? `Storno documento N° ${numeroDocumento(doc.notaVariazionePer)}`
+          ? `Storno documento N° ${doc.notaVariazionePer.numeroDocumentoStr ?? ''}`
           : 'Nota di variazione in diminuzione',
         riferimento: doc.pratica?.codicePratica ? `Pratica ${doc.pratica.codicePratica}` : null,
       };

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma, type Prisma, type DocumentoFiscaleTipo } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
-import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 
 export const runtime = 'nodejs';
@@ -64,7 +64,7 @@ export async function GET(req: Request): Promise<Response> {
     const de = d.datiDestinatario as unknown as DatiFiscali;
     return [
       d.emessoAt.toISOString().slice(0, 10),
-      numeroDocumento(d),
+      d.numeroDocumentoStr ?? '',
       labelTipoDocumento(d.tipo),
       em?.ragioneSociale ?? '',
       de?.ragioneSociale ?? '',

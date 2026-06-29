@@ -6,7 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
-import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 
@@ -176,7 +176,7 @@ export default async function AdminFatturazionePage({
                       <td className="py-2">{formatDate(d.emessoAt)}</td>
                       <td className="py-2">
                         <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                          {numeroDocumento(d)}
+                          {d.numeroDocumentoStr}
                         </Link>
                       </td>
                       <td className="py-2">{labelTipoDocumento(d.tipo)}</td>

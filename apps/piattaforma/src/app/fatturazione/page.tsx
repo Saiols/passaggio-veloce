@@ -5,7 +5,7 @@ import { prisma, type Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
-import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 
 export const dynamic = 'force-dynamic';
@@ -140,7 +140,7 @@ async function ListaAgenzia({
               <td className="py-2">{formatDate(d.emessoAt)}</td>
               <td className="py-2">
                 <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                  {numeroDocumento(d)}
+                  {d.numeroDocumentoStr}
                 </Link>
               </td>
               <td className="py-2">{labelTipoDocumento(d.tipo)}</td>
@@ -224,7 +224,7 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
               <td className="py-2">{formatDate(d.emessoAt)}</td>
               <td className="py-2">
                 <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                  {numeroDocumento(d)}
+                  {d.numeroDocumentoStr}
                 </Link>
               </td>
               <td className="py-2">{labelTipoDocumento(d.tipo)}</td>

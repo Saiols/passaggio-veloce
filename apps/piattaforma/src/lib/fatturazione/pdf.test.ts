@@ -20,6 +20,7 @@ function baseInput(over: Partial<DocumentoPdfInput> = {}): DocumentoPdfInput {
     fatturaPaTipo: 'TD01',
     numeroProgressivo: 7,
     anno: 2026,
+    numeroDocumentoStr: 'PV-2026-00007',
     emessoAt: new Date('2026-06-17T10:00:00Z'),
     emittente: PV,
     destinatario: {

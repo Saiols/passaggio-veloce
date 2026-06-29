@@ -15,7 +15,7 @@ import { AnnullaPraticaButton } from './annulla-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
-import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { PraticaToasts } from './pratica-toasts';
 import { BackButton } from '@/components/back-button';
@@ -82,6 +82,7 @@ export default async function PraticaDetailPage({
           tipo: true,
           numeroProgressivo: true,
           anno: true,
+          numeroDocumentoStr: true,
           importoLordoCent: true,
           emittenteCompanyId: true,
           destinatarioCompanyId: true,
@@ -266,7 +267,7 @@ export default async function PraticaDetailPage({
                     href={`/fatturazione/${d.id}`}
                     className="font-semibold text-pv-navy-600 hover:underline"
                   >
-                    {labelTipoDocumento(d.tipo)} · N° {numeroDocumento(d)}
+                    {labelTipoDocumento(d.tipo)} · N° {d.numeroDocumentoStr}
                   </Link>
                   <span
                     className={d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}

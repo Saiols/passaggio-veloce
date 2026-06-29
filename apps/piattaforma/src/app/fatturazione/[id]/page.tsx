@@ -5,7 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
-import { numeroDocumento, labelTipoDocumento } from '@/lib/fatturazione/format';
+import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { resolveSedeRiferimento, type SedeRiferimento } from '@/lib/fatturazione/descrizione';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
@@ -70,8 +70,8 @@ export default async function DocumentoFiscaleDetailPage({
           wallet: { select: { sede: { select: { nome: true, citta: true, provincia: true } } } },
         },
       },
-      notaVariazionePer: { select: { id: true, numeroProgressivo: true, anno: true } },
-      notaVariazioneFiglie: { select: { id: true, numeroProgressivo: true, anno: true } },
+      notaVariazionePer: { select: { id: true, numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },
+      notaVariazioneFiglie: { select: { id: true, numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },
     },
   });
   if (!doc) notFound();
@@ -107,7 +107,7 @@ export default async function DocumentoFiscaleDetailPage({
               {doc.fatturaPaTipo ? ` · ${doc.fatturaPaTipo}` : ''}
             </p>
             <h1 className="mt-1 text-[26px] font-extrabold tracking-tight text-pv-navy-900">
-              N° {numeroDocumento(doc)}
+              N° {doc.numeroDocumentoStr}
             </h1>
             <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
           </div>
@@ -224,7 +224,7 @@ export default async function DocumentoFiscaleDetailPage({
               <p>
                 Rettifica del documento{' '}
                 <Link href={`/fatturazione/${doc.notaVariazionePer.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                  N° {numeroDocumento(doc.notaVariazionePer)}
+                  N° {doc.notaVariazionePer.numeroDocumentoStr}
                 </Link>
               </p>
             )}
@@ -232,7 +232,7 @@ export default async function DocumentoFiscaleDetailPage({
               <p key={n.id}>
                 Stornato da nota di credito{' '}
                 <Link href={`/fatturazione/${n.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                  N° {numeroDocumento(n)}
+                  N° {n.numeroDocumentoStr}
                 </Link>
               </p>
             ))}

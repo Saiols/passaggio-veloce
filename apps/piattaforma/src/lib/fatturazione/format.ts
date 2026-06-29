@@ -1,8 +1,33 @@
 import type { DocumentoFiscaleTipo } from '@pv/db';
 
-/** Numero documento leggibile: "<progressivo>/<anno>". */
-export function numeroDocumento(d: { numeroProgressivo: number; anno: number }): string {
-  return `${d.numeroProgressivo}/${d.anno}`;
+const pad = (n: number, len: number): string => String(n).padStart(len, '0');
+
+/**
+ * Numero documento leggibile e fiscale (paper NumerazioneFatture):
+ * - FATTURA_PV:        PV-<anno>-<5 cifre>            es. PV-2026-00007
+ * - DOC_BROKER:        PV-<id4>-<anno>-<5 cifre>      es. PV-0047-2026-00003
+ * - NOTA_VARIAZIONE:   NC-[<id4>-]<anno>-<5 cifre>    es. NC-2026-00012 / NC-0047-2026-00002
+ * - PENALE_BROKER:     PN-[<id4>-]<anno>-<5 cifre>
+ * `emittenteNumeroSoggetto` = Company.numeroSoggetto del broker (null per documenti PV).
+ */
+export function numeroDocumento(d: {
+  tipo: DocumentoFiscaleTipo;
+  numeroProgressivo: number;
+  anno: number;
+  emittenteNumeroSoggetto?: number | null;
+}): string {
+  const seq = pad(d.numeroProgressivo, 5);
+  const id = d.emittenteNumeroSoggetto != null ? pad(d.emittenteNumeroSoggetto, 4) : null;
+  switch (d.tipo) {
+    case 'FATTURA_PV':
+      return `PV-${d.anno}-${seq}`;
+    case 'DOC_BROKER':
+      return `PV-${id ?? '0000'}-${d.anno}-${seq}`;
+    case 'NOTA_VARIAZIONE':
+      return id ? `NC-${id}-${d.anno}-${seq}` : `NC-${d.anno}-${seq}`;
+    case 'PENALE_BROKER':
+      return id ? `PN-${id}-${d.anno}-${seq}` : `PN-${d.anno}-${seq}`;
+  }
 }
 
 const LABELS: Record<DocumentoFiscaleTipo, string> = {

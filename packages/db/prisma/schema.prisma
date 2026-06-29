@@ -446,10 +446,10 @@ model Company {
   visuraCameraleData DateTime? @db.Date
 
   // Fatturazione (FT-A)
-  regimeFiscale         RegimeFiscale @default(ORDINARIO)
-  // Registro progressivo dei documenti emessi PER CONTO di questo broker (DOC_BROKER)
-  numeratoreFiscaleAnno Int?
-  numeratoreFiscaleNum  Int?
+  regimeFiscale RegimeFiscale @default(ORDINARIO)
+  // Numerazione paper: ID soggetto univoco a 4 cifre nel numero documento broker
+  // (es. PV-0047-2026-00001). Postgres sequence: univoco, mai riassegnato.
+  numeroSoggetto    Int                @unique @default(dbgenerated("nextval('numero_soggetto_seq')"))
   documentiEmessi   DocumentoFiscale[] @relation("DocumentiEmessi")
   documentiRicevuti DocumentoFiscale[] @relation("DocumentiRicevuti")
 
@@ -1349,6 +1349,8 @@ model DocumentoFiscale {
 
   numeroProgressivo Int
   anno              Int
+  // Stringa formattata congelata all'emissione (immutabile): es. "PV-0047-2026-00001".
+  numeroDocumentoStr String? @unique
 
   importoLordoCent    Int // negativo per NOTA_VARIAZIONE (TD04)
   imponibileCent      Int?
@@ -1870,4 +1872,32 @@ model ChatbotInteraction {
   unansweredQuestion String?
 
   @@map("chatbot_interactions")
+}
+
+// ============================================================
+// ENUMS + MODEL — numerazione fiscale paper (FT-B)
+// Spec: docs/PassaggioVeloce NumerazioneFatture.docx
+// ============================================================
+
+enum ContatoreFiscaleTipo {
+  FATTURA_PV
+  DOC_BROKER
+  NOTA_CREDITO
+  PENALE
+}
+
+// Contatore di numerazione fiscale (paper NumerazioneFatture). Una riga per
+// (soggetto emittente, tipo documento, anno fiscale). idSoggetto = "PV" per i
+// documenti propri di Passaggio Veloce, oppure Company.id del broker per i
+// documenti conto terzi. Incremento atomico via INSERT … ON CONFLICT.
+model ContatoreFiscale {
+  id            String               @id @default(uuid()) @db.Uuid
+  idSoggetto    String
+  tipoDocumento ContatoreFiscaleTipo
+  anno          Int
+  contatore     Int                  @default(0)
+  aggiornatoAt  DateTime             @updatedAt
+
+  @@unique([idSoggetto, tipoDocumento, anno])
+  @@map("contatori_fiscali")
 }

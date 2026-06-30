@@ -47,44 +47,72 @@ export default async function AffiliazionePage() {
   // affiliazione viene dal wallet affiliazione della madre.
   const operatingSede = await getOperatingSede();
 
-  const [company, affWallet, sedeRow, referrals, commissioni, clickCount] = await Promise.all([
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: {
-        id: true,
-        ragioneSociale: true,
-        referralCode: true,
-      },
-    }),
-    prisma.wallet.findUnique({ where: { companyId }, select: { id: true } }),
-    operatingSede
-      ? prisma.sede.findUnique({ where: { id: operatingSede.id }, select: { referralCode: true } })
-      : Promise.resolve(null),
-    prisma.company.findMany({
-      where: { referenteId: companyId, deletedAt: null },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        ragioneSociale: true,
-        type: true,
-        citta: true,
-        provincia: true,
-        suspendedAt: true,
-        createdAt: true,
-        _count: {
-          select: { commissioniGenerate: true },
+  const [company, affWallet, sedeRow, referrals, commissioni, clickCount, mieCommissioni] =
+    await Promise.all([
+      prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          id: true,
+          ragioneSociale: true,
+          referralCode: true,
         },
-      },
-    }),
-    prisma.commissioneAffiliazione.aggregate({
-      where: { referenteId: companyId, stato: 'ACCREDITATA' },
-      _sum: { importoNettoCent: true },
-      _count: { _all: true },
-    }),
-    prisma.referralClick.count({ where: { companyId } }),
-  ]);
+      }),
+      prisma.wallet.findUnique({ where: { companyId }, select: { id: true } }),
+      operatingSede
+        ? prisma.sede.findUnique({ where: { id: operatingSede.id }, select: { referralCode: true } })
+        : Promise.resolve(null),
+      prisma.company.findMany({
+        where: { referenteId: companyId, deletedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          ragioneSociale: true,
+          type: true,
+          citta: true,
+          provincia: true,
+          suspendedAt: true,
+          createdAt: true,
+        },
+      }),
+      prisma.commissioneAffiliazione.aggregate({
+        where: { referenteId: companyId, stato: 'ACCREDITATA' },
+        _sum: { importoNettoCent: true },
+        _count: { _all: true },
+      }),
+      prisma.referralClick.count({ where: { companyId } }),
+      // Le MIE commissioni (referente = io) con il broker/agenzia della pratica:
+      // servono ad attribuire ogni commissione al referral che l'ha generata.
+      prisma.commissioneAffiliazione.findMany({
+        where: { referenteId: companyId },
+        select: {
+          stato: true,
+          importoNettoCent: true,
+          pratica: { select: { brokerId: true, agenziaAssegnataId: true } },
+        },
+      }),
+    ]);
 
   if (!company) redirect('/profilo');
+
+  // Aggregato commissioni PER REFERRAL. Una commissione (referente = io) nasce
+  // dalla pratica del referral, lato broker o agenzia: la attribuisco alla/e
+  // company referral coinvolta/e (intersezione con i miei referral).
+  const myReferralIds = new Set(referrals.map((r) => r.id));
+  const commPerReferral = new Map<string, { tot: number; accr: number; accrNetCent: number }>();
+  const bumpComm = (id: string | null, stato: string, netCent: number | null): void => {
+    if (!id || !myReferralIds.has(id)) return;
+    const e = commPerReferral.get(id) ?? { tot: 0, accr: 0, accrNetCent: 0 };
+    e.tot += 1;
+    if (stato === 'ACCREDITATA') {
+      e.accr += 1;
+      e.accrNetCent += netCent ?? 0;
+    }
+    commPerReferral.set(id, e);
+  };
+  for (const c of mieCommissioni) {
+    bumpComm(c.pratica?.brokerId ?? null, c.stato, c.importoNettoCent);
+    bumpComm(c.pratica?.agenziaAssegnataId ?? null, c.stato, c.importoNettoCent);
+  }
 
   const totaleAccreditatoCent = commissioni._sum.importoNettoCent ?? 0;
   const numCommissioni = commissioni._count._all;
@@ -347,35 +375,47 @@ export default async function AffiliazionePage() {
             </p>
           ) : (
             <ul className="mt-3 divide-y divide-pv-slate-100 text-[13px]">
-              {referrals.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="font-semibold text-pv-navy-900">
-                      {r.ragioneSociale}
-                      {r.suspendedAt && (
-                        <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
-                          Sospeso
-                        </span>
+              {referrals.map((r) => {
+                const agg = commPerReferral.get(r.id);
+                const accr = agg?.accr ?? 0;
+                const inRevisione = (agg?.tot ?? 0) - accr;
+                return (
+                  <li
+                    key={r.id}
+                    className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold text-pv-navy-900">
+                        {r.ragioneSociale}
+                        {r.suspendedAt && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
+                            Sospeso
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-pv-slate-500">
+                        {r.type === 'DEALER' ? 'Broker' : 'Agenzia'} · {r.citta} ({r.provincia})
+                        · iscritto {formatDate(r.createdAt)}
+                      </p>
+                    </div>
+                    <p className="text-[12px] text-pv-slate-500 sm:text-right">
+                      {accr > 0 ? (
+                        <>
+                          <span className="font-bold text-pv-navy-800">
+                            {formatCurrencyCent(agg?.accrNetCent ?? 0)}
+                          </span>{' '}
+                          · {accr} commission{accr === 1 ? 'e' : 'i'} accreditat
+                          {accr === 1 ? 'a' : 'e'}
+                        </>
+                      ) : (
+                        'Nessuna commissione ancora'
                       )}
+                      {inRevisione > 0 ? ` · ${inRevisione} in revisione` : ''}
+                      {r.suspendedAt ? ` · sospeso ${formatRelative(r.suspendedAt)}` : ''}
                     </p>
-                    <p className="text-[11px] text-pv-slate-500">
-                      {r.type === 'DEALER' ? 'Broker' : 'Agenzia'} · {r.citta} ({r.provincia})
-                      · iscritto {formatDate(r.createdAt)}
-                    </p>
-                  </div>
-                  <p className="text-[12px] text-pv-slate-500 sm:text-right">
-                    {r._count.commissioniGenerate} commission
-                    {r._count.commissioniGenerate === 1 ? 'e' : 'i'} maturat
-                    {r._count.commissioniGenerate === 1 ? 'a' : 'e'}
-                    {r.suspendedAt
-                      ? ` · sospeso ${formatRelative(r.suspendedAt)}`
-                      : ''}
-                  </p>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

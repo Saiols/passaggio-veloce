@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { AppShell } from '@/components/app-shell';
 import { StatCard } from '@/components/ui';
@@ -5,7 +6,10 @@ import { TextSearchFilter } from '@/components/text-search-filter';
 import { formatRelative } from '@/lib/format';
 import { buildCatalogoContatti } from '@/lib/catalogo-contatti';
 
-type SearchParams = { q?: string };
+type Ruolo = 'VENDITORE' | 'ACQUIRENTE';
+type SearchParams = { q?: string; ruolo?: string };
+
+const BASE_PATH = '/admin/crm/contatti-operativi';
 
 /**
  * "Contatti operativi" — catalogo dedupli­cato di venditori/acquirenti emersi
@@ -22,13 +26,29 @@ export default async function AdminCRMContattiOperativiPage({
   const session = await auth();
   const sp = await searchParams;
   const q = sp.q?.trim();
+  const ruoloFilter: Ruolo | null =
+    sp.ruolo === 'VENDITORE' || sp.ruolo === 'ACQUIRENTE' ? sp.ruolo : null;
 
   const contatti = await buildCatalogoContatti(q);
   const venditori = contatti.filter((c) => c.ruolo === 'VENDITORE').length;
   const acquirenti = contatti.filter((c) => c.ruolo === 'ACQUIRENTE').length;
+  // Filtro per tipologia (acquirente/venditore) sulla lista mostrata.
+  const filtered = ruoloFilter ? contatti.filter((c) => c.ruolo === ruoloFilter) : contatti;
 
-  const exportHref = q
-    ? `/api/admin/contatti/export?q=${encodeURIComponent(q)}`
+  // Href che preservano i parametri attivi (q + ruolo).
+  const buildHref = (ruolo: Ruolo | null): string => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (ruolo) params.set('ruolo', ruolo);
+    const qs = params.toString();
+    return qs ? `${BASE_PATH}?${qs}` : BASE_PATH;
+  };
+  const exportParams = new URLSearchParams();
+  if (q) exportParams.set('q', q);
+  if (ruoloFilter) exportParams.set('ruolo', ruoloFilter);
+  const exportQs = exportParams.toString();
+  const exportHref = exportQs
+    ? `/api/admin/contatti/export?${exportQs}`
     : '/api/admin/contatti/export';
 
   return (
@@ -54,23 +74,52 @@ export default async function AdminCRMContattiOperativiPage({
           </a>
         </header>
 
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <StatCard label="Contatti totali" value={contatti.length} accent="navy" />
           <StatCard label="Venditori" value={venditori} accent="orange" />
           <StatCard label="Acquirenti" value={acquirenti} accent="green" />
         </div>
 
+        {/* Filtro per tipologia (acquirente/venditore). Preserva la ricerca testo. */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+            Tipologia
+          </span>
+          {([
+            { key: null, label: 'Tutti' },
+            { key: 'VENDITORE', label: 'Venditori' },
+            { key: 'ACQUIRENTE', label: 'Acquirenti' },
+          ] as const).map((opt) => {
+            const active = ruoloFilter === opt.key;
+            return (
+              <Link
+                key={opt.label}
+                href={buildHref(opt.key)}
+                aria-pressed={active}
+                className={`inline-flex items-center rounded-full px-3.5 py-1.5 text-[12px] font-bold uppercase tracking-wider transition-colors ${
+                  active
+                    ? 'bg-pv-navy-700 text-white'
+                    : 'bg-pv-slate-100 text-pv-slate-700 hover:bg-pv-slate-200'
+                }`}
+              >
+                {opt.label}
+              </Link>
+            );
+          })}
+        </div>
+
         <TextSearchFilter
-          action="/admin/crm/contatti-operativi"
+          action={BASE_PATH}
           q={q}
           placeholder="Cerca per nome, email, telefono o CF/P.IVA…"
+          hidden={ruoloFilter ? { ruolo: ruoloFilter } : undefined}
         />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
-          {contatti.length === 0 ? (
+          {filtered.length === 0 ? (
             <div className="px-5 py-16 text-center">
               <p className="text-[14px] text-pv-slate-500">
-                Nessun contatto trovato{q ? ' con il filtro corrente' : ''}.
+                Nessun contatto trovato{q || ruoloFilter ? ' con i filtri correnti' : ''}.
               </p>
             </div>
           ) : (
@@ -87,7 +136,7 @@ export default async function AdminCRMContattiOperativiPage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-pv-slate-200">
-                {contatti.map((c) => (
+                {filtered.map((c) => (
                   <tr key={c.key} className="hover:bg-pv-slate-50">
                     <td className="px-5 py-3 font-semibold text-pv-navy-800">
                       {c.nominativo}

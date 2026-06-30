@@ -27,8 +27,15 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const q = url.searchParams.get('q')?.trim() || undefined;
+  const ruoloParam = url.searchParams.get('ruolo');
+  const ruoloFilter =
+    ruoloParam === 'VENDITORE' || ruoloParam === 'ACQUIRENTE' ? ruoloParam : null;
 
-  const contatti = await buildCatalogoContatti(q);
+  const contattiAll = await buildCatalogoContatti(q);
+  // Esporta coerentemente col filtro tipologia attivo nella pagina.
+  const contatti = ruoloFilter
+    ? contattiAll.filter((c) => c.ruolo === ruoloFilter)
+    : contattiAll;
 
   const headers = [
     'nominativo',

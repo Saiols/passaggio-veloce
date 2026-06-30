@@ -8,27 +8,74 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
+import {
+  TIPI_DOC,
+  parseFatturaFiltri,
+  fatturaWhereFiltri,
+  fatturaFiltriToQuery,
+  type FatturaFiltri,
+} from '@/lib/fatturazione/filtri';
 
 export const dynamic = 'force-dynamic';
 
 const sedeSelect = { select: { nome: true, citta: true, provincia: true } } as const;
 
-function SearchBar({ q }: { q: string }) {
+type SedeOpt = { id: string; nome: string; citta: string };
+
+function FiltriBar({ filtri, sedi }: { filtri: FatturaFiltri; sedi: SedeOpt[] }) {
+  const attivi = !!(filtri.q || filtri.tipo || filtri.sedeId || filtri.dataDa || filtri.dataA);
+  const input =
+    'rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none';
   return (
-    <form className="mb-5 flex gap-2" action="/fatturazione" method="get">
+    <form className="mb-5 flex flex-wrap items-end gap-2" action="/fatturazione" method="get">
       <input
         type="text"
         name="q"
-        defaultValue={q}
+        defaultValue={filtri.q}
         placeholder="Cerca per codice pratica o n° documento…"
-        className="flex-1 rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none"
+        className={`min-w-[200px] flex-1 ${input}`}
       />
+      <select name="tipo" defaultValue={filtri.tipo ?? ''} className={input}>
+        <option value="">Tutti i tipi</option>
+        {TIPI_DOC.map((t) => (
+          <option key={t} value={t}>
+            {labelTipoDocumento(t)}
+          </option>
+        ))}
+      </select>
+      {sedi.length > 1 && (
+        <select name="sede" defaultValue={filtri.sedeId ?? ''} className={`max-w-[200px] ${input}`}>
+          <option value="">Tutte le sedi</option>
+          {sedi.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nome}
+              {s.citta ? ` (${s.citta})` : ''}
+            </option>
+          ))}
+        </select>
+      )}
+      <label className="flex items-center gap-1 text-[12px] text-pv-slate-500">
+        Dal
+        <input type="date" name="dataDa" defaultValue={filtri.dataDa ?? ''} className={input} />
+      </label>
+      <label className="flex items-center gap-1 text-[12px] text-pv-slate-500">
+        Al
+        <input type="date" name="dataA" defaultValue={filtri.dataA ?? ''} className={input} />
+      </label>
       <button
         type="submit"
         className="rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
       >
-        Cerca
+        Filtra
       </button>
+      {attivi && (
+        <Link
+          href="/fatturazione"
+          className="rounded-[10px] border border-pv-slate-300 bg-white px-3 py-2 text-[13px] font-semibold text-pv-slate-600 hover:bg-pv-slate-50"
+        >
+          Azzera
+        </Link>
+      )}
     </form>
   );
 }
@@ -36,11 +83,10 @@ function SearchBar({ q }: { q: string }) {
 export default async function FatturazionePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; tipo?: string; dataDa?: string; dataA?: string; sede?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
-  const { q = '' } = await searchParams;
   const companyId = session.user.companyId;
   const tipo = session.user.companyType;
 
@@ -48,16 +94,23 @@ export default async function FatturazionePage({
     return (
       <AppShell session={session} activePath="/fatturazione">
         <div className="mx-auto max-w-3xl px-5 py-10 sm:px-6">
-          <p className="text-pv-slate-500">
-            Le fatture sono disponibili per agenzie e broker.
-          </p>
+          <p className="text-pv-slate-500">Le fatture sono disponibili per agenzie e broker.</p>
         </div>
       </AppShell>
     );
   }
 
-  const qTrim = q.trim();
-  const numQ = /^\d+$/.test(qTrim) ? Number(qTrim) : null;
+  const sp = await searchParams;
+  const filtri = parseFatturaFiltri(sp);
+  const sedi = await prisma.sede.findMany({
+    where: { companyId, deletedAt: null },
+    select: { id: true, nome: true, citta: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const scope: Prisma.DocumentoFiscaleWhereInput =
+    tipo === 'AGENZIA' ? { destinatarioCompanyId: companyId } : { emittenteCompanyId: companyId };
+  const where: Prisma.DocumentoFiscaleWhereInput = { ...scope, ...fatturaWhereFiltri(filtri) };
+  const exportQs = fatturaFiltriToQuery(filtri);
 
   return (
     <AppShell session={session} activePath="/fatturazione">
@@ -72,42 +125,24 @@ export default async function FatturazionePage({
             </h1>
           </div>
           <DownloadDocumentiButton
-            href={`/api/fatturazione/zip${qTrim ? `?q=${encodeURIComponent(qTrim)}` : ''}`}
+            href={`/api/fatturazione/zip${exportQs ? `?${exportQs}` : ''}`}
             label="Scarica fatture (ZIP)"
             className="shrink-0 rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
           />
         </header>
 
-        <SearchBar q={q} />
+        <FiltriBar filtri={filtri} sedi={sedi} />
 
-        {tipo === 'AGENZIA'
-          ? await ListaAgenzia({ agenziaId: companyId, q: qTrim, numQ })
-          : await ListaBroker({ brokerId: companyId, numQ })}
+        {tipo === 'AGENZIA' ? await ListaAgenzia({ where }) : await ListaBroker({ where })}
       </div>
     </AppShell>
   );
 }
 
-async function ListaAgenzia({
-  agenziaId,
-  q,
-  numQ,
-}: {
-  agenziaId: string;
-  q: string;
-  numQ: number | null;
-}) {
-  const where: Prisma.DocumentoFiscaleWhereInput = {
-    destinatarioCompanyId: agenziaId,
-    ...(q
-      ? {
-          OR: [
-            { pratica: { codicePratica: { contains: q, mode: 'insensitive' } } },
-            ...(numQ !== null ? [{ numeroProgressivo: numQ }] : []),
-          ],
-        }
-      : {}),
-  };
+const TH = 'whitespace-nowrap px-3 py-2.5';
+const TD = 'whitespace-nowrap px-3 py-2.5';
+
+async function ListaAgenzia({ where }: { where: Prisma.DocumentoFiscaleWhereInput }) {
   const docs = await prisma.documentoFiscale.findMany({
     where,
     orderBy: { emessoAt: 'desc' },
@@ -120,7 +155,7 @@ async function ListaAgenzia({
     return (
       <Card>
         <p className="py-8 text-center text-[14px] text-pv-slate-500">
-          Nessuna fattura{q ? ' per questa ricerca' : ' ricevuta finora'}.
+          Nessuna fattura con i filtri correnti.
         </p>
       </Card>
     );
@@ -128,67 +163,66 @@ async function ListaAgenzia({
 
   return (
     <Card>
-      <table className="w-full text-[13px]">
-        <thead className="text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-          <tr>
-            <th className="py-2">Data</th>
-            <th className="py-2">N°</th>
-            <th className="py-2">Tipo</th>
-            <th className="py-2">Pratica</th>
-            <th className="py-2">Sede</th>
-            <th className="py-2 text-right">Imponibile</th>
-            <th className="py-2 text-right">IVA</th>
-            <th className="py-2 text-right">Totale</th>
-            <th className="py-2">Stato</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
-          {docs.map((d) => (
-            <tr key={d.id}>
-              <td className="py-2">{formatDate(d.emessoAt)}</td>
-              <td className="py-2">
-                <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                  {d.numeroDocumentoStr}
-                </Link>
-              </td>
-              <td className="py-2">{labelTipoDocumento(d.tipo)}</td>
-              <td className="py-2">
-                {d.pratica ? (
-                  <Link
-                    href={`/pratiche/${d.pratica.id}`}
-                    className="font-mono font-semibold text-pv-navy-600 hover:underline"
-                  >
-                    {d.pratica.codicePratica ?? '—'}
-                  </Link>
-                ) : (
-                  '—'
-                )}
-              </td>
-              <td className="py-2">
-                <SedeCell doc={d} />
-              </td>
-              <td className="py-2 text-right">{formatCurrencyCent(d.imponibileCent ?? 0)}</td>
-              <td className="py-2 text-right">{formatCurrencyCent(d.ivaCent ?? 0)}</td>
-              <td
-                className={`py-2 text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
-              >
-                {formatCurrencyCent(d.importoLordoCent)}
-              </td>
-              <td className="py-2 text-[12px] text-pv-slate-500">{d.statoPagamento}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[820px] text-[13px]">
+          <thead className="border-b border-pv-slate-200 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+            <tr>
+              <th className={TH}>Data</th>
+              <th className={TH}>N°</th>
+              <th className={TH}>Tipo</th>
+              <th className={TH}>Pratica</th>
+              <th className={TH}>Sede</th>
+              <th className={`${TH} text-right`}>Imponibile</th>
+              <th className={`${TH} text-right`}>IVA</th>
+              <th className={`${TH} text-right`}>Totale</th>
+              <th className={TH}>Stato</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
+            {docs.map((d) => (
+              <tr key={d.id} className="hover:bg-pv-slate-50">
+                <td className={TD}>{formatDate(d.emessoAt)}</td>
+                <td className={TD}>
+                  <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
+                    {d.numeroDocumentoStr}
+                  </Link>
+                </td>
+                <td className={TD}>{labelTipoDocumento(d.tipo)}</td>
+                <td className={TD}>
+                  {d.pratica ? (
+                    <Link
+                      href={`/pratiche/${d.pratica.id}`}
+                      className="font-mono font-semibold text-pv-navy-600 hover:underline"
+                    >
+                      {d.pratica.codicePratica ?? '—'}
+                    </Link>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td className={TD}>
+                  <SedeCell doc={d} />
+                </td>
+                <td className={`${TD} text-right`}>{formatCurrencyCent(d.imponibileCent ?? 0)}</td>
+                <td className={`${TD} text-right`}>{formatCurrencyCent(d.ivaCent ?? 0)}</td>
+                <td
+                  className={`${TD} text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
+                >
+                  {formatCurrencyCent(d.importoLordoCent)}
+                </td>
+                <td className={`${TD} text-[12px] text-pv-slate-500`}>{d.statoPagamento}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }
 
-async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number | null }) {
+async function ListaBroker({ where }: { where: Prisma.DocumentoFiscaleWhereInput }) {
   const docs = await prisma.documentoFiscale.findMany({
-    where: {
-      emittenteCompanyId: brokerId,
-      ...(numQ !== null ? { numeroProgressivo: numQ } : {}),
-    },
+    where,
     orderBy: { emessoAt: 'desc' },
     include: {
       payout: {
@@ -206,7 +240,7 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
     return (
       <Card>
         <p className="py-8 text-center text-[14px] text-pv-slate-500">
-          Nessun documento emesso finora.
+          Nessun documento con i filtri correnti.
         </p>
       </Card>
     );
@@ -214,44 +248,46 @@ async function ListaBroker({ brokerId, numQ }: { brokerId: string; numQ: number 
 
   return (
     <Card>
-      <table className="w-full text-[13px]">
-        <thead className="text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-          <tr>
-            <th className="py-2">Data</th>
-            <th className="py-2">N°</th>
-            <th className="py-2">Tipo</th>
-            <th className="py-2">Pratiche</th>
-            <th className="py-2">Sede</th>
-            <th className="py-2 text-right">Totale</th>
-            <th className="py-2">Stato</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
-          {docs.map((d) => (
-            <tr key={d.id}>
-              <td className="py-2">{formatDate(d.emessoAt)}</td>
-              <td className="py-2">
-                <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                  {d.numeroDocumentoStr}
-                </Link>
-              </td>
-              <td className="py-2">{labelTipoDocumento(d.tipo)}</td>
-              <td className="py-2">{d.payout?.transazioni.length ?? 0}</td>
-              <td className="py-2">
-                <SedeCell doc={d} />
-              </td>
-              <td
-                className={`py-2 text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
-              >
-                {formatCurrencyCent(d.importoLordoCent)}
-              </td>
-              <td className="py-2 text-[12px] text-pv-slate-500">
-                {d.trasmessoSdiAt ? 'Gestito' : 'In attesa'}
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[680px] text-[13px]">
+          <thead className="border-b border-pv-slate-200 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+            <tr>
+              <th className={TH}>Data</th>
+              <th className={TH}>N°</th>
+              <th className={TH}>Tipo</th>
+              <th className={TH}>Pratiche</th>
+              <th className={TH}>Sede</th>
+              <th className={`${TH} text-right`}>Totale</th>
+              <th className={TH}>Stato</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
+            {docs.map((d) => (
+              <tr key={d.id} className="hover:bg-pv-slate-50">
+                <td className={TD}>{formatDate(d.emessoAt)}</td>
+                <td className={TD}>
+                  <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
+                    {d.numeroDocumentoStr}
+                  </Link>
+                </td>
+                <td className={TD}>{labelTipoDocumento(d.tipo)}</td>
+                <td className={TD}>{d.payout?.transazioni.length ?? 0}</td>
+                <td className={TD}>
+                  <SedeCell doc={d} />
+                </td>
+                <td
+                  className={`${TD} text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
+                >
+                  {formatCurrencyCent(d.importoLordoCent)}
+                </td>
+                <td className={`${TD} text-[12px] text-pv-slate-500`}>
+                  {d.trasmessoSdiAt ? 'Gestito' : 'In attesa'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </Card>
   );
 }

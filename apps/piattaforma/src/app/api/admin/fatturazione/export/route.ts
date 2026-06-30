@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma, type Prisma, type DocumentoFiscaleTipo } from '@pv/db';
+import { prisma, type Prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
+import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const TIPI = ['FATTURA_PV', 'DOC_BROKER', 'NOTA_VARIAZIONE', 'PENALE_BROKER'] as const;
 
 /** Cella CSV con quoting se contiene separatori/virgolette/newline. */
 function csvCell(v: string | number | null | undefined): string {
@@ -23,24 +22,14 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const q = (url.searchParams.get('q') ?? '').trim();
-  const numQ = /^\d+$/.test(q) ? Number(q) : null;
-  const tipo = url.searchParams.get('tipo') ?? '';
-  const tipoFilter = (TIPI as readonly string[]).includes(tipo)
-    ? (tipo as DocumentoFiscaleTipo)
-    : null;
-
-  const where: Prisma.DocumentoFiscaleWhereInput = {
-    ...(tipoFilter ? { tipo: tipoFilter } : {}),
-    ...(q
-      ? {
-          OR: [
-            { pratica: { codicePratica: { contains: q, mode: 'insensitive' } } },
-            ...(numQ !== null ? [{ numeroProgressivo: numQ }] : []),
-          ],
-        }
-      : {}),
-  };
+  const filtri = parseFatturaFiltri({
+    q: url.searchParams.get('q') ?? undefined,
+    tipo: url.searchParams.get('tipo') ?? undefined,
+    dataDa: url.searchParams.get('dataDa') ?? undefined,
+    dataA: url.searchParams.get('dataA') ?? undefined,
+    sede: url.searchParams.get('sede') ?? undefined,
+  });
+  const where: Prisma.DocumentoFiscaleWhereInput = fatturaWhereFiltri(filtri);
 
   const docs = await prisma.documentoFiscale.findMany({
     where,

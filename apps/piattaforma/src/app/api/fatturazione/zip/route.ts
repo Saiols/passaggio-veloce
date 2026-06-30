@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma, type Prisma, type DocumentoFiscaleTipo } from '@pv/db';
+import { prisma, type Prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
 import { documentoPdfInclude, documentoPdfInput } from '@/lib/fatturazione/documento-pdf';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
+import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import { buildPraticaZip, type ZipEntry } from '@/lib/documenti/zip';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 
@@ -13,7 +14,6 @@ export const dynamic = 'force-dynamic';
 // I PDF sono generati al volo (pdf-lib): può richiedere qualche secondo.
 export const maxDuration = 60;
 
-const TIPI: DocumentoFiscaleTipo[] = ['FATTURA_PV', 'DOC_BROKER', 'NOTA_VARIAZIONE', 'PENALE_BROKER'];
 /** Tetto difensivo per non sforare il timeout della funzione (volume basso). */
 const MAX_DOCS = 500;
 
@@ -36,32 +36,29 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const qTrim = (url.searchParams.get('q') ?? '').trim();
-  const numQ = /^\d+$/.test(qTrim) ? Number(qTrim) : null;
-  const tipoParam = url.searchParams.get('tipo') ?? '';
-  const tipoFilter = TIPI.includes(tipoParam as DocumentoFiscaleTipo)
-    ? (tipoParam as DocumentoFiscaleTipo)
-    : null;
+  const filtri = parseFatturaFiltri({
+    q: url.searchParams.get('q') ?? undefined,
+    tipo: url.searchParams.get('tipo') ?? undefined,
+    dataDa: url.searchParams.get('dataDa') ?? undefined,
+    dataA: url.searchParams.get('dataA') ?? undefined,
+    sede: url.searchParams.get('sede') ?? undefined,
+  });
 
   const companyId = session.user.companyId;
   const companyType = session.user.companyType;
 
-  const where: Prisma.DocumentoFiscaleWhereInput = {};
+  // Scope per ruolo, identico alle liste; i filtri (q/tipo/date/sede) sono ANDati.
+  let scope: Prisma.DocumentoFiscaleWhereInput;
   if (isAdminPiattaforma(session.user.role)) {
-    if (tipoFilter) where.tipo = tipoFilter;
+    scope = {};
   } else if (companyType === 'DEALER' && companyId) {
-    where.emittenteCompanyId = companyId;
+    scope = { emittenteCompanyId: companyId };
   } else if (companyType === 'AGENZIA' && companyId) {
-    where.destinatarioCompanyId = companyId;
+    scope = { destinatarioCompanyId: companyId };
   } else {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
-  if (qTrim) {
-    where.OR = [
-      { pratica: { codicePratica: { contains: qTrim, mode: 'insensitive' } } },
-      ...(numQ !== null ? [{ numeroProgressivo: numQ }] : []),
-    ];
-  }
+  const where: Prisma.DocumentoFiscaleWhereInput = { ...scope, ...fatturaWhereFiltri(filtri) };
 
   const docs = await prisma.documentoFiscale.findMany({
     where,

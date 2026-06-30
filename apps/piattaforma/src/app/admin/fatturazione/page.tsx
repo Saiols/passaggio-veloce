@@ -10,16 +10,27 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
+import {
+  TIPI_DOC,
+  parseFatturaFiltri,
+  fatturaWhereFiltri,
+  fatturaFiltriToQuery,
+} from '@/lib/fatturazione/filtri';
 
 export const dynamic = 'force-dynamic';
 
-const TIPI: DocumentoFiscaleTipo[] = ['FATTURA_PV', 'DOC_BROKER', 'NOTA_VARIAZIONE', 'PENALE_BROKER'];
 const sedeSelect = { select: { nome: true, citta: true, provincia: true } } as const;
 
 export default async function AdminFatturazionePage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tipo?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    tipo?: string;
+    dataDa?: string;
+    dataA?: string;
+    sede?: string;
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -35,24 +46,16 @@ export default async function AdminFatturazionePage({
     );
   }
 
-  const { q = '', tipo = '' } = await searchParams;
-  const qTrim = q.trim();
-  const numQ = /^\d+$/.test(qTrim) ? Number(qTrim) : null;
-  const tipoFilter = TIPI.includes(tipo as DocumentoFiscaleTipo)
-    ? (tipo as DocumentoFiscaleTipo)
-    : null;
+  const sp = await searchParams;
+  const filtri = parseFatturaFiltri(sp);
+  const where: Prisma.DocumentoFiscaleWhereInput = fatturaWhereFiltri(filtri);
 
-  const where: Prisma.DocumentoFiscaleWhereInput = {
-    ...(tipoFilter ? { tipo: tipoFilter } : {}),
-    ...(qTrim
-      ? {
-          OR: [
-            { pratica: { codicePratica: { contains: qTrim, mode: 'insensitive' } } },
-            ...(numQ !== null ? [{ numeroProgressivo: numQ }] : []),
-          ],
-        }
-      : {}),
-  };
+  // Opzioni del filtro "Sede" (tutte le sedi attive, con azienda madre).
+  const sediOpzioni = await prisma.sede.findMany({
+    where: { deletedAt: null },
+    select: { id: true, nome: true, citta: true, company: { select: { ragioneSociale: true } } },
+    orderBy: [{ company: { ragioneSociale: 'asc' } }, { nome: 'asc' }],
+  });
 
   const docs = await prisma.documentoFiscale.findMany({
     where,
@@ -75,7 +78,7 @@ export default async function AdminFatturazionePage({
   const fpv = byTipo('FATTURA_PV');
   const dbk = byTipo('DOC_BROKER');
   const ncr = byTipo('NOTA_VARIAZIONE');
-  const exportQs = new URLSearchParams({ ...(qTrim ? { q: qTrim } : {}), ...(tipoFilter ? { tipo: tipoFilter } : {}) }).toString();
+  const exportQs = fatturaFiltriToQuery(filtri);
 
   return (
     <AppShell session={session} activePath="/admin/fatturazione">
@@ -126,32 +129,71 @@ export default async function AdminFatturazionePage({
           </a>
         </div>
 
-        <form className="mb-5 flex flex-wrap gap-2" action="/admin/fatturazione" method="get">
+        <form className="mb-5 flex flex-wrap items-end gap-2" action="/admin/fatturazione" method="get">
           <input
             type="text"
             name="q"
-            defaultValue={q}
+            defaultValue={filtri.q}
             placeholder="Cerca codice pratica o n° documento…"
-            className="min-w-[220px] flex-1 rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none"
+            className="min-w-[200px] flex-1 rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none"
           />
           <select
             name="tipo"
-            defaultValue={tipo}
+            defaultValue={filtri.tipo ?? ''}
             className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px]"
           >
             <option value="">Tutti i tipi</option>
-            {TIPI.map((t) => (
+            {TIPI_DOC.map((t) => (
               <option key={t} value={t}>
                 {labelTipoDocumento(t)}
               </option>
             ))}
           </select>
+          <select
+            name="sede"
+            defaultValue={filtri.sedeId ?? ''}
+            className="max-w-[240px] rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px]"
+          >
+            <option value="">Tutte le sedi</option>
+            {sediOpzioni.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.company.ragioneSociale} — {s.nome}
+                {s.citta ? ` (${s.citta})` : ''}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-1 text-[12px] text-pv-slate-500">
+            Dal
+            <input
+              type="date"
+              name="dataDa"
+              defaultValue={filtri.dataDa ?? ''}
+              className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-2 py-2 text-[13px]"
+            />
+          </label>
+          <label className="flex items-center gap-1 text-[12px] text-pv-slate-500">
+            Al
+            <input
+              type="date"
+              name="dataA"
+              defaultValue={filtri.dataA ?? ''}
+              className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-2 py-2 text-[13px]"
+            />
+          </label>
           <button
             type="submit"
             className="rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
           >
             Filtra
           </button>
+          {(filtri.q || filtri.tipo || filtri.sedeId || filtri.dataDa || filtri.dataA) && (
+            <Link
+              href="/admin/fatturazione"
+              className="rounded-[10px] border border-pv-slate-300 bg-white px-3 py-2 text-[13px] font-semibold text-pv-slate-600 hover:bg-pv-slate-50"
+            >
+              Azzera
+            </Link>
+          )}
         </form>
 
         {docs.length === 0 ? (
@@ -160,59 +202,69 @@ export default async function AdminFatturazionePage({
           </Card>
         ) : (
           <Card>
-            <table className="w-full text-[13px]">
-              <thead className="text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                <tr>
-                  <th className="py-2">Data</th>
-                  <th className="py-2">N°</th>
-                  <th className="py-2">Tipo</th>
-                  <th className="py-2">Emittente</th>
-                  <th className="py-2">Destinatario</th>
-                  <th className="py-2">Pratica</th>
-                  <th className="py-2">Sede</th>
-                  <th className="py-2 text-right">Totale</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
-                {docs.map((d) => {
-                  const em = d.datiEmittente as unknown as DatiFiscali;
-                  const de = d.datiDestinatario as unknown as DatiFiscali;
-                  return (
-                    <tr key={d.id}>
-                      <td className="py-2">{formatDate(d.emessoAt)}</td>
-                      <td className="py-2">
-                        <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
-                          {d.numeroDocumentoStr}
-                        </Link>
-                      </td>
-                      <td className="py-2">{labelTipoDocumento(d.tipo)}</td>
-                      <td className="py-2">{em?.ragioneSociale ?? '—'}</td>
-                      <td className="py-2">{de?.ragioneSociale ?? '—'}</td>
-                      <td className="py-2">
-                        {d.pratica ? (
-                          <Link
-                            href={`/pratiche/${d.pratica.id}`}
-                            className="font-mono font-semibold text-pv-navy-600 hover:underline"
-                          >
-                            {d.pratica.codicePratica ?? '—'}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] text-[13px]">
+                <thead className="border-b border-pv-slate-200 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                  <tr>
+                    <th className="whitespace-nowrap px-3 py-2.5">Data</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">N°</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Tipo</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Emittente</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Destinatario</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Pratica</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Sede</th>
+                    <th className="whitespace-nowrap px-3 py-2.5 text-right">Totale</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pv-slate-100 text-pv-slate-700">
+                  {docs.map((d) => {
+                    const em = d.datiEmittente as unknown as DatiFiscali;
+                    const de = d.datiDestinatario as unknown as DatiFiscali;
+                    return (
+                      <tr key={d.id} className="hover:bg-pv-slate-50">
+                        <td className="whitespace-nowrap px-3 py-2.5">{formatDate(d.emessoAt)}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          <Link href={`/fatturazione/${d.id}`} className="font-semibold text-pv-navy-600 hover:underline">
+                            {d.numeroDocumentoStr}
                           </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="py-2">
-                        <SedeCell doc={d} />
-                      </td>
-                      <td
-                        className={`py-2 text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
-                      >
-                        {formatCurrencyCent(d.importoLordoCent)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">{labelTipoDocumento(d.tipo)}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="max-w-[180px] truncate" title={em?.ragioneSociale ?? ''}>
+                            {em?.ragioneSociale ?? '—'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="max-w-[180px] truncate" title={de?.ragioneSociale ?? ''}>
+                            {de?.ragioneSociale ?? '—'}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          {d.pratica ? (
+                            <Link
+                              href={`/pratiche/${d.pratica.id}`}
+                              className="font-mono font-semibold text-pv-navy-600 hover:underline"
+                            >
+                              {d.pratica.codicePratica ?? '—'}
+                            </Link>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          <SedeCell doc={d} />
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-3 py-2.5 text-right font-semibold ${d.importoLordoCent < 0 ? 'text-pv-red-500' : 'text-pv-navy-900'}`}
+                        >
+                          {formatCurrencyCent(d.importoLordoCent)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </Card>
         )}
       </div>

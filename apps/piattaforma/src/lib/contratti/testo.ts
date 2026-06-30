@@ -41,7 +41,7 @@ export const MANDATO_CLAUSOLE: { heading: string; body: string }[] = [
   },
   {
     heading: '9. Legge applicabile e foro competente',
-    body: 'Il presente mandato è regolato dalla legge italiana. Per ogni controversia relativa alla validità, interpretazione, esecuzione o cessazione del presente accordo sarà competente il Foro di {{FORO}}, salvo diverso foro inderogabile previsto dalla legge.',
+    body: 'Il presente mandato è regolato dalla legge italiana. Per ogni controversia relativa alla validità, interpretazione, esecuzione o cessazione del presente accordo sarà competente il foro competente per legge.',
   },
   {
     heading: '10. Sottoscrizione',

@@ -2498,7 +2498,8 @@ function UploadCard({
   onSelect: (file: File | null) => void;
   onRemove: () => void;
   invalid?: boolean;
-  /** Solo PDF + bypass editor (la visura va caricata intera, tutte le pagine). */
+  /** Solo PDF + bypass editor (documento da caricare intero, tutte le pagine:
+   *  es. visura camerale o foglio complementare). */
   pdfOnly?: boolean;
   /** Testo guida sotto il titolo della card. */
   subtitle?: string;
@@ -2514,8 +2515,8 @@ function UploadCard({
   const hasDoc = !!file || !!ref;
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
   const { pick, modal } = useDocumentScanner({ onFile: onSelect });
-  // pdfOnly (visura): bypassa l'editor e carica il PDF intero (tutte le pagine);
-  // rifiuta i non-PDF. Altrimenti instrada allo scanner come al solito.
+  // pdfOnly (visura / foglio complementare): bypassa l'editor e carica il PDF
+  // intero (tutte le pagine); rifiuta i non-PDF. Altrimenti instrada allo scanner.
   const handlePick = (f: File | null): void => {
     if (!f) {
       setLocalErr(null);
@@ -2524,7 +2525,7 @@ function UploadCard({
     }
     if (pdfOnly) {
       if (!isPdfFile(f)) {
-        setLocalErr('La visura deve essere in formato PDF.');
+        setLocalErr('Il documento deve essere in formato PDF.');
         return;
       }
       setLocalErr(null);

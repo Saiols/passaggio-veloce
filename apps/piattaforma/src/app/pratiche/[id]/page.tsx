@@ -18,6 +18,7 @@ import { GuidaStepCard } from './guida-step-card';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { PraticaToasts } from './pratica-toasts';
+import { DownloadDocumentiButton } from '../download-documenti-button';
 import { BackButton } from '@/components/back-button';
 import { OverrideGatingButton } from '@/app/admin/documenti/override-gating-button';
 
@@ -224,6 +225,12 @@ export default async function PraticaDetailPage({
                 Scarica PDF
               </a>
             )}
+            {pratica.documenti.length > 0 && (
+              <DownloadDocumentiButton
+                href={`/api/pratiche/${pratica.id}/zip`}
+                className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+              />
+            )}
           </div>
         </header>
 
@@ -341,14 +348,19 @@ export default async function PraticaDetailPage({
                         <InfoRow label="Immatricolazione" value={formatDate(v.dataImmatricolazione)} />
                         <InfoRow label="Pre-2015" value={v.preImm2015 ? 'Sì' : 'No'} />
                         <InfoRow label="Comodato d'uso" value={v.flagComodatoDuso ? 'Sì' : 'No'} />
-                        <InfoRow
-                          label="Prezzo di vendita"
-                          value={
-                            v.prezzoVenditaCent != null
+                        {/* Prezzo di vendita: messo in leggera evidenza rispetto agli
+                            altri campi (blocco a tutta larghezza, importo più grande),
+                            in modo delicato. */}
+                        <div className="mt-1 flex items-center justify-between gap-3 rounded-lg border border-pv-navy-100 bg-pv-navy-50/60 px-3 py-2 sm:col-span-2">
+                          <dt className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                            Prezzo di vendita
+                          </dt>
+                          <dd className="text-[18px] font-extrabold tracking-tight text-pv-navy-900">
+                            {v.prezzoVenditaCent != null
                               ? formatCurrencyCent(v.prezzoVenditaCent)
-                              : null
-                          }
-                        />
+                              : '—'}
+                          </dd>
+                        </div>
                       </dl>
                     </div>
                   ))}

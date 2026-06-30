@@ -7,6 +7,19 @@ import { storageGetBuffer } from '@/lib/providers/storage';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/**
+ * Parte filename ASCII-safe: ogni sequenza non alfanumerica (spazi, punti,
+ * accenti, ecc.) diventa "_". Usata per il nome "parlante" del mandato.
+ */
+function slug(s: string): string {
+  return (
+    s
+      .replace(/[^a-zA-Z0-9]+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 80) || 'azienda'
+  );
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ companyId: string }> },
@@ -18,19 +31,30 @@ export async function GET(
 
   const { companyId } = await params;
 
-  const mandato = await prisma.mandatoFatturazione.findUnique({
-    where: { companyId },
-    select: { storageKey: true },
-  });
+  const [mandato, company] = await Promise.all([
+    prisma.mandatoFatturazione.findUnique({
+      where: { companyId },
+      select: { storageKey: true, firmatoAt: true },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { ragioneSociale: true },
+    }),
+  ]);
   if (!mandato) {
     return new NextResponse('Not found', { status: 404 });
   }
+
+  // Nome file "parlante": <RagioneSociale>_mandato_firmato_<YYYY-MM-DD>.pdf
+  const data = mandato.firmatoAt ? mandato.firmatoAt.toISOString().slice(0, 10) : 'na';
+  const filename = `${slug(company?.ragioneSociale ?? companyId)}_mandato_firmato_${data}.pdf`;
 
   const buffer = await storageGetBuffer(mandato.storageKey);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="mandato-${companyId}.pdf"`,
+      // "attachment" → download diretto col nome parlante (il link admin è "Scarica PDF").
+      'Content-Disposition': `attachment; filename="${filename}"`,
       'Cache-Control': 'private, no-store',
     },
   });

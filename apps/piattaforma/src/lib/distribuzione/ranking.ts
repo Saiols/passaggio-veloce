@@ -18,7 +18,6 @@ export type AgenziaRanked = {
   ratingAvg: number | null;
   ratingCount: number;
   ranked: boolean; // count ≥ MIN_RATINGS_FOR_RANK
-  sospesa: boolean; // ranked && avg < MIN_AVG_TO_STAY_ACTIVE
   /** A3: rifiuti consecutivi recenti (anti-abuso). Più alto = più penalità. */
   recentRejects: number;
 };
@@ -33,7 +32,8 @@ type Candidate = {
 
 /**
  * Attacca rating aggregato a una lista di candidate agenzie e marca lo stato
- * (ranked / sospesa). Non mutua l'input.
+ * (ranked). Non mutua l'input. Il rating basso NON esclude dalla distribuzione:
+ * è solo un'evidenza per l'admin (vedi LOW_RATING_THRESHOLD).
  */
 export async function attachRating(
   tx: Prisma.TransactionClient,
@@ -89,13 +89,11 @@ export async function attachRating(
     const ratingAvg = entry?.avg ?? null;
     const ratingCount = entry?.count ?? 0;
     const ranked = ratingCount >= RANKING.MIN_RATINGS_FOR_RANK;
-    const sospesa = ranked && (ratingAvg ?? 0) < RANKING.MIN_AVG_TO_STAY_ACTIVE;
     return {
       ...c,
       ratingAvg,
       ratingCount,
       ranked,
-      sospesa,
       recentRejects: rejectsById.get(c.id) ?? 0,
     };
   });

@@ -10,7 +10,6 @@ export type AgenziaRankedLike = {
   ratingAvg: number | null;
   ratingCount: number;
   ranked: boolean;
-  sospesa: boolean;
   recentRejects: number;
 };
 
@@ -28,14 +27,14 @@ export function effectiveScore(a: {
 }
 
 /**
- * Filtra e ordina candidate per la distribuzione:
- *   1. Esclude le sospese (ranked + avg < soglia)
- *   2. Ordina: rankate (effectiveScore desc) prima, non rankate dopo
- *      (tie-break createdAt asc). effectiveScore = ratingAvg − decay rifiuti.
+ * Ordina le candidate per la distribuzione: rankate (effectiveScore desc) prima,
+ * non rankate dopo (tie-break createdAt asc). effectiveScore = ratingAvg − decay
+ * rifiuti. NB: il rating basso NON esclude più dalla distribuzione (resta solo
+ * un'evidenza per l'admin); un rating scarso fa comunque scivolare in coda.
  */
 export function rankCandidates<T extends AgenziaRankedLike>(agenzie: T[]): T[] {
-  const eligible = agenzie.filter((a) => !a.sospesa);
-  eligible.sort((a, b) => {
+  const sorted = [...agenzie];
+  sorted.sort((a, b) => {
     if (a.ranked && b.ranked) {
       return effectiveScore(b) - effectiveScore(a);
     }
@@ -46,5 +45,5 @@ export function rankCandidates<T extends AgenziaRankedLike>(agenzie: T[]): T[] {
       a.createdAt.getTime() - b.createdAt.getTime()
     );
   });
-  return eligible;
+  return sorted;
 }

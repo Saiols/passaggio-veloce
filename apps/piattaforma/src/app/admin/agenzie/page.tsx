@@ -44,26 +44,28 @@ export default async function AdminAgenziePage({
   type Row = typeof agenzie[number] & {
     ratingAvg: number | null;
     ratingCount: number;
-    stato: 'attiva-rankata' | 'attiva-nonrank' | 'sospesa';
+    stato: 'attiva-rankata' | 'attiva-nonrank' | 'rating-basso';
   };
   const rows: Row[] = agenzie.map((a) => {
     const r = byId.get(a.id);
     const ratingAvg = r?.avg ?? null;
     const ratingCount = r?.count ?? 0;
     const ranked = ratingCount >= RANKING.MIN_RATINGS_FOR_RANK;
-    const sospesa = ranked && (ratingAvg ?? 0) < RANKING.MIN_AVG_TO_STAY_ACTIVE;
+    // Rating basso = solo segnalazione visiva per l'admin (nessuna sospensione).
+    const ratingBasso = ranked && (ratingAvg ?? 0) < RANKING.LOW_RATING_THRESHOLD;
     return {
       ...a,
       ratingAvg,
       ratingCount,
-      stato: sospesa ? 'sospesa' : ranked ? 'attiva-rankata' : 'attiva-nonrank',
+      stato: ratingBasso ? 'rating-basso' : ranked ? 'attiva-rankata' : 'attiva-nonrank',
     };
   });
 
-  // Ordine: sospese prima (rosso in cima), poi rankate desc, poi non rankate
+  // Ordine: rating basso in cima (così l'admin le nota subito e può contattarle),
+  // poi rankate desc, poi non rankate.
   rows.sort((a, b) => {
-    if (a.stato === 'sospesa' && b.stato !== 'sospesa') return -1;
-    if (b.stato === 'sospesa' && a.stato !== 'sospesa') return 1;
+    if (a.stato === 'rating-basso' && b.stato !== 'rating-basso') return -1;
+    if (b.stato === 'rating-basso' && a.stato !== 'rating-basso') return 1;
     if (a.stato === 'attiva-rankata' && b.stato === 'attiva-rankata') {
       return (b.ratingAvg ?? 0) - (a.ratingAvg ?? 0);
     }
@@ -72,7 +74,7 @@ export default async function AdminAgenziePage({
     return a.ragioneSociale.localeCompare(b.ragioneSociale);
   });
 
-  const sospese = rows.filter((r) => r.stato === 'sospesa');
+  const ratingBasse = rows.filter((r) => r.stato === 'rating-basso');
   const rankate = rows.filter((r) => r.stato === 'attiva-rankata');
 
   return (
@@ -87,8 +89,8 @@ export default async function AdminAgenziePage({
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
             Ranking calcolato su minimo {RANKING.MIN_RATINGS_FOR_RANK} valutazioni.
-            Soglia sospensione automatica: rating medio sotto{' '}
-            {RANKING.MIN_AVG_TO_STAY_ACTIVE}.
+            Rating medio sotto {RANKING.LOW_RATING_THRESHOLD} = agenzia evidenziata
+            (qualità da attenzionare). Nessuna sospensione automatica.
           </p>
         </header>
 
@@ -97,18 +99,19 @@ export default async function AdminAgenziePage({
           <StatCard label="Rankate" value={rankate.length} accent="green" />
           <StatCard
             label="Non rankate"
-            value={rows.length - rankate.length - sospese.length}
+            value={rows.length - rankate.length - ratingBasse.length}
             hint="< 5 valutazioni"
             accent="slate"
           />
-          <StatCard label="Sospese" value={sospese.length} accent="red" />
+          <StatCard label="Rating basso" value={ratingBasse.length} accent="red" />
         </div>
 
-        {sospese.length > 0 && (
+        {ratingBasse.length > 0 && (
           <div className="mb-5">
-            <Alert variant="warning" title={`${sospese.length} agenzie sospese`}>
-              Sono escluse automaticamente dalla distribuzione finché l&apos;admin non
-              interviene manualmente.
+            <Alert variant="warning" title={`${ratingBasse.length} agenzie con rating basso`}>
+              Rating medio sotto {RANKING.LOW_RATING_THRESHOLD}: nessun effetto
+              automatico (restano nella distribuzione), ma conviene contattarle per
+              capire e migliorare il servizio — o valutare una sospensione manuale.
             </Alert>
           </div>
         )}
@@ -133,8 +136,17 @@ export default async function AdminAgenziePage({
             </thead>
             <tbody className="divide-y divide-pv-slate-200">
               {rows.map((r) => (
-                <tr key={r.id} className="transition-colors hover:bg-pv-slate-50">
-                  <td className="px-5 py-3 font-semibold text-pv-navy-800">
+                <tr
+                  key={r.id}
+                  className={`transition-colors hover:bg-pv-slate-50 ${
+                    r.stato === 'rating-basso' ? 'bg-pv-red-50/40' : ''
+                  }`}
+                >
+                  <td
+                    className={`px-5 py-3 font-semibold text-pv-navy-800 ${
+                      r.stato === 'rating-basso' ? 'border-l-4 border-pv-red-500' : ''
+                    }`}
+                  >
                     <Link
                       href={`/admin/companies/${r.id}`}
                       className="hover:underline"
@@ -188,7 +200,7 @@ export default async function AdminAgenziePage({
 function StatoChip({
   stato,
 }: {
-  stato: 'attiva-rankata' | 'attiva-nonrank' | 'sospesa';
+  stato: 'attiva-rankata' | 'attiva-nonrank' | 'rating-basso';
 }) {
   const map: Record<typeof stato, { label: string; cls: string }> = {
     'attiva-rankata': { label: 'Attiva · rankata', cls: 'bg-pv-green-50 text-pv-green-500' },
@@ -196,7 +208,7 @@ function StatoChip({
       label: 'Attiva · non rankata',
       cls: 'bg-pv-slate-100 text-pv-slate-700',
     },
-    sospesa: { label: 'Sospesa', cls: 'bg-pv-red-50 text-pv-red-500' },
+    'rating-basso': { label: '⚠ Rating basso', cls: 'bg-pv-red-50 text-pv-red-500' },
   };
   const s = map[stato];
   return (

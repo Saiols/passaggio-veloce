@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { CompanyEditForm } from '@/components/company-edit-form';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { RANKING } from '@/lib/distribuzione';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
 import { updateCompanyAdminAction } from '../actions';
 import { SuspendButton } from '../../suspend-button';
@@ -46,6 +47,19 @@ export default async function AdminCompanyDetailPage({
 
   if (!company || company.deletedAt) notFound();
 
+  // Evidenza qualità (solo agenzie, rankate): rating medio basso → segnalazione
+  // visiva per l'admin (nessun effetto operativo, vedi LOW_RATING_THRESHOLD).
+  let ratingBasso = false;
+  if (company.type === 'AGENZIA') {
+    const r = await prisma.valutazione.aggregate({
+      where: { agenziaId: company.id },
+      _avg: { stelle: true },
+      _count: { _all: true },
+    });
+    const ranked = r._count._all >= RANKING.MIN_RATINGS_FOR_RANK;
+    ratingBasso = ranked && (r._avg.stelle ?? 0) < RANKING.LOW_RATING_THRESHOLD;
+  }
+
   const tipoLabel = company.type === 'DEALER' ? 'Broker' : 'Agenzia';
   const listaHref = company.type === 'DEALER' ? '/admin/broker' : '/admin/agenzie';
   const numPratiche =
@@ -76,6 +90,14 @@ export default async function AdminCompanyDetailPage({
               {company.suspendedAt && (
                 <span className="inline-flex items-center rounded-full bg-pv-red-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-pv-red-500">
                   Sospesa admin
+                </span>
+              )}
+              {ratingBasso && (
+                <span
+                  title="Rating medio sotto la soglia: agenzia da attenzionare (nessuna sospensione automatica)"
+                  className="inline-flex items-center rounded-full bg-pv-red-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-pv-red-500"
+                >
+                  ⚠ Rating basso
                 </span>
               )}
             </h1>

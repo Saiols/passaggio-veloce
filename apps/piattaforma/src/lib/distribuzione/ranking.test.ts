@@ -13,7 +13,6 @@ const baseAgenzia = (
   ratingAvg: 4.0,
   ratingCount: 10,
   ranked: true,
-  sospesa: false,
   recentRejects: 0,
   ...overrides,
 });
@@ -56,10 +55,11 @@ describe('rankCandidates', () => {
     expect(out.map((x) => x.id)).toEqual(['onesta', 'abusiva']);
   });
 
-  it('exclude sospese', () => {
-    const ok = baseAgenzia({ id: 'ok' });
-    const sospesa = baseAgenzia({ id: 'sosp', sospesa: true });
-    const out = rankCandidates([ok, sospesa]);
-    expect(out.map((x) => x.id)).toEqual(['ok']);
+  it('NON esclude le agenzie con rating basso (resta in distribuzione, ma in coda)', () => {
+    const ok = baseAgenzia({ id: 'ok', ratingAvg: 4.0 });
+    const ratingBasso = baseAgenzia({ id: 'basso', ratingAvg: 1.5 }); // < soglia 2.5
+    const out = rankCandidates([ratingBasso, ok]);
+    // Entrambe presenti (nessuna esclusione); la migliore prima.
+    expect(out.map((x) => x.id)).toEqual(['ok', 'basso']);
   });
 });

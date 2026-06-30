@@ -3,7 +3,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { cn, ToastProvider } from '@/components/ui';
 import { NavBadge } from '@/components/nav-badge';
-import { logoutAction } from '@/app/(auth)/actions';
+import { LogoutButton } from '@/components/logout-button';
 import { DemoBanner } from '@/components/demo-banner';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
@@ -252,14 +252,9 @@ function UserMenu({ session }: { session: AppShellSession }) {
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-pv-navy-700 text-[12px] font-bold text-white ring-2 ring-white/20">
         {initials(name)}
       </div>
-      <form action={logoutAction}>
-        <button
-          type="submit"
-          className="rounded-[10px] border border-[1.5px] border-white/20 bg-white/5 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
-        >
-          Esci
-        </button>
-      </form>
+      <LogoutButton className="rounded-[10px] border border-[1.5px] border-white/20 bg-white/5 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]">
+        Esci
+      </LogoutButton>
     </div>
   );
 }

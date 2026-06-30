@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { cn } from '@/components/ui';
-import { logoutAction } from '@/app/(auth)/actions';
+import { LogoutButton } from '@/components/logout-button';
 import { IconClose, IconLogout, IconMenu, type AdminIconProps } from '@/components/admin/admin-icons';
 
 /**
@@ -218,16 +218,13 @@ export function SidebarShell({
               <p className="truncate text-[12.5px] font-semibold leading-tight text-white">{userName}</p>
               <p className="truncate text-[11px] text-[#8aa6cd]">{roleLabel}</p>
             </div>
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                aria-label="Esci"
-                title="Esci"
-                className="rounded-[9px] p-2 text-[#b8cdea] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
-              >
-                <IconLogout className="h-[18px] w-[18px]" />
-              </button>
-            </form>
+            <LogoutButton
+              ariaLabel="Esci"
+              title="Esci"
+              className="rounded-[9px] p-2 text-[#b8cdea] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+            >
+              <IconLogout className="h-[18px] w-[18px]" />
+            </LogoutButton>
           </div>
         </div>
       </aside>

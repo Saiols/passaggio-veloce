@@ -46,6 +46,7 @@ export default async function NuovaPraticaPage({
         atecoAllowed={atecoAllowed}
         sedi={sedi}
         defaultSedeId={defaultSedeId}
+        userId={session.user.id!}
       />
     </AppShell>
   );

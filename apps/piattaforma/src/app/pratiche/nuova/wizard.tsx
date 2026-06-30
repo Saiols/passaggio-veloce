@@ -380,6 +380,7 @@ export function WizardNuovaPratica({
   atecoAllowed,
   sedi,
   defaultSedeId,
+  userId,
 }: {
   error?: string;
   /** Allowlist ATECO DEALER (admin /admin/ateco): gate operatore auto minivoltura. */
@@ -388,11 +389,19 @@ export function WizardNuovaPratica({
   sedi: SedeRef[];
   /** Sede pre-selezionata (sede operativa corrente, o la prima accessibile). */
   defaultSedeId?: string;
+  /** Utente loggato: la bozza è scoping PER-UTENTE (vedi draftKey). */
+  userId: string;
 }) {
   const [step, setStep] = useState(1);
   // Multi-sede: sede broker da cui parte la pratica (selettore in step 4).
   const multiSede = sedi.length > 1;
   const [brokerSedeId, setBrokerSedeId] = useState(defaultSedeId ?? '');
+
+  // Chiave bozza PER-UTENTE: la chiave fissa condivisa (DRAFT_KEY) faceva
+  // trapelare la bozza (targhe, venditori, acquirente, brokerSedeId) tra utenti
+  // diversi sullo STESSO browser → invii con una sede non accessibile e perdita
+  // di isolamento multi-tenant. Con lo userId nella chiave ogni utente ha la sua.
+  const draftKey = `${DRAFT_KEY}:${userId}`;
 
   // Al cambio step riporta la pagina in cima: gli step sono lunghi (upload +
   // OCR + verifiche) e l'utente deve ripartire dall'inizio della sezione.
@@ -535,8 +544,12 @@ export function WizardNuovaPratica({
   useLayoutEffect(() => {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
+    // Cleanup una-tantum della VECCHIA bozza a chiave condivisa (pre-fix): poteva
+    // contenere dati di un altro utente loggato in precedenza sullo stesso
+    // browser. Ora si legge solo la chiave per-utente, quindi la rimuoviamo.
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
     try {
-      const d = parseDraft(localStorage.getItem(DRAFT_KEY), Date.now()) as
+      const d = parseDraft(localStorage.getItem(draftKey), Date.now()) as
         | Partial<WizardDraftState>
         | null;
       if (d) {
@@ -558,7 +571,14 @@ export function WizardNuovaPratica({
           setAcquirenteResidenzaDiversa(d.acquirenteResidenzaDiversa);
         if (typeof d.acquirenteIndirizzoResidenza === 'string')
           setAcquirenteIndirizzoResidenza(d.acquirenteIndirizzoResidenza);
-        if (typeof d.brokerSedeId === 'string' && d.brokerSedeId) setBrokerSedeId(d.brokerSedeId);
+        // Difesa in profondità: ripristina la sede SOLO se è ancora tra quelle
+        // accessibili (una sede stale/non accessibile farebbe fallire l'invio).
+        if (
+          typeof d.brokerSedeId === 'string' &&
+          d.brokerSedeId &&
+          sedi.some((s) => s.id === d.brokerSedeId)
+        )
+          setBrokerSedeId(d.brokerSedeId);
         if (typeof d.comune === 'string') setComune(d.comune);
         if (typeof d.provincia === 'string') setProvincia(d.provincia);
         if (d.documenti) setDocumenti(d.documenti);
@@ -567,6 +587,8 @@ export function WizardNuovaPratica({
       /* bozza illeggibile: si parte puliti */
     }
     setHydrated(true);
+    // Ripristino una-tantum (guardia hydratedRef): draftKey/sedi sono stabili.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Salvataggio debounced (solo dopo il ripristino, così non si sovrascrive la
@@ -594,13 +616,14 @@ export function WizardNuovaPratica({
             Object.entries(documenti).map(([k, s]) => [k, slotForStorage(s)]),
           ),
         };
-        localStorage.setItem(DRAFT_KEY, serializeDraft(draft, Date.now()));
+        localStorage.setItem(draftKey, serializeDraft(draft, Date.now()));
       } catch {
         /* quota o serializzazione: la bozza è best-effort */
       }
     }, 400);
     return () => clearTimeout(t);
   }, [
+    draftKey,
     hydrated,
     step,
     tipo,
@@ -622,7 +645,7 @@ export function WizardNuovaPratica({
   // Svuota la bozza salvata (al submit riuscito e dal bottone "Ricomincia").
   const clearDraft = () => {
     try {
-      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(draftKey);
     } catch {
       /* ignore */
     }

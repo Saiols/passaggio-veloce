@@ -101,6 +101,31 @@ describe('N40 cliente avanzamento', () => {
     expect(html).toContain('20094 Corsico (MI)');
   });
 
+  it('COMPLETATA con agenzia: mostra la SEDE della firma (nome + indirizzo), senza "dove recarti"/documenti originali', () => {
+    const { text, html } = tplN40ClienteAvanzamento({
+      codicePratica: 'PV-2026-011',
+      veicoloDescrizione: 'AB123CD',
+      nomeDestinatario: 'Mario Rossi',
+      ruolo: 'VENDITORE',
+      stato: 'COMPLETATA',
+      agenziaNome: 'Agenzia Corsico',
+      agenziaIndirizzo: 'Via Roma 1',
+      agenziaCap: '20094',
+      agenziaCitta: 'Corsico',
+      agenziaProvincia: 'MI',
+    });
+    expect(text).toContain('Agenzia Corsico');
+    expect(text).toContain('Via Roma 1');
+    expect(text).toContain('20094 Corsico (MI)');
+    expect(html).toContain('Sede della firma');
+    expect(html).toContain('Agenzia Corsico');
+    expect(html).toContain('20094 Corsico (MI)');
+    // L'email finale NON usa il linguaggio "dove recarti"/documenti originali.
+    const hay = `${text}\n${html}`.toLowerCase();
+    expect(hay).not.toContain('dove recarti');
+    expect(hay).not.toContain('documenti originali');
+  });
+
   it('non mostra l\'indirizzo agenzia quando non c\'è agenzia (es. AVVIATA)', () => {
     const { text, html } = tplN40ClienteAvanzamento({
       codicePratica: 'PV-2026-010', veicoloDescrizione: 'AB123CD',

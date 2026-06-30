@@ -514,9 +514,13 @@ export function tplN40ClienteAvanzamento(p: N40ClienteAvanzamentoPayload): Notif
 
   const m = M[p.stato];
 
-  // Indirizzo agenzia: mostrato quando la pratica è presa in carico o pronta per
-  // la firma, per indicare al cliente dove recarsi di persona con gli originali.
-  const mostraAgenzia = p.stato === 'PRESA_IN_CARICO' || p.stato === 'PRONTA_FIRMA';
+  // Indirizzo agenzia/sede:
+  //  - PRESA_IN_CARICO / PRONTA_FIRMA → DOVE RECARSI (con gli originali);
+  //  - COMPLETATA → la SEDE PRESSO CUI si è firmato (deve restare visibile
+  //    nell'email finale di passaggio completato).
+  const isCompletata = p.stato === 'COMPLETATA';
+  const mostraAgenzia =
+    p.stato === 'PRESA_IN_CARICO' || p.stato === 'PRONTA_FIRMA' || isCompletata;
   const cittaRiga = [
     p.agenziaCap,
     p.agenziaCitta,
@@ -528,17 +532,21 @@ export function tplN40ClienteAvanzamento(p: N40ClienteAvanzamentoPayload): Notif
   const indirizzoCompleto = [p.agenziaIndirizzo, cittaRiga].filter(Boolean).join(', ');
 
   const agenziaText = hasIndirizzo
-    ? `\nRecati in agenzia con i documenti originali` +
-      `${p.agenziaNome ? ` presso ${p.agenziaNome}` : ''}, all'indirizzo: ${indirizzoCompleto}.`
+    ? isCompletata
+      ? `\nSede della firma${p.agenziaNome ? `: ${p.agenziaNome}` : ''} — ${indirizzoCompleto}.`
+      : `\nRecati in agenzia con i documenti originali` +
+        `${p.agenziaNome ? ` presso ${p.agenziaNome}` : ''}, all'indirizzo: ${indirizzoCompleto}.`
     : '';
   const agenziaHtml = hasIndirizzo
     ? `
-    <div style="margin-top:12px;background:#fff7ed;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
-      <strong>Dove recarti</strong><br>
+    <div style="margin-top:12px;background:${isCompletata ? '#f0f9ff' : '#fff7ed'};border:1px solid ${isCompletata ? '#0ea5e933' : '#f59e0b33'};border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
+      <strong>${isCompletata ? 'Sede della firma' : 'Dove recarti'}</strong><br>
       ${p.agenziaNome ? `${escapeHtml(p.agenziaNome)}<br>` : ''}
       ${p.agenziaIndirizzo ? `${escapeHtml(p.agenziaIndirizzo)}<br>` : ''}
       ${cittaRiga ? `${escapeHtml(cittaRiga)}<br>` : ''}
-      Porta con te i <strong>documenti originali</strong>.
+      ${isCompletata
+        ? 'Sede presso cui è avvenuta la firma del passaggio.'
+        : 'Porta con te i <strong>documenti originali</strong>.'}
     </div>`
     : '';
 

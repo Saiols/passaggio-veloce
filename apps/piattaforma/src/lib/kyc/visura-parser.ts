@@ -62,6 +62,51 @@ export function parseVisuraText(text: string): VisuraData {
  * carica "Titolare Firmatario"); il suo CF coincide con quello dell'impresa.
  */
 function parseAmministratore(text: string): VisuraData['amministratore'] {
+  // Strategia A — àncore SEMANTICHE sull'intero testo (robuste al riordino unpdf).
+  // unpdf estrae il testo in ordine di oggetti PDF, NON visivo: su un layout a due
+  // colonne carica, nome e CF dell'amministratore finiscono scollegati e il CF può
+  // perfino precedere la sezione "Amministratori" (cfr. fixture reale Planet Auto).
+  // Quindi NON ci si affida all'adiacenza visiva ma a due segnali stabili:
+  //  - CF amministratore = il codice fiscale che segue una clausola di NASCITA
+  //    ("Nato/Nata a … Codice fiscale: CF"): solo le persone fisiche "nascono",
+  //    così si scarta il CF di eventuali società socie.
+  //  - Nome = il "COGNOME NOME" (InfoCamere) che precede "Rappresentante dell'impresa".
+  let nome: string | undefined;
+  let cognome: string | undefined;
+  let codiceFiscale: string | undefined;
+
+  const cfBorn = new RegExp(
+    `Nat[oa]\\s+a\\b[\\s\\S]{0,80}?Codice fiscale:?\\s*(${CF_INNER})`,
+    'i',
+  ).exec(text);
+  if (cfBorn) codiceFiscale = cfBorn[1]!.toUpperCase();
+
+  const nameRep =
+    /([A-ZÀ-Ù'’]{2,}(?:\s+[A-ZÀ-Ù'’]{2,}){1,3}?)\s+Rappresentante\s+dell['’\s]*[Ii]mpresa/.exec(text);
+  if (nameRep) {
+    const tokens = nameRep[1]!.trim().split(/\s+/);
+    cognome = tokens[0]; // InfoCamere: COGNOME NOME
+    nome = tokens.slice(1).join(' ') || undefined;
+  }
+
+  // Strategia B — fallback a FINESTRA: per i layout dove carica/nome/CF restano
+  // adiacenti (es. impresa individuale "Titolare Firmatario", o CF non preceduto
+  // da "Nato a"). Riempie solo i campi che la strategia A non ha trovato.
+  if (!nome || !cognome || !codiceFiscale) {
+    const w = parseAmministratoreWindowed(text);
+    nome ??= w?.nome;
+    cognome ??= w?.cognome;
+    codiceFiscale ??= w?.codiceFiscale;
+  }
+
+  if (!nome && !cognome && !codiceFiscale) return undefined;
+  return { nome, cognome, codiceFiscale };
+}
+
+/** Fallback storico: si ancora alla sezione amministratori/titolari e cerca, in una
+ * finestra di 1500 char, "carica NOME … (Rappresentante|Nato|Codice fiscale)" + il
+ * primo "Codice fiscale: CF". Affidabile quando il testo conserva l'ordine visivo. */
+function parseAmministratoreWindowed(text: string): VisuraData['amministratore'] {
   const startIdx = (() => {
     // Ordine: prima le sezioni "amministratori" (società di capitale/persone),
     // poi il "Titolare Firmatario" delle imprese individuali. Si ancora alla

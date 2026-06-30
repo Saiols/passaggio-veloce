@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { parseVisuraText } from './visura-parser';
 
@@ -127,5 +129,34 @@ describe('parseVisuraText (amministratrice donna: carica al femminile)', () => {
       expect(r.amministratore?.nome).toBe(nome);
       expect(r.amministratore?.codiceFiscale).toBe(cf);
     }
+  });
+});
+
+// REGRESSIONE su CORPUS REALE: testo esatto prodotto da unpdf sulla visura reale
+// "PLANET AUTO S.R.L." (amministratrice donna SOLIANI LUIGIA). A differenza dei
+// fixture sintetici sopra — dove carica/nome/CF sono adiacenti — qui i token sono
+// nell'ordine REALE di unpdf (layout a due colonne): la carica è staccata dal nome
+// e il CF dell'amministratrice PRECEDE la sezione "Amministratori". Era il caso che
+// mandava in errore la registrazione in produzione ("Non siamo riusciti a leggere
+// completamente l'amministratore nella visura"). Il file è il dump verbatim di unpdf.
+const REAL_PLANET_AUTO = readFileSync(
+  fileURLToPath(new URL('./__fixtures__/visura-planet-auto.unpdf.txt', import.meta.url)),
+  'utf8',
+);
+
+describe('parseVisuraText (corpus reale unpdf: PLANET AUTO, ordine token non visivo)', () => {
+  it('estrae l\'amministratrice (nome+cognome+CF) nonostante token scollegati', () => {
+    const r = parseVisuraText(REAL_PLANET_AUTO);
+    expect(r.amministratore?.cognome).toBe('SOLIANI');
+    expect(r.amministratore?.nome).toBe('LUIGIA');
+    expect(r.amministratore?.codiceFiscale).toBe('SLNLGU57L44L020L');
+  });
+
+  it('estrae anche P.IVA, data emissione e ATECO (gate "leggibile" superato)', () => {
+    const r = parseVisuraText(REAL_PLANET_AUTO);
+    expect(r.partitaIva).toBe('13880060960');
+    expect(r.dataEmissione).toBe('2026-05-30');
+    expect(r.atecoCodes).toContain('46.71.10');
+    expect(r.denominazione).toContain('PLANET AUTO');
   });
 });

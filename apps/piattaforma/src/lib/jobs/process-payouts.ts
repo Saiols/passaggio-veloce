@@ -73,6 +73,16 @@ export async function processPayouts(): Promise<ProcessPayoutsResult> {
 
     if (result.ok) {
       await prisma.$transaction(async (tx) => {
+        // Aggancia i compensi maturati (pratiche + affiliazione) al payout:
+        // alimenta il documento broker conto terzi (createDocBroker).
+        await tx.transazioneWallet.updateMany({
+          where: {
+            walletId: payout.walletId,
+            payoutId: null,
+            tipo: { in: ['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE'] },
+          },
+          data: { payoutId: payout.id },
+        });
         const wallet = await tx.wallet.update({
           where: { id: payout.walletId },
           data: { saldoCent: { decrement: payout.importoCent } },

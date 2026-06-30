@@ -61,29 +61,34 @@ export default async function WalletPage({
     );
   }
 
-  const [wallet, sedeRow, company] = await Promise.all([
-    prisma.wallet.findUnique({
-      where: { sedeId: sede.id },
-      include: {
-        transazioni: {
-          orderBy: { createdAt: 'desc' },
-          take: 20,
-          include: {
-            pratica: {
-              select: {
-                id: true,
-                codicePratica: true,
-                veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
-              },
-            },
-          },
-        },
-        payouts: {
-          orderBy: { richiestoAt: 'desc' },
-          take: 10,
+  const txInclude = {
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    include: {
+      pratica: {
+        select: {
+          id: true,
+          codicePratica: true,
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
         },
       },
+    },
+  } as const;
+  const payoutsInclude = { orderBy: { richiestoAt: 'desc' }, take: 10 } as const;
+
+  const [wallet, walletMadre, sedeRow, company] = await Promise.all([
+    // Wallet di sede: compensi maturati dalle pratiche.
+    prisma.wallet.findUnique({
+      where: { sedeId: sede.id },
+      include: { transazioni: txInclude, payouts: payoutsInclude },
     }),
+    // Wallet madre: commissioni di affiliazione (vivono sull'azienda madre).
+    session.user.companyId
+      ? prisma.wallet.findUnique({
+          where: { companyId: session.user.companyId },
+          include: { transazioni: txInclude, payouts: payoutsInclude },
+        })
+      : null,
     prisma.sede.findUnique({
       where: { id: sede.id },
       select: { payoutThresholdCent: true },
@@ -91,14 +96,21 @@ export default async function WalletPage({
     session.user.companyId
       ? prisma.company.findUnique({
           where: { id: session.user.companyId },
-          select: { ragioneSociale: true },
+          select: { ragioneSociale: true, payoutThresholdCent: true },
         })
       : null,
   ]);
 
-  const saldoCent = wallet?.saldoCent ?? 0;
+  const saldoSedeCent = wallet?.saldoCent ?? 0;
+  const saldoAffiliazioneCent = walletMadre?.saldoCent ?? 0;
+  // Saldo totale incassabile = compensi pratiche (sede) + affiliazione (madre).
+  const saldoCent = saldoSedeCent + saldoAffiliazioneCent;
+  const hasAffiliazione = walletMadre != null;
+
   const thresholdAutoCent =
-    sedeRow?.payoutThresholdCent ?? WALLET.AUTO_PAYOUT_DEFAULT_CENT;
+    sedeRow?.payoutThresholdCent ??
+    company?.payoutThresholdCent ??
+    WALLET.AUTO_PAYOUT_DEFAULT_CENT;
 
   const statusPayout =
     saldoCent >= thresholdAutoCent
@@ -110,7 +122,27 @@ export default async function WalletPage({
   // Sistema Penali Broker — SP-C: il wallet può andare in negativo se sono
   // state addebitate penali superiori al saldo. In tal caso mostriamo banner
   // dedicato che invita a reintegrare per sbloccare i payout.
-  const saldoNegativo = saldoCent < 0;
+  const saldoNegativo = saldoSedeCent < 0 || saldoAffiliazioneCent < 0;
+
+  // Payout possibile se ALMENO uno dei due wallet supera la soglia minima
+  // (l'azione li incassa entrambi se eleggibili).
+  const canPayout =
+    saldoSedeCent >= WALLET.MIN_PAYOUT_CENT ||
+    saldoAffiliazioneCent >= WALLET.MIN_PAYOUT_CENT;
+
+  // Movimenti e payout uniti dai due wallet, ordinati per data.
+  const movimenti = [
+    ...(wallet?.transazioni ?? []),
+    ...(walletMadre?.transazioni ?? []),
+  ]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, 20);
+  const payouts = [
+    ...(wallet?.payouts ?? []),
+    ...(walletMadre?.payouts ?? []),
+  ]
+    .sort((a, b) => b.richiestoAt.getTime() - a.richiestoAt.getTime())
+    .slice(0, 10);
 
   // Rendimento periodo (item 03 release 2026-05). Default 30d.
   const rendimentoPeriod: RendimentoPeriod = PERIOD_OPTIONS.some(
@@ -118,10 +150,11 @@ export default async function WalletPage({
   )
     ? (sp.rendimento as RendimentoPeriod)
     : '30d';
-  const rendimento = await getRendimento(wallet?.id ?? null, rendimentoPeriod, [
-    'CREDITO_PRATICA',
-    'CREDITO_AFFILIAZIONE',
-  ]);
+  const rendimento = await getRendimento(
+    [wallet?.id, walletMadre?.id].filter((x): x is string => !!x),
+    rendimentoPeriod,
+    ['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE'],
+  );
   const isAdminAzienda = session.user.role === 'ADMIN_AZIENDA';
 
   return (
@@ -135,8 +168,9 @@ export default async function WalletPage({
             Wallet
           </h1>
           <p className="mt-1 text-[14px] text-pv-slate-500">
-            Accrediti maturati dalle pratiche firmate. Payout automatico al raggiungimento di{' '}
-            {formatCurrencyCent(thresholdAutoCent)}.
+            Compensi maturati dalle pratiche firmate
+            {hasAffiliazione ? ' e dalle commissioni di affiliazione' : ''}. Payout
+            automatico al raggiungimento di {formatCurrencyCent(thresholdAutoCent)}.
           </p>
         </header>
 
@@ -155,6 +189,11 @@ export default async function WalletPage({
           <StatCard
             label="Saldo disponibile"
             value={formatCurrencyCent(saldoCent)}
+            hint={
+              hasAffiliazione
+                ? `Pratiche ${formatCurrencyCent(saldoSedeCent)} · Affiliazione ${formatCurrencyCent(saldoAffiliazioneCent)}`
+                : undefined
+            }
             accent="navy"
           />
           <StatCard
@@ -212,12 +251,15 @@ export default async function WalletPage({
         <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
           <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
           <p className="mt-1 text-sm text-pv-slate-500">
-            Richiesta manuale da {formatCurrencyCent(WALLET.MIN_PAYOUT_CENT)} ·
-            Soglia automatica {formatCurrencyCent(thresholdAutoCent)}
+            Erogazione immediata alla richiesta (saldo minimo{' '}
+            {formatCurrencyCent(WALLET.MIN_PAYOUT_CENT)}).
+            {hasAffiliazione
+              ? ' Incassa insieme i compensi pratiche e le commissioni di affiliazione.'
+              : ''}
           </p>
           <div className="mt-4">
             <PayoutButton
-              disabled={saldoCent < WALLET.MIN_PAYOUT_CENT}
+              disabled={!canPayout}
               isTitolare={isOwner(session.user.role as string)}
               ragioneSociale={company?.ragioneSociale ?? ''}
             />
@@ -227,9 +269,9 @@ export default async function WalletPage({
               ⚠️ Saldo negativo: reintegra prima di poter richiedere payout.
             </p>
           )}
-          {!saldoNegativo && saldoCent >= thresholdAutoCent && (
+          {!saldoNegativo && canPayout && (
             <p className="mt-2 text-xs text-pv-slate-500">
-              🎯 Sei sopra la soglia automatica. In DEMO il payout si attiva via Demo Control.
+              🎯 Il payout viene erogato subito alla richiesta.
             </p>
           )}
           {isAdminAzienda && (
@@ -258,9 +300,9 @@ export default async function WalletPage({
 
         <Card className="mb-5">
           <h2 className="text-[15px] font-bold text-pv-navy-800">Movimenti</h2>
-          {wallet?.transazioni.length ? (
+          {movimenti.length ? (
             <ul className="mt-3 divide-y divide-pv-slate-200 text-[13px]">
-              {wallet.transazioni.map((t) => (
+              {movimenti.map((t) => (
                 <li key={t.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-pv-navy-800">
@@ -311,11 +353,11 @@ export default async function WalletPage({
           )}
         </Card>
 
-        {wallet?.payouts.length ? (
+        {payouts.length ? (
           <Card>
             <h2 className="text-[15px] font-bold text-pv-navy-800">Payout</h2>
             <ul className="mt-3 divide-y divide-pv-slate-200 text-[13px]">
-              {wallet.payouts.map((p) => (
+              {payouts.map((p) => (
                 <li key={p.id} className="flex items-center justify-between py-3">
                   <div>
                     <p className="font-semibold text-pv-navy-800">
@@ -346,6 +388,7 @@ export default async function WalletPage({
 function labelTipoTx(t: string): string {
   if (t === 'CREDITO_PRATICA') return 'Credito pratica firmata';
   if (t === 'CREDITO_AFFILIAZIONE') return 'Commissione affiliazione';
+  if (t === 'CREDITO_PROMO') return 'Bonus promozionale';
   if (t === 'PAYOUT_AUTOMATICO') return 'Payout automatico';
   if (t === 'PAYOUT_MANUALE') return 'Payout manuale';
   if (t === 'RETTIFICA_ADMIN') return 'Rettifica admin';

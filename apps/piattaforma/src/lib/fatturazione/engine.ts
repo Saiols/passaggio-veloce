@@ -54,9 +54,10 @@ export async function createFatturaPv(input: {
 }
 
 /**
- * DOC_BROKER (conto terzi) aggregato al payout: importo = somma dei CREDITO_PRATICA
- * del payout, tipo per regime del broker. Emittente = broker (madre), destinatario
- * = PV (snapshot). Numerato sul registro del broker. Idempotente per payout.
+ * DOC_BROKER (conto terzi) aggregato al payout: importo = somma dei compensi
+ * maturati agganciati al payout (CREDITO_PRATICA + CREDITO_AFFILIAZIONE), tipo
+ * per regime del broker. Emittente = broker/agenzia (madre), destinatario = PV
+ * (snapshot). Numerato sul registro dell'emittente. Idempotente per payout.
  */
 export async function createDocBroker(input: { payoutId: string }): Promise<void> {
   const anno = new Date().getFullYear();
@@ -78,7 +79,7 @@ export async function createDocBroker(input: { payoutId: string }): Promise<void
     if (!broker) return;
 
     const lordo = payout.transazioni
-      .filter((t) => t.tipo === 'CREDITO_PRATICA')
+      .filter((t) => t.tipo === 'CREDITO_PRATICA' || t.tipo === 'CREDITO_AFFILIAZIONE')
       .reduce((s, t) => s + t.importoCent, 0);
     if (lordo <= 0) return;
 

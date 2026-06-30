@@ -6,9 +6,16 @@ import { auth } from '@/auth';
 import { getOperatingSede } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { WALLET, validatePayoutThresholdCent } from '@/lib/wallet/config';
+import { eseguiPayoutImmediato } from '@/lib/wallet/payout-exec';
 
 export type PayoutResult = { ok: true } | { ok: false; error: string } | { ok: false; requireMandato: true };
 
+/**
+ * Richiesta payout ISTANTANEA: il payout viene eseguito subito (saldo azzerato,
+ * documento broker generato, payout ESEGUITO), senza passare dall'approvazione
+ * admin né dal job. Copre entrambi i wallet incassabili: la sede operativa
+ * (compensi pratiche) e la madre (commissioni affiliazione).
+ */
 export async function richiediPayoutAction(): Promise<PayoutResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -19,37 +26,54 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
   ) {
     return { ok: false, error: 'Payout disponibile solo per broker e agenzie' };
   }
-  // Multi-sede: payout dal wallet della sede operativa.
-  const sede = await getOperatingSede();
-  if (!sede) return { ok: false, error: 'Seleziona una sede per richiedere il payout' };
+  if (!session.user.companyId) return { ok: false, error: 'Azienda non associata' };
 
-  const wallet = await prisma.wallet.findUnique({ where: { sedeId: sede.id } });
-  if (!wallet) return { ok: false, error: 'Wallet non trovato' };
-  if (wallet.saldoCent < WALLET.MIN_PAYOUT_CENT) {
-    return { ok: false, error: 'Saldo sotto la soglia minima di 500€' };
+  // Wallet incassabili: sede operativa (pratiche) + madre (affiliazione).
+  const sede = await getOperatingSede();
+  const [walletSede, walletMadre] = await Promise.all([
+    sede
+      ? prisma.wallet.findUnique({
+          where: { sedeId: sede.id },
+          select: { id: true, saldoCent: true },
+        })
+      : null,
+    prisma.wallet.findUnique({
+      where: { companyId: session.user.companyId },
+      select: { id: true, saldoCent: true },
+    }),
+  ]);
+
+  const wallets = [walletSede, walletMadre].filter(
+    (w): w is { id: string; saldoCent: number } => w != null,
+  );
+  if (wallets.length === 0) return { ok: false, error: 'Wallet non trovato' };
+
+  const eleggibili = wallets.filter((w) => w.saldoCent >= WALLET.MIN_PAYOUT_CENT);
+  if (eleggibili.length === 0) {
+    return {
+      ok: false,
+      error: `Saldo sotto la soglia minima di ${WALLET.MIN_PAYOUT_CENT / 100}€`,
+    };
   }
 
-  const inflight = await prisma.payout.findFirst({
-    where: { walletId: wallet.id, stato: { in: ['RICHIESTO', 'IN_LAVORAZIONE'] } },
-  });
-  if (inflight) return { ok: false, error: 'Payout già in corso, attendi' };
-
   // Gate mandato fatturazione: alla PRIMA richiesta payout serve il contratto firmato.
-  if (!session.user.companyId) return { ok: false, error: 'Azienda non associata' };
   const mandato = await prisma.mandatoFatturazione.findUnique({
     where: { companyId: session.user.companyId },
     select: { id: true },
   });
   if (!mandato) return { ok: false, requireMandato: true };
 
-  await prisma.payout.create({
-    data: {
-      walletId: wallet.id,
-      importoCent: wallet.saldoCent,
-      stato: 'RICHIESTO',
-      automatico: false,
-    },
-  });
+  let eseguiti = 0;
+  let ultimoErrore: string | null = null;
+  for (const w of eleggibili) {
+    const res = await eseguiPayoutImmediato(w.id, { automatico: false });
+    if (res.ok) eseguiti++;
+    else ultimoErrore = res.error;
+  }
+
+  if (eseguiti === 0) {
+    return { ok: false, error: ultimoErrore ?? 'Payout non riuscito' };
+  }
 
   revalidatePath('/wallet');
   return { ok: true };

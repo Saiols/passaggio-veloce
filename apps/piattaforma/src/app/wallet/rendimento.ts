@@ -50,24 +50,27 @@ const MONTH_LABELS = [
 ];
 
 /**
- * Ritorna i bucket di rendimento per il wallet della company indicata,
- * filtrati su un set di tipi di transazione (es. solo crediti pratica
- * + crediti affiliazione, escludendo payout). Aggrega per giorno
- * (7d/30d) o per mese (12m/ytd).
+ * Ritorna i bucket di rendimento per uno o più wallet (es. sede operativa +
+ * madre affiliazione), filtrati su un set di tipi di transazione (es. solo
+ * crediti pratica + crediti affiliazione, escludendo payout). Aggrega per
+ * giorno (7d/30d) o per mese (12m/ytd).
  */
 export async function getRendimento(
-  walletId: string | null,
+  walletId: string | string[] | null,
   period: RendimentoPeriod,
   types?: readonly string[],
 ): Promise<RendimentoData> {
-  if (!walletId) {
+  const walletIds = (Array.isArray(walletId) ? walletId : [walletId]).filter(
+    (id): id is string => !!id,
+  );
+  if (walletIds.length === 0) {
     return { period, buckets: [], totalCent: 0, count: 0 };
   }
 
   const since = startDateForPeriod(period);
   const txs = await prisma.transazioneWallet.findMany({
     where: {
-      walletId,
+      walletId: { in: walletIds },
       createdAt: { gte: since },
       ...(types && types.length > 0 ? { tipo: { in: types as never } } : {}),
     },

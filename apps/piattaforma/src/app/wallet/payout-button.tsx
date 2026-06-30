@@ -26,7 +26,7 @@ export function PayoutButton({
     startTransition(async () => {
       const res = await richiediPayoutAction();
       if (res.ok) {
-        setSuccess("Richiesta inviata. L'admin la processerà a breve.");
+        setSuccess('Payout eseguito. Il bonifico verrà accreditato a breve.');
         return;
       }
       if ('requireMandato' in res) {
@@ -46,7 +46,7 @@ export function PayoutButton({
         disabled={disabled || pending}
         className="rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
       >
-        {pending ? 'Invio…' : 'Richiedi payout'}
+        {pending ? 'Eseguo…' : 'Richiedi payout'}
       </button>
       {error && <p className="text-xs text-pv-red-500">{error}</p>}
       {success && <p className="text-xs text-pv-green-500">{success}</p>}

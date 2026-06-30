@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useTransition, type FormEvent } from 'react';
+import { useState, useMemo, useTransition, useEffect, useLayoutEffect, useRef, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,6 +20,11 @@ import { registerAction, checkPromoCodeAction, verifyRegistrationDocumentsAction
 import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
+import {
+  REGISTER_DRAFT_KEY,
+  parseRegisterDraft,
+  serializeRegisterDraft,
+} from './register-draft';
 
 type AccountData = z.infer<typeof registerStep1AccountSchema>;
 type CompanyData = z.infer<typeof registerStep2CompanySchema>;
@@ -64,6 +69,16 @@ type WizardData = {
   sedi?: SedeInput[];
 };
 
+/** Forma dello stato persistito in bozza (sessionStorage). I File non sono
+ * serializzabili: di `documents` si salvano solo le BlobRef (dentro `data`). */
+type PersistedRegisterDraft = {
+  step: number;
+  data: WizardData;
+  kycToken: string | null;
+  docsVerified: boolean;
+  pendingPromoCode: string;
+};
+
 const STEPS = [
   { id: 1, label: 'Account', title: 'Crea il tuo account', hint: 'Inserisci i dati del titolare o del responsabile dell\'account. Questi dati identificano la persona fisica che gestisce il profilo sulla piattaforma.' },
   { id: 2, label: 'Azienda', title: 'Dati azienda', hint: 'Ragione sociale, partita IVA, sede legale e contatti.' },
@@ -103,6 +118,70 @@ export function RegisterWizard({
   const [pendingPromoCode, setPendingPromoCode] = useState('');
   const [isPending, startTransition] = useTransition();
   const [isVerifyingDocs, startVerifyDocs] = useTransition();
+
+  // Oggetti File dei documenti KYC, tenuti nel genitore così — tornando INDIETRO
+  // allo step Documenti — le miniature ricompaiono (i File non sopravvivono allo
+  // smontaggio dello step, le BlobRef in `data.documents` sì). Non serializzabili
+  // → non persistiti: dopo un refresh la card mostra "Caricato" senza miniatura.
+  const [docFiles, setDocFiles] = useState<Partial<Record<SlotKey, File | null>>>({});
+
+  // --- Persistenza bozza (sessionStorage): sopravvive al refresh accidentale, si
+  // azzera chiudendo la scheda. Include la password dello step Account → mai in
+  // localStorage. Forma versionata/scaduta gestita nel modulo register-draft.
+  const hydratedRef = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Ripristino PRIMA del paint (niente flash dello stato vuoto). Una bozza
+  // corrotta/di versione vecchia viene semplicemente ignorata dal parser.
+  useLayoutEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    try {
+      const d = parseRegisterDraft(sessionStorage.getItem(REGISTER_DRAFT_KEY), Date.now()) as
+        | Partial<PersistedRegisterDraft>
+        | null;
+      if (d) {
+        if (d.data) {
+          setData(
+            forcedCompanyType
+              ? { ...d.data, company: { ...(d.data.company ?? {}), type: forcedCompanyType } as CompanyData }
+              : d.data,
+          );
+        }
+        if (typeof d.step === 'number') setStep(d.step);
+        if (typeof d.kycToken === 'string') setKycToken(d.kycToken);
+        if (typeof d.docsVerified === 'boolean') setDocsVerified(d.docsVerified);
+        if (typeof d.pendingPromoCode === 'string') setPendingPromoCode(d.pendingPromoCode);
+      }
+    } catch {
+      /* bozza illeggibile: si parte puliti */
+    }
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Salvataggio debounced (solo dopo il ripristino, così non si sovrascrive con
+  // lo stato iniziale vuoto). I File non si salvano: solo le BlobRef in `data`.
+  useEffect(() => {
+    if (!hydrated) return;
+    const t = setTimeout(() => {
+      try {
+        const draft: PersistedRegisterDraft = { step, data, kycToken, docsVerified, pendingPromoCode };
+        sessionStorage.setItem(REGISTER_DRAFT_KEY, serializeRegisterDraft(draft, Date.now()));
+      } catch {
+        /* quota o serializzazione: la bozza è best-effort */
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [hydrated, step, data, kycToken, docsVerified, pendingPromoCode]);
+
+  const clearRegisterDraft = () => {
+    try {
+      sessionStorage.removeItem(REGISTER_DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleAccount = (values: AccountData) => {
     setData((d) => ({ ...d, account: values }));
@@ -220,6 +299,7 @@ export function RegisterWizard({
       const result = await registerAction(fd);
 
       if (result.ok) {
+        clearRegisterDraft();
         setToken(result.emailVerificationToken);
         setPromoOutcome(result.promo ?? null);
       } else if (result.kycFailures && result.kycFailures.length > 0) {
@@ -296,6 +376,8 @@ export function RegisterWizard({
           {step === 3 && (
             <DocumentsStep
               defaultValues={data.documents}
+              defaultFiles={docFiles}
+              onFileChange={(k, f) => setDocFiles((m) => ({ ...m, [k]: f }))}
               kycErrors={kycErrors}
               onDocsChanged={invalidateDocsVerification}
               onBack={() => setStep(2)}
@@ -591,6 +673,8 @@ const SLOT_TIPO: Record<
 
 function DocumentsStep({
   defaultValues,
+  defaultFiles,
+  onFileChange,
   kycErrors,
   onDocsChanged,
   onBack,
@@ -598,28 +682,35 @@ function DocumentsStep({
   isVerifying,
 }: {
   defaultValues?: DocumentsData;
+  /** File già selezionati, tenuti dal genitore: ripristinano la miniatura quando
+   * si torna indietro a questo step (le BlobRef non bastano per l'anteprima). */
+  defaultFiles?: Partial<Record<SlotKey, File | null>>;
+  /** Notifica al genitore il File scelto/rimosso, così la miniatura sopravvive
+   * allo smontaggio dello step (Indietro/Avanti). */
+  onFileChange?: (key: SlotKey, file: File | null) => void;
   kycErrors: KycFailureUi[];
   onDocsChanged: () => void;
   onBack: () => void;
   onNext: (data: DocumentsData) => void;
   isVerifying: boolean;
 }) {
-  // defaultValues ora contiene BlobRef (file già caricati in un passaggio
-  // precedente del wizard): ripristiniamo lo stato "done" senza il File (non
-  // più disponibile dopo un Back/Avanti, ma non serve: abbiamo già la ref).
-  const fromRef = (ref?: BlobRef): DocSlotState =>
-    ref ? { file: null, ref, status: 'done', progress: 100 } : EMPTY_SLOT;
+  // defaultValues contiene le BlobRef (file già caricati in un passaggio
+  // precedente del wizard): ripristiniamo lo stato "done". Il File, se ancora in
+  // memoria (defaultFiles dal genitore), riabilita la miniatura; dopo un refresh
+  // non c'è più ma la ref basta per mostrare "Caricato".
+  const fromRef = (key: SlotKey, ref?: BlobRef): DocSlotState =>
+    ref ? { file: defaultFiles?.[key] ?? null, ref, status: 'done', progress: 100 } : EMPTY_SLOT;
 
-  const [ciFronte, setCiFronte] = useState<DocSlotState>(fromRef(defaultValues?.ciFronte));
-  const [ciRetro, setCiRetro] = useState<DocSlotState>(fromRef(defaultValues?.ciRetro));
+  const [ciFronte, setCiFronte] = useState<DocSlotState>(fromRef('ciFronte', defaultValues?.ciFronte));
+  const [ciRetro, setCiRetro] = useState<DocSlotState>(fromRef('ciRetro', defaultValues?.ciRetro));
   const [codiceFiscale, setCodiceFiscale] = useState<DocSlotState>(
-    fromRef(defaultValues?.codiceFiscale),
+    fromRef('codiceFiscale', defaultValues?.codiceFiscale),
   );
   const [codiceFiscaleRetro, setCodiceFiscaleRetro] = useState<DocSlotState>(
-    fromRef(defaultValues?.codiceFiscaleRetro),
+    fromRef('codiceFiscaleRetro', defaultValues?.codiceFiscaleRetro),
   );
   const [visuraCamerale, setVisuraCamerale] = useState<DocSlotState>(
-    fromRef(defaultValues?.visuraCamerale),
+    fromRef('visuraCamerale', defaultValues?.visuraCamerale),
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -679,6 +770,7 @@ function DocumentsStep({
   // ottenuta è ciò che verrà inviato alle Server Action (niente File nel body).
   const onDocChange = (key: SlotKey) => async (f: File | null) => {
     onDocsChanged();
+    onFileChange?.(key, f); // bubble al genitore: la miniatura sopravvive al Back
     setError(null);
     const setSlot = setters[key];
     if (!f) {
@@ -706,10 +798,11 @@ function DocumentsStep({
   // (CI → carta d'identità fronte/retro, CF → tessera, VISURA → visura).
   const failedDocs = new Set(kycErrors.map((f) => f.doc).filter(Boolean));
 
-  // Etichetta di stato upload mostrata sotto ogni card.
+  // Etichetta di stato upload mostrata sotto ogni card. NB: lo stato "done" NON si
+  // ripete qui — il badge "✓ Caricato" è già dentro la DocCard (era ridondante).
+  // Restano solo i transitori: avanzamento upload ed errore.
   const uploadHint = (s: DocSlotState) => {
     if (s.status === 'uploading') return <p className="mt-1 text-[12px] text-pv-slate-500">Caricamento… {Math.round(s.progress)}%</p>;
-    if (s.status === 'done') return <p className="mt-1 text-[12px] font-semibold text-pv-green-500">✓ Caricato</p>;
     if (s.status === 'error') return <p className="mt-1 text-[12px] font-semibold text-pv-red-500">{s.errorMsg}</p>;
     return null;
   };
@@ -736,6 +829,9 @@ function DocumentsStep({
           <DocCard
             label="Carta d'identità — Fronte"
             file={ciFronte.file}
+            uploaded={ciFronte.status === 'done'}
+            uploadedName={ciFronte.ref?.name}
+            uploadedIsPdf={ciFronte.ref?.type === 'application/pdf'}
             onChange={onDocChange('ciFronte')}
             invalid={failedDocs.has('CI') || ciFronte.status === 'error'}
           />
@@ -745,6 +841,9 @@ function DocumentsStep({
           <DocCard
             label="Carta d'identità — Retro"
             file={ciRetro.file}
+            uploaded={ciRetro.status === 'done'}
+            uploadedName={ciRetro.ref?.name}
+            uploadedIsPdf={ciRetro.ref?.type === 'application/pdf'}
             onChange={onDocChange('ciRetro')}
             invalid={failedDocs.has('CI') || ciRetro.status === 'error'}
           />
@@ -754,6 +853,9 @@ function DocumentsStep({
           <DocCard
             label="Codice Fiscale / Tessera Sanitaria"
             file={codiceFiscale.file}
+            uploaded={codiceFiscale.status === 'done'}
+            uploadedName={codiceFiscale.ref?.name}
+            uploadedIsPdf={codiceFiscale.ref?.type === 'application/pdf'}
             onChange={onDocChange('codiceFiscale')}
             invalid={failedDocs.has('CF') || codiceFiscale.status === 'error'}
           />
@@ -763,6 +865,9 @@ function DocumentsStep({
           <DocCard
             label="Codice Fiscale / Tessera Sanitaria — Retro"
             file={codiceFiscaleRetro.file}
+            uploaded={codiceFiscaleRetro.status === 'done'}
+            uploadedName={codiceFiscaleRetro.ref?.name}
+            uploadedIsPdf={codiceFiscaleRetro.ref?.type === 'application/pdf'}
             onChange={onDocChange('codiceFiscaleRetro')}
             invalid={failedDocs.has('CF') || codiceFiscaleRetro.status === 'error'}
           />
@@ -772,6 +877,9 @@ function DocumentsStep({
           <DocCard
             label="Visura Camerale"
             file={visuraCamerale.file}
+            uploaded={visuraCamerale.status === 'done'}
+            uploadedName={visuraCamerale.ref?.name}
+            uploadedIsPdf={visuraCamerale.ref?.type === 'application/pdf'}
             pdfOnly
             subtitle="La visura camerale deve essere in formato PDF. Scaricala dal Registro Imprese e caricala qui."
             onChange={onDocChange('visuraCamerale')}

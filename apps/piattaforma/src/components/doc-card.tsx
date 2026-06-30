@@ -13,6 +13,9 @@ export function DocCard({
   invalid = false,
   pdfOnly = false,
   subtitle,
+  uploaded = false,
+  uploadedName,
+  uploadedIsPdf = false,
 }: {
   label: string;
   file: File | null;
@@ -23,6 +26,17 @@ export function DocCard({
   pdfOnly?: boolean;
   /** Testo guida sotto il titolo della card. */
   subtitle?: string;
+  /**
+   * Documento GIÀ caricato di cui non abbiamo più l'oggetto `File` (es. dopo un
+   * "Indietro"/refresh nel wizard: sopravvive solo la BlobRef). Fa mostrare alla
+   * card lo stato "Caricato" — niente più "Da caricare" fuorviante — anche senza
+   * miniatura. Quando `file` è presente ha precedenza e mostra l'anteprima reale.
+   */
+  uploaded?: boolean;
+  /** Nome file da mostrare quando `uploaded` ma `file` è assente. */
+  uploadedName?: string;
+  /** Se il documento già caricato è un PDF (placeholder "PDF" invece di "DOC"). */
+  uploadedIsPdf?: boolean;
 }) {
   const [localErr, setLocalErr] = useState<string | null>(null);
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
@@ -59,21 +73,25 @@ export function DocCard({
     };
   }, [previewUrl]);
 
-  const isPdf = file?.type === 'application/pdf';
+  // Lo stato "caricato" è guidato dal File (appena selezionato) OPPURE dal flag
+  // `uploaded` (file già su Blob ma File non più in memoria dopo Indietro/refresh).
+  const isUploaded = !!file || uploaded;
+  const isPdf = file ? file.type === 'application/pdf' : uploadedIsPdf;
+  const displayName = file?.name ?? uploadedName;
 
   return (
     <div
       className={`rounded-xl border p-4 transition ${
         invalid
           ? 'border-pv-red-500 bg-pv-red-50'
-          : file
+          : isUploaded
             ? 'border-pv-green-500/40 bg-pv-green-50'
             : 'border-pv-slate-200 bg-white'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[13px] font-semibold text-pv-navy-900">{label}</span>
-        {file ? (
+        {isUploaded ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-pv-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-pv-green-500">
             ✓ Caricato
           </span>
@@ -98,14 +116,16 @@ export function DocCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          {file ? (
+          {isUploaded ? (
             <>
-              <p className="truncate text-[12px] text-pv-slate-700" title={file.name}>
-                {file.name}
+              <p className="truncate text-[12px] text-pv-slate-700" title={displayName}>
+                {displayName ?? 'Documento caricato'}
               </p>
-              <p className="text-[11px] text-pv-slate-500">
-                {(file.size / 1024 / 1024).toFixed(2)} MB
-              </p>
+              {file && (
+                <p className="text-[11px] text-pv-slate-500">
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              )}
             </>
           ) : (
             <p className="text-[12px] text-pv-slate-500">
@@ -120,9 +140,9 @@ export function DocCard({
               htmlFor={inputId}
               className="cursor-pointer text-[12px] font-semibold text-pv-navy-600 hover:underline"
             >
-              {file ? 'Sostituisci' : 'Carica file'}
+              {isUploaded ? 'Sostituisci' : 'Carica file'}
             </label>
-            {file && (
+            {isUploaded && (
               <button
                 type="button"
                 onClick={() => onChange(null)}

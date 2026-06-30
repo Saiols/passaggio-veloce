@@ -34,4 +34,15 @@ describe('buildMandatoFatturazionePdf', () => {
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
+
+  it('ANTEPRIMA: senza firmatoAt produce comunque un PDF valido (nessuna firma fabbricata)', async () => {
+    const bytes = await buildMandatoFatturazionePdf({
+      mandante, mandanteRappresentante: 'Mario Rossi',
+      mandatario, mandatarioRappresentante: 'Andrea Saino',
+      foro: 'Milano', // niente firmatoAt / otpAudit → variante anteprima
+    });
+    expect(bytes).toBeInstanceOf(Uint8Array);
+    expect(bytes.length).toBeGreaterThan(1500);
+    expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe('%PDF-');
+  });
 });

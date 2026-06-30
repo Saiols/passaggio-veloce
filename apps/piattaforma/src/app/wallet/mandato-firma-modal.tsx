@@ -58,6 +58,17 @@ export function MandatoFirmaModal({
           alla tua email.
         </p>
 
+        {/* Presa visione: il documento (compilato coi dati della tua azienda) è
+            consultabile e scaricabile in PDF prima della firma. */}
+        <a
+          href="/api/mandato/pdf"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-pv-navy-200 bg-pv-navy-50 px-3 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-navy-100"
+        >
+          📄 Visualizza il mandato (PDF) — leggilo prima di firmare
+        </a>
+
         {!isTitolare ? (
           <p className="mt-4 rounded-lg bg-pv-red-50 p-3 text-[13px] text-pv-red-500">
             La firma del mandato spetta al titolare/amministratore dell&apos;azienda.

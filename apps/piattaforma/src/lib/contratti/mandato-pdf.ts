@@ -10,8 +10,9 @@ export type MandatoPdfInput = {
   mandatario: DatiFiscali;
   mandatarioRappresentante: string;
   foro: string;
-  firmatoAt: Date;
-  otpAudit: { ip: string | null };
+  /** Data firma. ASSENTE = ANTEPRIMA (documento non ancora sottoscritto). */
+  firmatoAt?: Date;
+  otpAudit?: { ip: string | null };
 };
 
 const PAGE_W = 595.28; // A4
@@ -92,21 +93,36 @@ export async function buildMandatoFatturazionePdf(input: MandatoPdfInput): Promi
 
   // Sottoscrizione
   gap(6);
-  draw(`Luogo e data: ${input.mandatario.citta}, ${formatData(input.firmatoAt)}`, helv, 10);
-  gap(4);
-  draw(
-    `Firma del Mandante: ${input.mandanteRappresentante || '—'} — firmato elettronicamente via codice OTP ` +
-      `il ${formatData(input.firmatoAt)}${input.otpAudit.ip ? ` (IP ${input.otpAudit.ip})` : ''}, codice verificato.`,
-    helv,
-    10,
-    NAVY,
-  );
-  gap(2);
-  draw(
-    `Firma del Mandatario: ${input.mandatarioRappresentante} per ${input.mandatario.ragioneSociale}.`,
-    helv,
-    10,
-  );
+  if (input.firmatoAt) {
+    draw(`Luogo e data: ${input.mandatario.citta}, ${formatData(input.firmatoAt)}`, helv, 10);
+    gap(4);
+    draw(
+      `Firma del Mandante: ${input.mandanteRappresentante || '—'} — firmato elettronicamente via codice OTP ` +
+        `il ${formatData(input.firmatoAt)}${input.otpAudit?.ip ? ` (IP ${input.otpAudit.ip})` : ''}, codice verificato.`,
+      helv,
+      10,
+      NAVY,
+    );
+    gap(2);
+    draw(
+      `Firma del Mandatario: ${input.mandatarioRappresentante} per ${input.mandatario.ragioneSociale}.`,
+      helv,
+      10,
+    );
+  } else {
+    // ANTEPRIMA: nessuna firma fabbricata; si descrive come avverrà la sottoscrizione.
+    draw(`Luogo: ${input.mandatario.citta}.`, helv, 10);
+    gap(4);
+    draw(
+      `ANTEPRIMA — documento non ancora sottoscritto. La firma del Mandante ` +
+        `(${input.mandanteRappresentante || '—'}) sarà apposta elettronicamente tramite codice OTP ` +
+        `inviato e verificato dalla piattaforma al momento della sottoscrizione. ` +
+        `Mandatario: ${input.mandatarioRappresentante} per ${input.mandatario.ragioneSociale}.`,
+      helv,
+      10,
+      NAVY,
+    );
+  }
 
   return await pdf.save();
 }

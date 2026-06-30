@@ -26,9 +26,21 @@ export async function redeemPromoCode(
   const res = evaluatePromoCode(promo, count);
   if (res.stato !== 'valido' || !promo) return { applied: false };
 
+  // Il bonus iscrizione è un credito OPERATIVO → va sul wallet di SEDE (come i
+  // crediti pratica: è quello letto da /wallet e dalla dashboard), NON sul wallet
+  // madre (companyId) che è riservato alle commissioni di affiliazione. Lo
+  // accreditiamo sulla sede principale dell'azienda = la prima creata (la sede
+  // "dai dati azienda" generata in registrazione). Single-sede → univoca.
+  const sede = await tx.sede.findFirst({
+    where: { companyId, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  if (!sede) return { applied: false };
+
   const wallet = await tx.wallet.upsert({
-    where: { companyId },
-    create: { companyId, saldoCent: 0 },
+    where: { sedeId: sede.id },
+    create: { sedeId: sede.id, saldoCent: 0 },
     update: {},
   });
   const nuovoSaldo = wallet.saldoCent + res.amountCent;

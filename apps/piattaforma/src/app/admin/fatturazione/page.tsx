@@ -9,6 +9,7 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
+import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,7 +112,12 @@ export default async function AdminFatturazionePage({
           cura del commercialista.
         </p>
 
-        <div className="mb-3 flex justify-end">
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
+          <DownloadDocumentiButton
+            href={`/api/fatturazione/zip${exportQs ? `?${exportQs}` : ''}`}
+            label="Scarica PDF (ZIP)"
+            className="rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
+          />
           <a
             href={`/api/admin/fatturazione/export${exportQs ? `?${exportQs}` : ''}`}
             className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"

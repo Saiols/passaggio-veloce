@@ -7,6 +7,7 @@ import { Card } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
+import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,13 +62,20 @@ export default async function FatturazionePage({
   return (
     <AppShell session={session} activePath="/fatturazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <header className="mb-6">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            {tipo === 'AGENZIA' ? 'Agenzia' : 'Broker'}
-          </p>
-          <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
-            Fatture
-          </h1>
+        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              {tipo === 'AGENZIA' ? 'Agenzia' : 'Broker'}
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              Fatture
+            </h1>
+          </div>
+          <DownloadDocumentiButton
+            href={`/api/fatturazione/zip${qTrim ? `?q=${encodeURIComponent(qTrim)}` : ''}`}
+            label="Scarica fatture (ZIP)"
+            className="shrink-0 rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
+          />
         </header>
 
         <SearchBar q={q} />

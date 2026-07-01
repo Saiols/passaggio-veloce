@@ -26,9 +26,16 @@ beforeEach(() => {
 });
 
 describe('bloccaAgenziaPerAddebito', () => {
-  it('prima transizione: setta bloccoPagamentoAt + invia N9', async () => {
+  it('prima transizione: setta bloccoPagamentoAt + invia N9 all’email admin', async () => {
     feeFindUnique.mockResolvedValue({ agenziaId: 'a1' });
-    companyFindUnique.mockResolvedValue({ id: 'a1', ragioneSociale: 'Ag', email: 'ag@x.it', bloccoPagamentoAt: null, sepaMandateStatus: 'ACTIVE' });
+    companyFindUnique.mockResolvedValue({
+      id: 'a1',
+      ragioneSociale: 'Ag',
+      email: 'ag@x.it',
+      bloccoPagamentoAt: null,
+      sepaMandateStatus: 'ACTIVE',
+      users: [{ id: 'u1', email: 'admin@x.it' }],
+    });
     await bloccaAgenziaPerAddebito('f1', 'SEPA rifiutato');
     expect(companyUpdate).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'a1' },
@@ -37,6 +44,26 @@ describe('bloccaAgenziaPerAddebito', () => {
     expect(companyUpdate.mock.calls[0][0].data.bloccoPagamentoAt).toBeInstanceOf(Date);
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][0].tipo).toBe('N9_AGENZIA_ADDEBITO_FALLITO');
+    // Destinatario = email di registrazione dell'admin, non Company.email.
+    expect(sendMock.mock.calls[0][0].target).toEqual(
+      expect.objectContaining({ email: 'admin@x.it', userId: 'u1' }),
+    );
+  });
+
+  it('fallback a Company.email se l’azienda non ha admin attivo', async () => {
+    feeFindUnique.mockResolvedValue({ agenziaId: 'a1' });
+    companyFindUnique.mockResolvedValue({
+      id: 'a1',
+      ragioneSociale: 'Ag',
+      email: 'ag@x.it',
+      bloccoPagamentoAt: null,
+      sepaMandateStatus: 'ACTIVE',
+      users: [],
+    });
+    await bloccaAgenziaPerAddebito('f1', 'SEPA rifiutato');
+    expect(sendMock.mock.calls[0][0].target).toEqual(
+      expect.objectContaining({ email: 'ag@x.it', userId: null }),
+    );
   });
 
   it('già bloccata: aggiorna solo il motivo, niente email', async () => {

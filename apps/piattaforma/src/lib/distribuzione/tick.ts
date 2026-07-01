@@ -266,7 +266,19 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
   const assegnazioni = await prisma.praticaAssegnazione.findMany({
     where: { id: { in: assegnazioneIds } },
     include: {
-      agenzia: { select: { id: true, ragioneSociale: true, email: true } },
+      agenzia: {
+        select: {
+          id: true,
+          ragioneSociale: true,
+          email: true,
+          // Destinatario = email di registrazione dell'admin azienda.
+          users: {
+            where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+            select: { id: true, email: true },
+            take: 1,
+          },
+        },
+      },
       pratica: {
         select: {
           codicePratica: true,
@@ -283,9 +295,9 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
   const inputs = assegnazioni.map((a) => ({
     tipo: 'N6_AGENZIA_NUOVA_PRATICA' as const,
     target: {
-      email: a.agenzia.email,
+      email: a.agenzia.users[0]?.email ?? a.agenzia.email,
       companyId: a.agenzia.id,
-      userId: null,
+      userId: a.agenzia.users[0]?.id ?? null,
     },
     payload: {
       codicePratica: a.pratica.codicePratica ?? '—',

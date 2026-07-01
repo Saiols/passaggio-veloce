@@ -24,7 +24,19 @@ export async function bloccaAgenziaPerAddebito(feeId: string, motivo: string): P
     if (!fee) return;
     const agenzia = await prisma.company.findUnique({
       where: { id: fee.agenziaId },
-      select: { id: true, ragioneSociale: true, email: true, bloccoPagamentoAt: true, sepaMandateStatus: true },
+      select: {
+        id: true,
+        ragioneSociale: true,
+        email: true,
+        bloccoPagamentoAt: true,
+        sepaMandateStatus: true,
+        // Destinatario = email di registrazione dell'admin azienda.
+        users: {
+          where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+          select: { id: true, email: true },
+          take: 1,
+        },
+      },
     });
     if (!agenzia) return;
     // Skip: mandato non attivo → gap di setup, non rifiuto bancario.
@@ -38,9 +50,14 @@ export async function bloccaAgenziaPerAddebito(feeId: string, motivo: string): P
       },
     });
     if (!giaBloccata) {
+      const admin = agenzia.users[0];
       await sendNotification({
         tipo: 'N9_AGENZIA_ADDEBITO_FALLITO',
-        target: { email: agenzia.email, companyId: agenzia.id },
+        target: {
+          email: admin?.email ?? agenzia.email,
+          userId: admin?.id ?? null,
+          companyId: agenzia.id,
+        },
         payload: {
           nomeAgenzia: agenzia.ragioneSociale,
           rimedioUrl: `${env.NEXT_PUBLIC_APP_URL}/blocco-pagamento`,

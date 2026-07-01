@@ -390,7 +390,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           {
             tipo: 'N8_AGENZIA_ADDEBITO',
             target: {
-              email: full.agenziaAssegnata.email,
+              // Email di registrazione (utente admin), non il campo Company.email.
+              email: agenziaUser.email,
               userId: agenziaUser.id,
               companyId: full.agenziaAssegnata.id,
             },

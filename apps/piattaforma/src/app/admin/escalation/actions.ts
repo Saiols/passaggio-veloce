@@ -13,6 +13,7 @@ export type AssignResult = { ok: true } | { ok: false; error: string };
 
 type NotificaData = {
   agenziaEmail: string;
+  agenziaUserId: string | null;
   agenziaRagioneSociale: string;
   codicePratica: string | null;
   targa: string | null;
@@ -63,7 +64,17 @@ export async function assegnaEscalationAction(
             nome: true,
             email: true,
             companyId: true,
-            company: { select: { email: true } },
+            company: {
+              select: {
+                email: true,
+                // Destinatario = email di registrazione dell'admin azienda.
+                users: {
+                  where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+                  select: { id: true, email: true },
+                  take: 1,
+                },
+              },
+            },
           },
         });
         if (!sede || sede.type !== 'AGENZIA') {
@@ -100,7 +111,8 @@ export async function assegnaEscalationAction(
         return {
           agenziaCompanyId: sede.companyId,
           agenziaSedeId: sede.id,
-          agenziaEmail: sede.email ?? sede.company.email,
+          agenziaEmail: sede.company.users[0]?.email ?? sede.email ?? sede.company.email,
+          agenziaUserId: sede.company.users[0]?.id ?? null,
           agenziaRagioneSociale: sede.nome,
         codicePratica: pratica.codicePratica,
         targa:
@@ -121,6 +133,7 @@ export async function assegnaEscalationAction(
         tipo: 'N6_AGENZIA_NUOVA_PRATICA',
         target: {
           email: notificaData.agenziaEmail,
+          userId: notificaData.agenziaUserId,
           companyId: notificaData.agenziaCompanyId,
         },
         payload: {

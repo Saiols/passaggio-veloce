@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import { Suspense } from 'react';
 import './globals.css';
 import { CookieBanner } from '@/components/cookie-banner';
 import { SiteChatbot } from '@/components/site-chatbot';
 import { NumberInputWheelGuard } from '@/components/number-input-wheel-guard';
+import { GlobalNavOverlay } from '@/components/ui/global-nav-overlay';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { BRAND } from '@/lib/seo/brand';
 import { organizationJsonLd, websiteJsonLd } from '@/lib/seo/jsonLd';
@@ -113,6 +115,9 @@ export default function RootLayout({
         <SiteChatbot />
         <CookieBanner />
         <NumberInputWheelGuard />
+        <Suspense fallback={null}>
+          <GlobalNavOverlay />
+        </Suspense>
       </body>
     </html>
   );

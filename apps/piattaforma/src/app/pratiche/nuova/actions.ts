@@ -1357,21 +1357,30 @@ export async function submitNuovaPraticaAction(
   // con countdown per-agenzia basato sugli orari di apertura dichiarati.
   const round1 = await avviaRound1ForPratica(pratica.id);
 
-  // N1 — conferma invio al broker
+  // N1 — conferma invio al broker.
+  // Email/nome freschi dal DB, NON dalla sessione: il JWT porta l'email
+  // congelata al login, quindi se l'utente l'ha appena cambiata dal profilo la
+  // conferma finirebbe al vecchio recapito finché non ri-logga. Il DB è la
+  // fonte autoritativa del recapito corrente.
   if (round1.assegnazioni > 0) {
-    const me = session.user;
-    await sendNotification({
-      tipo: 'N1_BROKER_INVIO_PRATICA',
-      target: { email: me.email ?? '', userId: me.id ?? null, companyId: brokerId },
-      payload: {
-        codicePratica,
-        targa: veicoli[0]!.targa,
-        comune: d.comune,
-        provincia: d.provincia,
-        numeroAgenzie: round1.assegnazioni,
-        nomeBroker: me.name?.split(' ')[0] ?? 'utente',
-      },
-    }).catch(() => undefined);
+    const dest = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, nome: true },
+    });
+    if (dest?.email) {
+      await sendNotification({
+        tipo: 'N1_BROKER_INVIO_PRATICA',
+        target: { email: dest.email, userId, companyId: brokerId },
+        payload: {
+          codicePratica,
+          targa: veicoli[0]!.targa,
+          comune: d.comune,
+          provincia: d.provincia,
+          numeroAgenzie: round1.assegnazioni,
+          nomeBroker: dest.nome?.split(' ')[0] ?? 'utente',
+        },
+      }).catch(() => undefined);
+    }
   }
 
   // Email cliente: pratica avviata. Solo se è entrata in distribuzione

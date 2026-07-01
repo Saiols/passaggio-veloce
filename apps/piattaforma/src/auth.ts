@@ -14,7 +14,7 @@ const credentialsSchema = z.object({
   totp: z.string().optional(),
 });
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -92,7 +92,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = user.role;
@@ -100,6 +100,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.companyId = user.companyId;
         token.companyType = user.companyType;
         token.companyName = user.companyName;
+      }
+      // Refresh dei dati identità mutabili quando la sessione viene aggiornata
+      // via unstable_update (es. l'utente ha cambiato l'email di accesso dal
+      // profilo): senza questo il token — e quindi header/menu — resterebbe con
+      // email/nome del login fino al re-login. Il DB è la fonte autoritativa.
+      if (trigger === 'update' && token.id) {
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { email: true, nome: true, cognome: true, status: true },
+        });
+        if (fresh) {
+          token.email = fresh.email;
+          token.name = `${fresh.nome} ${fresh.cognome}`;
+          token.status = fresh.status;
+        }
       }
       return token;
     },

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
+import { auth, unstable_update } from '@/auth';
 import { prisma } from '@pv/db';
 
 export type UpdateOwnProfileResult =
@@ -62,6 +62,11 @@ export async function updateOwnProfileAction(
       codiceFiscale: codiceFiscale.trim() || null,
     },
   });
+
+  // Allinea subito la sessione (JWT) al nuovo recapito/nome, così header e menu
+  // si aggiornano senza dover ri-loggare. Best-effort: se fallisce i dati sono
+  // comunque salvati e si allineano al prossimo login.
+  await unstable_update({ user: { email: emailLower } }).catch(() => undefined);
 
   revalidatePath('/profilo');
   revalidatePath('/profilo/personale');

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { risolviRevisioneAction } from '@/lib/documenti/revisione';
 
 /**
@@ -83,6 +84,7 @@ export function ChiudiRevisioneForm({ praticaId }: { praticaId: string }) {
           {esito === 'RISOLTA' ? 'Chiudi come risolta' : 'Annulla pratica'}
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Attendere…" />
     </div>
   );
 }

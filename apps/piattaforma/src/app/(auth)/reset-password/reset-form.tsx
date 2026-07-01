@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { InlineSpinner, PasswordInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   requestPasswordResetAction,
   confirmPasswordResetAction,
@@ -69,6 +70,7 @@ export function ResetForm({ token }: { token: string | null }) {
           {pending && <InlineSpinner className="h-4 w-4" />}
           <span>{pending ? 'Salvataggio…' : 'Imposta password'}</span>
         </button>
+        <LoadingOverlay show={pending} label="Salvataggio…" />
       </form>
     );
   }
@@ -101,6 +103,7 @@ export function ResetForm({ token }: { token: string | null }) {
         {pending && <InlineSpinner className="h-4 w-4" />}
         <span>{pending ? 'Invio…' : 'Invia link'}</span>
       </button>
+      <LoadingOverlay show={pending} label="Invio…" />
     </form>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { ritentaAddebitoAction, aggiornaIbanERitentaAction } from './actions';
 
 export function BloccoPagamentoClient({
@@ -81,6 +82,7 @@ export function BloccoPagamentoClient({
       )}
 
       {error && <Alert variant="error" className="mt-4">{error}</Alert>}
+      <LoadingOverlay show={pending} label="Attendere…" />
     </div>
   );
 }

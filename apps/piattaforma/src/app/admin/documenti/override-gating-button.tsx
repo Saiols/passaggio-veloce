@@ -2,6 +2,7 @@
 
 import { useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { overrideGatingAction } from './actions';
 
 export function OverrideGatingButton({ documentoId }: { documentoId: string }) {
@@ -29,6 +30,7 @@ export function OverrideGatingButton({ documentoId }: { documentoId: string }) {
     >
       {pending && <InlineSpinner className="h-3 w-3" />}
       <span>{pending ? 'Forza…' : 'Forza PASSED'}</span>
+      <LoadingOverlay show={pending} label="Attendere…" />
     </button>
   );
 }

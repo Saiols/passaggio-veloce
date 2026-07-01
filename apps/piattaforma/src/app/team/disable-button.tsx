@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { disableTeamUserAction } from './actions';
 
 export function DisableTeamUserButton({
@@ -44,6 +45,7 @@ export function DisableTeamUserButton({
         <span>{pending ? 'Eliminazione…' : 'Elimina'}</span>
       </button>
       {error && <p className="text-[11px] text-pv-red-500">{error}</p>}
+      <LoadingOverlay show={pending} label="Eliminazione…" />
     </div>
   );
 }

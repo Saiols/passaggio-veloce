@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { InlineSpinner, PasswordInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { createAssistenteAction } from './actions';
 
 export function CreateAssistenteForm({
@@ -73,6 +74,7 @@ export function CreateAssistenteForm({
       </button>
       {error && <p className="text-sm text-pv-red-500 sm:col-span-2">{error}</p>}
       {success && <p className="text-sm text-pv-green-500 sm:col-span-2">{success}</p>}
+      <LoadingOverlay show={pending} label="Creazione…" />
     </form>
   );
 }

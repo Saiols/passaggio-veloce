@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   createChatbotAction,
   updateChatbotAction,
@@ -195,6 +196,7 @@ function BotCard({
           </Button>
         </div>
       )}
+      <LoadingOverlay show={pending} label="Aggiornamento…" />
     </div>
   );
 }
@@ -395,6 +397,7 @@ function ChatbotModal({
           </footer>
         </div>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </div>
   );
 }

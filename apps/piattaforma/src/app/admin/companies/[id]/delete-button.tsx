@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { deleteCompanyAction } from '../../suspension-actions';
 
 export function DeleteCompanyButton({
@@ -98,6 +99,7 @@ export function DeleteCompanyButton({
           Annulla
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Eliminazione…" />
     </div>
   );
 }

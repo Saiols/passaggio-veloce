@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   reactivateCompanyAction,
   reactivateUserAction,
@@ -185,6 +186,10 @@ export function SuspendButton({
           </div>
         </div>
       )}
+      <LoadingOverlay
+        show={pending}
+        label={dialog === 'reactivate' ? 'Riattivazione…' : 'Sospensione…'}
+      />
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { updateAssistenteAction } from '@/app/admin/assistenti/actions';
 
 export function AssistenteEditForm({
@@ -81,6 +82,7 @@ export function AssistenteEditForm({
           Salva modifiche
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>
   );
 }

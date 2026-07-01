@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Alert, Button, Field, Input, NumberInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { createPromoCodeAction, togglePromoCodeAction } from './actions';
 
@@ -109,6 +110,7 @@ export function PromoCodiClient({ rows }: { rows: Row[] }) {
           </tbody>
         </table>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </div>
   );
 }

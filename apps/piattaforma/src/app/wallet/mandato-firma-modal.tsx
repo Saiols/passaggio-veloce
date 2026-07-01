@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { inviaOtpMandatoAction, firmaMandatoAction } from './mandato-actions';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 
 export function MandatoFirmaModal({
   open,
@@ -136,6 +137,7 @@ export function MandatoFirmaModal({
           </button>
         </div>
       </div>
+      <LoadingOverlay show={pending} label="Attendere…" />
     </div>
   );
 }

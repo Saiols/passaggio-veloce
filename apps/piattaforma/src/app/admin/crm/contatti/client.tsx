@@ -4,6 +4,7 @@ import { useState, useTransition, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   createCrmContactAction,
   updateCrmContactAction,
@@ -485,22 +486,25 @@ function StatusSelect({
   };
 
   return (
-    <select
-      value={value}
-      disabled={disabled || pending}
-      onChange={(e) => onChange(e.target.value)}
-      title={STATI_LABEL[value] ?? value}
-      className={
-        'rounded-full px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wider disabled:opacity-60 ' +
-        (STATI_COLOR[value] ?? 'bg-pv-slate-100 text-pv-slate-700')
-      }
-    >
-      {Object.entries(STATI_LABEL).map(([k, l]) => (
-        <option key={k} value={k}>
-          {k} — {l}
-        </option>
-      ))}
-    </select>
+    <>
+      <select
+        value={value}
+        disabled={disabled || pending}
+        onChange={(e) => onChange(e.target.value)}
+        title={STATI_LABEL[value] ?? value}
+        className={
+          'rounded-full px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wider disabled:opacity-60 ' +
+          (STATI_COLOR[value] ?? 'bg-pv-slate-100 text-pv-slate-700')
+        }
+      >
+        {Object.entries(STATI_LABEL).map(([k, l]) => (
+          <option key={k} value={k}>
+            {k} — {l}
+          </option>
+        ))}
+      </select>
+      <LoadingOverlay show={pending} label="Aggiornamento…" />
+    </>
   );
 }
 
@@ -633,6 +637,7 @@ function CsvImportDialog({
           </>
         )}
       </div>
+      <LoadingOverlay show={pending} label="Importazione…" />
     </div>
   );
 }
@@ -828,6 +833,7 @@ function ContactModal({
           </div>
         </footer>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </div>
   );
 }

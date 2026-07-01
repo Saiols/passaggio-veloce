@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, NumberInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   createSalesAgentAction,
   updateSalesAgentAction,
@@ -349,6 +350,7 @@ function CampaignCard({
           )}
         </div>
       )}
+      <LoadingOverlay show={pending} label="Aggiornamento…" />
     </div>
   );
 }
@@ -504,6 +506,7 @@ function AgentModal({
           )
         }
       />
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </ModalShell>
   );
 }
@@ -697,6 +700,7 @@ function CampaignModal({
           )
         }
       />
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </ModalShell>
   );
 }

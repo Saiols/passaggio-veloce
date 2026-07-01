@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { assegnaEscalationAction } from './actions';
 
 type Agenzia = {
@@ -66,6 +67,7 @@ export function AssignForm({
         <span>{pending ? 'Assegnazione…' : 'Assegna'}</span>
       </button>
       {error && <p className="basis-full text-xs text-pv-red-500">{error}</p>}
+      <LoadingOverlay show={pending} label="Assegnazione…" />
     </div>
   );
 }

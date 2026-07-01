@@ -3,6 +3,7 @@
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   markPraticaProcessataAction,
   markFirmaAvvenutaAction,
@@ -57,15 +58,18 @@ export function QuickActionButton({
   };
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={pending}
-      aria-busy={pending || undefined}
-      className="animate-pulse-soft relative z-20 inline-flex items-center gap-1.5 rounded-full bg-pv-navy-600 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-pv-navy-700 disabled:opacity-50 disabled:animate-none"
-    >
-      {pending && <InlineSpinner className="h-3 w-3" />}
-      <span>{pending ? 'Invio…' : c.label}</span>
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={pending}
+        aria-busy={pending || undefined}
+        className="animate-pulse-soft relative z-20 inline-flex items-center gap-1.5 rounded-full bg-pv-navy-600 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white hover:bg-pv-navy-700 disabled:opacity-50 disabled:animate-none"
+      >
+        {pending && <InlineSpinner className="h-3 w-3" />}
+        <span>{pending ? 'Invio…' : c.label}</span>
+      </button>
+      <LoadingOverlay show={pending} label="Aggiornamento pratica…" />
+    </>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, Field, Input } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { createSedeAction } from './actions';
 
@@ -113,6 +114,7 @@ export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
           Aggiungi sede
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Creazione…" />
     </form>
   );
 }

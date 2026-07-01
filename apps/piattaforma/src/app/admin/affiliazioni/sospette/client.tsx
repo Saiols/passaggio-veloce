@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { formatCurrencyCent } from '@/lib/format';
 import {
   approveCommissioneAction,
@@ -241,6 +242,10 @@ function ReviewModal({
           </div>
         </div>
       </div>
+      <LoadingOverlay
+        show={pending}
+        label={mode === 'approve' ? 'Accredito…' : 'Rifiuto…'}
+      />
     </div>
   );
 }

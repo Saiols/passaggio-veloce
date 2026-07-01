@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { updateOwnProfileAction } from './actions';
 
 export function ProfiloPersonaleForm({
@@ -97,6 +98,7 @@ export function ProfiloPersonaleForm({
           Salva modifiche
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>
   );
 }

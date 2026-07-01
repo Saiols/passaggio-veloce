@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, PasswordInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   createCrmTeamUserAction,
   updateCrmTeamUserAction,
@@ -240,6 +241,7 @@ function CreateUserModal({
         onPrimary={submit}
         pending={pending}
       />
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </ModalShell>
   );
 }
@@ -423,6 +425,7 @@ function EditUserModal({
           </Button>
         }
       />
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </ModalShell>
   );
 }

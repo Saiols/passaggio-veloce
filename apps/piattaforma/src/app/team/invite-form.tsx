@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { createInvitationAction } from './actions';
 
 export function InviteForm({
@@ -80,6 +81,7 @@ export function InviteForm({
           <a href={demoLink} className="text-pv-navy-700 underline break-all">{demoLink}</a>
         </div>
       )}
+      <LoadingOverlay show={pending} label="Invito…" />
     </form>
   );
 }

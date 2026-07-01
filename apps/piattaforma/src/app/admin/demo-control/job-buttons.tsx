@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 
 const jobs = [
   { key: 'fee', label: '⚡ Processa addebiti SCHEDULED', endpoint: '/api/jobs/process-fee-scheduled' },
@@ -67,6 +68,7 @@ export function JobButtons() {
           );
         })}
       </div>
+      <LoadingOverlay show={pending} label="Esecuzione job…" />
     </div>
   );
 }

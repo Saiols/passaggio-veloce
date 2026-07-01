@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, useToast } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   segnalaPraticaAction,
   type SegnalazioneTipo,
@@ -137,6 +138,7 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
           </Button>
         </div>
       </div>
+      <LoadingOverlay show={pending} label="Invio segnalazione…" />
     </div>
   );
 }

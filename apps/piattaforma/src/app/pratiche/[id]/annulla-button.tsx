@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { annullaPraticaAction } from '../actions';
 
 /**
@@ -66,6 +67,7 @@ export function AnnullaPraticaButton({ praticaId }: { praticaId: string }) {
           </Button>
         </div>
       </div>
+      <LoadingOverlay show={pending} label="Annullamento…" />
     </div>
   );
 }

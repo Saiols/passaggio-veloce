@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   richiediRevisioneManualeAction,
   type MotivoRevisione,
@@ -144,6 +145,7 @@ export function RevisioneManualePopup({
           </>
         )}
       </div>
+      <LoadingOverlay show={pending} label="Invio…" />
     </div>
   );
 }

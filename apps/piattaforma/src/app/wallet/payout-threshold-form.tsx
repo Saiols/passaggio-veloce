@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { updatePayoutThresholdAction } from './actions';
 
 export function PayoutThresholdForm({
@@ -73,6 +74,7 @@ export function PayoutThresholdForm({
       {savedAt && !error && (
         <p className="basis-full text-[11px] text-pv-green-500">Salvato.</p>
       )}
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>
   );
 }

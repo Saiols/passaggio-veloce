@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   confermaAnnullamentoConPenaleAction,
   respingiSegnalazioneAction,
@@ -90,6 +91,7 @@ export function GestioneSegnalazione({ praticaId }: { praticaId: string }) {
             Conferma respingimento
           </Button>
         </div>
+        <LoadingOverlay show={pending} label="Respingimento…" />
       </div>
     );
   }
@@ -121,6 +123,7 @@ export function GestioneSegnalazione({ praticaId }: { praticaId: string }) {
           Conferma annullo + addebita penale
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Attendere…" />
     </div>
   );
 }

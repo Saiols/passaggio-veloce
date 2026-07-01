@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import type { AtecoAllowedCode, CompanyType } from '@pv/db';
 import { Alert, Button, Field, Input, Select } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { createAtecoAction, toggleAtecoAction } from './actions';
 
 export function AtecoClient({ codes }: { codes: AtecoAllowedCode[] }) {
@@ -92,6 +93,7 @@ export function AtecoClient({ codes }: { codes: AtecoAllowedCode[] }) {
           </tbody>
         </table>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </div>
   );
 }

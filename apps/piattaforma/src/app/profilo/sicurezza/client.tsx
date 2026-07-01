@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import QRCode from 'qrcode';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, PasswordInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
   start2faSetupAction,
   confirm2faSetupAction,
@@ -131,6 +132,7 @@ export function SicurezzaClient({
             Disattiva 2FA
           </Button>
         </div>
+        <LoadingOverlay show={pending} label="Disattivazione…" />
       </div>
     );
   }
@@ -199,6 +201,7 @@ export function SicurezzaClient({
             Conferma e attiva
           </Button>
         </div>
+        <LoadingOverlay show={pending} label="Attivazione…" />
       </div>
     );
   }
@@ -252,6 +255,7 @@ export function SicurezzaClient({
       <Button onClick={start} disabled={pending} loading={pending}>
         Attiva 2FA
       </Button>
+      <LoadingOverlay show={pending} label="Attendere…" />
     </div>
   );
 }

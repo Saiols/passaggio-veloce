@@ -2,6 +2,7 @@
 
 import { useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { revokeInvitationAction } from './actions';
 
 export function RevokeButton({ invitationId }: { invitationId: string }) {
@@ -16,6 +17,7 @@ export function RevokeButton({ invitationId }: { invitationId: string }) {
     >
       {pending && <InlineSpinner className="h-3.5 w-3.5" />}
       <span>{pending ? 'Revoca…' : 'Revoca'}</span>
+      <LoadingOverlay show={pending} label="Revoca…" />
     </button>
   );
 }

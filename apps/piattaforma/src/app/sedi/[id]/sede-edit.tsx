@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, Card, Field, Input } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { formatCurrencyCent } from '@/lib/format';
 import { updateSedeAction } from '../actions';
@@ -200,6 +201,7 @@ export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData 
           </Button>
         </div>
       </form>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </Card>
   );
 }

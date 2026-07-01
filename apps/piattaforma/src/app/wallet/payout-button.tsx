@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { richiediPayoutAction } from './actions';
 import { MandatoFirmaModal } from './mandato-firma-modal';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 
 export function PayoutButton({
   disabled,
@@ -57,6 +58,7 @@ export function PayoutButton({
         isTitolare={isTitolare}
         ragioneSociale={ragioneSociale}
       />
+      <LoadingOverlay show={pending} label="Elaborazione payout…" />
     </div>
   );
 }

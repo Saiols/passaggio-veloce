@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { updateTeamUserAction } from '@/app/team/actions';
 
 type RuoloSede = 'OPERATORE' | 'ADMIN_SEDE';
@@ -142,6 +143,7 @@ export function TeamEditForm({
           Salva modifiche
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>
   );
 }

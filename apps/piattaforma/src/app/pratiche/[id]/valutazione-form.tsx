@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button, Card, useToast } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { submitValutazioneAction } from '../actions';
 
 type Props = {
@@ -119,6 +120,7 @@ export function ValutazioneForm({ praticaId, agenziaNome }: Props) {
           Invia valutazione
         </Button>
       </div>
+      <LoadingOverlay show={isPending} label="Invio valutazione…" />
     </Card>
   );
 }

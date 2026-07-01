@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { Alert, Button } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { resetAssistentePasswordAction } from '@/app/admin/assistenti/actions';
 
 export function ResetAssistentePassword({ userId }: { userId: string }) {
@@ -74,6 +75,7 @@ export function ResetAssistentePassword({ userId }: { userId: string }) {
       >
         Genera nuova password
       </Button>
+      <LoadingOverlay show={pending} label="Generazione…" />
     </div>
   );
 }

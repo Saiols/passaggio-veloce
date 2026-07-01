@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { InlineSpinner, PasswordInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { acceptInvitationAction } from '@/app/team/actions';
 
 export function AcceptForm({ token }: { token: string }) {
@@ -39,6 +40,7 @@ export function AcceptForm({ token }: { token: string }) {
         {pending && <InlineSpinner className="h-4 w-4" />}
         <span>{pending ? 'Creazione…' : 'Crea il mio account'}</span>
       </button>
+      <LoadingOverlay show={pending} label="Creazione…" />
     </form>
   );
 }

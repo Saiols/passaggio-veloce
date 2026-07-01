@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Field, Input, NumberInput } from '@/components/ui';
+import { LoadingOverlay } from '@/components/ui/loading-overlay';
 
 export type CompanyEditDefaults = {
   ragioneSociale: string;
@@ -145,6 +146,7 @@ export function CompanyEditForm({
           Annulla
         </Button>
       </div>
+      <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>
   );
 }

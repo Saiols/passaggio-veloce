@@ -406,6 +406,28 @@ const venditoreSchema = z.object({
 
 export type VenditoreInputData = z.infer<typeof venditoreSchema>;
 
+/**
+ * Co-intestatario acquirente (solo SEMPLICE): come il venditore ma senza
+ * veicoloOrdine (è a livello pratica) + indirizzo di residenza opzionale.
+ * I file identità arrivano negli slot COACQ<ordine>_*.
+ */
+const coAcquirenteSchema = z.object({
+  ordine: z.coerce.number().int().min(1).max(50),
+  isPG: z.boolean().default(false),
+  tipoSoggetto: tipoSoggettoEnum.optional().nullable(),
+  nome: z.string().trim().max(80).optional().nullable(),
+  cognome: z.string().trim().max(80).optional().nullable(),
+  cf: z.string().trim().max(16).optional().nullable(),
+  ragioneSociale: z.string().trim().max(160).optional().nullable(),
+  piva: z.string().trim().max(11).optional().nullable(),
+  telefono: z.string().trim().min(1, 'Numero di telefono del co-intestatario obbligatorio').max(30),
+  email: z.string().trim().min(1, 'Email del co-intestatario obbligatoria').max(120).email('Email del co-intestatario non valida'),
+  docId: z.enum(['CI', 'PASSAPORTO', 'PATENTE']).default('CI'),
+  indirizzoResidenza: z.string().trim().max(250).optional().nullable(),
+});
+
+export type CoAcquirenteInputData = z.infer<typeof coAcquirenteSchema>;
+
 const submitSchema = z.object({
   tipo: z.enum(['SEMPLICE', 'MINIVOLTURA']),
   numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),
@@ -442,6 +464,29 @@ const submitSchema = z.object({
         .refine(
           (arr) => new Set(arr.map((v) => v.ordine)).size === arr.length,
           { message: 'ordine venditore duplicato' },
+        ),
+    ),
+
+  // Co-intestatari acquirente (solo SEMPLICE): lista JSON, default vuota.
+  coAcquirenti: z
+    .string()
+    .optional()
+    .default('[]')
+    .transform((s, ctx) => {
+      try {
+        return JSON.parse(s) as unknown;
+      } catch {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'coAcquirenti non è JSON valido' });
+        return z.NEVER;
+      }
+    })
+    .pipe(
+      z
+        .array(coAcquirenteSchema)
+        .max(50)
+        .refine(
+          (arr) => new Set(arr.map((c) => c.ordine)).size === arr.length,
+          { message: 'ordine co-intestatario duplicato' },
         ),
     ),
 
@@ -532,6 +577,9 @@ export async function submitNuovaPraticaAction(
   const d = parsed.data;
   const veicoli = d.veicoli;
   const venditori = d.venditori;
+  // Co-intestatari solo per SEMPLICE: fuori scope → ignorati (difensivo; la UI
+  // già li nasconde/azzera). Ordine ricalcolato 1..n per coerenza con gli slot.
+  const coAcquirenti = d.tipo === 'SEMPLICE' ? d.coAcquirenti : [];
 
   // Client uploads: i file sono già su Vercel Blob (browser → Blob diretto, per
   // aggirare il limite 4,5 MB sul body delle Server Action). Dalla FormData
@@ -731,6 +779,9 @@ export async function submitNuovaPraticaAction(
     // Per i documenti del venditore, l'ordine 1..n del venditore a cui il
     // documento appartiene (serve per il linkage Documento.venditoreId).
     venditoreOrdine?: number;
+    // Per i documenti di un co-intestatario acquirente, l'ordine 1..n del
+    // co-intestatario a cui il documento appartiene.
+    coAcquirenteOrdine?: number;
     ref: FileRef;
   };
   const identitaCandidates: IdentitaDocCandidate[] = [];
@@ -760,6 +811,7 @@ export async function submitNuovaPraticaAction(
     labelParte: string,
     richiedeCf: boolean,
     venditoreOrdine?: number,
+    coAcquirenteOrdine?: number,
   ): void => {
     const missingMsg = `/pratiche/nuova?error=${encodeURIComponent(
       `Documento d'identità mancante per ${labelParte}`,
@@ -777,12 +829,14 @@ export async function submitNuovaPraticaAction(
         tipo: tFronte,
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(fronte!, "documento d'identità"),
       });
       identitaCandidates.push({
         tipo: tRetro,
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(retro!, "documento d'identità"),
       });
     } else {
@@ -795,6 +849,7 @@ export async function submitNuovaPraticaAction(
         tipo: 'PASSAPORTO',
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(id!, "documento d'identità"),
       });
     }
@@ -813,12 +868,14 @@ export async function submitNuovaPraticaAction(
         tipo: 'CODICE_FISCALE',
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(cf!, 'tessera sanitaria / codice fiscale'),
       });
       identitaCandidates.push({
         tipo: 'CODICE_FISCALE_RETRO',
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(cfRetro!, 'tessera sanitaria / codice fiscale (retro)'),
       });
     }
@@ -829,6 +886,7 @@ export async function submitNuovaPraticaAction(
         tipo: 'PERMESSO_SOGGIORNO',
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(permesso, 'permesso di soggiorno'),
       });
     }
@@ -850,6 +908,7 @@ export async function submitNuovaPraticaAction(
         tipo: 'VISURA_CAMERALE',
         owner,
         venditoreOrdine,
+        coAcquirenteOrdine,
         ref: validateIdentitaRef(visura, 'visura camerale'),
       });
     }
@@ -872,6 +931,17 @@ export async function submitNuovaPraticaAction(
     documentoIdentita: d.acquirenteDocumentoIdentita,
   }).codiceFiscale;
   collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente", richiedeCfAcq);
+
+  // Un blocco di file identità per ciascun co-intestatario (slot COACQ<ordine>_*).
+  for (const c of coAcquirenti) {
+    const label = `il co-intestatario ${c.ordine}`;
+    const richiedeCf = documentiRichiestiParte({
+      isPersonaGiuridica: c.isPG,
+      tipoSoggetto: c.tipoSoggetto ?? null,
+      documentoIdentita: c.docId,
+    }).codiceFiscale;
+    collectIdentita('ACQUIRENTE', `COACQ${c.ordine}`, c.docId, label, richiedeCf, undefined, c.ordine);
+  }
 
   // Cross-check insiemistico venditori ↔ intestatari PER VEICOLO (server-side,
   // autoritativo): i venditori del veicolo i devono coincidere con gli
@@ -1012,6 +1082,22 @@ export async function submitNuovaPraticaAction(
       // L'acquirente della minivoltura DEVE essere commerciante d'auto.
       richiedeOperatoreAuto: d.tipo === 'MINIVOLTURA',
     },
+    ...coAcquirenti.map((c) => ({
+      parte: {
+        isPersonaGiuridica: c.isPG,
+        tipoSoggetto: c.tipoSoggetto ?? null,
+        nome: c.nome ?? undefined,
+        cognome: c.cognome ?? undefined,
+        cf: c.cf ?? undefined,
+        ragioneSociale: c.ragioneSociale ?? undefined,
+        piva: c.piva ?? undefined,
+        documentoIdentita: c.docId,
+      } satisfies ParteDati,
+      prefix: `COACQ${c.ordine}`,
+      docId: c.docId,
+      label: `Co-intestatario ${c.ordine}`,
+      richiedeOperatoreAuto: false,
+    })),
   ];
 
   const verificheParti = await Promise.all(

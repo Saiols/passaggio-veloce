@@ -13,8 +13,9 @@ export const DRAFT_KEY = 'pv-pratica-nuova-draft';
  *     (fronte/retro libretto + tessera sanitaria).
  * v3: aggiunti veicoli.tipoDocumento e veicoli.foglioComplementare (foglio
  *     complementare al posto del libretto).
+ * v4: aggiunto coAcquirenti (co-intestatari acquirente).
  */
-export const DRAFT_VERSION = 3;
+export const DRAFT_VERSION = 4;
 /** Oltre questa età la bozza viene ignorata (e ripulita). */
 export const DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni
 

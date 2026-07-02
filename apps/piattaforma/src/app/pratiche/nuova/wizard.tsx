@@ -264,6 +264,25 @@ const emptyVenditore = (veicoloOrdine = 1): VenditoreInput => ({
   veicoloOrdine,
 });
 
+/**
+ * Co-intestatario acquirente (solo pratiche SEMPLICE): stessi campi del blocco
+ * acquirente principale (Parte + documento + residenza), a livello pratica.
+ */
+type CoAcquirenteInput = Parte & {
+  docId: DocIdTipo;
+  identita: IdentitaFiles;
+  residenzaDiversa: boolean;
+  indirizzoResidenza: string;
+};
+
+const emptyCoAcquirente = (): CoAcquirenteInput => ({
+  ...emptyParte(),
+  docId: 'CI',
+  identita: {},
+  residenzaDiversa: false,
+  indirizzoResidenza: '',
+});
+
 // --- Persistenza bozza (localStorage) ----------------------------------------
 // I File non sono serializzabili: teniamo solo la BlobRef (il file è già su
 // Blob, l'OCR è già stato fatto) e azzeriamo i flag transitori. Al refresh lo
@@ -310,6 +329,7 @@ type WizardDraftState = {
   numeroVeicoli: number;
   veicoli: VeicoloInput[];
   venditori: VenditoreInput[];
+  coAcquirenti: CoAcquirenteInput[];
   acquirente: Parte;
   acquirenteDocId: DocIdTipo;
   acquirenteIdentita: IdentitaFiles;
@@ -435,6 +455,8 @@ export function WizardNuovaPratica({
           : prev,
       );
     } else {
+      // MINIVOLTURA: acquirente singolo commerciante → via eventuali co-intestatari.
+      setCoAcquirenti([]);
       // MINIVOLTURA: l'acquirente è un operatore auto → preimposta.
       setAcquirente((prev) =>
         prev.tipoSoggetto === 'OPERATORE_AUTO'
@@ -488,6 +510,14 @@ export function WizardNuovaPratica({
   // indirizzo alternativo quando il broker risponde No (stringa formattata).
   const [acquirenteResidenzaDiversa, setAcquirenteResidenzaDiversa] = useState(false);
   const [acquirenteIndirizzoResidenza, setAcquirenteIndirizzoResidenza] = useState('');
+
+  // Co-intestatari acquirente (solo SEMPLICE). Default: nessuno.
+  const [coAcquirenti, setCoAcquirenti] = useState<CoAcquirenteInput[]>([]);
+  const updateCoAcquirente = (idx: number, patch: Partial<CoAcquirenteInput>) =>
+    setCoAcquirenti((prev) => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  const addCoAcquirente = () => setCoAcquirenti((prev) => [...prev, emptyCoAcquirente()]);
+  const removeCoAcquirente = (idx: number) =>
+    setCoAcquirenti((prev) => prev.filter((_, i) => i !== idx));
 
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
@@ -565,6 +595,7 @@ export function WizardNuovaPratica({
           ownersSig.current = computeOwnersSig(d.veicoli);
         }
         if (Array.isArray(d.venditori)) setVenditori(d.venditori);
+        if (Array.isArray(d.coAcquirenti)) setCoAcquirenti(d.coAcquirenti);
         if (d.acquirente) setAcquirente(d.acquirente);
         if (d.acquirenteDocId) setAcquirenteDocId(d.acquirenteDocId);
         if (d.acquirenteIdentita) setAcquirenteIdentita(d.acquirenteIdentita);
@@ -605,6 +636,10 @@ export function WizardNuovaPratica({
           numeroVeicoli,
           veicoli: veicoli.map(veicoloForStorage),
           venditori: venditori.map((v) => ({ ...v, identita: identitaForStorage(v.identita) })),
+          coAcquirenti: coAcquirenti.map((c) => ({
+            ...c,
+            identita: identitaForStorage(c.identita),
+          })),
           acquirente,
           acquirenteDocId,
           acquirenteIdentita: identitaForStorage(acquirenteIdentita),
@@ -632,6 +667,7 @@ export function WizardNuovaPratica({
     numeroVeicoli,
     veicoli,
     venditori,
+    coAcquirenti,
     acquirente,
     acquirenteDocId,
     acquirenteIdentita,

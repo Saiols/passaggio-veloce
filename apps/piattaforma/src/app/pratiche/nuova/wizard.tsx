@@ -857,10 +857,12 @@ export function WizardNuovaPratica({
     });
   };
 
-  // Upload del foglio complementare: un solo PDF. Dopo l'upload, OCR best-effort
-  // (parser dedicato): pre-compila targa/telaio/intestatario commerciante quando
-  // riesce; se fallisce, i campi restano da inserire a mano (niente blocco). La
-  // data di immatricolazione NON è sul foglio → resta sempre manuale.
+  // Upload del foglio complementare: PDF o foto (JPG/PNG), entrambi dallo scanner
+  // (ritaglio/migliora, come il libretto). Dopo l'upload, OCR best-effort (parser
+  // dedicato): pre-compila targa/telaio quando riesce; se fallisce, i campi
+  // restano da inserire a mano (niente blocco). Il "Proprietario attuale" resta
+  // manuale (non lo estraiamo qui). La data di immatricolazione NON è sul foglio
+  // → resta sempre manuale.
   const onFoglioSelected = async (idx: number, file: File | undefined) => {
     if (!file) {
       updateVeicolo(idx, {
@@ -917,9 +919,11 @@ export function WizardNuovaPratica({
         };
         if (d.targa) patch.targa = d.targa;
         if (d.telaio) patch.telaio = d.telaio;
-        if (d.proprietarioAttuale) patch.proprietarioAttuale = d.proprietarioAttuale;
+        // NB: il "Proprietario attuale" NON si pre-compila dal foglio (scelta
+        // di prodotto): il broker lo inserisce a mano. Il venditore commerciante
+        // si rigenera comunque dagli intestatari OCR via effect, e il cross-check
+        // del foglio usa v.ocr (non questo campo), quindi resta coerente.
         updateVeicolo(idx, patch);
-        // I venditori (commerciante) si rigenerano dagli intestatari via effect.
       } else {
         updateVeicolo(idx, { extracting: false, ocr: undefined, ocrError: null });
       }
@@ -2227,7 +2231,8 @@ function VeicoloSection({
       {isFoglio ? (
         <>
           <p className="mb-3 text-[12.5px] text-pv-slate-500">
-            Carica il <strong>foglio complementare</strong> in un unico PDF. Subentra
+            Carica il <strong>foglio complementare</strong> come PDF o foto (JPG/PNG):
+            potrai ritagliarlo e migliorarlo prima dell&apos;invio. Subentra
             tipicamente quando vende un commerciante d&apos;auto. I dati del veicolo
             vanno inseriti a mano qui sotto.
           </p>
@@ -2235,8 +2240,7 @@ function VeicoloSection({
             <UploadCard
               label="Foglio complementare"
               slot={veicolo.foglioComplementare}
-              pdfOnly
-              subtitle="Un solo file PDF con il foglio complementare."
+              subtitle="Il foglio complementare come PDF o foto (JPG/PNG)."
               onSelect={(f) => onFoglio(f ?? undefined)}
               onRemove={() => onFoglio(undefined)}
             />
@@ -2312,7 +2316,9 @@ function VeicoloSection({
       {mostraCampi && (
         <div className="mt-4 rounded-[12px] border border-pv-slate-200 bg-pv-slate-50 p-4">
           <p className="mb-3 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-            {isFoglio ? 'Dati del veicolo — inseriscili a mano' : 'Dati estratti — correggi se serve'}
+            {isFoglio
+              ? 'Dati del veicolo — inseriscili a mano dove è necessario'
+              : 'Dati estratti — correggi se serve'}
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Targa" required>
@@ -2498,8 +2504,8 @@ function UploadCard({
   onSelect: (file: File | null) => void;
   onRemove: () => void;
   invalid?: boolean;
-  /** Solo PDF + bypass editor (documento da caricare intero, tutte le pagine:
-   *  es. visura camerale o foglio complementare). */
+  /** Solo PDF + bypass editor (documento multipagina da caricare intero: SOLO
+   *  la visura camerale). Tutto il resto passa dallo scanner. */
   pdfOnly?: boolean;
   /** Testo guida sotto il titolo della card. */
   subtitle?: string;
@@ -2515,8 +2521,12 @@ function UploadCard({
   const hasDoc = !!file || !!ref;
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
   const { pick, modal } = useDocumentScanner({ onFile: onSelect });
-  // pdfOnly (visura / foglio complementare): bypassa l'editor e carica il PDF
-  // intero (tutte le pagine); rifiuta i non-PDF. Altrimenti instrada allo scanner.
+  // pdfOnly (SOLO la visura): bypassa l'editor e carica il PDF intero (tutte le
+  // pagine, documento multipagina); rifiuta i non-PDF. Per tutto il resto
+  // (libretto, foglio complementare, …) si passa dallo scanner: immagini →
+  // editor ritaglio/migliora; PDF → editor pagina per pagina (esporta la pagina
+  // scelta come JPEG). L'editor serve anche sul foglio: spesso è la foto storta
+  // di un documento da raddrizzare/ritagliare.
   const handlePick = (f: File | null): void => {
     if (!f) {
       setLocalErr(null);

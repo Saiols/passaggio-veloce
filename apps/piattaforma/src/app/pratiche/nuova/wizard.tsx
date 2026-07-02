@@ -29,6 +29,7 @@ import {
   delegaDocsComplete,
 } from './delega-docs';
 import { formatIndirizzo } from './acquirente-indirizzo';
+import { residenzaOk } from './residenza';
 import { DRAFT_KEY, parseDraft, serializeDraft } from './wizard-draft';
 import {
   validaParte,
@@ -1425,14 +1426,16 @@ export function WizardNuovaPratica({
 
   // Gate per lasciare lo step 3 (Acquirente): parte valida + identità (BlobRef)
   // pronta + nessun upload in corso + verifica documentale OK (fail-closed).
-  const residenzaOk =
-    !acquirenteResidenzaDiversa || acquirenteIndirizzoResidenza.trim().length > 0;
+  const residenzaAcqOk = residenzaOk(
+    acquirenteResidenzaDiversa,
+    acquirenteIndirizzoResidenza,
+  );
   const canStep3 =
     parteValida(acquirente) &&
     identitaPresente(acquirenteDocId, acquirenteIdentita) &&
     !identitaUploading(acquirenteIdentita) &&
     verdettoAcquirente.ok &&
-    residenzaOk;
+    residenzaAcqOk;
 
   // Schema Documentale v7 (SD-B): blocca il submit se l'engine non torna OK
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite

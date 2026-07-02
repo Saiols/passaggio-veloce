@@ -1408,6 +1408,162 @@ export function WizardNuovaPratica({
     </div>
   );
 
+  // Blocco di un singolo co-intestatario acquirente (solo SEMPLICE): stesso
+  // layout del principale (tipo soggetto in cima → anagrafica → documento →
+  // residenza). Verifica documentale per-parte identica all'acquirente.
+  const renderCoAcquirente = (c: CoAcquirenteInput, idx: number) => (
+    <div key={idx} className="space-y-5">
+      <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[15px] font-bold text-pv-navy-800">
+            Co-intestatario {idx + 1}
+          </h2>
+          <button
+            type="button"
+            onClick={() => removeCoAcquirente(idx)}
+            className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600"
+          >
+            Rimuovi
+          </button>
+        </div>
+        <Field label="Tipo soggetto" required>
+          <Select
+            value={c.tipoSoggetto ?? ''}
+            onChange={(e) => {
+              const next = e.target.value as TipoSoggetto;
+              const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
+              updateCoAcquirente(idx, {
+                tipoSoggetto: next,
+                isPG,
+                visuraOcr: isPG ? c.visuraOcr : undefined,
+                permessoOcr: next === 'STRANIERO_EXTRA_UE' ? c.permessoOcr : undefined,
+              });
+            }}
+          >
+            <option value="" disabled>
+              Seleziona tipo…
+            </option>
+            {acquirenteTipiSoggetto.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="my-3 h-px bg-pv-slate-200" />
+        <ParteForm parte={c} onChange={(p) => updateCoAcquirente(idx, p)} />
+      </div>
+
+      <IdentitaSection
+        titolo={`Documento d'identità — co-intestatario ${idx + 1}`}
+        hideTipoSoggetto
+        docId={c.docId}
+        onDocId={(t) => updateCoAcquirente(idx, { docId: t })}
+        files={c.identita}
+        isPG={c.isPG}
+        tipoSoggetto={c.tipoSoggetto}
+        tipiSoggetto={acquirenteTipiSoggetto}
+        onTipoSoggetto={(next) => {
+          const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
+          updateCoAcquirente(idx, { tipoSoggetto: next, isPG });
+        }}
+        onFiles={(updater) =>
+          setCoAcquirenti((prev) =>
+            prev.map((cc, i) => (i === idx ? { ...cc, identita: updater(cc.identita) } : cc)),
+          )
+        }
+        onMainRef={(ref) =>
+          runIdentitaOcr<CoAcquirenteInput>(ref, c.docId, (upd) =>
+            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+          )
+        }
+        onVisuraRef={(ref) =>
+          runVisuraOcr<CoAcquirenteInput>(ref, (upd) =>
+            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+          )
+        }
+        onPermessoRef={(ref) =>
+          runPermessoOcr<CoAcquirenteInput>(ref, (upd) =>
+            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+          )
+        }
+        onInvalidateVisura={() =>
+          setCoAcquirenti((prev) =>
+            prev.map((cc, i) => (i === idx ? { ...cc, visuraOcr: undefined } : cc)),
+          )
+        }
+        onInvalidatePermesso={() =>
+          setCoAcquirenti((prev) =>
+            prev.map((cc, i) => (i === idx ? { ...cc, permessoOcr: undefined } : cc)),
+          )
+        }
+        onCfRef={(ref) =>
+          runCfOcr<CoAcquirenteInput>(ref, (upd) =>
+            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+          )
+        }
+        onInvalidateCf={() =>
+          setCoAcquirenti((prev) =>
+            prev.map((cc, i) => (i === idx ? { ...cc, codiceFiscaleOcr: undefined } : cc)),
+          )
+        }
+        onInvalidateIdentita={() =>
+          setCoAcquirenti((prev) =>
+            prev.map((cc, i) => (i === idx ? { ...cc, identitaOcr: undefined } : cc)),
+          )
+        }
+      />
+
+      <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+        <p className="mb-2 text-[14px] font-semibold text-pv-navy-800">
+          L&apos;indirizzo di residenza è lo stesso indicato nel documento?
+        </p>
+        <div className="inline-flex overflow-hidden rounded-[10px] border border-pv-slate-300">
+          <button
+            type="button"
+            onClick={() => updateCoAcquirente(idx, { residenzaDiversa: false, indirizzoResidenza: '' })}
+            className={`px-5 py-2 text-[13px] font-semibold transition ${
+              !c.residenzaDiversa
+                ? 'bg-pv-navy-800 text-white'
+                : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+            }`}
+          >
+            Sì
+          </button>
+          <button
+            type="button"
+            onClick={() => updateCoAcquirente(idx, { residenzaDiversa: true })}
+            className={`border-l border-pv-slate-300 px-5 py-2 text-[13px] font-semibold transition ${
+              c.residenzaDiversa
+                ? 'bg-pv-navy-800 text-white'
+                : 'bg-white text-pv-slate-700 hover:bg-pv-slate-50'
+            }`}
+          >
+            No
+          </button>
+        </div>
+        {c.residenzaDiversa && (
+          <div className="mt-4">
+            {hasMaps ? (
+              <AddressAutocomplete
+                label="Nuovo indirizzo di residenza"
+                placeholder="Via, civico, città…"
+                helpText="Inizia a digitare e seleziona dall'elenco."
+                onSelect={(p) => updateCoAcquirente(idx, { indirizzoResidenza: formatIndirizzo(p) })}
+              />
+            ) : (
+              <Input
+                value={c.indirizzoResidenza}
+                onChange={(e) => updateCoAcquirente(idx, { indirizzoResidenza: e.target.value })}
+                placeholder="Via, civico, città…"
+              />
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   // Allegati delega/procura a vendere per un veicolo (solo se flag = Sì).
   // Due UploadCard riusate (stessa grafica + scanner). Nessun OCR.
   const renderDelegaDocs = (ord: number) => {
@@ -1993,6 +2149,19 @@ export function WizardNuovaPratica({
                 </div>
               )}
             </div>
+
+            {tipo === 'SEMPLICE' && (
+              <>
+                {coAcquirenti.map((c, idx) => renderCoAcquirente(c, idx))}
+                <button
+                  type="button"
+                  onClick={addCoAcquirente}
+                  className="w-full rounded-[12px] border border-dashed border-pv-navy-300 bg-pv-navy-50 px-4 py-3 text-[13px] font-semibold text-pv-navy-700 transition hover:bg-pv-navy-100"
+                >
+                  + Aggiungi co-intestatario
+                </button>
+              </>
+            )}
 
             {/* Verifica documentale OCR (fail-closed): finché ci sono problemi
                 l'acquirente non supera il gate "Avanti". */}

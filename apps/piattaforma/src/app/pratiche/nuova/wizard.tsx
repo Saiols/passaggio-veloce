@@ -1812,14 +1812,38 @@ export function WizardNuovaPratica({
                   (operatore auto), con visura camerale.
                 </p>
               )}
-              <ParteForm
-                parte={acquirente}
-                onChange={setAcquirente}
-              />
+              <Field label="Tipo soggetto" required>
+                <Select
+                  value={acquirente.tipoSoggetto ?? ''}
+                  onChange={(e) => {
+                    const next = e.target.value as TipoSoggetto;
+                    const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
+                    setAcquirente((prev) => ({
+                      ...prev,
+                      tipoSoggetto: next,
+                      isPG,
+                      visuraOcr: isPG ? prev.visuraOcr : undefined,
+                      permessoOcr: next === 'STRANIERO_EXTRA_UE' ? prev.permessoOcr : undefined,
+                    }));
+                  }}
+                >
+                  <option value="" disabled>
+                    Seleziona tipo…
+                  </option>
+                  {acquirenteTipiSoggetto.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <div className="my-3 h-px bg-pv-slate-200" />
+              <ParteForm parte={acquirente} onChange={setAcquirente} />
             </div>
 
             <IdentitaSection
               titolo="Documento d'identità dell'acquirente"
+              hideTipoSoggetto
               docId={acquirenteDocId}
               onDocId={setAcquirenteDocId}
               files={acquirenteIdentita}
@@ -2688,6 +2712,7 @@ function IdentitaSection({
   onInvalidatePermesso,
   onCfRef,
   onInvalidateCf,
+  hideTipoSoggetto = false,
 }: {
   titolo: string;
   docId: DocIdTipo;
@@ -2706,6 +2731,9 @@ function IdentitaSection({
   onInvalidatePermesso: () => void;
   onCfRef: (ref: BlobRef) => void;
   onInvalidateCf: () => void;
+  /** Nasconde il selettore "Tipo soggetto" (reso esternamente sopra i dati:
+   *  vale solo per lo step acquirente). Default: mostrato inline (venditore). */
+  hideTipoSoggetto?: boolean;
 }) {
   const mostraVisura =
     isPG || tipoSoggetto === 'AZIENDA' || tipoSoggetto === 'OPERATORE_AUTO';
@@ -2766,23 +2794,26 @@ function IdentitaSection({
   return (
     <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
       <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">{titolo}</h2>
-      <Field label="Tipo soggetto" required>
-        <Select
-          value={tipoSoggetto ?? ''}
-          onChange={(e) => onTipoSoggetto(e.target.value as TipoSoggetto)}
-        >
-          <option value="" disabled>
-            Seleziona tipo…
-          </option>
-          {tipiSoggetto.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-
-      <div className="my-3 h-px bg-pv-slate-200" />
+      {!hideTipoSoggetto && (
+        <>
+          <Field label="Tipo soggetto" required>
+            <Select
+              value={tipoSoggetto ?? ''}
+              onChange={(e) => onTipoSoggetto(e.target.value as TipoSoggetto)}
+            >
+              <option value="" disabled>
+                Seleziona tipo…
+              </option>
+              {tipiSoggetto.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <div className="my-3 h-px bg-pv-slate-200" />
+        </>
+      )}
 
       <Field label="Tipo documento" required>
         <Select

@@ -768,6 +768,7 @@ model Pratica {
   // Relations
   veicoli                 Veicolo[]
   venditori               Venditore[]
+  coAcquirenti            CoAcquirente[]
   documenti               Documento[]
   assegnazioni            PraticaAssegnazione[]
   transazioni             TransazioneWallet[]
@@ -877,6 +878,10 @@ model Documento {
   venditoreId String?    @db.Uuid
   venditore   Venditore? @relation("DocumentiVenditore", fields: [venditoreId], references: [id], onDelete: SetNull)
 
+  // Co-intestatario acquirente: documenti identità/permesso per parte
+  coAcquirenteId String?       @db.Uuid
+  coAcquirente   CoAcquirente? @relation("DocumentiCoAcquirente", fields: [coAcquirenteId], references: [id], onDelete: SetNull)
+
   // Storage
   storageKey       String // path/key nel provider (locale o S3)
   storageProvider  String @default("local") // "local" | "s3" | "gcs"
@@ -908,6 +913,7 @@ model Documento {
   @@index([companyId])
   @@index([veicoloId])
   @@index([venditoreId])
+  @@index([coAcquirenteId])
   @@index([tipo])
   @@index([gatingStato])
   @@map("documenti")
@@ -965,6 +971,32 @@ model Venditore {
   @@index([praticaId])
   @@index([veicoloId])
   @@map("venditori")
+}
+
+model CoAcquirente {
+  id                 String        @id @default(uuid()) @db.Uuid
+  praticaId          String        @db.Uuid
+  pratica            Pratica       @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+  ordine             Int
+  nome               String?
+  cognome            String?
+  cf                 String?
+  isPersonaGiuridica Boolean       @default(false)
+  ragioneSociale     String?
+  piva               String?
+  telefono           String?
+  email              String?
+  tipoSoggetto       TipoSoggetto?
+  visuraData         DateTime?     @db.Date
+  permessoData       DateTime?     @db.Date
+  documentoIdentita  String?
+  indirizzoResidenza String? // null = stesso del documento
+  documenti          Documento[]   @relation("DocumentiCoAcquirente")
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([praticaId])
+  @@map("co_acquirenti")
 }
 
 // ============================================================

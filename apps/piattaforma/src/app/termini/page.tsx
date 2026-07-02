@@ -95,10 +95,10 @@ export default function TerminiPage() {
             L&apos;utente può richiedere in qualsiasi momento la cessazione
             del servizio scrivendo a{' '}
             <a
-              href="mailto:supporto@passaggioveloce.it"
+              href="mailto:assistenza@passaggioveloce.it"
               className="font-semibold text-pv-navy-700 hover:underline"
             >
-              supporto@passaggioveloce.it
+              assistenza@passaggioveloce.it
             </a>
             .
           </p>

@@ -576,7 +576,7 @@ export function tplN14AccountSospeso(
     `e' stato sospeso da un amministratore.\n` +
     (p.motivo ? `Motivo: ${p.motivo}\n` : '') +
     `Non puoi accedere alla piattaforma fino alla riattivazione. ` +
-    `Per chiarimenti contatta supporto@passaggioveloce.it.`;
+    `Per chiarimenti contatta assistenza@passaggioveloce.it.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Account sospeso</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
@@ -587,7 +587,7 @@ export function tplN14AccountSospeso(
     </p>
     ${p.motivo ? `<div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540"><strong>Motivo:</strong> ${p.motivo}</div>` : ''}
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
-      Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+      Per chiarimenti scrivi a <a href="mailto:assistenza@passaggioveloce.it">assistenza@passaggioveloce.it</a>.
     </p>
   `);
   return { subject, html, text };
@@ -629,7 +629,7 @@ export function tplN16AccountEliminato(
     `l'account ${p.ragioneSociale} e' stato eliminato definitivamente da un ` +
     `amministratore. I dati personali saranno cancellati entro 90 giorni ` +
     `(retention legale). Le pratiche storiche restano per audit ma anonimizzate.\n` +
-    `Per chiarimenti contatta supporto@passaggioveloce.it.`;
+    `Per chiarimenti contatta assistenza@passaggioveloce.it.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Account eliminato</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
@@ -645,7 +645,7 @@ export function tplN16AccountEliminato(
       storiche restano per audit ma anonimizzate.
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
-      Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+      Per chiarimenti scrivi a <a href="mailto:assistenza@passaggioveloce.it">assistenza@passaggioveloce.it</a>.
     </p>
   `);
   return { subject, html, text };
@@ -672,7 +672,7 @@ export function tplN17BrokerPenaleAddebitata(
     (p.saldoWalletCent < 0
       ? 'Il saldo è negativo: dovrai reintegrarlo prima di poter ricevere payout.\n'
       : '') +
-    `Per chiarimenti contatta supporto@passaggioveloce.it.`;
+    `Per chiarimenti contatta assistenza@passaggioveloce.it.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Penale addebitata</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
@@ -691,7 +691,7 @@ export function tplN17BrokerPenaleAddebitata(
         : ''
     }
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
-      Per chiarimenti scrivi a <a href="mailto:supporto@passaggioveloce.it">supporto@passaggioveloce.it</a>.
+      Per chiarimenti scrivi a <a href="mailto:assistenza@passaggioveloce.it">assistenza@passaggioveloce.it</a>.
     </p>
   `);
   return { subject, html, text };
@@ -821,7 +821,7 @@ export function tplN21BrokerRevisioneCompletata(
       ${
         p.esito === 'RISOLTA'
           ? 'Puoi riprendere il wizard normalmente con le indicazioni ricevute.'
-          : 'La pratica è annullata. Per chiarimenti scrivi a supporto@passaggioveloce.it.'
+          : 'La pratica è annullata. Per chiarimenti scrivi a assistenza@passaggioveloce.it.'
       }
     </p>
   `);

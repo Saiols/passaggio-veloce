@@ -1193,6 +1193,38 @@ export function WizardNuovaPratica({
     if (acquirenteIdentita.codiceFiscaleRetro?.ref)
       blobRefs['ACQ_CF_RETRO'] = acquirenteIdentita.codiceFiscaleRetro.ref;
 
+    // Co-intestatari acquirente (solo SEMPLICE): JSON + slot COACQ<n>_*.
+    const coAcquirentiPayload = coAcquirenti.map((c, i) => ({
+      ordine: i + 1,
+      isPG: c.isPG,
+      nome: c.nome,
+      cognome: c.cognome,
+      cf: c.cf,
+      ragioneSociale: c.ragioneSociale,
+      piva: c.piva,
+      telefono: c.telefono,
+      email: c.email,
+      tipoSoggetto: c.tipoSoggetto,
+      docId: c.docId,
+      indirizzoResidenza: c.residenzaDiversa ? c.indirizzoResidenza.trim() : null,
+    }));
+    fd.append('coAcquirenti', JSON.stringify(coAcquirentiPayload));
+
+    coAcquirenti.forEach((c, i) => {
+      const n = i + 1;
+      if (c.docId === 'CI' || c.docId === 'PATENTE') {
+        if (c.identita.fronte?.ref) blobRefs[`COACQ${n}_ID_FRONTE`] = c.identita.fronte.ref;
+        if (c.identita.retro?.ref) blobRefs[`COACQ${n}_ID_RETRO`] = c.identita.retro.ref;
+      } else if (c.identita.single?.ref) {
+        blobRefs[`COACQ${n}_ID`] = c.identita.single.ref;
+      }
+      if (c.identita.permesso?.ref) blobRefs[`COACQ${n}_PERMESSO`] = c.identita.permesso.ref;
+      if (c.identita.visura?.ref) blobRefs[`COACQ${n}_VISURA`] = c.identita.visura.ref;
+      if (c.identita.codiceFiscale?.ref) blobRefs[`COACQ${n}_CF`] = c.identita.codiceFiscale.ref;
+      if (c.identita.codiceFiscaleRetro?.ref)
+        blobRefs[`COACQ${n}_CF_RETRO`] = c.identita.codiceFiscaleRetro.ref;
+    });
+
     // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
     fd.append('blobRefs', JSON.stringify(blobRefs));
 
@@ -1295,6 +1327,9 @@ export function WizardNuovaPratica({
     now,
     atecoAllowed,
     tipo === 'MINIVOLTURA',
+  );
+  const verdettiCoAcquirenti = coAcquirenti.map((c) =>
+    verificaDocumentaleParte(c, c.docId, now, atecoAllowed, false),
   );
 
   // Blocco UI di un singolo venditore (riusato dal layout singolo e dall'accordion
@@ -1622,12 +1657,21 @@ export function WizardNuovaPratica({
     acquirenteResidenzaDiversa,
     acquirenteIndirizzoResidenza,
   );
+  const coAcquirentiOk = coAcquirenti.every(
+    (c, i) =>
+      parteValida(c) &&
+      identitaPresente(c.docId, c.identita) &&
+      !identitaUploading(c.identita) &&
+      verdettiCoAcquirenti[i]!.ok &&
+      residenzaOk(c.residenzaDiversa, c.indirizzoResidenza),
+  );
   const canStep3 =
     parteValida(acquirente) &&
     identitaPresente(acquirenteDocId, acquirenteIdentita) &&
     !identitaUploading(acquirenteIdentita) &&
     verdettoAcquirente.ok &&
-    residenzaAcqOk;
+    residenzaAcqOk &&
+    coAcquirentiOk;
 
   // Schema Documentale v7 (SD-B): blocca il submit se l'engine non torna OK
   // (BLOCCO o INPUT_INCOMPLETO). Lo step 3 mostra l'esito tramite
@@ -1693,6 +1737,14 @@ export function WizardNuovaPratica({
       m.push('documenti acquirente da correggere');
     if (acquirenteResidenzaDiversa && !acquirenteIndirizzoResidenza.trim())
       m.push('indirizzo di residenza');
+    coAcquirenti.forEach((c, i) => {
+      const tag = ` (co-intestatario ${i + 1})`;
+      mancanzeParte(c, c.docId, c.identita).forEach((x) => m.push(`${x}${tag}`));
+      if (parteCompleta(c, c.docId, c.identita) && !verdettiCoAcquirenti[i]!.ok)
+        m.push(`documenti co-intestatario da correggere${tag}`);
+      if (!residenzaOk(c.residenzaDiversa, c.indirizzoResidenza))
+        m.push(`indirizzo di residenza${tag}`);
+    });
     return m;
   };
   const mancanzeStep4 = (): string[] => {

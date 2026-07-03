@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { isGatedHost } from '@/lib/landing-gate';
 import { BRAND } from '@/lib/seo/brand';
-import { FAQ_ITEMS } from '@/lib/seo/faqItems';
+import { buildFaqItems, type FaqItem } from '@/lib/seo/faqItems';
 import { GUIDES } from '@/lib/seo/guides';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,13 @@ export async function GET() {
   const host = (await headers()).get('host');
   if (!isGatedHost(host)) return notFound();
 
-  const body = renderLlmsTxt();
+  // Import dinamico: evita di eseguire la query del tariffario prima del
+  // check isGatedHost (host non gated → notFound senza toccare il DB).
+  const { getTariffarioCorrente } = await import('@/lib/tariffario');
+  const tariffario = await getTariffarioCorrente();
+  const FAQ_ITEMS = buildFaqItems(tariffario.SEMPLICE.creditoBrokerCent / 100);
+
+  const body = renderLlmsTxt(FAQ_ITEMS);
   return new Response(body, {
     status: 200,
     headers: {
@@ -29,9 +35,9 @@ export async function GET() {
   });
 }
 
-function renderLlmsTxt(): string {
+function renderLlmsTxt(faqItems: readonly FaqItem[]): string {
   const addr = BRAND.address;
-  const faqBlock = FAQ_ITEMS.map(
+  const faqBlock = faqItems.map(
     ({ q, a }) => `Q: ${q}\nA: ${a}`,
   ).join('\n\n');
 

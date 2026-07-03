@@ -8,7 +8,8 @@ import { isGatedHost } from '@/lib/landing-gate';
 import type { Metadata } from 'next';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { BRAND } from '@/lib/seo/brand';
-import { FAQ_ITEMS } from '@/lib/seo/faqItems';
+import { buildFaqItems } from '@/lib/seo/faqItems';
+import { getTariffarioCorrente } from '@/lib/tariffario';
 import {
   serviceJsonLd,
   faqJsonLd,
@@ -44,6 +45,8 @@ function richiediAccessoHref(contesto?: string) {
 export default async function HomePage() {
   const host = (await headers()).get('host');
   const landingOnly = isGatedHost(host);
+  const tariffario = await getTariffarioCorrente();
+  const FAQ_ITEMS = buildFaqItems(tariffario.SEMPLICE.creditoBrokerCent / 100);
 
   return (
     <main className="flex min-h-screen flex-col bg-white">

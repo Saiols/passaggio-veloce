@@ -11,6 +11,8 @@ import {
   markPraticaProcessataAction,
 } from '../actions';
 import { SegnalaProblemaButton } from './segnala-button';
+import { StatoExtraInfo } from '../stato-extra-info';
+import { statoExtra } from '@/lib/pratiche/stato-extra';
 import { AnnullaPraticaButton } from './annulla-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
@@ -159,6 +161,18 @@ export default async function PraticaDetailPage({
     (pratica.stato === 'ACCETTATA' || pratica.stato === 'PROCESSATA') &&
     !pratica.flagSegnalata;
 
+  // Trattamento extra dello stato (pill "in revisione" / motivo annullamento).
+  const statoInfo = statoExtra({
+    stato: pratica.stato as PraticaStato,
+    flagSegnalata: pratica.flagSegnalata,
+    segnalazioneStato: pratica.segnalazioneStato,
+    tipoSegnalazione: pratica.tipoSegnalazione,
+    notaSegnalazione: pratica.notaSegnalazione,
+    penaleAddebitatoCent: pratica.penaleAddebitatoCent,
+    revisioneCompletata: pratica.revisioneCompletata,
+    richiedeRevisioneManuale: pratica.richiedeRevisioneManuale,
+  });
+
   // Spec §1.4 demo: il prezzo è informativo solo dopo la firma (dashboard
   // economica). Per agenzie e broker, prima della firma non viene mostrato.
   const showFee = pratica.firmaAvvenutaAt !== null;
@@ -200,6 +214,7 @@ export default async function PraticaDetailPage({
               </span>
               <StatusChip
                 stato={pratica.stato as PraticaStato}
+                tone={statoInfo?.kind === 'ANNULLATA_TEAM' ? 'danger' : undefined}
                 viewerRole={
                   session.user.role === 'ADMIN_PIATTAFORMA' ||
                   session.user.role === 'ASSISTENTE'
@@ -209,6 +224,7 @@ export default async function PraticaDetailPage({
                       : 'BROKER'
                 }
               />
+              <StatoExtraInfo extra={statoInfo} />
             </h1>
             <p className="mt-1 text-[14px] text-pv-slate-500">
               {labelTipo(pratica.tipo, pratica.numeroVeicoli)} · {pratica.comune ?? '—'}

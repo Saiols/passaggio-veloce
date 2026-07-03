@@ -10,6 +10,8 @@ import { PraticheFilters } from './filters';
 import { QuickActionButton } from './quick-action-button';
 import { DownloadDocumentiButton } from './download-documenti-button';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
+import { StatoExtraInfo } from './stato-extra-info';
+import { statoExtra } from '@/lib/pratiche/stato-extra';
 
 const PAGE_SIZE = 15;
 
@@ -196,7 +198,18 @@ export default async function PratichePage({
                 </tr>
               </thead>
               <tbody className="divide-y divide-pv-slate-200">
-                {items.map((p) => (
+                {items.map((p) => {
+                  const extra = statoExtra({
+                    stato: p.stato as PraticaStato,
+                    flagSegnalata: p.flagSegnalata,
+                    segnalazioneStato: p.segnalazioneStato,
+                    tipoSegnalazione: p.tipoSegnalazione,
+                    notaSegnalazione: p.notaSegnalazione,
+                    penaleAddebitatoCent: p.penaleAddebitatoCent,
+                    revisioneCompletata: p.revisioneCompletata,
+                    richiedeRevisioneManuale: p.richiedeRevisioneManuale,
+                  });
+                  return (
                   <tr
                     key={p.id}
                     className="relative cursor-pointer transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50"
@@ -235,8 +248,10 @@ export default async function PratichePage({
                       <span className="inline-flex items-center gap-2">
                         <StatusChip
                           stato={p.stato as PraticaStato}
+                          tone={extra?.kind === 'ANNULLATA_TEAM' ? 'danger' : undefined}
                           viewerRole={companyType === 'AGENZIA' ? 'AGENZIA' : 'BROKER'}
                         />
+                        <StatoExtraInfo extra={extra} />
                         {companyType === 'AGENZIA' &&
                           p.agenziaAssegnataId === companyId &&
                           p.stato === 'ACCETTATA' && (
@@ -266,7 +281,8 @@ export default async function PratichePage({
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

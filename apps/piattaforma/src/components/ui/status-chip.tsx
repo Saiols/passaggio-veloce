@@ -70,18 +70,21 @@ function labelFor(stato: PraticaStato, role: ChipViewerRole): string {
 export function StatusChip({
   stato,
   viewerRole = 'GENERIC',
+  tone,
   className,
 }: {
   stato: PraticaStato;
   viewerRole?: ChipViewerRole;
+  /** Sovrascrive la palette dello stato (es. ANNULLATA da team → rosso). */
+  tone?: 'danger';
   className?: string;
 }) {
-  const s = styles[stato];
+  const cls = tone === 'danger' ? 'bg-pv-red-50 text-pv-red-500' : styles[stato].cls;
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider',
-        s.cls,
+        cls,
         className,
       )}
     >

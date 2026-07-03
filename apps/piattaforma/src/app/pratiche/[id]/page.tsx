@@ -92,6 +92,7 @@ export default async function PraticaDetailPage({
       },
       veicoli: { orderBy: { ordine: 'asc' } },
       venditori: { orderBy: { ordine: 'asc' } },
+      coAcquirenti: { orderBy: { ordine: 'asc' } },
     },
   });
 
@@ -425,6 +426,25 @@ export default async function PraticaDetailPage({
                       <span className="font-semibold">Residenza acquirente (diversa dal documento):</span>{' '}
                       {pratica.acquirenteIndirizzoResidenza}
                     </p>
+                  )}
+                  {pratica.coAcquirenti.length > 0 && (
+                    <div className="mt-3 border-t border-pv-slate-200 pt-3">
+                      <p className="mb-1 text-[12px] font-semibold text-pv-slate-500">
+                        Co-intestatari ({pratica.coAcquirenti.length})
+                      </p>
+                      <ul className="space-y-1">
+                        {pratica.coAcquirenti.map((c) => (
+                          <li key={c.id} className="text-[13px] text-pv-slate-700">
+                            {c.isPersonaGiuridica
+                              ? (c.ragioneSociale ?? '—')
+                              : `${c.nome ?? ''} ${c.cognome ?? ''}`.trim() || '—'}
+                            {' · '}
+                            {c.isPersonaGiuridica ? (c.piva ?? '—') : (c.cf ?? '—')}
+                            {c.indirizzoResidenza ? ` · residenza: ${c.indirizzoResidenza}` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
               </div>

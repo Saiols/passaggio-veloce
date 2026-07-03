@@ -49,14 +49,13 @@ chatbot_visibility: internal
 ## 2. Economico
 
 - **[CLIENTI] Pricing** (`lib/pricing.ts`, per-veicolo × `numeroVeicoli`):
-  - SEMPLICE: agenzia **€75**, broker **€25**, ricavo PV lordo €50, costo affiliazione €10.
-  - MINIVOLTURA: agenzia **€15**, broker **€0**, ricavo PV €15, affiliazione €5.
+  - SEMPLICE e MINIVOLTURA: costo agenzia, compenso broker e costo affiliazione sono definiti dal **listino ufficiale corrente** (modificabile in `/admin/tariffe`); il ricavo lordo PV è derivato = costo − compenso.
 - **[CLIENTI] Wallet broker**: saldo in cent, **può andare negativo** (penali). Banner di avviso in `/wallet` su saldo negativo; payout bloccato se negativo.
 - **[CLIENTI] Payout**: manuale da **€500** (`MIN_PAYOUT_CENT`), automatico da **€1000** (soglia `Company.payoutThresholdCent`, configurabile **€1000–€5000**). 🚩 La spec affiliazione cita €500: verificare se la soglia auto è coerente.
 - **Transazioni wallet** (`TransazioneWalletTipo`): CREDITO_PRATICA, PAYOUT_AUTOMATICO/MANUALE, RETTIFICA_ADMIN, STORNO, PENALE_BROKER, CREDITO_AFFILIAZIONE, CREDITO_PROMO.
 - **[CLIENTI] Addebiti fee agenzia** (`FeeAddebito`): ADDEBITO_FIRMA o (futuro) AUTO_ADDEBITO_GIORNO_20. Dashboard `/addebiti` con upcoming + storico mensile; stati SCHEDULED→IN_LAVORAZIONE→SUCCESS/FAILED. Fee annullata se pratica ANNULLATA.
 - **Stripe SEPA** (`lib/providers/payment/stripe-mandate.ts`): SetupIntent + mandato (PENDING→ACTIVE→FAILED); addebito off-session su mandato attivo. **Payout reale non implementato (§0.2).**
-- **[CLIENTI] Affiliazione** (`lib/affiliazione/**`): link referral univoco (`Company.referralCode`), tracking click (`ReferralClick`, IP troncato). Commissioni al firma: trapasso **€10** (€5+€5 se doppio referente), minivoltura **€5** (€2,50+€2,50). Stato MATURATA→ACCREDITATA, oppure DA_REVISIONARE se anti-collusione **AF-AC** (SAME_IBAN/SAME_IP_SIGNUP) → review admin.
+- **[CLIENTI] Affiliazione** (`lib/affiliazione/**`): link referral univoco (`Company.referralCode`), tracking click (`ReferralClick`, IP troncato). Commissioni al firma secondo il **listino ufficiale corrente** (se ci sono due referenti la quota è divisa a metà). Stato MATURATA→ACCREDITATA, oppure DA_REVISIONARE se anti-collusione **AF-AC** (SAME_IBAN/SAME_IP_SIGNUP) → review admin.
 - **[CLIENTI] Codici promozionali**: riscatto in registrazione (step 4), accredito wallet best-effort post-commit.
 
 ---

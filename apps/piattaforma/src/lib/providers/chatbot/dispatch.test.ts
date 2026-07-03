@@ -7,6 +7,11 @@ const { respondWithLlm, envMock } = vi.hoisted(() => ({
 vi.mock('./llm', () => ({ respondWithLlm: (...a: unknown[]) => respondWithLlm(...a) }));
 vi.mock('./kb', () => ({ kbForTier: () => 'KB_FINTA' }));
 vi.mock('@/env', () => ({ env: envMock }));
+vi.mock('@/lib/tariffario', () => ({ getTariffarioCorrente: vi.fn().mockResolvedValue({
+  SEMPLICE: { feeAgenziaCent: 7500, creditoBrokerCent: 2500, affiliazioneCent: 1000 },
+  MINIVOLTURA: { feeAgenziaCent: 1500, creditoBrokerCent: 0, affiliazioneCent: 500 },
+}) }));
+vi.mock('./listino-block', () => ({ buildListinoBlock: () => 'LISTINO_BLOCK' }));
 
 import { dispatchChat } from './dispatch';
 import type { ChatbotConfig } from './index';
@@ -55,5 +60,15 @@ describe('dispatchChat', () => {
     });
     expect(out.usedLlm).toBe(false);
     expect(out.reply).toBe('Gratis.');
+  });
+
+  it('inietta il listino per tier clients, non per public', async () => {
+    respondWithLlm.mockResolvedValue({ reply: 'ok', escalated: false });
+
+    await dispatchChat({ bot, tier: 'clients', history: [{ role: 'user', content: 'quanto costa?' }], overBudget: false });
+    expect(respondWithLlm).toHaveBeenLastCalledWith(bot, 'KB_FINTA', expect.anything(), 'LISTINO_BLOCK');
+
+    await dispatchChat({ bot, tier: 'public', history: [{ role: 'user', content: 'quanto costa?' }], overBudget: false });
+    expect(respondWithLlm).toHaveBeenLastCalledWith(bot, 'KB_FINTA', expect.anything(), undefined);
   });
 });

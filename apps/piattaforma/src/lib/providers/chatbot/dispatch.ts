@@ -3,6 +3,8 @@ import { respondAsBot, type ChatbotConfig, type ChatbotReply } from './index';
 import { respondWithLlm, type ChatMessage } from './llm';
 import { kbForTier } from './kb';
 import type { Tier } from './tier';
+import { getTariffarioCorrente } from '@/lib/tariffario';
+import { buildListinoBlock } from './listino-block';
 
 export type { ChatMessage };
 export type DispatchResult = ChatbotReply & { usedLlm: boolean };
@@ -27,7 +29,9 @@ export async function dispatchChat(opts: {
   }
 
   try {
-    const out = await respondWithLlm(opts.bot, kbForTier(opts.tier), opts.history);
+    const listinoBlock =
+      opts.tier === 'public' ? undefined : buildListinoBlock(await getTariffarioCorrente());
+    const out = await respondWithLlm(opts.bot, kbForTier(opts.tier), opts.history, listinoBlock);
     return { ...out, usedLlm: true };
   } catch {
     return { ...respondAsBot(opts.bot, message), usedLlm: false };

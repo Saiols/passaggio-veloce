@@ -47,6 +47,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
       adminLinks.push({ href: '/admin/ateco', label: 'ATECO' });
       adminLinks.push({ href: '/admin/assistenti', label: 'Assistenti' });
       adminLinks.push({ href: '/admin/audit-log', label: 'Audit log' });
+      adminLinks.push({ href: '/admin/tariffe', label: 'Tariffe' });
       // LISTINI DISABILITATI (feature nascosta 2026-06-12) — riattivare con /admin/listini:
       // adminLinks.push({ href: '/admin/listini', label: 'Listini' });
     }

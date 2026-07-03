@@ -1147,6 +1147,7 @@ export async function submitNuovaPraticaAction(
     tipo: cand.tipo,
     owner: cand.owner,
     venditoreOrdine: cand.venditoreOrdine,
+    coAcquirenteOrdine: cand.coAcquirenteOrdine,
     put: refToPut(cand.ref),
   }));
 
@@ -1366,6 +1367,30 @@ export async function submitNuovaPraticaAction(
       venditoreIdByOrdine.set(v.ordine, venditore.id);
     }
 
+    // Co-intestatari acquirente (solo SEMPLICE): righe CoAcquirente (ordine 1..n).
+    // I documenti identità vengono poi linkati via Documento.coAcquirenteId.
+    const coAcquirenteIdByOrdine = new Map<number, string>();
+    for (const c of coAcquirenti) {
+      const co = await tx.coAcquirente.create({
+        data: {
+          praticaId: created.id,
+          ordine: c.ordine,
+          nome: c.isPG ? null : c.nome || null,
+          cognome: c.isPG ? null : c.cognome || null,
+          cf: c.isPG ? null : c.cf?.toUpperCase() || null,
+          isPersonaGiuridica: c.isPG,
+          ragioneSociale: c.isPG ? c.ragioneSociale || null : null,
+          piva: c.isPG ? c.piva || null : null,
+          telefono: c.telefono || null,
+          email: c.email?.toLowerCase() || null,
+          tipoSoggetto: c.tipoSoggetto ?? null,
+          documentoIdentita: c.docId,
+          indirizzoResidenza: c.indirizzoResidenza || null,
+        },
+      });
+      coAcquirenteIdByOrdine.set(c.ordine, co.id);
+    }
+
     // Schema Documentale v7 (SD-B): documenti richiesti (esclusi libretti).
     // Gli upload su storage sono già avvenuti prima della transazione; qui
     // creiamo solo le righe Documento collegate alla pratica (e al veicolo se
@@ -1396,7 +1421,7 @@ export async function submitNuovaPraticaAction(
     // Upload già avvenuti prima della transazione; qui creiamo le righe
     // Documento collegate alla pratica. I documenti del venditore vengono
     // collegati alla riga Venditore corrispondente via venditoreId.
-    for (const { tipo, owner, venditoreOrdine, put } of identitaUploads) {
+    for (const { tipo, owner, venditoreOrdine, coAcquirenteOrdine, put } of identitaUploads) {
       await tx.documento.create({
         data: {
           tipo: tipo as Prisma.DocumentoCreateInput['tipo'],
@@ -1406,6 +1431,9 @@ export async function submitNuovaPraticaAction(
             owner === 'VENDITORE' && venditoreOrdine
               ? (venditoreIdByOrdine.get(venditoreOrdine) ?? null)
               : null,
+          coAcquirenteId: coAcquirenteOrdine
+            ? (coAcquirenteIdByOrdine.get(coAcquirenteOrdine) ?? null)
+            : null,
           storageKey: put.storageKey,
           storageProvider: put.storageProvider,
           mimeType: put.mimeType,

@@ -57,3 +57,4 @@ uploads/
 # Claude Code runtime / local-only
 .claude/scheduled_tasks.lock
 .claude/crm-extracted.txt
+.claude/settings.local.json

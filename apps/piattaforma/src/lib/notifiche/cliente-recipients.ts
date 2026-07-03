@@ -31,6 +31,13 @@ export type ClientiInput = {
     isPersonaGiuridica: boolean;
     ragioneSociale: string | null;
   }[];
+  coAcquirenti: {
+    email: string | null;
+    nome: string | null;
+    cognome: string | null;
+    isPersonaGiuridica: boolean;
+    ragioneSociale: string | null;
+  }[];
 };
 
 /** Nome visualizzato della parte: ragione sociale (PG) o nome+cognome, con fallback. */
@@ -68,6 +75,9 @@ export function buildClienteRecipients(input: ClientiInput): ClienteRecipient[] 
       cognome: input.acquirenteCognome,
     }),
   );
+  for (const c of input.coAcquirenti) {
+    push(c.email, 'ACQUIRENTE', nomeParte(c));
+  }
   for (const v of input.venditori) {
     push(v.email, 'VENDITORE', nomeParte(v));
   }

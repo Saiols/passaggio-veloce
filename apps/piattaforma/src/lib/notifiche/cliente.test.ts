@@ -26,6 +26,7 @@ const praticaPiena = {
     { email: 'seller@x.it', nome: 'Anna', cognome: 'Bianchi', isPersonaGiuridica: false, ragioneSociale: null },
     { email: 'BUYER@x.it', nome: 'Dup', cognome: 'X', isPersonaGiuridica: false, ragioneSociale: null },
   ],
+  coAcquirenti: [],
   veicoli: [{ targa: 'AB123CD' }],
 };
 

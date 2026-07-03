@@ -34,6 +34,16 @@ export async function notifyClientiAvanzamento(
             ragioneSociale: true,
           },
         },
+        coAcquirenti: {
+          orderBy: { ordine: 'asc' },
+          select: {
+            email: true,
+            nome: true,
+            cognome: true,
+            isPersonaGiuridica: true,
+            ragioneSociale: true,
+          },
+        },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
         // Indirizzo "dove recarsi": preferisci la SEDE che ha accettato (in
         // multi-sede il cliente va lì, non all'azienda madre), con fallback

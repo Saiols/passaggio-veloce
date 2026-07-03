@@ -7,6 +7,7 @@ const acquirente = {
   acquirenteCognome: 'Rossi',
   acquirenteIsPersonaGiuridica: false,
   acquirenteRagioneSociale: null,
+  coAcquirenti: [],
 };
 
 describe('veicoloDescrizione', () => {
@@ -67,6 +68,7 @@ describe('buildClienteRecipients', () => {
       acquirenteEmail: 'pg@x.it', acquirenteNome: null, acquirenteCognome: null,
       acquirenteIsPersonaGiuridica: true, acquirenteRagioneSociale: 'ACME Srl',
       venditori: [],
+      coAcquirenti: [],
     });
     expect(r[0]!.nomeDestinatario).toBe('ACME Srl');
   });
@@ -76,7 +78,60 @@ describe('buildClienteRecipients', () => {
       acquirenteEmail: 'x@x.it', acquirenteNome: null, acquirenteCognome: null,
       acquirenteIsPersonaGiuridica: false, acquirenteRagioneSociale: null,
       venditori: [],
+      coAcquirenti: [],
     });
     expect(r[0]!.nomeDestinatario).toBe('Cliente');
+  });
+
+  it('co-intestatari acquirente: inclusi con ruolo ACQUIRENTE, prima dei venditori', () => {
+    const r = buildClienteRecipients({
+      ...acquirente,
+      venditori: [
+        { email: 'seller1@x.it', nome: 'Anna', cognome: 'Bianchi', isPersonaGiuridica: false, ragioneSociale: null },
+      ],
+      coAcquirenti: [
+        { email: 'co1@x.it', nome: 'Paolo', cognome: 'Neri', isPersonaGiuridica: false, ragioneSociale: null },
+        { email: 'co2@x.it', nome: 'Giulia', cognome: 'Gialli', isPersonaGiuridica: false, ragioneSociale: null },
+      ],
+    });
+    expect(r).toEqual([
+      { email: 'buyer@x.it', ruolo: 'ACQUIRENTE', nomeDestinatario: 'Mario Rossi' },
+      { email: 'co1@x.it', ruolo: 'ACQUIRENTE', nomeDestinatario: 'Paolo Neri' },
+      { email: 'co2@x.it', ruolo: 'ACQUIRENTE', nomeDestinatario: 'Giulia Gialli' },
+      { email: 'seller1@x.it', ruolo: 'VENDITORE', nomeDestinatario: 'Anna Bianchi' },
+    ]);
+  });
+
+  it('co-intestatario con email duplicata dell\'acquirente principale: deduplicato (case-insensitive)', () => {
+    const r = buildClienteRecipients({
+      ...acquirente,
+      venditori: [
+        { email: 'seller1@x.it', nome: 'Anna', cognome: 'Bianchi', isPersonaGiuridica: false, ragioneSociale: null },
+      ],
+      coAcquirenti: [
+        { email: 'BUYER@x.it', nome: 'Dup', cognome: 'Acquirente', isPersonaGiuridica: false, ragioneSociale: null },
+        { email: 'co1@x.it', nome: 'Paolo', cognome: 'Neri', isPersonaGiuridica: false, ragioneSociale: null },
+      ],
+    });
+    expect(r.map((x) => x.email)).toEqual(['buyer@x.it', 'co1@x.it', 'seller1@x.it']);
+    expect(r).toHaveLength(3);
+  });
+
+  it('co-intestatario con email duplicata di un venditore: deduplicato (vince il primo, il co-intestatario)', () => {
+    const r = buildClienteRecipients({
+      ...acquirente,
+      venditori: [
+        { email: 'seller1@x.it', nome: 'Anna', cognome: 'Bianchi', isPersonaGiuridica: false, ragioneSociale: null },
+      ],
+      coAcquirenti: [
+        { email: 'seller1@x.it', nome: 'Dup', cognome: 'DiVenditore', isPersonaGiuridica: false, ragioneSociale: null },
+      ],
+    });
+    // Il co-intestatario e' processato prima del venditore (ordine acquirenti->venditori):
+    // vince il primo push, quindi una sola voce con ruolo ACQUIRENTE.
+    expect(r).toEqual([
+      { email: 'buyer@x.it', ruolo: 'ACQUIRENTE', nomeDestinatario: 'Mario Rossi' },
+      { email: 'seller1@x.it', ruolo: 'ACQUIRENTE', nomeDestinatario: 'Dup DiVenditore' },
+    ]);
   });
 });

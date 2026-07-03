@@ -9,6 +9,8 @@
 > **penale €25** + storno del compenso €25 maturato dal broker = **−€50 totali** per il
 > broker; PV trattiene €25. Sostituisce il precedente €100.
 
+> **Nota listino:** il "compenso €25" stornato al broker è il **compenso broker corrente da listino** (modificabile in `/admin/tariffe`, illustrativo qui a €25). La **penale** è invece una costante indipendente (`PENALE_BROKER_DEFAULT_CENT`), NON legata al listino. L'impatto "−€50" vale finché compenso e penale coincidono a €25.
+
 ---
 
 ## Logica di base

@@ -16,6 +16,8 @@ PV adotta un modello di **fatturazione delegata** ispirato a Booking.com / Airbn
 
 ### 1.1 Flusso economico (per tipo pratica e regime broker)
 
+> **Nota listino (fonte autorevole = backoffice):** gli importi di costo agenzia, compenso broker e commissione di affiliazione riportati qui sotto sono **illustrativi** e riferiti al listino storico. Il **listino ufficiale corrente** è modificabile dal backoffice in `/admin/tariffe` e per i prezzi correnti fa fede quello (il chatbot lo inietta come fonte autorevole). Gli split fiscali per regime (50/25, 55/20, ecc.) restano il **modello di ripartizione**, da applicare ai valori correnti del listino. In particolare la minivoltura è descritta qui a €30/€20 ma il listino attivo può differire: fa fede `/admin/tariffe`.
+
 Importi (LORDI IVA inclusa, convenzione PV) — coerenti con `analisi-progetto.md` §3.1 nella sua versione aggiornata.
 
 **Trapasso netto — split dinamico in base al regime fiscale del broker:**

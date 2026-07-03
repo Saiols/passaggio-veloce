@@ -33,6 +33,8 @@ generato dall'ecosistema.
 
 ## 2. Struttura wallet e soglia payout
 
+> **Nota listino (fonte autorevole = backoffice):** gli importi di compenso pratiche (€25) e di commissione di affiliazione (€10 standard / €5 minivoltura) usati nelle tabelle e nelle simulazioni di questo documento sono **illustrativi** e riferiti al listino storico. Il **listino ufficiale corrente** è modificabile in `/admin/tariffe` e per i valori correnti fa fede quello (il chatbot lo inietta come fonte autorevole); le simulazioni economiche restano esemplificative.
+
 ### 2.1 Wallet broker (una wallet, due voci)
 
 | Voce | Fonte | Importo lordo |

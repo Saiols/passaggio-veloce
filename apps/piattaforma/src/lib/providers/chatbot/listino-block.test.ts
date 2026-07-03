@@ -10,4 +10,12 @@ describe('buildListinoBlock', () => {
     expect(s).toContain('25,00');   // compenso broker SEMPLICE
     expect(s).toContain('15,00');   // costo agenzia MINIVOLTURA
   });
+
+  it('include anche il costo affiliazione per entrambi i tipi', () => {
+    const s = buildListinoBlock(DEFAULT_TARIFFARIO);
+    expect(s).toContain('affiliazione');
+    expect(s).toContain('10,00');   // costo affiliazione SEMPLICE (€10)
+    // entrambe le righe (SEMPLICE + MINIVOLTURA) citano la commissione affiliazione
+    expect(s.match(/commissione affiliazione/g)?.length).toBe(2);
+  });
 });

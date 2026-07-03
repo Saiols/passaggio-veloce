@@ -39,6 +39,7 @@ import {
 import { extractCf } from '@/lib/kyc/extract-cf';
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { computeFees } from '@/lib/pricing';
+import { getTariffarioCorrente } from '@/lib/tariffario';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import {
   requiredUploadDocs,
@@ -1119,7 +1120,8 @@ export async function submitNuovaPraticaAction(
   }
 
   // Pricing derivato dal tipo + numero veicoli (engine in lib/pricing.ts).
-  const fees = computeFees({ tipo: d.tipo, numeroVeicoli: d.numeroVeicoli });
+  const tariffario = await getTariffarioCorrente();
+  const fees = computeFees({ tipo: d.tipo, numeroVeicoli: d.numeroVeicoli }, tariffario);
   const feeAgenziaCent = fees.feeAgenziaCent;
   const creditoBrokerCent = fees.creditoBrokerCent;
 

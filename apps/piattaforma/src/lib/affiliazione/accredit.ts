@@ -1,6 +1,6 @@
 import 'server-only';
 import { Prisma } from '@pv/db';
-import { computeFees, type PraticaTipoEconomico } from '@/lib/pricing';
+import { computeFees, rowToTariffario, type PraticaTipoEconomico } from '@/lib/pricing';
 import { detectCollusion } from './check';
 
 /**
@@ -72,7 +72,13 @@ export async function accreditCommissioniAffiliazione(
     return { commissioniCreate: 0, importoTotaleCent: 0, accrediti: [] };
   }
 
-  const fees = computeFees({ tipo: input.tipo, numeroVeicoli: input.numeroVeicoli });
+  const tariffario = rowToTariffario(
+    await tx.tariffaPiattaforma.findFirst({
+      where: { attivo: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+  );
+  const fees = computeFees({ tipo: input.tipo, numeroVeicoli: input.numeroVeicoli }, tariffario);
   const totale = fees.costoAffiliazioneTotaleCent;
   const quota = quotaPerReferente(totale, numReferenti as 1 | 2);
 

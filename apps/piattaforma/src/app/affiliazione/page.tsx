@@ -7,6 +7,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
 import { computeFees } from '@/lib/pricing';
+import { getTariffarioCorrente } from '@/lib/tariffario';
 import { CopyLinkButton } from './copy-link-button';
 import { getRendimento } from '@/app/wallet/rendimento';
 import { RendimentoChart } from '@/app/wallet/rendimento-chart';
@@ -93,6 +94,8 @@ export default async function AffiliazionePage() {
     ]);
 
   if (!company) redirect('/profilo');
+
+  const tariffario = await getTariffarioCorrente();
 
   // Aggregato commissioni PER REFERRAL. Una commissione (referente = io) nasce
   // dalla pratica del referral, lato broker o agenzia: la attribuisco alla/e
@@ -336,7 +339,7 @@ export default async function AffiliazionePage() {
                 const base = computeFees({
                   tipo: r.tipo,
                   numeroVeicoli: 1,
-                }).costoAffiliazioneTotaleCent;
+                }, tariffario).costoAffiliazioneTotaleCent;
                 const suffix = r.multiplo ? ' × N veicoli' : '';
                 return (
                   <tr key={r.label}>

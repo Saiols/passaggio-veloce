@@ -36,6 +36,21 @@ async function main() {
   const passwordHash = await hash(DEV_PASSWORD, 12);
   const now = new Date();
 
+  // Listino piattaforma: riga attiva coi valori legacy (idempotente).
+  if ((await prisma.tariffaPiattaforma.count()) === 0) {
+    await prisma.tariffaPiattaforma.create({
+      data: {
+        sempliceFeeAgenziaCent: 7500,
+        sempliceCreditoBrokerCent: 2500,
+        sempliceAffiliazioneCent: 1000,
+        minivolturaFeeAgenziaCent: 1500,
+        minivolturaCreditoBrokerCent: 0,
+        minivolturaAffiliazioneCent: 500,
+        attivo: true,
+      },
+    });
+  }
+
   // Admin piattaforma
   const admin = await upsertUserByEmail('admin@passaggioveloce.it', {
     update: {},

@@ -517,6 +517,9 @@ model User {
   // AF-AC: review commissioni affiliazione sospette
   commissioniReviewed CommissioneAffiliazione[] @relation("CommissioneAffiliazioneReviewer")
 
+  // Tariffario piattaforma: righe create da questo utente (admin)
+  tariffeCreate TariffaPiattaforma[] @relation("TariffaCreatedBy")
+
   // Multi-sede: sedi su cui questo utente può operare (login multi-sede).
   sediMembership UserSede[]
 
@@ -1448,6 +1451,35 @@ model Listino {
 
   @@index([agenziaId])
   @@map("listini")
+}
+
+/// Listino fee di piattaforma (costo agenzia + commissione broker + costo
+/// affiliazione, per tipo). Append-only versionato: esattamente una riga
+/// `attivo=true` è il listino corrente. Il ricavo lordo PV è derivato
+/// (fee − commissione), NON persistito.
+model TariffaPiattaforma {
+  id String @id @default(uuid()) @db.Uuid
+
+  // SEMPLICE — per veicolo, in centesimi
+  sempliceFeeAgenziaCent    Int
+  sempliceCreditoBrokerCent Int
+  sempliceAffiliazioneCent  Int
+
+  // MINIVOLTURA — per veicolo, in centesimi
+  minivolturaFeeAgenziaCent    Int
+  minivolturaCreditoBrokerCent Int
+  minivolturaAffiliazioneCent  Int
+
+  attivo Boolean @default(false) // invariante applicativo: esattamente una riga true
+  note   String?
+
+  createdAt   DateTime @default(now())
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("TariffaCreatedBy", fields: [createdById], references: [id])
+
+  @@index([attivo])
+  @@index([createdAt])
+  @@map("tariffe_piattaforma")
 }
 
 // ============================================================

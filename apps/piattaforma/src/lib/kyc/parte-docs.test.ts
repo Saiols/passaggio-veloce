@@ -284,13 +284,13 @@ describe('validaParte — gate ATECO acquirente operatore auto (minivoltura)', (
   it('commerciante (ATECO dealer) con visura vecchia → SCADUTO', () => {
     const r = validaParte(OPERATORE, visuraVecchia(['45.11.01']), NOW, MINI);
     expect(r.ok).toBe(false);
-    expect(r.problemi.join(' ')).toMatch(/scadut/i);
+    expect(r.problemi.join(' ')).toMatch(/non superiore agli ultimi 6 mesi/i);
   });
 
   it('acquirente minivoltura: visura vecchia → SCADUTO anche se ATECO non estraibile', () => {
     const r = validaParte(OPERATORE, visuraVecchia([]), NOW, MINI);
     expect(r.ok).toBe(false);
-    expect(r.problemi.join(' ')).toMatch(/scadut/i);
+    expect(r.problemi.join(' ')).toMatch(/non superiore agli ultimi 6 mesi/i);
   });
 
   it('società NON commerciante: visura vecchia → ok (niente controllo data)', () => {

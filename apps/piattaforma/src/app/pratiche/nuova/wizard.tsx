@@ -2086,7 +2086,11 @@ export function WizardNuovaPratica({
             </div>
 
             <IdentitaSection
-              titolo="Documento d'identità dell'acquirente"
+              titolo={
+                tipo === 'MINIVOLTURA'
+                  ? "Documento d'identità dell'acquirente (dell'amministratore o del delegato alla firma)"
+                  : "Documento d'identità dell'acquirente"
+              }
               hideTipoSoggetto
               docId={acquirenteDocId}
               onDocId={setAcquirenteDocId}

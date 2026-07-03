@@ -175,7 +175,11 @@ function messaggio(label: string, v: Verdetto): string {
     case 'MISMATCH':
       return `${label}: non corrisponde ai dati inseriti`;
     case 'SCADUTO':
-      return `${label}: scaduto o non più valido`;
+      // La visura scaduta ha un messaggio dedicato (freschezza ≤6 mesi); gli
+      // altri documenti a scadenza (es. permesso di soggiorno) restano generici.
+      return label === 'Visura camerale'
+        ? `${label}: la visura deve essere di un periodo non superiore agli ultimi 6 mesi`
+        : `${label}: scaduto o non più valido`;
     default:
       return `${label}: documento mancante o non leggibile, ricaricalo`;
   }

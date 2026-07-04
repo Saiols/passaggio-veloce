@@ -6,8 +6,10 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
+import type { WalletPreview } from './payout-confirm-modal';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { WALLET } from '@/lib/wallet/config';
+import { getWalletBreakdown } from '@/lib/wallet/breakdown';
 import { getRendimento, type RendimentoPeriod } from './rendimento';
 import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
@@ -129,6 +131,37 @@ export default async function WalletPage({
   const canPayout =
     saldoSedeCent >= WALLET.MIN_PAYOUT_CENT ||
     saldoAffiliazioneCent >= WALLET.MIN_PAYOUT_CENT;
+
+  // Scomposizione del saldo per origine (pratiche / affiliazione / bonus welcome),
+  // mostrata nella modale di conferma payout. Calcolata solo se un payout è
+  // possibile: sotto soglia il bottone è disabilitato e la modale non si apre.
+  let payoutWallets: WalletPreview[] = [];
+  if (canPayout) {
+    const [sedeBreakdown, madreBreakdown] = await Promise.all([
+      wallet ? getWalletBreakdown(wallet.id, saldoSedeCent) : Promise.resolve(null),
+      walletMadre
+        ? getWalletBreakdown(walletMadre.id, saldoAffiliazioneCent)
+        : Promise.resolve(null),
+    ]);
+    payoutWallets = [
+      sedeBreakdown
+        ? {
+            origine: 'sede' as const,
+            willPay: saldoSedeCent >= WALLET.MIN_PAYOUT_CENT,
+            saldoCent: saldoSedeCent,
+            voci: sedeBreakdown.voci,
+          }
+        : null,
+      madreBreakdown
+        ? {
+            origine: 'madre' as const,
+            willPay: saldoAffiliazioneCent >= WALLET.MIN_PAYOUT_CENT,
+            saldoCent: saldoAffiliazioneCent,
+            voci: madreBreakdown.voci,
+          }
+        : null,
+    ].filter((w): w is WalletPreview => w != null);
+  }
 
   // Movimenti e payout uniti dai due wallet, ordinati per data.
   const movimenti = [
@@ -262,6 +295,7 @@ export default async function WalletPage({
               disabled={!canPayout}
               isTitolare={isOwner(session.user.role as string)}
               ragioneSociale={company?.ragioneSociale ?? ''}
+              wallets={payoutWallets}
             />
           </div>
           {saldoNegativo && (

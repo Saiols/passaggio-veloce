@@ -67,7 +67,7 @@ export function MandatoFirmaModal({
           rel="noopener noreferrer"
           className="mt-3 inline-flex items-center gap-2 rounded-lg border border-pv-navy-200 bg-pv-navy-50 px-3 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-navy-100"
         >
-          📄 Visualizza il mandato (PDF) — leggilo prima di firmare
+          📄 Visualizza il mandato (PDF)
         </a>
 
         {!isTitolare ? (

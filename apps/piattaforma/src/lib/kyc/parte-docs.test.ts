@@ -253,9 +253,13 @@ describe('validaParte — gate ATECO acquirente operatore auto (minivoltura)', (
     expect(r.problemi.join(' ')).toMatch(/62\.01\.00/);
   });
 
-  it('visura senza ATECO estraibile → nessun blocco ATECO (parità registrazione)', () => {
-    expect(validaParte(OPERATORE, ocrConAteco([]), NOW, MINI).ok).toBe(true);
-    expect(validaParte(OPERATORE, ocrConAteco(undefined), NOW, MINI).ok).toBe(true);
+  it('visura senza ATECO estraibile → BLOCCO fail-closed per l\'acquirente minivoltura (bug #13)', () => {
+    // Prima passava (fail-open): una visura leggibile ma con ATECO non estratto
+    // accreditava un commerciante mai confermato. Ora blocca.
+    const r1 = validaParte(OPERATORE, ocrConAteco([]), NOW, MINI);
+    expect(r1.ok).toBe(false);
+    expect(r1.problemi.join(' ')).toMatch(/ATECO/);
+    expect(validaParte(OPERATORE, ocrConAteco(undefined), NOW, MINI).ok).toBe(false);
   });
 
   it('senza richiedeOperatoreAuto → il gate ATECO non blocca', () => {

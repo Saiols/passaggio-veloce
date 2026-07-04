@@ -68,4 +68,18 @@ describe('crossCheckPerVeicolo', () => {
     const venditori = [{ veicoloOrdine: 1, isPG: false, nome: 'MARIO', cognome: 'ROSSI' }];
     expect(crossCheckPerVeicolo(venditori, {})).toBe('SCONOSCIUTO');
   });
+
+  it('MISMATCH se un veicolo ha intestatari noti ma NESSUN venditore assegnato (bug #8)', () => {
+    // Il veicolo 2 ha intestatari letti dall'OCR ma nessun venditore (rimosso a
+    // mano). Prima passava come OK (mai controllato); ora deve bloccare.
+    const venditori = [{ veicoloOrdine: 1, isPG: false, nome: 'MARIO', cognome: 'ROSSI' }];
+    const proprietariPerVeicolo = { 1: ['ROSSI MARIO'], 2: ['VERDI GIUSEPPE'] };
+    expect(crossCheckPerVeicolo(venditori, proprietariPerVeicolo)).toBe('MISMATCH');
+  });
+
+  it('un veicolo con intestatari vuoti non genera MISMATCH spurio', () => {
+    const venditori = [{ veicoloOrdine: 1, isPG: false, nome: 'MARIO', cognome: 'ROSSI' }];
+    const proprietariPerVeicolo = { 1: ['ROSSI MARIO'], 2: [] };
+    expect(crossCheckPerVeicolo(venditori, proprietariPerVeicolo)).toBe('OK');
+  });
 });

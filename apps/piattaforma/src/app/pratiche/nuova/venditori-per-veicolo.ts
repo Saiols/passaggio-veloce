@@ -37,7 +37,14 @@ export function crossCheckPerVeicolo(
   opts: { flagProcura?: boolean } = {},
 ): 'OK' | 'MISMATCH' | 'SCONOSCIUTO' {
   const flagProcura = opts.flagProcura ?? false;
-  const ordini = new Set(venditori.map((v) => v.veicoloOrdine));
+  // Include ANCHE i veicoli con intestatari noti ma SENZA alcun venditore
+  // assegnato (bug #8): un veicolo così non veniva mai controllato e passava
+  // come OK (venduto senza venditore dichiarato). Ora finisce in venditoriCrossCheck
+  // con gruppo vuoto → MISMATCH, e blocca il submit.
+  const ordini = new Set<number>([
+    ...venditori.map((v) => v.veicoloOrdine),
+    ...Object.keys(proprietariPerVeicolo).map(Number),
+  ]);
   let qualcheNoto = false;
   for (const ord of ordini) {
     const proprietari = proprietariPerVeicolo[ord] ?? [];

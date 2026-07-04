@@ -220,6 +220,15 @@ export function validaParte(
     if (v !== 'MATCH') problemi.push(messaggio(label, v));
   };
 
+  // Fail-closed (bug #6): l'acquirente della minivoltura DEVE essere un operatore
+  // auto (persona giuridica con visura). Se non passa dal ramo visura qui sotto,
+  // il gate "deve essere commerciante" non verrebbe mai valutato → blocco esplicito.
+  if (opts?.richiedeOperatoreAuto && !req.visura) {
+    problemi.push(
+      "L'acquirente della minivoltura deve essere un commerciante d'auto (operatore auto con visura camerale).",
+    );
+  }
+
   if (req.visura) {
     const codici = ocr.visura?.atecoCodes ?? [];
     // Commerciante d'auto = almeno un codice ATECO della visura è nell'allowlist
@@ -232,14 +241,17 @@ export function validaParte(
     const requireFreshness = isCommerciante || !!opts?.richiedeOperatoreAuto;
     push('Visura camerale', verificaVisura(p, ocr.visura, now, { requireFreshness }));
 
-    // Gate ATECO: l'acquirente minivoltura DEVE essere commerciante d'auto.
-    // Match per prefisso sull'allowlist DEALER. Se la visura espone codici e
-    // nessuno è ammesso → blocco; senza codici non blocchiamo (come in
-    // registrazione). Gli OPERATORE_AUTO non-minivoltura (es. venditore) non
-    // vengono bloccati: per loro l'ATECO serve solo a decidere la freschezza.
-    if (opts?.richiedeOperatoreAuto && opts.atecoAllowed && codici.length > 0 && !isCommerciante) {
+    // Gate ATECO (bug #13, fail-closed): l'acquirente minivoltura DEVE risultare
+    // commerciante d'auto. Blocco sia quando la visura espone codici non ammessi,
+    // sia quando NON espone alcun codice ATECO (prima passava: fail-open — una
+    // visura leggibile ma con ATECO non estratto accreditava un commerciante mai
+    // confermato). Gli OPERATORE_AUTO non-minivoltura (es. venditore) restano
+    // esenti: per loro l'ATECO serve solo a decidere la freschezza.
+    if (opts?.richiedeOperatoreAuto && opts.atecoAllowed && !isCommerciante) {
       problemi.push(
-        `Il codice ATECO (${codici.join(', ')}) non rientra tra le attività ammesse per i commercianti auto.`,
+        codici.length > 0
+          ? `Il codice ATECO (${codici.join(', ')}) non rientra tra le attività ammesse per i commercianti auto.`
+          : 'Impossibile verificare dalla visura un codice ATECO di commercio auto: ricarica una visura camerale leggibile e aggiornata.',
       );
     }
     // CI del legale rappresentante: dev'essere presente e leggibile; se la

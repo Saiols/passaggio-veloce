@@ -614,6 +614,33 @@ export async function submitNuovaPraticaAction(
     );
   }
 
+  // Guard autoritativo (bug #5/#10): nessun venditore può riferirsi a un veicolo
+  // inesistente. Senza questo, un venditore orfano (veicoloOrdine > veicoli.length,
+  // p.es. dopo aver ridotto il numero veicoli) verrebbe persistito con
+  // veicoloId=null, scollegato da ogni veicolo e col cross-check saltato.
+  if (venditori.some((v) => v.veicoloOrdine < 1 || v.veicoloOrdine > veicoli.length)) {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        'Un venditore è associato a un veicolo inesistente. Riprova.',
+      )}`,
+    );
+  }
+
+  // Invariante MINIVOLTURA (bug #6): l'acquirente DEVE essere un commerciante
+  // d'auto (operatore auto, persona giuridica con visura). Lo forziamo qui
+  // lato server — la UI lo impone già, ma un submit costruito a mano (FormData
+  // o bozza) potrebbe aggirarlo e creare una minivoltura con acquirente privato.
+  if (
+    d.tipo === 'MINIVOLTURA' &&
+    !(d.acquirenteIsPG && d.acquirenteTipoSoggetto === 'OPERATORE_AUTO')
+  ) {
+    redirect(
+      `/pratiche/nuova?error=${encodeURIComponent(
+        "Nella minivoltura l'acquirente deve essere un commerciante d'auto (operatore auto con visura).",
+      )}`,
+    );
+  }
+
   // Documento di circolazione per ciascun veicolo. Due forme:
   //  - LIBRETTO: fronte + retro (slot LIBRETTO_<i>_FRONTE / _RETRO), entrambi
   //    obbligatori (il retro può portare etichette di trasferimento).
@@ -948,20 +975,59 @@ export async function submitNuovaPraticaAction(
   // autoritativo): i venditori del veicolo i devono coincidere con gli
   // intestatari del libretto i (C.2 + C.3), con fallback al proprietarioAttuale
   // editabile. MISMATCH blocca il submit; OK/SCONOSCIUTO proseguono.
-  const proprietariPerVeicolo: Record<number, string[]> = {};
-  veicoli.forEach((v, i) => {
+  // Bug #7: gli intestatari del libretto vengono RI-ESTRATTI server-side (non ci
+  // fidiamo dell'ocrData inviato dal client, forgiabile per forzare un OK). Il
+  // server OCR è la fonte autoritativa quando riesce; se l'OCR fallisce si
+  // ripiega best-effort sull'ocrData client / proprietarioAttuale per non
+  // introdurre un nuovo hard-fail di disponibilità sul submit.
+  const clientProprietari = (v: (typeof veicoli)[number]): string[] | null => {
     const raw = (v.ocrData as { proprietari?: unknown } | null | undefined)?.proprietari;
-    const fromOcr = Array.isArray(raw)
+    return Array.isArray(raw)
       ? raw.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
       : null;
-    if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
-      // Foglio: cross-check solo se l'OCR ha letto l'intestatario (niente
-      // fallback al proprietarioAttuale manuale, per evitare MISMATCH spuri).
-      proprietariPerVeicolo[i + 1] = fromOcr ?? [];
-      return;
+  };
+  const ocrProprietariLibretto = async (docRef: VeicoloDocRef): Promise<string[] | null> => {
+    if (docRef.tipo !== 'LIBRETTO') return null;
+    try {
+      const ocr = await getOcr();
+      const [tF, tR] = await Promise.all([
+        ocr.extractText({
+          buffer: await storageGetBuffer(docRef.fronte.key),
+          mimeType: docRef.fronte.type,
+          originalFilename: docRef.fronte.name,
+        }),
+        ocr.extractText({
+          buffer: await storageGetBuffer(docRef.retro.key),
+          mimeType: docRef.retro.type,
+          originalFilename: docRef.retro.name,
+        }),
+      ]);
+      const data = parseLibrettoText(`${tF.text}\n${tR.text}`, 1);
+      return (data.proprietari ?? []).filter(
+        (p): p is string => typeof p === 'string' && p.trim().length > 0,
+      );
+    } catch {
+      return null; // OCR fallita: fallback best-effort sotto
     }
-    proprietariPerVeicolo[i + 1] = fromOcr ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []);
-  });
+  };
+  const proprietariEntries = await Promise.all(
+    veicoli.map(async (v, i): Promise<readonly [number, string[]]> => {
+      const clientProps = clientProprietari(v);
+      if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
+        // Foglio: cross-check solo se l'OCR ha letto l'intestatario (niente
+        // fallback al proprietarioAttuale manuale, per evitare MISMATCH spuri).
+        return [i + 1, clientProps ?? []] as const;
+      }
+      const serverOcr = await ocrProprietariLibretto(veicoloDocRefs[i]!);
+      // serverOcr: [] = OCR ok senza intestatari letti (→ SCONOSCIUTO, non si
+      // blocca) ma comunque autoritativo; null = OCR fallita → fallback client.
+      return [
+        i + 1,
+        serverOcr ?? clientProps ?? (v.proprietarioAttuale ? [v.proprietarioAttuale] : []),
+      ] as const;
+    }),
+  );
+  const proprietariPerVeicolo: Record<number, string[]> = Object.fromEntries(proprietariEntries);
   const cc = crossCheckPerVeicolo(
     venditori.map((v) => ({
       veicoloOrdine: v.veicoloOrdine,
@@ -1195,7 +1261,9 @@ export async function submitNuovaPraticaAction(
       acquirenteEmail: d.acquirenteEmail?.toLowerCase() || null,
       acquirenteIndirizzoResidenza: d.acquirenteIndirizzoResidenza || null,
 
-      flagCointestazione: d.flagCointestazione,
+      // Derivato server-side (bug #12): il client non invia mai questo flag.
+      // C'è cointestazione se più venditori o almeno un co-intestatario acquirente.
+      flagCointestazione: venditori.length > 1 || coAcquirenti.length > 0,
       flagMinivoltura: d.tipo === 'MINIVOLTURA',
       flagProcura: d.flagProcura,
 

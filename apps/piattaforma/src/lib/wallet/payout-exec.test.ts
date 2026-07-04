@@ -1,43 +1,72 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { prismaMock, txMock, createDocBrokerMock } = vi.hoisted(() => {
+const {
+  prismaMock,
+  txMock,
+  getPaymentMock,
+  executePayoutMock,
+  createDocBrokerMock,
+} = vi.hoisted(() => {
   const txMock = {
     wallet: { findUnique: vi.fn(), update: vi.fn() },
-    payout: { findFirst: vi.fn(), create: vi.fn() },
+    payout: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     transazioneWallet: { updateMany: vi.fn(), create: vi.fn() },
   };
+  const executePayoutMock = vi.fn();
   return {
     txMock,
+    executePayoutMock,
+    getPaymentMock: vi.fn(() => ({ executePayout: executePayoutMock })),
+    createDocBrokerMock: vi.fn(),
     prismaMock: {
       $transaction: vi.fn((cb: (tx: typeof txMock) => unknown) => cb(txMock)),
+      payout: { findUnique: vi.fn(), update: vi.fn() },
     },
-    createDocBrokerMock: vi.fn(),
   };
 });
 
 vi.mock('server-only', () => ({}));
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/lib/fatturazione/engine', () => ({ createDocBroker: createDocBrokerMock }));
+vi.mock('@/lib/providers/payment', () => ({ getPayment: getPaymentMock }));
 
-import { eseguiPayoutImmediato } from './payout-exec';
+import { eseguiPayoutImmediato, settlePayout } from './payout-exec';
+
+/** Payout risolto da settlePayout, con wallet di sede e IBAN valido. */
+function payoutSede(over: Record<string, unknown> = {}) {
+  return {
+    id: 'p1',
+    walletId: 'w1',
+    importoCent: 80_000,
+    automatico: false,
+    wallet: { sede: { iban: 'IT60X0542811101', company: { iban: null } }, company: null },
+    ...over,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // reserve (transazione)
   txMock.payout.findFirst.mockResolvedValue(null);
   txMock.payout.create.mockResolvedValue({ id: 'p1' });
-  txMock.wallet.update.mockResolvedValue({});
+  txMock.wallet.update.mockResolvedValue({ saldoCent: 0 });
   txMock.transazioneWallet.updateMany.mockResolvedValue({ count: 2 });
   txMock.transazioneWallet.create.mockResolvedValue({});
+  txMock.payout.update.mockResolvedValue({});
+  // settlePayout (top-level)
+  prismaMock.payout.findUnique.mockResolvedValue(payoutSede());
+  prismaMock.payout.update.mockResolvedValue({});
+  executePayoutMock.mockResolvedValue({ ok: true, providerRef: 'prov-1' });
   createDocBrokerMock.mockResolvedValue(undefined);
 });
 
 describe('eseguiPayoutImmediato', () => {
-  it('saldo sotto soglia → errore, nessun payout', async () => {
+  it('saldo sotto soglia → errore, nessun payout, provider non chiamato', async () => {
     txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 10_000 });
     const r = await eseguiPayoutImmediato('w1');
     expect(r.ok).toBe(false);
     expect(txMock.payout.create).not.toHaveBeenCalled();
-    expect(createDocBrokerMock).not.toHaveBeenCalled();
+    expect(executePayoutMock).not.toHaveBeenCalled();
   });
 
   it('payout già in corso → errore', async () => {
@@ -48,16 +77,29 @@ describe('eseguiPayoutImmediato', () => {
     expect(txMock.payout.create).not.toHaveBeenCalled();
   });
 
-  it('saldo sopra soglia → esegue subito: payout ESEGUITO, aggancia crediti, azzera saldo, genera documento', async () => {
+  it('happy path → crea IN_LAVORAZIONE, paga via provider, salda ESEGUITO, genera documento', async () => {
     txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
     const r = await eseguiPayoutImmediato('w1');
 
     expect(r).toEqual({ ok: true, payoutId: 'p1', importoCent: 80_000 });
+    // reserve: payout creato IN_LAVORAZIONE (non ESEGUITO subito)
     expect(txMock.payout.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ stato: 'ESEGUITO', importoCent: 80_000, automatico: false }),
+        data: expect.objectContaining({
+          walletId: 'w1',
+          importoCent: 80_000,
+          stato: 'IN_LAVORAZIONE',
+          automatico: false,
+        }),
       }),
     );
+    // provider chiamato con l'IBAN risolto
+    expect(executePayoutMock).toHaveBeenCalledWith({
+      payoutId: 'p1',
+      importoCent: 80_000,
+      iban: 'IT60X0542811101',
+    });
+    // settle: aggancia crediti, azzera saldo, marca ESEGUITO
     expect(txMock.transazioneWallet.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ walletId: 'w1', payoutId: null }),
@@ -65,21 +107,94 @@ describe('eseguiPayoutImmediato', () => {
       }),
     );
     expect(txMock.wallet.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'w1' }, data: { saldoCent: 0 } }),
+      expect.objectContaining({ where: { id: 'w1' }, data: { saldoCent: { decrement: 80_000 } } }),
     );
-    expect(txMock.transazioneWallet.create).toHaveBeenCalledWith(
+    expect(txMock.payout.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ tipo: 'PAYOUT_MANUALE', importoCent: -80_000, payoutId: 'p1' }),
+        where: { id: 'p1' },
+        data: expect.objectContaining({ stato: 'ESEGUITO', providerRef: 'prov-1' }),
       }),
     );
     expect(createDocBrokerMock).toHaveBeenCalledWith({ payoutId: 'p1' });
   });
 
+  it('provider rifiuta (safeguard go-live) → Payout FALLITO, wallet NON svuotato', async () => {
+    txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+    executePayoutMock.mockResolvedValue({
+      ok: false,
+      error: 'Payout reale non implementato (Strada B)',
+      retryable: false,
+    });
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r).toEqual({ ok: false, error: 'Payout reale non implementato (Strada B)' });
+    expect(prismaMock.payout.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'p1' },
+        data: expect.objectContaining({ stato: 'FALLITO' }),
+      }),
+    );
+    // niente svuotamento saldo, niente documento
+    expect(txMock.wallet.update).not.toHaveBeenCalled();
+    expect(createDocBrokerMock).not.toHaveBeenCalled();
+  });
+
+  it('IBAN mancante → Payout FALLITO, provider non chiamato, wallet NON svuotato', async () => {
+    txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+    prismaMock.payout.findUnique.mockResolvedValue(
+      payoutSede({ wallet: { sede: { iban: null, company: { iban: null } }, company: null } }),
+    );
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r.ok).toBe(false);
+    expect(r).toMatchObject({ error: expect.stringContaining('IBAN') });
+    expect(executePayoutMock).not.toHaveBeenCalled();
+    expect(prismaMock.payout.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'p1' },
+        data: expect.objectContaining({ stato: 'FALLITO', errorMessage: 'IBAN mancante' }),
+      }),
+    );
+    expect(txMock.wallet.update).not.toHaveBeenCalled();
+  });
+
   it('payout automatico → tipo movimento PAYOUT_AUTOMATICO', async () => {
     txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+    prismaMock.payout.findUnique.mockResolvedValue(payoutSede({ automatico: true }));
+
     await eseguiPayoutImmediato('w1', { automatico: true });
+
     expect(txMock.transazioneWallet.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ tipo: 'PAYOUT_AUTOMATICO' }) }),
+    );
+  });
+});
+
+describe('settlePayout (path job, wallet madre)', () => {
+  it('salda un payout RICHIESTO esistente via IBAN madre → ESEGUITO', async () => {
+    prismaMock.payout.findUnique.mockResolvedValue({
+      id: 'pJob',
+      walletId: 'w9',
+      importoCent: 60_000,
+      automatico: true,
+      wallet: { sede: null, company: { iban: 'IT99A0301503200' } },
+    });
+
+    const r = await settlePayout('pJob');
+
+    expect(r).toEqual({ ok: true, payoutId: 'pJob', importoCent: 60_000 });
+    expect(executePayoutMock).toHaveBeenCalledWith({
+      payoutId: 'pJob',
+      importoCent: 60_000,
+      iban: 'IT99A0301503200',
+    });
+    expect(txMock.payout.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'pJob' },
+        data: expect.objectContaining({ stato: 'ESEGUITO' }),
+      }),
     );
   });
 });

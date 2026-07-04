@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useId, useState } from 'react';
 import { useDocumentScanner } from '@/components/document-scanner-modal';
 import { isPdfFile } from '@/lib/scanner/pdf-render';
 
@@ -60,7 +60,12 @@ export function DocCard({
     }
     pick(f);
   };
-  const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+  // Id unico per ISTANZA: se due DocCard condividessero la stessa `label`,
+  // l'id derivato dalla sola label collide e `<label htmlFor>` attiverebbe
+  // sempre il primo input nel DOM (il file della 2ª card finirebbe sulla 1ª).
+  // `useId` evita la collisione. Vedi il gemello UploadCard (wizard pratiche).
+  const uid = useId();
+  const inputId = `doc-file-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${uid}`;
   const previewUrl = useMemo(
     () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
     [file],

@@ -8,8 +8,6 @@ import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
 import { PENALI } from '@/lib/penali/config';
 import { docKey } from '@/lib/documenti/richiesti';
-import { useDocumentScanner } from '@/components/document-scanner-modal';
-import { isPdfFile } from '@/lib/scanner/pdf-render';
 import { AddressAutocomplete } from '@/components/address-autocomplete';
 import {
   calcolaDocumentiRichiesti,
@@ -18,6 +16,7 @@ import {
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import type { SedeRef } from '@/lib/sedi/scope';
 import { intestatariPerVeicolo, crossCheckPerVeicolo } from './venditori-per-veicolo';
+import { reconcileVenditori } from './venditori-prefill';
 import {
   docVeicoloMancante,
   docVeicoloCompleto,
@@ -42,6 +41,7 @@ import {
 } from '@/lib/kyc/parte-docs';
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
+import { UploadCard, type BlobSlot } from './upload-card';
 import {
   extractLibrettoAction,
   extractFoglioComplementareAction,
@@ -54,20 +54,8 @@ import {
 
 type DocIdTipo = 'CI' | 'PASSAPORTO' | 'PATENTE';
 
-/**
- * Slot di upload diretto su Vercel Blob. Il browser carica il file
- * direttamente su Blob (aggira il limite 4,5 MB sul body delle Server Action)
- * e teniamo in stato solo la BlobRef (il "gettone"). `file` è conservato solo
- * per l'anteprima locale (nome/dimensione/immagine) e NON viene mai inviato al
- * server né alle action OCR. `uploading`/`progress`/`error` guidano la UI.
- */
-type BlobSlot = {
-  ref: BlobRef | null;
-  file: File | null;
-  uploading: boolean;
-  progress: number;
-  error: string | null;
-};
+// `BlobSlot` e la `UploadCard` vivono in ./upload-card (modulo presentazionale
+// isolato: grafo import auth-free e quindi testabile in unità).
 
 const emptySlot = (): BlobSlot => ({
   ref: null,
@@ -252,13 +240,38 @@ const emptyParte = (): Parte => ({
  * libretto ha più proprietari, si crea un VenditoreInput per ciascuno.
  */
 type VenditoreInput = Parte & {
+  /** Id stabile per-parte: usato SOLO per targettizzare gli update di stato
+   *  (closure async, merge del prefill, rimozione) e come React key — mai reso
+   *  nel DOM. Evita che upload/OCR async colpiscano la parte sbagliata dopo un
+   *  riordino dell'array (bug #2) e permette il merge non distruttivo (bug #1). */
+  id: string;
   docId: DocIdTipo;
   identita: IdentitaFiles;
   veicoloOrdine: number; // veicolo (1..n) a cui appartiene questo venditore
 };
 
+// Id stabile per parte (venditore/co-acquirente). Contatore di modulo: gli id
+// non finiscono mai nel DOM (solo targeting di stato + React key), quindi non
+// c'è rischio di mismatch SSR/hydration.
+let partySeq = 0;
+const newPartyId = (): string => `party-${(partySeq += 1)}`;
+
+/** True se almeno uno slot identità porta una BlobRef caricata. */
+function identitaHasAnyRef(f: IdentitaFiles): boolean {
+  return !!(
+    f.fronte?.ref ||
+    f.retro?.ref ||
+    f.single?.ref ||
+    f.permesso?.ref ||
+    f.visura?.ref ||
+    f.codiceFiscale?.ref ||
+    f.codiceFiscaleRetro?.ref
+  );
+}
+
 const emptyVenditore = (veicoloOrdine = 1): VenditoreInput => ({
   ...emptyParte(),
+  id: newPartyId(),
   docId: 'CI',
   identita: {},
   veicoloOrdine,
@@ -269,6 +282,8 @@ const emptyVenditore = (veicoloOrdine = 1): VenditoreInput => ({
  * acquirente principale (Parte + documento + residenza), a livello pratica.
  */
 type CoAcquirenteInput = Parte & {
+  /** Id stabile per-parte (vedi VenditoreInput.id). */
+  id: string;
   docId: DocIdTipo;
   identita: IdentitaFiles;
   residenzaDiversa: boolean;
@@ -277,6 +292,7 @@ type CoAcquirenteInput = Parte & {
 
 const emptyCoAcquirente = (): CoAcquirenteInput => ({
   ...emptyParte(),
+  id: newPartyId(),
   docId: 'CI',
   identita: {},
   residenzaDiversa: false,
@@ -440,12 +456,23 @@ export function WizardNuovaPratica({
     const clamped = Math.min(50, Math.max(1, n));
     setNumeroVeicoli(clamped);
     setVeicoli((prev) => resizeVeicoli(prev, clamped));
+    // Pota i venditori dei veicoli rimossi (bug #5/#10): senza questo restano
+    // orfani nello stato (invisibili e non rimovibili nell'accordion) e vengono
+    // inviati con un veicoloOrdine inesistente → Venditore con veicoloId=null
+    // lato server, scollegato da ogni veicolo e col cross-check saltato.
+    setVenditori((prev) => {
+      const kept = prev.filter((v) => v.veicoloOrdine <= clamped);
+      return kept.length ? kept : [emptyVenditore(1)];
+    });
   };
 
   const handleCardSelect = (card: (typeof TIPO_CARDS)[number]) => {
     setTipo(card.tipo);
     setMultiplo(card.multiplo);
-    changeNumeroVeicoli(card.multiplo ? 2 : 1);
+    // Resetta il numero veicoli SOLO quando cambia davvero la dimensione
+    // singolo/multiplo (bug #11): passare tra due card multiplo o ri-cliccare la
+    // stessa card non deve riportare a 2 scartando i veicoli 3..N già caricati.
+    if (card.multiplo !== multiplo) changeNumeroVeicoli(card.multiplo ? 2 : 1);
     // Se il nuovo tipo non è MINIVOLTURA, l'acquirente deve poter scegliere un
     // tipo soggetto valido per SEMPLICE; resettiamo se era OPERATORE_AUTO.
     if (card.tipo !== 'MINIVOLTURA') {
@@ -493,13 +520,15 @@ export function WizardNuovaPratica({
   const [acquirente, setAcquirente] = useState<Parte>(emptyParte());
 
   // Aggiorna un singolo venditore per indice (update immutabile).
-  const updateVenditore = (idx: number, patch: Partial<VenditoreInput>) => {
-    setVenditori((prev) => prev.map((v, i) => (i === idx ? { ...v, ...patch } : v)));
+  // Update/rimozione per ID STABILE (non per indice): le closure catturate da
+  // upload/OCR async restano corrette anche se l'array viene riordinato (bug #2).
+  const updateVenditore = (id: string, patch: Partial<VenditoreInput>) => {
+    setVenditori((prev) => prev.map((v) => (v.id === id ? { ...v, ...patch } : v)));
   };
   const addVenditore = (veicoloOrdine = 1) =>
     setVenditori((prev) => [...prev, emptyVenditore(veicoloOrdine)]);
-  const removeVenditore = (idx: number) =>
-    setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+  const removeVenditore = (id: string) =>
+    setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((v) => v.id !== id)));
 
   // Documento d'identità per parte (A7): tipo scelto + file caricati. Il file
   // fronte (CI e patente) o il file singolo (passaporto) avvia l'OCR di pre-fill.
@@ -513,11 +542,11 @@ export function WizardNuovaPratica({
 
   // Co-intestatari acquirente (solo SEMPLICE). Default: nessuno.
   const [coAcquirenti, setCoAcquirenti] = useState<CoAcquirenteInput[]>([]);
-  const updateCoAcquirente = (idx: number, patch: Partial<CoAcquirenteInput>) =>
-    setCoAcquirenti((prev) => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  const updateCoAcquirente = (id: string, patch: Partial<CoAcquirenteInput>) =>
+    setCoAcquirenti((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const addCoAcquirente = () => setCoAcquirenti((prev) => [...prev, emptyCoAcquirente()]);
-  const removeCoAcquirente = (idx: number) =>
-    setCoAcquirenti((prev) => prev.filter((_, i) => i !== idx));
+  const removeCoAcquirente = (id: string) =>
+    setCoAcquirenti((prev) => prev.filter((c) => c.id !== id));
 
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
@@ -554,17 +583,16 @@ export function WizardNuovaPratica({
     if (sig === ownersSig.current) return;
     ownersSig.current = sig;
     if (!prefill.length) return;
-    setVenditori(
-      prefill.map((o) => ({
-        ...emptyVenditore(o.veicoloOrdine),
-        isPG: o.isPersonaGiuridica,
-        tipoSoggetto: o.isPersonaGiuridica ? 'AZIENDA' : null,
-        nome: o.nome ?? '',
-        cognome: o.cognome ?? '',
-        cf: (o.cf ?? '').toUpperCase(),
-        ragioneSociale: o.ragioneSociale ?? '',
-        piva: o.piva ?? '',
-      })),
+    // MERGE non distruttivo (bug #1/#3/#4): riusa i venditori esistenti abbinati
+    // per identità (preserva documenti/verdetti/contatti + co-intestatari
+    // manuali), semina i vuoti, aggiunge solo gli intestatari realmente nuovi.
+    // Non sostituisce più l'intero array (che cancellava i documenti KYC già
+    // caricati ad ogni re-upload/re-OCR o aggiunta di un altro veicolo).
+    setVenditori((prev) =>
+      reconcileVenditori(prev, prefill, {
+        makeEmpty: emptyVenditore,
+        hasIdentita: (v) => identitaHasAnyRef(v.identita),
+      }),
     );
   }, [veicoli, hydrated]);
 
@@ -594,8 +622,12 @@ export function WizardNuovaPratica({
           // stessa sig e NON sovrascriverà i venditori ripristinati.
           ownersSig.current = computeOwnersSig(d.veicoli);
         }
-        if (Array.isArray(d.venditori)) setVenditori(d.venditori);
-        if (Array.isArray(d.coAcquirenti)) setCoAcquirenti(d.coAcquirenti);
+        // Backfill dell'id stabile per bozze salvate prima della sua
+        // introduzione (altrimenti il targeting per id non troverebbe la parte).
+        if (Array.isArray(d.venditori))
+          setVenditori(d.venditori.map((v) => (v.id ? v : { ...v, id: newPartyId() })));
+        if (Array.isArray(d.coAcquirenti))
+          setCoAcquirenti(d.coAcquirenti.map((c) => (c.id ? c : { ...c, id: newPartyId() })));
         if (d.acquirente) setAcquirente(d.acquirente);
         if (d.acquirenteDocId) setAcquirenteDocId(d.acquirenteDocId);
         if (d.acquirenteIdentita) setAcquirenteIdentita(d.acquirenteIdentita);
@@ -1070,6 +1102,75 @@ export function WizardNuovaPratica({
     }
   };
 
+  // Bug #9: ri-arma gli OCR interrotti da un refresh durante la finestra di
+  // estrazione (o rimasti a vuoto dopo un OCR fallito). Alla riapertura della
+  // bozza i file sono già su Blob (ref presente) ma il risultato OCR manca → i
+  // campi del veicolo restano nascosti e i gate step 1/2/3 restano bloccati senza
+  // rimedio se non ricaricare il file. One-shot dopo l'hydration.
+  const reOcrArmedRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated || reOcrArmedRef.current) return;
+    reOcrArmedRef.current = true;
+
+    // Libretti: fronte+retro presenti ma OCR mancante → ri-estrai (sblocca step 1).
+    veicoli.forEach((v, i) => {
+      if (
+        v.tipoDocumento === 'LIBRETTO' &&
+        v.libretto.ref &&
+        v.librettoRetro.ref &&
+        !v.ocr &&
+        !v.extracting
+      ) {
+        void runLibrettoOcr(i, v.libretto.ref, v.librettoRetro.ref);
+      }
+    });
+
+    // Ri-arma gli OCR documentali di una parte quando il file è presente ma il
+    // relativo verdetto OCR manca (sblocca la verifica fail-closed step 2/3).
+    const rearmParte = <P extends Parte & { docId: DocIdTipo; identita: IdentitaFiles }>(
+      p: P,
+      docId: DocIdTipo,
+      identita: IdentitaFiles,
+      onChange: (updater: (prev: P) => P) => void,
+    ) => {
+      const mainRef =
+        docId === 'CI' || docId === 'PATENTE' ? identita.fronte?.ref : identita.single?.ref;
+      if (mainRef && !p.identitaOcr) void runIdentitaOcr<P>(mainRef, docId, onChange);
+      if (identita.visura?.ref && !p.visuraOcr) void runVisuraOcr<P>(identita.visura.ref, onChange);
+      if (identita.permesso?.ref && !p.permessoOcr)
+        void runPermessoOcr<P>(identita.permesso.ref, onChange);
+      if (identita.codiceFiscale?.ref && !p.codiceFiscaleOcr)
+        void runCfOcr<P>(identita.codiceFiscale.ref, onChange);
+    };
+
+    venditori.forEach((v) =>
+      rearmParte(v, v.docId, v.identita, (upd) =>
+        setVenditori((prev) => prev.map((vv) => (vv.id === v.id ? upd(vv) : vv))),
+      ),
+    );
+    coAcquirenti.forEach((c) =>
+      rearmParte(c, c.docId, c.identita, (upd) =>
+        setCoAcquirenti((prev) => prev.map((cc) => (cc.id === c.id ? upd(cc) : cc))),
+      ),
+    );
+    // Acquirente: identità/visura/permesso/CF in acquirenteIdentita + acquirente.
+    {
+      const mainRef =
+        acquirenteDocId === 'CI' || acquirenteDocId === 'PATENTE'
+          ? acquirenteIdentita.fronte?.ref
+          : acquirenteIdentita.single?.ref;
+      if (mainRef && !acquirente.identitaOcr)
+        void runIdentitaOcr<Parte>(mainRef, acquirenteDocId, setAcquirente);
+      if (acquirenteIdentita.visura?.ref && !acquirente.visuraOcr)
+        void runVisuraOcr<Parte>(acquirenteIdentita.visura.ref, setAcquirente);
+      if (acquirenteIdentita.permesso?.ref && !acquirente.permessoOcr)
+        void runPermessoOcr<Parte>(acquirenteIdentita.permesso.ref, setAcquirente);
+      if (acquirenteIdentita.codiceFiscale?.ref && !acquirente.codiceFiscaleOcr)
+        void runCfOcr<Parte>(acquirenteIdentita.codiceFiscale.ref, setAcquirente);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
   const handleFinalSubmit = () => {
     // Tutti i libretti (fronte e retro) devono avere la BlobRef pronta.
     if (veicoli.some((v) => !v.libretto.ref || !v.librettoRetro.ref)) return;
@@ -1340,15 +1441,18 @@ export function WizardNuovaPratica({
     label: string,
     canRemove: boolean,
   ) => (
-    <div key={idx} className="space-y-5">
+    <div key={v.id} className="space-y-5">
       <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-pv-navy-800">{label}</h2>
           {canRemove && (
             <button
               type="button"
-              onClick={() => removeVenditore(idx)}
-              className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600"
+              onClick={() => removeVenditore(v.id)}
+              // Difesa #2: niente rimozione mentre un upload identità è in corso
+              // (chiuderebbe la finestra di race sul targeting per-parte).
+              disabled={identitaUploading(v.identita)}
+              className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
             >
               Rimuovi
             </button>
@@ -1356,7 +1460,7 @@ export function WizardNuovaPratica({
         </div>
         <ParteForm
           parte={v}
-          onChange={(p) => updateVenditore(idx, p)}
+          onChange={(p) => updateVenditore(v.id, p)}
         />
       </div>
 
@@ -1367,14 +1471,14 @@ export function WizardNuovaPratica({
             : `Documento d'identità — ${label.toLowerCase()}`
         }
         docId={v.docId}
-        onDocId={(t) => updateVenditore(idx, { docId: t })}
+        onDocId={(t) => updateVenditore(v.id, { docId: t })}
         files={v.identita}
         isPG={v.isPG}
         tipoSoggetto={v.tipoSoggetto}
         tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
         onTipoSoggetto={(next) => {
           const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
-          updateVenditore(idx, {
+          updateVenditore(v.id, {
             tipoSoggetto: next,
             isPG,
             visuraOcr: isPG ? v.visuraOcr : undefined,
@@ -1383,47 +1487,47 @@ export function WizardNuovaPratica({
         }}
         onFiles={(updater) =>
           setVenditori((prev) =>
-            prev.map((vv, i) => (i === idx ? { ...vv, identita: updater(vv.identita) } : vv)),
+            prev.map((vv) => (vv.id === v.id ? { ...vv, identita: updater(vv.identita) } : vv)),
           )
         }
         onMainRef={(ref) =>
           runIdentitaOcr<VenditoreInput>(ref, v.docId, (upd) =>
-            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+            setVenditori((prev) => prev.map((vv) => (vv.id === v.id ? upd(vv) : vv))),
           )
         }
         onVisuraRef={(ref) =>
           runVisuraOcr<VenditoreInput>(ref, (upd) =>
-            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+            setVenditori((prev) => prev.map((vv) => (vv.id === v.id ? upd(vv) : vv))),
           )
         }
         onPermessoRef={(ref) =>
           runPermessoOcr<VenditoreInput>(ref, (upd) =>
-            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+            setVenditori((prev) => prev.map((vv) => (vv.id === v.id ? upd(vv) : vv))),
           )
         }
         onInvalidateVisura={() =>
           setVenditori((prev) =>
-            prev.map((vv, i) => (i === idx ? { ...vv, visuraOcr: undefined } : vv)),
+            prev.map((vv) => (vv.id === v.id ? { ...vv, visuraOcr: undefined } : vv)),
           )
         }
         onInvalidatePermesso={() =>
           setVenditori((prev) =>
-            prev.map((vv, i) => (i === idx ? { ...vv, permessoOcr: undefined } : vv)),
+            prev.map((vv) => (vv.id === v.id ? { ...vv, permessoOcr: undefined } : vv)),
           )
         }
         onCfRef={(ref) =>
           runCfOcr<VenditoreInput>(ref, (upd) =>
-            setVenditori((prev) => prev.map((vv, i) => (i === idx ? upd(vv) : vv))),
+            setVenditori((prev) => prev.map((vv) => (vv.id === v.id ? upd(vv) : vv))),
           )
         }
         onInvalidateCf={() =>
           setVenditori((prev) =>
-            prev.map((vv, i) => (i === idx ? { ...vv, codiceFiscaleOcr: undefined } : vv)),
+            prev.map((vv) => (vv.id === v.id ? { ...vv, codiceFiscaleOcr: undefined } : vv)),
           )
         }
         onInvalidateIdentita={() =>
           setVenditori((prev) =>
-            prev.map((vv, i) => (i === idx ? { ...vv, identitaOcr: undefined } : vv)),
+            prev.map((vv) => (vv.id === v.id ? { ...vv, identitaOcr: undefined } : vv)),
           )
         }
       />
@@ -1447,7 +1551,7 @@ export function WizardNuovaPratica({
   // layout del principale (tipo soggetto in cima → anagrafica → documento →
   // residenza). Verifica documentale per-parte identica all'acquirente.
   const renderCoAcquirente = (c: CoAcquirenteInput, idx: number) => (
-    <div key={idx} className="space-y-5">
+    <div key={c.id} className="space-y-5">
       <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[15px] font-bold text-pv-navy-800">
@@ -1455,8 +1559,9 @@ export function WizardNuovaPratica({
           </h2>
           <button
             type="button"
-            onClick={() => removeCoAcquirente(idx)}
-            className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600"
+            onClick={() => removeCoAcquirente(c.id)}
+            disabled={identitaUploading(c.identita)}
+            className="text-[12.5px] font-semibold text-pv-red-500 underline hover:text-pv-red-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
           >
             Rimuovi
           </button>
@@ -1467,7 +1572,7 @@ export function WizardNuovaPratica({
             onChange={(e) => {
               const next = e.target.value as TipoSoggetto;
               const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
-              updateCoAcquirente(idx, {
+              updateCoAcquirente(c.id, {
                 tipoSoggetto: next,
                 isPG,
                 visuraOcr: isPG ? c.visuraOcr : undefined,
@@ -1486,65 +1591,65 @@ export function WizardNuovaPratica({
           </Select>
         </Field>
         <div className="my-3 h-px bg-pv-slate-200" />
-        <ParteForm parte={c} onChange={(p) => updateCoAcquirente(idx, p)} />
+        <ParteForm parte={c} onChange={(p) => updateCoAcquirente(c.id, p)} />
       </div>
 
       <IdentitaSection
         titolo={`Documento d'identità — co-intestatario ${idx + 1}`}
         hideTipoSoggetto
         docId={c.docId}
-        onDocId={(t) => updateCoAcquirente(idx, { docId: t })}
+        onDocId={(t) => updateCoAcquirente(c.id, { docId: t })}
         files={c.identita}
         isPG={c.isPG}
         tipoSoggetto={c.tipoSoggetto}
         tipiSoggetto={acquirenteTipiSoggetto}
         onTipoSoggetto={(next) => {
           const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
-          updateCoAcquirente(idx, { tipoSoggetto: next, isPG });
+          updateCoAcquirente(c.id, { tipoSoggetto: next, isPG });
         }}
         onFiles={(updater) =>
           setCoAcquirenti((prev) =>
-            prev.map((cc, i) => (i === idx ? { ...cc, identita: updater(cc.identita) } : cc)),
+            prev.map((cc) => (cc.id === c.id ? { ...cc, identita: updater(cc.identita) } : cc)),
           )
         }
         onMainRef={(ref) =>
           runIdentitaOcr<CoAcquirenteInput>(ref, c.docId, (upd) =>
-            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+            setCoAcquirenti((prev) => prev.map((cc) => (cc.id === c.id ? upd(cc) : cc))),
           )
         }
         onVisuraRef={(ref) =>
           runVisuraOcr<CoAcquirenteInput>(ref, (upd) =>
-            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+            setCoAcquirenti((prev) => prev.map((cc) => (cc.id === c.id ? upd(cc) : cc))),
           )
         }
         onPermessoRef={(ref) =>
           runPermessoOcr<CoAcquirenteInput>(ref, (upd) =>
-            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+            setCoAcquirenti((prev) => prev.map((cc) => (cc.id === c.id ? upd(cc) : cc))),
           )
         }
         onInvalidateVisura={() =>
           setCoAcquirenti((prev) =>
-            prev.map((cc, i) => (i === idx ? { ...cc, visuraOcr: undefined } : cc)),
+            prev.map((cc) => (cc.id === c.id ? { ...cc, visuraOcr: undefined } : cc)),
           )
         }
         onInvalidatePermesso={() =>
           setCoAcquirenti((prev) =>
-            prev.map((cc, i) => (i === idx ? { ...cc, permessoOcr: undefined } : cc)),
+            prev.map((cc) => (cc.id === c.id ? { ...cc, permessoOcr: undefined } : cc)),
           )
         }
         onCfRef={(ref) =>
           runCfOcr<CoAcquirenteInput>(ref, (upd) =>
-            setCoAcquirenti((prev) => prev.map((cc, i) => (i === idx ? upd(cc) : cc))),
+            setCoAcquirenti((prev) => prev.map((cc) => (cc.id === c.id ? upd(cc) : cc))),
           )
         }
         onInvalidateCf={() =>
           setCoAcquirenti((prev) =>
-            prev.map((cc, i) => (i === idx ? { ...cc, codiceFiscaleOcr: undefined } : cc)),
+            prev.map((cc) => (cc.id === c.id ? { ...cc, codiceFiscaleOcr: undefined } : cc)),
           )
         }
         onInvalidateIdentita={() =>
           setCoAcquirenti((prev) =>
-            prev.map((cc, i) => (i === idx ? { ...cc, identitaOcr: undefined } : cc)),
+            prev.map((cc) => (cc.id === c.id ? { ...cc, identitaOcr: undefined } : cc)),
           )
         }
       />
@@ -1556,7 +1661,7 @@ export function WizardNuovaPratica({
         <div className="inline-flex overflow-hidden rounded-[10px] border border-pv-slate-300">
           <button
             type="button"
-            onClick={() => updateCoAcquirente(idx, { residenzaDiversa: false, indirizzoResidenza: '' })}
+            onClick={() => updateCoAcquirente(c.id, { residenzaDiversa: false, indirizzoResidenza: '' })}
             className={`px-5 py-2 text-[13px] font-semibold transition ${
               !c.residenzaDiversa
                 ? 'bg-pv-navy-800 text-white'
@@ -1567,7 +1672,7 @@ export function WizardNuovaPratica({
           </button>
           <button
             type="button"
-            onClick={() => updateCoAcquirente(idx, { residenzaDiversa: true })}
+            onClick={() => updateCoAcquirente(c.id, { residenzaDiversa: true })}
             className={`border-l border-pv-slate-300 px-5 py-2 text-[13px] font-semibold transition ${
               c.residenzaDiversa
                 ? 'bg-pv-navy-800 text-white'
@@ -1584,12 +1689,12 @@ export function WizardNuovaPratica({
                 label="Nuovo indirizzo di residenza"
                 placeholder="Via, civico, città…"
                 helpText="Inizia a digitare e seleziona dall'elenco."
-                onSelect={(p) => updateCoAcquirente(idx, { indirizzoResidenza: formatIndirizzo(p) })}
+                onSelect={(p) => updateCoAcquirente(c.id, { indirizzoResidenza: formatIndirizzo(p) })}
               />
             ) : (
               <Input
                 value={c.indirizzoResidenza}
-                onChange={(e) => updateCoAcquirente(idx, { indirizzoResidenza: e.target.value })}
+                onChange={(e) => updateCoAcquirente(c.id, { indirizzoResidenza: e.target.value })}
                 placeholder="Via, civico, città…"
               />
             )}
@@ -2770,178 +2875,6 @@ const DOC_ID_OPTIONS: { value: DocIdTipo; label: string }[] = [
   { value: 'PASSAPORTO', label: 'Passaporto' },
   { value: 'PATENTE', label: 'Patente' },
 ];
-
-/**
- * Card di upload diretto su Blob con stato per-file. Sostituisce DocCard negli
- * slot del wizard che vanno su Blob (documenti richiesti, identità): mostra
- * anteprima locale + badge stato (Caricamento N% / ✓ caricato / errore) e
- * delega upload+rimozione al chiamante. NON tiene il File in stato di submit:
- * l'anteprima usa il File solo localmente.
- */
-function UploadCard({
-  label,
-  slot,
-  onSelect,
-  onRemove,
-  invalid = false,
-  pdfOnly = false,
-  subtitle,
-}: {
-  label: string;
-  slot: BlobSlot | undefined;
-  onSelect: (file: File | null) => void;
-  onRemove: () => void;
-  invalid?: boolean;
-  /** Solo PDF + bypass editor (documento multipagina da caricare intero: SOLO
-   *  la visura camerale). Tutto il resto passa dallo scanner. */
-  pdfOnly?: boolean;
-  /** Testo guida sotto il titolo della card. */
-  subtitle?: string;
-}) {
-  const [localErr, setLocalErr] = useState<string | null>(null);
-  const file = slot?.file ?? null;
-  const ref = slot?.ref ?? null;
-  // Nome/dimensione: dal File se presente, altrimenti dalla BlobRef (bozza
-  // ripristinata dopo un refresh: il file è già su Blob, ma l'oggetto File
-  // locale non esiste più).
-  const docName = file?.name ?? ref?.name ?? null;
-  const docSize = file?.size ?? ref?.size ?? null;
-  const hasDoc = !!file || !!ref;
-  // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
-  const { pick, modal } = useDocumentScanner({ onFile: onSelect });
-  // pdfOnly (SOLO la visura): bypassa l'editor e carica il PDF intero (tutte le
-  // pagine, documento multipagina); rifiuta i non-PDF. Per tutto il resto
-  // (libretto, foglio complementare, …) si passa dallo scanner: immagini →
-  // editor ritaglio/migliora; PDF → editor pagina per pagina (esporta la pagina
-  // scelta come JPEG). L'editor serve anche sul foglio: spesso è la foto storta
-  // di un documento da raddrizzare/ritagliare.
-  const handlePick = (f: File | null): void => {
-    if (!f) {
-      setLocalErr(null);
-      onSelect(null);
-      return;
-    }
-    if (pdfOnly) {
-      if (!isPdfFile(f)) {
-        setLocalErr('Il documento deve essere in formato PDF.');
-        return;
-      }
-      setLocalErr(null);
-      onSelect(f);
-      return;
-    }
-    pick(f);
-  };
-  const inputId = `upload-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
-  const previewUrl = useMemo(
-    () => (file && file.type.startsWith('image/') ? URL.createObjectURL(file) : null),
-    [file],
-  );
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  const isPdf = (file?.type ?? ref?.type) === 'application/pdf';
-  const caricato = !!slot?.ref && !slot.uploading;
-  const uploading = !!slot?.uploading;
-  const erroreUpload = slot?.error ?? null;
-
-  return (
-    <div
-      className={`rounded-xl border p-4 transition ${
-        invalid || erroreUpload
-          ? 'border-pv-red-500 bg-pv-red-50'
-          : caricato
-            ? 'border-pv-green-500/40 bg-pv-green-50'
-            : 'border-pv-slate-200 bg-white'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[13px] font-semibold text-pv-navy-900">{label}</span>
-        {uploading ? (
-          <span className="rounded-full bg-pv-navy-50 px-2 py-0.5 text-[11px] font-semibold text-pv-navy-700">
-            Caricamento… {slot?.progress ?? 0}%
-          </span>
-        ) : caricato ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-pv-green-500/10 px-2 py-0.5 text-[11px] font-semibold text-pv-green-500">
-            ✓ Caricato
-          </span>
-        ) : (
-          <span className="rounded-full bg-pv-slate-100 px-2 py-0.5 text-[11px] font-semibold text-pv-slate-500">
-            Da caricare
-          </span>
-        )}
-      </div>
-
-      {subtitle && (
-        <p className="mt-1 text-[11px] leading-snug text-pv-slate-500">{subtitle}</p>
-      )}
-
-      <div className="mt-3 flex items-center gap-3">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-pv-slate-200 bg-pv-slate-50">
-          {previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt={`Anteprima ${label}`} className="h-full w-full object-cover" />
-          ) : (
-            <span className="text-[11px] font-bold text-pv-slate-400">{isPdf ? 'PDF' : 'DOC'}</span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          {docName ? (
-            <>
-              <p className="truncate text-[12px] text-pv-slate-700" title={docName}>
-                {docName}
-              </p>
-              {docSize != null && (
-                <p className="text-[11px] text-pv-slate-500">
-                  {(docSize / 1024 / 1024).toFixed(2)} MB
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-[12px] text-pv-slate-500">
-              {pdfOnly ? 'Solo PDF · max 10 MB' : 'PDF, JPG o PNG · max 10 MB'}
-            </p>
-          )}
-          {(erroreUpload || localErr) && (
-            <p className="mt-0.5 text-[11px] font-semibold text-pv-red-500">{erroreUpload ?? localErr}</p>
-          )}
-          <div className="mt-1.5 flex gap-3">
-            <label
-              htmlFor={inputId}
-              className="cursor-pointer text-[12px] font-semibold text-pv-navy-600 hover:underline"
-            >
-              {hasDoc ? 'Sostituisci' : 'Carica file'}
-            </label>
-            {hasDoc && (
-              <button
-                type="button"
-                onClick={onRemove}
-                className="text-[12px] font-semibold text-pv-red-500 hover:underline"
-              >
-                Rimuovi
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <input
-        id={inputId}
-        type="file"
-        accept={pdfOnly ? 'application/pdf' : 'application/pdf,image/jpeg,image/png,image/jpg'}
-        className="sr-only"
-        onChange={(e) => {
-          handlePick(e.target.files?.[0] ?? null);
-          e.target.value = '';
-        }}
-      />
-      {modal}
-    </div>
-  );
-}
 
 /**
  * A7 + Verifica documentale: sezione "Documento d'identità" sotto ciascuna

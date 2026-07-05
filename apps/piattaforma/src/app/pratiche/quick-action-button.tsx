@@ -2,23 +2,25 @@
 
 import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { InlineSpinner } from '@/components/ui';
+import { InlineSpinner, useToast } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import {
-  markPraticaProcessataAction,
-  markFirmaAvvenutaAction,
+  processaPraticaFromListaAction,
+  firmaFromListaAction,
 } from './actions';
 
 type Action = 'processata' | 'firma';
 
-const COPY: Record<Action, { label: string; confirm: string }> = {
+const COPY: Record<Action, { label: string; confirm: string; success: string }> = {
   processata: {
     label: 'Processata',
     confirm: 'Confermi che la pratica è stata processata? Il broker riceverà notifica.',
+    success: 'Pratica processata: il broker è stato avvisato',
   },
   firma: {
     label: 'Firmata',
     confirm: 'Confermi che la firma è avvenuta? Verrà accreditato il broker e schedulato l\'addebito.',
+    success: 'Firma registrata: credito accreditato al broker',
   },
 };
 
@@ -35,6 +37,7 @@ export function QuickActionButton({
   action: Action;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
   const c = COPY[action];
 
@@ -44,14 +47,16 @@ export function QuickActionButton({
     if (!confirm(c.confirm)) return;
     startTransition(async () => {
       try {
-        if (action === 'processata') {
-          await markPraticaProcessataAction(praticaId);
-        } else {
-          await markFirmaAvvenutaAction(praticaId);
-        }
+        // Le action "FromLista" NON navigano: restiamo sulla lista, aggiorniamo
+        // lo stato col refresh e diamo feedback via toast.
+        const res =
+          action === 'processata'
+            ? await processaPraticaFromListaAction(praticaId)
+            : await firmaFromListaAction(praticaId);
+        toast(res.ok ? c.success : res.error, res.ok ? 'success' : 'error');
       } catch {
-        // Le server action fanno redirect. In caso di errore lo stato si
-        // aggiorna comunque al refresh.
+        // Gate (es. blocco pagamento) o imprevisto: naviga/gestisce lato server;
+        // lo stato si aggiorna comunque al refresh.
       }
       router.refresh();
     });

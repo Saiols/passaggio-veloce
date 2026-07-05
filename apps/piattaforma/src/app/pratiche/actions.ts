@@ -26,6 +26,9 @@ import {
 } from '@/lib/eventi/pratica-eventi';
 import { env } from '@/env';
 
+/** Esito delle quick-action usate dalla lista pratiche (nessuna navigazione). */
+export type QuickActionResult = { ok: true } | { ok: false; error: string };
+
 /**
  * AF-N: notifiche affiliazione post-firma. Per ogni accredit eseguito:
  *  - N24 al referente se il saldo wallet ha attraversato la soglia payout
@@ -81,7 +84,7 @@ async function notifyAffiliationPostFirma(
  * pratica come "processata" quando ha completato la lavorazione e attende solo
  * la firma del cliente. Transizione forzata: ACCETTATA → PROCESSATA → FIRMATA.
  */
-export async function markPraticaProcessataAction(praticaId: string): Promise<void> {
+async function processaPraticaCore(praticaId: string): Promise<QuickActionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.companyType !== 'AGENZIA') {
@@ -110,7 +113,7 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
       });
     });
   } catch (err) {
-    redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
+    return { ok: false, error: (err as Error).message };
   }
 
   // N13: notifica al broker che la pratica è stata processata, manca solo la firma.
@@ -179,10 +182,32 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');
   revalidatePath(`/pratiche/${praticaId}`);
+  return { ok: true };
+}
+
+/**
+ * Wrapper per il DETTAGLIO pratica (form action): mantiene il comportamento
+ * storico redirect + toast via query param sulla stessa pagina di dettaglio.
+ */
+export async function markPraticaProcessataAction(praticaId: string): Promise<void> {
+  const res = await processaPraticaCore(praticaId);
+  if (!res.ok) {
+    redirect(`/pratiche/${praticaId}?error=${encodeURIComponent(res.error)}`);
+  }
   redirect(`/pratiche/${praticaId}?processata=1`);
 }
 
-export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> {
+/**
+ * Wrapper per la LISTA pratiche: NON naviga, ritorna l'esito così il client
+ * resta sulla lista (stato aggiornato dal refresh) e mostra un toast.
+ */
+export async function processaPraticaFromListaAction(
+  praticaId: string,
+): Promise<QuickActionResult> {
+  return processaPraticaCore(praticaId);
+}
+
+async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.companyType !== 'AGENZIA') {
@@ -292,7 +317,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
       accreditiResult = accreditOut.accrediti;
     });
   } catch (err) {
-    redirect(`/pratiche/${praticaId}?error=${encodeURIComponent((err as Error).message)}`);
+    return { ok: false, error: (err as Error).message };
   }
 
   // CRM-G: avanzamento stato CRM del broker (S7→S8 prima volta, S8→S9
@@ -495,7 +520,23 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');
   revalidatePath(`/pratiche/${praticaId}`);
+  return { ok: true };
+}
+
+/** Wrapper per il DETTAGLIO pratica (form action): redirect + toast come prima. */
+export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> {
+  const res = await firmaPraticaCore(praticaId);
+  if (!res.ok) {
+    redirect(`/pratiche/${praticaId}?error=${encodeURIComponent(res.error)}`);
+  }
   redirect(`/pratiche/${praticaId}?firmata=1`);
+}
+
+/** Wrapper per la LISTA pratiche: NON naviga, ritorna l'esito (toast lato client). */
+export async function firmaFromListaAction(
+  praticaId: string,
+): Promise<QuickActionResult> {
+  return firmaPraticaCore(praticaId);
 }
 
 export async function annullaPraticaAction(praticaId: string): Promise<void> {

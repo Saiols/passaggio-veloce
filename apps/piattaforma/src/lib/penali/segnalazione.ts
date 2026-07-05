@@ -160,7 +160,7 @@ export async function confermaAnnullamentoConPenaleAction(
             include: {
               wallet: true,
               users: {
-                where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+                where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
                 select: { id: true, email: true, nome: true },
                 take: 1,
               },
@@ -169,7 +169,7 @@ export async function confermaAnnullamentoConPenaleAction(
           agenziaAssegnata: {
             include: {
               users: {
-                where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+                where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
                 select: { id: true, email: true },
                 take: 1,
               },
@@ -281,12 +281,12 @@ export async function confermaAnnullamentoConPenaleAction(
         tipoSegnalazione:
           (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo,
         saldoBroker: newSaldo,
-        brokerEmail: brokerUser?.email ?? null,
+        brokerEmail: brokerUser?.email ?? pratica.broker.email,
         brokerUserId: brokerUser?.id ?? null,
         brokerCompanyId: pratica.brokerId,
         brokerSedeId: pratica.brokerSedeId,
         brokerNome: brokerUser?.nome ?? pratica.broker.ragioneSociale,
-        agenziaEmail: agenziaUser?.email ?? null,
+        agenziaEmail: agenziaUser?.email ?? pratica.agenziaAssegnata?.email ?? null,
         agenziaUserId: agenziaUser?.id ?? null,
         agenziaCompanyId: pratica.agenziaAssegnataId,
         agenziaSedeId: pratica.agenziaSedeId,

@@ -121,7 +121,7 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
         broker: {
           include: {
             users: {
-              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
               select: { email: true, nome: true, id: true },
               take: 1,
             },
@@ -134,12 +134,15 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
       },
     });
     const brokerUser = full?.broker.users[0];
-    if (full && brokerUser) {
+    // Ripiega sull'email azienda se manca l'admin attivo: la notifica non deve
+    // sparire in silenzio (coerente con N3).
+    const brokerEmail = brokerUser?.email ?? full?.broker.email;
+    if (full && brokerEmail) {
       await sendNotification({
         tipo: 'N13_BROKER_PRATICA_PROCESSATA',
         target: {
-          email: brokerUser.email,
-          userId: brokerUser.id,
+          email: brokerEmail,
+          userId: brokerUser?.id ?? null,
           companyId: full.broker.id,
         },
         payload: {
@@ -151,7 +154,7 @@ export async function markPraticaProcessataAction(praticaId: string): Promise<vo
                 : full.veicoli[0].targa
               : null,
           agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
-          nomeBroker: brokerUser.nome,
+          nomeBroker: brokerUser?.nome ?? full.broker.ragioneSociale,
         },
       }).catch(() => undefined);
     }
@@ -320,7 +323,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           include: {
             wallet: true,
             users: {
-              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
               select: { email: true, nome: true, id: true },
               take: 1,
             },
@@ -329,7 +332,7 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
         agenziaAssegnata: {
           include: {
             users: {
-              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
               select: { email: true, id: true },
               take: 1,
             },
@@ -346,12 +349,16 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
             : full.veicoli[0].targa
           : null;
       const brokerUser = full.broker.users[0];
-      if (brokerUser) {
+      // Ripiega sull'email azienda se manca l'admin attivo: N4/N31 non devono
+      // sparire in silenzio (coerente con N3).
+      const brokerEmail = brokerUser?.email ?? full.broker.email;
+      const nomeBroker = brokerUser?.nome ?? full.broker.ragioneSociale;
+      if (brokerEmail) {
         await sendNotification({
           tipo: 'N4_BROKER_FIRMA_E_CREDITO',
           target: {
-            email: brokerUser.email,
-            userId: brokerUser.id,
+            email: brokerEmail,
+            userId: brokerUser?.id ?? null,
             companyId: full.broker.id,
           },
           payload: {
@@ -360,29 +367,33 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
             creditoCent: full.creditoBrokerCent,
             saldoCent: full.broker.wallet?.saldoCent ?? 0,
-            nomeBroker: brokerUser.nome,
+            nomeBroker,
           },
         }).catch(() => undefined);
 
         await sendNotification({
           tipo: 'N31_VALUTA_AGENZIA',
           target: {
-            email: brokerUser.email,
-            userId: brokerUser.id,
+            email: brokerEmail,
+            userId: brokerUser?.id ?? null,
             companyId: full.broker.id,
           },
           payload: {
             codicePratica: full.codicePratica ?? '—',
             targa: fullTarga,
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
-            nomeBroker: brokerUser.nome,
+            nomeBroker,
             praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${praticaId}`,
           },
         }).catch(() => undefined);
       }
 
       const agenziaUser = full.agenziaAssegnata?.users[0];
-      if (full.agenziaAssegnata && agenziaUser && full.autoAddebitoAt) {
+      // Preferisci l'email di registrazione dell'admin azienda, ma ripiega su
+      // Company.email se non c'è un admin attivo: un addebito non deve mai
+      // sparire in silenzio (coerente con N3/N6/N9).
+      const agenziaEmail = agenziaUser?.email ?? full.agenziaAssegnata?.email;
+      if (full.agenziaAssegnata && agenziaEmail && full.autoAddebitoAt) {
         // Allega il PDF della fattura PV all'addebito. Best-effort: se la
         // fattura non c'è (fee 0) o il PDF fallisce, si invia senza allegato.
         const fatturaPdf = await fatturaPvAttachment(praticaId).catch(() => null);
@@ -390,9 +401,8 @@ export async function markFirmaAvvenutaAction(praticaId: string): Promise<void> 
           {
             tipo: 'N8_AGENZIA_ADDEBITO',
             target: {
-              // Email di registrazione (utente admin), non il campo Company.email.
-              email: agenziaUser.email,
-              userId: agenziaUser.id,
+              email: agenziaEmail,
+              userId: agenziaUser?.id ?? null,
               companyId: full.agenziaAssegnata.id,
             },
             payload: {

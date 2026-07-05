@@ -153,7 +153,7 @@ export async function risolviRevisioneAction(
       broker: {
         include: {
           users: {
-            where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+            where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
             select: { id: true, email: true, nome: true },
             take: 1,
           },
@@ -191,17 +191,20 @@ export async function risolviRevisioneAction(
   // Notifica al broker (admin del'azienda)
   try {
     const brokerUser = pratica.broker.users[0];
-    if (brokerUser) {
+    // Ripiega sull'email azienda se manca l'admin attivo (coerente con N3): la
+    // notifica al broker non deve sparire in silenzio.
+    const brokerEmail = brokerUser?.email ?? pratica.broker.email;
+    if (brokerEmail) {
       await sendNotification({
         tipo: 'N21_BROKER_REVISIONE_COMPLETATA',
         target: {
-          email: brokerUser.email,
-          userId: brokerUser.id,
+          email: brokerEmail,
+          userId: brokerUser?.id ?? null,
           companyId: pratica.brokerId,
         },
         payload: {
           codicePratica: pratica.codicePratica ?? '(bozza)',
-          nomeBroker: brokerUser.nome,
+          nomeBroker: brokerUser?.nome ?? pratica.broker.ragioneSociale,
           esito,
           noteEsito: trimmedEsito,
         },

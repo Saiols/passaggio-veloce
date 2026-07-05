@@ -90,7 +90,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
         broker: {
           include: {
             users: {
-              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' },
+              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
               select: { email: true, nome: true, id: true },
               take: 1,
             },
@@ -113,10 +113,14 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
     const broker = full?.broker;
     const brokerUser = broker?.users[0];
     const agenzia = full?.agenziaAssegnata;
-    if (full && broker && brokerUser && agenzia) {
+    // Recapito broker: preferisci l'admin azienda attivo, ma ripiega sull'email
+    // dell'azienda se manca (account non ancora attivo o pratica creata da un
+    // collaboratore) così la notifica non viene mai persa in silenzio (vedi N3).
+    const brokerEmail = brokerUser?.email ?? broker?.email;
+    if (full && broker && brokerEmail && agenzia) {
       await sendNotification({
         tipo: 'N2_BROKER_ACCETTATA',
-        target: { email: brokerUser.email, userId: brokerUser.id, companyId: broker.id },
+        target: { email: brokerEmail, userId: brokerUser?.id ?? null, companyId: broker.id },
         payload: {
           codicePratica: full.codicePratica ?? '—',
           targa:
@@ -132,7 +136,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
           agenziaProvincia: agenzia.provincia,
           agenziaEmail: agenzia.email,
           agenziaTelefono: agenzia.telefono,
-          nomeBroker: brokerUser.nome,
+          nomeBroker: brokerUser?.nome ?? broker.ragioneSociale,
         },
       }).catch(() => undefined);
     }

@@ -341,7 +341,7 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
     include: {
       broker: {
         include: {
-          users: { where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE' }, select: { email: true, nome: true, id: true }, take: 1 },
+          users: { where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null }, select: { email: true, nome: true, id: true }, take: 1 },
         },
       },
       assegnazioni: { select: { id: true } },
@@ -377,14 +377,17 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
   await sendNotifications(targets);
 
   const brokerUser = pratica.broker.users[0];
-  if (brokerUser) {
+  // Ripiega sull'email azienda se manca l'admin attivo (coerente con N3): la
+  // notifica al broker non deve sparire in silenzio.
+  const brokerEmail = brokerUser?.email ?? pratica.broker.email;
+  if (brokerEmail) {
     await sendNotification({
       tipo: 'N11_BROKER_ESCALATION',
-      target: { email: brokerUser.email, userId: brokerUser.id, companyId: pratica.broker.id },
+      target: { email: brokerEmail, userId: brokerUser?.id ?? null, companyId: pratica.broker.id },
       payload: {
         codicePratica: pratica.codicePratica ?? '—',
         targa: targaPratica,
-        nomeBroker: brokerUser.nome,
+        nomeBroker: brokerUser?.nome ?? pratica.broker.ragioneSociale,
       },
     });
   }

@@ -2,6 +2,7 @@
 
 import { type ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui';
+import { NavBadge } from '@/components/nav-badge';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
 import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
 import {
@@ -54,7 +55,14 @@ export function BrokerShell({
     },
     {
       label: 'Operatività',
-      items: [{ href: '/pratiche', label: 'Pratiche', icon: IconPratiche }],
+      items: [
+        {
+          href: '/pratiche',
+          label: 'Pratiche',
+          icon: IconPratiche,
+          badge: <NavBadge keyName="praticheAttive" />,
+        },
+      ],
     },
     {
       label: 'Finanze',

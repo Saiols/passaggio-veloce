@@ -61,7 +61,12 @@ export function AgenziaShell({
       label: 'Operatività',
       items: [
         { href: '/inbox', label: 'Inbox', icon: IconInbox, badge: <NavBadge /> },
-        { href: '/pratiche', label: 'Pratiche attive', icon: IconPratiche },
+        {
+          href: '/pratiche',
+          label: 'Pratiche attive',
+          icon: IconPratiche,
+          badge: <NavBadge keyName="praticheAttive" />,
+        },
       ],
     },
     {

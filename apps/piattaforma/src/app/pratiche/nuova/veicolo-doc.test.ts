@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { docVeicoloMancante } from './veicolo-doc';
+import { docVeicoloMancante, veicoliDocsProntiPerInvio } from './veicolo-doc';
 
 describe('docVeicoloMancante', () => {
   const full = { librettoFronte: true, librettoRetro: true, ocr: true, foglio: true };
@@ -48,5 +48,40 @@ describe('docVeicoloMancante', () => {
         foglio: false,
       }),
     ).toBe('foglio complementare');
+  });
+});
+
+describe('veicoliDocsProntiPerInvio', () => {
+  const libretto = {
+    tipoDocumento: 'LIBRETTO' as const,
+    librettoFronte: true,
+    librettoRetro: true,
+    ocr: true,
+    foglio: false,
+  };
+  const foglio = {
+    tipoDocumento: 'FOGLIO_COMPLEMENTARE' as const,
+    librettoFronte: false,
+    librettoRetro: false,
+    ocr: false,
+    foglio: true,
+  };
+
+  it('un veicolo a FOGLIO_COMPLEMENTARE con solo il PDF è pronto per l\'invio', () => {
+    // Regressione: il vecchio guard di handleFinalSubmit pretendeva libretto
+    // fronte+retro anche per il foglio → invio bloccato in silenzio.
+    expect(veicoliDocsProntiPerInvio([foglio])).toBe(true);
+  });
+
+  it('un veicolo a LIBRETTO senza retro NON è pronto', () => {
+    expect(veicoliDocsProntiPerInvio([{ ...libretto, librettoRetro: false }])).toBe(false);
+  });
+
+  it('multi-veicolo: un veicolo a foglio non blocca gli altri a libretto completi', () => {
+    expect(veicoliDocsProntiPerInvio([libretto, foglio])).toBe(true);
+  });
+
+  it('un veicolo a FOGLIO_COMPLEMENTARE senza PDF NON è pronto', () => {
+    expect(veicoliDocsProntiPerInvio([{ ...foglio, foglio: false }])).toBe(false);
   });
 });

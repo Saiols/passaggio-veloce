@@ -21,6 +21,7 @@ import { reconcileVenditori } from './venditori-prefill';
 import {
   docVeicoloMancante,
   docVeicoloCompleto,
+  veicoliDocsProntiPerInvio,
   type TipoDocumentoVeicolo,
 } from './veicolo-doc';
 import {
@@ -1196,8 +1197,25 @@ export function WizardNuovaPratica({
   }, [hydrated]);
 
   const handleFinalSubmit = () => {
-    // Tutti i libretti (fronte e retro) devono avere la BlobRef pronta.
-    if (veicoli.some((v) => !v.libretto.ref || !v.librettoRetro.ref)) return;
+    // Il documento di circolazione di ogni veicolo dev'essere pronto: libretto
+    // fronte+retro+OCR OPPURE foglio complementare (solo PDF). Il guard è
+    // tipoDocumento-aware (stesso criterio di canStep1): il vecchio check
+    // `!libretto.ref || !librettoRetro.ref` bloccava sempre i veicoli a foglio
+    // — che azzerano di proposito gli slot libretto — interrompendo l'invio in
+    // silenzio. Feedback visibile invece dell'early-return muto.
+    const docsPronti = veicoliDocsProntiPerInvio(
+      veicoli.map((v) => ({
+        tipoDocumento: v.tipoDocumento,
+        librettoFronte: !!v.libretto.ref,
+        librettoRetro: !!v.librettoRetro.ref,
+        ocr: !!v.ocr,
+        foglio: !!v.foglioComplementare.ref,
+      })),
+    );
+    if (!docsPronti) {
+      avvisaMancanze(mancanzeStep1());
+      return;
+    }
     const fd = new FormData();
     fd.append('tipo', tipo);
     fd.append('numeroVeicoli', String(numeroVeicoli));

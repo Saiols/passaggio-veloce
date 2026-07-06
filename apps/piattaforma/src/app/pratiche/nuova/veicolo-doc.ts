@@ -42,3 +42,13 @@ export function docVeicoloMancante(s: StatoDocVeicolo): string | null {
 export function docVeicoloCompleto(s: StatoDocVeicolo): boolean {
   return docVeicoloMancante(s) === null;
 }
+
+/**
+ * True se TUTTI i veicoli hanno il documento di circolazione pronto per l'invio
+ * (libretto fronte+retro+OCR, oppure foglio complementare). È il guard usato da
+ * `handleFinalSubmit`: dev'essere `tipoDocumento`-aware, altrimenti un veicolo a
+ * foglio (che azzera di proposito gli slot libretto) blocca l'invio in silenzio.
+ */
+export function veicoliDocsProntiPerInvio(veicoli: readonly StatoDocVeicolo[]): boolean {
+  return veicoli.every(docVeicoloCompleto);
+}

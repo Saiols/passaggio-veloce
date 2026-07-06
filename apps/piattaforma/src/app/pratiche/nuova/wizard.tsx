@@ -530,6 +530,17 @@ export function WizardNuovaPratica({
   const removeVenditore = (id: string) =>
     setVenditori((prev) => (prev.length <= 1 ? prev : prev.filter((v) => v.id !== id)));
 
+  // Co-intestatari venditori = 2+ venditori sullo stesso veicolo. Prima
+  // dell'invio il broker va avvisato che TUTTI i co-intestatari devono
+  // presentarsi fisicamente in agenzia alla firma con i propri documenti.
+  const hasCoIntestatariVenditori = useMemo(() => {
+    const perVeicolo = new Map<number, number>();
+    for (const v of venditori) {
+      perVeicolo.set(v.veicoloOrdine, (perVeicolo.get(v.veicoloOrdine) ?? 0) + 1);
+    }
+    return [...perVeicolo.values()].some((n) => n >= 2);
+  }, [venditori]);
+
   // Documento d'identità per parte (A7): tipo scelto + file caricati. Il file
   // fronte (CI e patente) o il file singolo (passaporto) avvia l'OCR di pre-fill.
   const [acquirenteDocId, setAcquirenteDocId] = useState<DocIdTipo>('CI');
@@ -2473,6 +2484,13 @@ export function WizardNuovaPratica({
                 engine puro. Mostra blocchi/incompletezze in tempo reale e
                 lista doc obbligatori per il broker, raggruppati per parte/veicolo. */}
             <SchemaDocumentalePreview esito={esitoSchema} />
+
+            {hasCoIntestatariVenditori && (
+              <Alert variant="warning" title="Co-intestatari: presenza fisica richiesta">
+                Entrambi i co-intestatari dovranno presentarsi fisicamente in agenzia al
+                momento della firma con i loro documenti.
+              </Alert>
+            )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
               <Button variant="secondary" onClick={() => setStep(3)} disabled={submitting}>

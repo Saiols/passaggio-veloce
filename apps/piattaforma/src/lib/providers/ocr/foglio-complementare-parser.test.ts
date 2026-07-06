@@ -51,23 +51,26 @@ const FOGLIO_B = [
 ].join('\n');
 
 describe('parseFoglioComplementareText (foglio complementare PRA)', () => {
-  it('Doc A (Renault Clio): targa, telaio, intestatario azienda+P.IVA, data scrittura', () => {
+  it('Doc A (Renault Clio): targa, telaio, data scrittura; intestatario NON usato per prefill', () => {
     const r = parseFoglioComplementareText(FOGLIO_A, 0.9);
     expect(r.targa).toBe('GT440ZX');
     expect(r.telaio).toBe('VF1RJA00672164604');
+    // L'intestatario azienda è letto come "proprietario attuale" (riferimento),
+    // ma NON viene surfacet-ato come venditore: niente prefill né cross-check.
     expect(r.proprietarioAttuale).toBe('DIMENSIONE AUTO MILANO SPL');
-    expect(r.proprietariInfo?.[0]?.isPersonaGiuridica).toBe(true);
-    expect(r.proprietariInfo?.[0]?.piva).toBe('13180640966');
+    expect(r.proprietari).toBeUndefined();
+    expect(r.proprietariInfo).toBeUndefined();
     expect(r.dataAcquisto).toBe('2026-02-03');
     expect(r.confidenceScore).toBe(0.9);
   });
 
-  it('Doc B (Ford Fiesta): targa, telaio, intestatario azienda+P.IVA, data scrittura', () => {
+  it('Doc B (Ford Fiesta): targa, telaio, data scrittura; intestatario NON usato per prefill', () => {
     const r = parseFoglioComplementareText(FOGLIO_B, 0.8);
     expect(r.targa).toBe('DP243SK');
     expect(r.telaio).toBe('WF0DXXGAJD8G75490');
     expect(r.proprietarioAttuale).toBe('DIMENSIONE AUTO MILANO SPL');
-    expect(r.proprietariInfo?.[0]?.piva).toBe('13180640966');
+    expect(r.proprietari).toBeUndefined();
+    expect(r.proprietariInfo).toBeUndefined();
     expect(r.dataAcquisto).toBe('2025-10-03');
   });
 

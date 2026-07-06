@@ -5,10 +5,12 @@ import type { LibrettoCircolazioneData, OwnerInfo } from './types';
  * CIRCOLAZIONE", art. 56 D.Lgs. 446/1997). Subentra al libretto quando il
  * veicolo è intestato a un commerciante d'auto.
  *
- * Ritorna la stessa forma del libretto (LibrettoCircolazioneData) così da
- * alimentare la stessa pre-compilazione del wizard. Differenze chiave dal
- * libretto:
- *  - l'intestatario è SEMPRE l'azienda commerciante (ragione sociale + P.IVA);
+ * Ritorna la stessa forma del libretto (LibrettoCircolazioneData) per alimentare
+ * il wizard. Differenze chiave dal libretto:
+ *  - l'intestatario (azienda commerciante) viene letto come riferimento ma NON
+ *    auto-compila il venditore né alimenta il cross-check: l'OCR del foglio non è
+ *    affidabile sull'intestatario, quindi ragione sociale + P.IVA del venditore si
+ *    inseriscono a mano (come il "Proprietario attuale", anch'esso non compilato);
  *  - NON c'è la data di prima immatricolazione (campo B) → dataImmatricolazione
  *    resta undefined (si inserisce a mano);
  *  - la data utile è quella della "Scrittura Privata" (acquisto del commerciante).
@@ -89,8 +91,13 @@ export function parseFoglioComplementareText(
     dataAcquisto,
     proprietarioAttuale: owner?.display,
     proprietarioCf: undefined, // intestatario azienda → nessun CF persona fisica
-    proprietari: owner ? [owner.display] : undefined,
-    proprietariInfo: owner ? [owner] : undefined,
+    // Scelta di prodotto: la ragione sociale del commerciante NON pre-compila il
+    // venditore né alimenta il cross-check (l'OCR del foglio non è affidabile
+    // sull'intestatario; il broker la inserisce a mano, come il "Proprietario
+    // attuale"). Lasciandoli vuoti, prefill e cross-check — che li leggono con
+    // `?? []` — diventano no-op per il foglio, sia lato client sia lato server.
+    proprietari: undefined,
+    proprietariInfo: undefined,
     preImm2015,
     flagComodatoDuso: /COMODATO/.test(upper),
     confidenceScore: confidence,

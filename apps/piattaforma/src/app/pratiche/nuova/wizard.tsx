@@ -999,10 +999,11 @@ export function WizardNuovaPratica({
         };
         if (d.targa) patch.targa = d.targa;
         if (d.telaio) patch.telaio = d.telaio;
-        // NB: il "Proprietario attuale" NON si pre-compila dal foglio (scelta
-        // di prodotto): il broker lo inserisce a mano. Il venditore commerciante
-        // si rigenera comunque dagli intestatari OCR via effect, e il cross-check
-        // del foglio usa v.ocr (non questo campo), quindi resta coerente.
+        // NB: né il "Proprietario attuale" né la ragione sociale del venditore si
+        // pre-compilano dal foglio (scelta di prodotto: l'OCR del foglio non è
+        // affidabile sull'intestatario) — il broker li inserisce a mano. Il parser
+        // non emette proprietari/proprietariInfo, quindi prefill e cross-check
+        // restano no-op per il foglio; il venditore resta comunque obbligatorio.
         updateVeicolo(idx, patch);
       } else {
         updateVeicolo(idx, { extracting: false, ocr: undefined, ocrError: null });

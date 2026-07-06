@@ -160,7 +160,12 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
   // Gap di sicurezza: i campi vanno a capo entro la colonna così i valori
   // lunghi (ragione sociale, indirizzo, PEC) non arrivano al bordo laterale.
   const PARTE_GAP = 6;
-  const drawParte = (titolo: string, d: DatiFiscali, x: number, sede?: SedeRiferimento | null): void => {
+  const drawParte = (
+    titolo: string,
+    d: DatiFiscali,
+    x: number,
+    sede?: SedeRiferimento | null,
+  ): number => {
     let yy = y;
     text(page, titolo, x, yy, { font: helvBold, size: 9, color: SLATE_500 });
     yy -= 15;
@@ -182,15 +187,25 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
     if (addr) drawField(addr, { size: 9 }, 12);
     if (d.codiceSdi) drawField(`SDI ${d.codiceSdi}`, { size: 9 }, 12);
     if (d.pec) drawField(`PEC ${d.pec}`, { size: 9 }, 12);
+    return yy;
   };
-  drawParte('EMITTENTE', input.emittente, MARGIN, input.sede?.lato === 'emittente' ? input.sede : null);
-  drawParte(
+  const yEmittente = drawParte(
+    'EMITTENTE',
+    input.emittente,
+    MARGIN,
+    input.sede?.lato === 'emittente' ? input.sede : null,
+  );
+  const yDestinatario = drawParte(
     'DESTINATARIO',
     input.destinatario,
     MARGIN + colW + 20,
     input.sede?.lato === 'destinatario' ? input.sede : null,
   );
-  y -= 110;
+  // La tabella parte SOTTO il blocco più alto tra i due: i valori lunghi
+  // (ragione sociale, sede, PEC) vanno a capo e rendono i blocchi di altezza
+  // variabile — una y fissa (prima -110) causava la sovrapposizione del blocco
+  // destinatario con l'header della tabella.
+  y = Math.min(yEmittente, yDestinatario) - 28;
 
   // ─── Tabella riga documento ──────────────────────────────────────
   const colImp = PAGE_W - MARGIN - 320;

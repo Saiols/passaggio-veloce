@@ -137,11 +137,18 @@ enum TipoDocumentoVeicolo {
 // Schema Documentale v7: tipologia di soggetto (venditore o acquirente).
 // Determina insieme di documenti richiesti nell'albero decisionale.
 enum TipoSoggetto {
-  PRIVATO_ITALIANO_CIE // Persona fisica italiana con CIE elettronica
-  PRIVATO_ITALIANO_CARTACEA // Persona fisica italiana con CI cartacea (vecchia)
+  PRIVATO_ITALIANO // Persona fisica italiana (variante CI cartacea/elettronica in CiTipo)
   STRANIERO_EXTRA_UE
   AZIENDA
   OPERATORE_AUTO // Solo lato venditore: dealer/commerciante (mini voltura)
+}
+
+// Variante della carta d'identità (rilevante solo per il privato con CI): la CIE
+// elettronica contiene già il codice fiscale, la cartacea no. Determina se serve
+// il documento tessera sanitaria / codice fiscale separato.
+enum CiTipo {
+  CARTACEA
+  ELETTRONICA
 }
 
 // Schema Documentale v7: motivo per cui una pratica entra in revisione manuale
@@ -702,6 +709,7 @@ model Pratica {
   // determinano la lista di documenti richiesti tramite engine puro.
   // venditoreTipoSoggetto/VisuraData/PermessoData spostati in modello Venditore.
   acquirenteTipoSoggetto TipoSoggetto?
+  acquirenteCiTipo       CiTipo?
   acquirenteVisuraData   DateTime?     @db.Date
   acquirentePermessoData DateTime?     @db.Date
   flagSuccessione        Boolean       @default(false)
@@ -964,6 +972,7 @@ model Venditore {
   telefono           String?
   email              String?
   tipoSoggetto       TipoSoggetto?
+  ciTipo             CiTipo?
   visuraData         DateTime?     @db.Date
   permessoData       DateTime?     @db.Date
   documentoIdentita  String?
@@ -990,6 +999,7 @@ model CoAcquirente {
   telefono           String?
   email              String?
   tipoSoggetto       TipoSoggetto?
+  ciTipo             CiTipo?
   visuraData         DateTime?     @db.Date
   permessoData       DateTime?     @db.Date
   documentoIdentita  String?

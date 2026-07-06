@@ -1,6 +1,6 @@
 import { nameMatches, normalizeCf, companyMatches } from './match';
 import { isAtecoAllowed, type AllowedAteco } from './ateco';
-import { richiedeCodiceFiscale } from '../documenti/engine';
+import { richiedeCodiceFiscale, ciElettronica, type CiTipo } from '../documenti/engine';
 
 /**
  * Verifica documentale di una parte (venditore/acquirente): confronta i dati
@@ -11,8 +11,7 @@ import { richiedeCodiceFiscale } from '../documenti/engine';
  */
 
 export type TipoSoggettoParte =
-  | 'PRIVATO_ITALIANO_CIE'
-  | 'PRIVATO_ITALIANO_CARTACEA'
+  | 'PRIVATO_ITALIANO'
   | 'STRANIERO_EXTRA_UE'
   | 'AZIENDA'
   | 'OPERATORE_AUTO'
@@ -22,6 +21,8 @@ export type ParteDati = {
   isPersonaGiuridica: boolean;
   tipoSoggetto: TipoSoggettoParte;
   documentoIdentita?: 'CI' | 'PASSAPORTO' | 'PATENTE';
+  /** Variante CI (solo privato); default elettronica se non specificata. */
+  ciTipo?: CiTipo | null;
   nome?: string;
   cognome?: string;
   cf?: string;
@@ -65,13 +66,15 @@ function isPG(p: ParteDati): boolean {
 export function documentiRichiestiParte(p: ParteDati): DocRequisiti {
   const pg = isPG(p);
   // Per la PG il documento d'identità è del legale rappresentante: la sua CI è
-  // trattata come CIE (niente CF), ma passaporto/patente richiedono comunque il CF.
-  const tipoEffettivo = pg ? 'PRIVATO_ITALIANO_CIE' : (p.tipoSoggetto ?? 'PRIVATO_ITALIANO_CIE');
+  // trattata come elettronica (niente CF); passaporto/patente richiedono il CF.
+  const ciElett = pg
+    ? true
+    : ciElettronica(p.tipoSoggetto ?? 'PRIVATO_ITALIANO', p.ciTipo);
   return {
     identita: true,
     visura: pg,
     permesso: p.tipoSoggetto === 'STRANIERO_EXTRA_UE',
-    codiceFiscale: richiedeCodiceFiscale(tipoEffettivo, p.documentoIdentita ?? 'CI'),
+    codiceFiscale: richiedeCodiceFiscale(p.documentoIdentita ?? 'CI', ciElett),
   };
 }
 

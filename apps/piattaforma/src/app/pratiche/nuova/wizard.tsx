@@ -12,6 +12,7 @@ import { AddressAutocomplete } from '@/components/address-autocomplete';
 import {
   calcolaDocumentiRichiesti,
   type TipoSoggetto,
+  type CiTipo,
 } from '@/lib/documenti/engine';
 import type { LibrettoCircolazioneData } from '@/lib/providers/ocr/types';
 import type { SedeRef } from '@/lib/sedi/scope';
@@ -198,6 +199,8 @@ type Parte = {
    * e OPERATORE_AUTO settano isPG=true automaticamente.
    */
   tipoSoggetto: TipoSoggetto | null;
+  /** Variante CI (rilevante solo per privato + documento CI); default elettronica. */
+  ciTipo: CiTipo;
   nome: string;
   cognome: string;
   cf: string;
@@ -221,6 +224,7 @@ type Parte = {
 const emptyParte = (): Parte => ({
   isPG: false,
   tipoSoggetto: null,
+  ciTipo: 'ELETTRONICA',
   nome: '',
   cognome: '',
   cf: '',
@@ -358,11 +362,16 @@ type WizardDraftState = {
 };
 
 const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
-  { value: 'PRIVATO_ITALIANO_CIE', label: 'Privato italiano · CIE elettronica' },
-  { value: 'PRIVATO_ITALIANO_CARTACEA', label: 'Privato italiano · CI cartacea' },
+  { value: 'PRIVATO_ITALIANO', label: 'Privato italiano' },
   { value: 'STRANIERO_EXTRA_UE', label: 'Straniero extra-UE' },
   { value: 'AZIENDA', label: 'Azienda / Società' },
   { value: 'OPERATORE_AUTO', label: 'Operatore auto / Commerciante' },
+];
+
+/** Variante della carta d'identità (mostrata solo per privato + documento CI). */
+const CI_TIPO_OPTIONS: { value: CiTipo; label: string }[] = [
+  { value: 'ELETTRONICA', label: 'CI elettronica (CIE)' },
+  { value: 'CARTACEA', label: 'CI cartacea' },
 ];
 
 // Acquirente SEMPLICE: privato (no operatore auto). Acquirente MINIVOLTURA: il
@@ -770,17 +779,20 @@ export function WizardNuovaPratica({
         ordine: i + 1,
         tipoSoggetto: v.tipoSoggetto,
         documentoIdentita: v.docId,
+        ciTipo: v.ciTipo,
       })),
       flagProcura: false,
       flagSuccessione: false,
       acquirenteTipoSoggetto: acquirente.tipoSoggetto,
       acquirenteDocumentoIdentita: acquirenteDocId,
+      acquirenteCiTipo: acquirente.ciTipo,
       flagMinore: false,
     });
   }, [
     veicoli,
     venditori,
     acquirente.tipoSoggetto,
+    acquirente.ciTipo,
     acquirenteDocId,
   ]);
 
@@ -1233,6 +1245,7 @@ export function WizardNuovaPratica({
       veicoloOrdine: v.veicoloOrdine,
       isPG: v.isPG,
       tipoSoggetto: v.tipoSoggetto,
+      ciTipo: v.ciTipo,
       nome: v.nome,
       cognome: v.cognome,
       cf: v.cf,
@@ -1273,6 +1286,7 @@ export function WizardNuovaPratica({
     // via OCR nella verifica documentale, vedi lib/kyc/parte-docs.)
     if (acquirente.tipoSoggetto) {
       fd.append('acquirenteTipoSoggetto', acquirente.tipoSoggetto);
+      fd.append('acquirenteCiTipo', acquirente.ciTipo);
     }
 
     // B6: documento d'identità + visura + permesso PER venditore negli slot
@@ -1318,6 +1332,7 @@ export function WizardNuovaPratica({
       telefono: c.telefono,
       email: c.email,
       tipoSoggetto: c.tipoSoggetto,
+      ciTipo: c.ciTipo,
       docId: c.docId,
       indirizzoResidenza: c.residenzaDiversa ? c.indirizzoResidenza.trim() : null,
     }));
@@ -1487,6 +1502,7 @@ export function WizardNuovaPratica({
         files={v.identita}
         isPG={v.isPG}
         tipoSoggetto={v.tipoSoggetto}
+        ciTipo={v.ciTipo}
         tipiSoggetto={TIPI_SOGGETTO_VENDITORE}
         onTipoSoggetto={(next) => {
           const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
@@ -1497,6 +1513,7 @@ export function WizardNuovaPratica({
             permessoOcr: next === 'STRANIERO_EXTRA_UE' ? v.permessoOcr : undefined,
           });
         }}
+        onCiTipo={(next) => updateVenditore(v.id, { ciTipo: next })}
         onFiles={(updater) =>
           setVenditori((prev) =>
             prev.map((vv) => (vv.id === v.id ? { ...vv, identita: updater(vv.identita) } : vv)),
@@ -1614,11 +1631,13 @@ export function WizardNuovaPratica({
         files={c.identita}
         isPG={c.isPG}
         tipoSoggetto={c.tipoSoggetto}
+        ciTipo={c.ciTipo}
         tipiSoggetto={acquirenteTipiSoggetto}
         onTipoSoggetto={(next) => {
           const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
           updateCoAcquirente(c.id, { tipoSoggetto: next, isPG });
         }}
+        onCiTipo={(next) => updateCoAcquirente(c.id, { ciTipo: next })}
         onFiles={(updater) =>
           setCoAcquirenti((prev) =>
             prev.map((cc) => (cc.id === c.id ? { ...cc, identita: updater(cc.identita) } : cc)),
@@ -2214,6 +2233,7 @@ export function WizardNuovaPratica({
               files={acquirenteIdentita}
               isPG={acquirente.isPG}
               tipoSoggetto={acquirente.tipoSoggetto}
+              ciTipo={acquirente.ciTipo}
               tipiSoggetto={acquirenteTipiSoggetto}
               onTipoSoggetto={(next) => {
                 const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
@@ -2225,6 +2245,7 @@ export function WizardNuovaPratica({
                   permessoOcr: next === 'STRANIERO_EXTRA_UE' ? prev.permessoOcr : undefined,
                 }));
               }}
+              onCiTipo={(next) => setAcquirente((prev) => ({ ...prev, ciTipo: next }))}
               onFiles={setAcquirenteIdentita}
               onMainRef={(ref) =>
                 runIdentitaOcr(ref, acquirenteDocId, (updater) =>
@@ -2914,8 +2935,10 @@ function IdentitaSection({
   files,
   isPG,
   tipoSoggetto,
+  ciTipo,
   tipiSoggetto,
   onTipoSoggetto,
+  onCiTipo,
   onFiles,
   onMainRef,
   onVisuraRef,
@@ -2933,8 +2956,10 @@ function IdentitaSection({
   files: IdentitaFiles;
   isPG: boolean;
   tipoSoggetto: TipoSoggetto | null;
+  ciTipo: CiTipo;
   tipiSoggetto: { value: TipoSoggetto; label: string }[];
   onTipoSoggetto: (t: TipoSoggetto) => void;
+  onCiTipo: (t: CiTipo) => void;
   onFiles: (updater: (prev: IdentitaFiles) => IdentitaFiles) => void;
   onMainRef: (ref: BlobRef) => void;
   onVisuraRef: (ref: BlobRef) => void;
@@ -2955,6 +2980,7 @@ function IdentitaSection({
     isPersonaGiuridica: isPG,
     tipoSoggetto,
     documentoIdentita: docId,
+    ciTipo,
   }).codiceFiscale;
 
   // Upload di un singolo campo su Blob, aggiornando lo slot via `onFiles`. Al
@@ -3040,6 +3066,20 @@ function IdentitaSection({
           ))}
         </Select>
       </Field>
+
+      {/* Variante CI: solo per privato + CI. La CIE elettronica contiene il CF
+          (nessun documento CF separato); la cartacea no. Default: elettronica. */}
+      {tipoSoggetto === 'PRIVATO_ITALIANO' && docId === 'CI' && (
+        <Field label="Tipo di carta d'identità" required>
+          <Select value={ciTipo} onChange={(e) => onCiTipo(e.target.value as CiTipo)}>
+            {CI_TIPO_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {docId === 'CI' || docId === 'PATENTE' ? (
@@ -3159,6 +3199,7 @@ function parteCompleta(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): boo
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,
     documentoIdentita: docId,
+    ciTipo: p.ciTipo,
   });
   if (req.identita && !identitaPresente(docId, identita)) return false;
   if (req.codiceFiscale && (!identita.codiceFiscale?.ref || !identita.codiceFiscaleRetro?.ref))
@@ -3186,6 +3227,7 @@ function mancanzeParte(p: Parte, docId: DocIdTipo, identita: IdentitaFiles): str
     isPersonaGiuridica: p.isPG,
     tipoSoggetto: p.tipoSoggetto,
     documentoIdentita: docId,
+    ciTipo: p.ciTipo,
   });
   if (req.identita && !identitaPresente(docId, identita)) m.push("documento d'identità");
   if (req.codiceFiscale && !identita.codiceFiscale?.ref)

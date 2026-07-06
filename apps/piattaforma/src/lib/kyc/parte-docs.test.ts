@@ -13,7 +13,7 @@ const NOW = new Date('2026-06-06T12:00:00Z');
 
 const PRIVATO: ParteDati = {
   isPersonaGiuridica: false,
-  tipoSoggetto: 'PRIVATO_ITALIANO_CIE',
+  tipoSoggetto: 'PRIVATO_ITALIANO',
   nome: 'Mario',
   cognome: 'Rossi',
   cf: 'RSSMRA80A01F205Z',
@@ -32,20 +32,25 @@ const AZIENDA: ParteDati = {
 };
 
 describe('documentiRichiestiParte', () => {
-  it('privato CIE+CI → identità, niente CF', () => {
+  it('privato + CI (default elettronica) → identità, niente CF', () => {
     expect(documentiRichiestiParte(PRIVATO)).toEqual({
       identita: true, visura: false, permesso: false, codiceFiscale: false,
     });
   });
-  it('privato cartacea+CI → CF richiesto', () => {
+  it('privato + CI elettronica esplicita → niente CF', () => {
     expect(
-      documentiRichiestiParte({ ...PRIVATO, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA' }).codiceFiscale,
+      documentiRichiestiParte({ ...PRIVATO, ciTipo: 'ELETTRONICA' }).codiceFiscale,
+    ).toBe(false);
+  });
+  it('privato + CI cartacea → CF richiesto', () => {
+    expect(
+      documentiRichiestiParte({ ...PRIVATO, ciTipo: 'CARTACEA' }).codiceFiscale,
     ).toBe(true);
   });
-  it('privato CIE + passaporto → CF richiesto', () => {
+  it('privato + passaporto → CF richiesto (ciTipo ininfluente)', () => {
     expect(documentiRichiestiParte({ ...PRIVATO, documentoIdentita: 'PASSAPORTO' }).codiceFiscale).toBe(true);
   });
-  it('privato CIE + patente → CF richiesto', () => {
+  it('privato + patente → CF richiesto', () => {
     expect(documentiRichiestiParte({ ...PRIVATO, documentoIdentita: 'PATENTE' }).codiceFiscale).toBe(true);
   });
   it('straniero (default CI) → identità + permesso + CF', () => {
@@ -327,7 +332,8 @@ describe('verificaCodiceFiscale', () => {
 describe('validaParte — tessera sanitaria / CF fail-closed', () => {
   const CARTACEA: ParteDati = {
     isPersonaGiuridica: false,
-    tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA',
+    tipoSoggetto: 'PRIVATO_ITALIANO',
+    ciTipo: 'CARTACEA',
     documentoIdentita: 'CI',
     nome: 'Mario',
     cognome: 'Rossi',

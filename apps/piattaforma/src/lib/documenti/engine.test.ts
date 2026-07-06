@@ -15,11 +15,11 @@ function baseInput(
   return {
     veicoli: [{ ordine: 1, preImm2015: false, flagComodatoDuso: false }],
     venditori: [
-      { ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI' },
+      { ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'CI' },
     ],
     flagProcura: false,
     flagSuccessione: false,
-    acquirenteTipoSoggetto: 'PRIVATO_ITALIANO_CIE',
+    acquirenteTipoSoggetto: 'PRIVATO_ITALIANO',
     acquirenteDocumentoIdentita: 'CI',
     flagMinore: false,
     ...overrides,
@@ -56,7 +56,7 @@ describe('calcolaDocumentiRichiesti — casi base', () => {
 
   it('CI cartacea aggiunge CODICE_FISCALE (3 doc venditore invece di 2)', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'CI' }] }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'CI', ciTipo: 'CARTACEA' }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
@@ -197,7 +197,7 @@ describe('calcolaDocumentiRichiesti — combinazioni complesse', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
         veicoli: [{ ordine: 1, preImm2015: true, flagComodatoDuso: false }],
-        venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'CI' }],
+        venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'CI', ciTipo: 'CARTACEA' }],
         flagProcura: true,
         flagSuccessione: true,
         acquirenteTipoSoggetto: 'AZIENDA',
@@ -255,8 +255,8 @@ describe('calcolaDocumentiRichiesti — co-intestatari venditori', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
         venditori: [
-          { ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI' },
-          { ordine: 2, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'CI' },
+          { ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'CI' },
+          { ordine: 2, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'CI' },
         ],
       }),
     );
@@ -270,7 +270,7 @@ describe('calcolaDocumentiRichiesti — co-intestatari venditori', () => {
 describe('calcolaDocumentiRichiesti — documento identità alternativo', () => {
   it('venditore con passaporto: richiede PASSAPORTO non CI', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PASSAPORTO' }] }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'PASSAPORTO' }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
@@ -281,7 +281,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
 
   it('venditore con patente: richiede PATENTE non CI', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PATENTE' }] }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'PATENTE' }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
@@ -292,7 +292,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
 
   it('patente: aggiunge PATENTE + PATENTE_RETRO', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PATENTE' }] }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'PATENTE' }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
@@ -342,7 +342,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
   it('CI cartacea con passaporto scelto: aggiunge comunque CODICE_FISCALE', () => {
     const r = calcolaDocumentiRichiesti(
       baseInput({
-        venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CARTACEA', documentoIdentita: 'PASSAPORTO' }],
+        venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'PASSAPORTO', ciTipo: 'CARTACEA' }],
       }),
     );
     expect(r.kind).toBe('OK');
@@ -354,7 +354,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
 
   it('venditore passaporto (CIE): PASSAPORTO + CODICE_FISCALE', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PASSAPORTO' }] }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'PASSAPORTO' }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;
@@ -365,7 +365,7 @@ describe('calcolaDocumentiRichiesti — documento identità alternativo', () => 
 
   it('venditore patente: PATENTE + CODICE_FISCALE', () => {
     const r = calcolaDocumentiRichiesti(
-      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO_CIE', documentoIdentita: 'PATENTE' }] }),
+      baseInput({ venditori: [{ ordine: 1, tipoSoggetto: 'PRIVATO_ITALIANO', documentoIdentita: 'PATENTE' }] }),
     );
     expect(r.kind).toBe('OK');
     if (r.kind !== 'OK') return;

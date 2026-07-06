@@ -378,12 +378,14 @@ const veicoloSchema = z.object({
 export type VeicoloInputData = z.infer<typeof veicoloSchema>;
 
 const tipoSoggettoEnum = z.enum([
-  'PRIVATO_ITALIANO_CIE',
-  'PRIVATO_ITALIANO_CARTACEA',
+  'PRIVATO_ITALIANO',
   'STRANIERO_EXTRA_UE',
   'AZIENDA',
   'OPERATORE_AUTO',
 ]);
+
+// Variante CI (solo privato): elettronica (CIE, ha il CF) o cartacea.
+const ciTipoEnum = z.enum(['CARTACEA', 'ELETTRONICA']);
 
 /**
  * Tipi pratica multiveicolo (B7): dati di un singolo venditore (co-intestatario).
@@ -395,6 +397,7 @@ const venditoreSchema = z.object({
   veicoloOrdine: z.coerce.number().int().min(1).max(50).default(1),
   isPG: z.boolean().default(false),
   tipoSoggetto: tipoSoggettoEnum.optional().nullable(),
+  ciTipo: ciTipoEnum.optional().nullable(),
   nome: z.string().trim().max(80).optional().nullable(),
   cognome: z.string().trim().max(80).optional().nullable(),
   cf: z.string().trim().max(16).optional().nullable(),
@@ -416,6 +419,7 @@ const coAcquirenteSchema = z.object({
   ordine: z.coerce.number().int().min(1).max(50),
   isPG: z.boolean().default(false),
   tipoSoggetto: tipoSoggettoEnum.optional().nullable(),
+  ciTipo: ciTipoEnum.optional().nullable(),
   nome: z.string().trim().max(80).optional().nullable(),
   cognome: z.string().trim().max(80).optional().nullable(),
   cf: z.string().trim().max(16).optional().nullable(),
@@ -512,6 +516,7 @@ const submitSchema = z.object({
   // Schema Documentale v7 (SD-B): branching variables.
   // Quelle del venditore sono ora per-venditore (vedi `venditori` sopra).
   acquirenteTipoSoggetto: tipoSoggettoEnum.optional(),
+  acquirenteCiTipo: ciTipoEnum.optional(),
 
   // Tipi pratica multiveicolo (A7): documento d'identità scelto per parte.
   acquirenteDocumentoIdentita: z
@@ -697,11 +702,13 @@ export async function submitNuovaPraticaAction(
       ordine: v.ordine,
       tipoSoggetto: v.tipoSoggetto ?? null,
       documentoIdentita: v.docId,
+      ciTipo: v.ciTipo ?? null,
     })),
     flagProcura: d.flagProcura,
     flagSuccessione: d.flagSuccessione,
     acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
     acquirenteDocumentoIdentita: d.acquirenteDocumentoIdentita,
+    acquirenteCiTipo: d.acquirenteCiTipo ?? null,
     flagMinore: d.flagMinore,
   });
   if (esitoSchema.kind === 'BLOCCO') {
@@ -950,6 +957,7 @@ export async function submitNuovaPraticaAction(
       isPersonaGiuridica: v.isPG,
       tipoSoggetto: v.tipoSoggetto ?? null,
       documentoIdentita: v.docId,
+      ciTipo: v.ciTipo ?? null,
     }).codiceFiscale;
     collectIdentita('VENDITORE', `VEND${v.ordine}`, v.docId, label, richiedeCf, v.ordine);
   }
@@ -957,6 +965,7 @@ export async function submitNuovaPraticaAction(
     isPersonaGiuridica: d.acquirenteIsPG,
     tipoSoggetto: d.acquirenteTipoSoggetto ?? null,
     documentoIdentita: d.acquirenteDocumentoIdentita,
+    ciTipo: d.acquirenteCiTipo ?? null,
   }).codiceFiscale;
   collectIdentita('ACQUIRENTE', 'ACQ', d.acquirenteDocumentoIdentita, "l'acquirente", richiedeCfAcq);
 
@@ -967,6 +976,7 @@ export async function submitNuovaPraticaAction(
       isPersonaGiuridica: c.isPG,
       tipoSoggetto: c.tipoSoggetto ?? null,
       documentoIdentita: c.docId,
+      ciTipo: c.ciTipo ?? null,
     }).codiceFiscale;
     collectIdentita('ACQUIRENTE', `COACQ${c.ordine}`, c.docId, label, richiedeCf, undefined, c.ordine);
   }
@@ -1275,6 +1285,8 @@ export async function submitNuovaPraticaAction(
       // Le date visura/permesso non sono più raccolte (verifica via OCR nello
       // step parte): le colonne restano null.
       acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
+      acquirenteCiTipo:
+        d.acquirenteTipoSoggetto === 'PRIVATO_ITALIANO' ? (d.acquirenteCiTipo ?? null) : null,
       flagSuccessione: d.flagSuccessione,
       flagMinore: d.flagMinore,
 
@@ -1431,6 +1443,7 @@ export async function submitNuovaPraticaAction(
           telefono: v.telefono || null,
           email: v.email?.toLowerCase() || null,
           tipoSoggetto: v.tipoSoggetto ?? null,
+          ciTipo: v.tipoSoggetto === 'PRIVATO_ITALIANO' ? (v.ciTipo ?? null) : null,
           documentoIdentita: v.docId,
         },
       });
@@ -1454,6 +1467,7 @@ export async function submitNuovaPraticaAction(
           telefono: c.telefono || null,
           email: c.email?.toLowerCase() || null,
           tipoSoggetto: c.tipoSoggetto ?? null,
+          ciTipo: c.tipoSoggetto === 'PRIVATO_ITALIANO' ? (c.ciTipo ?? null) : null,
           documentoIdentita: c.docId,
           indirizzoResidenza: c.indirizzoResidenza || null,
         },

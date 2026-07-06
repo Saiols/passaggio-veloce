@@ -18,11 +18,14 @@
  */
 
 export type TipoSoggetto =
-  | 'PRIVATO_ITALIANO_CIE'
-  | 'PRIVATO_ITALIANO_CARTACEA'
+  | 'PRIVATO_ITALIANO'
   | 'STRANIERO_EXTRA_UE'
   | 'AZIENDA'
   | 'OPERATORE_AUTO';
+
+/** Variante della carta d'identità (rilevante solo per il privato con CI): la
+ *  CIE elettronica contiene già il codice fiscale, la cartacea no. */
+export type CiTipo = 'CARTACEA' | 'ELETTRONICA';
 
 export type DocumentoTipoEngine =
   | 'LIBRETTO_CIRCOLAZIONE'
@@ -69,12 +72,15 @@ export type SchemaDocumentaleInput = {
     ordine: number;
     tipoSoggetto: TipoSoggetto | null;
     documentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
+    /** Variante CI (solo privato); default elettronica se non specificata. */
+    ciTipo?: CiTipo | null;
   }[];
   flagProcura: boolean;
   flagSuccessione: boolean;
 
   acquirenteTipoSoggetto: TipoSoggetto | null;
   acquirenteDocumentoIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE';
+  acquirenteCiTipo?: CiTipo | null;
   flagMinore: boolean;
 
   /** Data di riferimento per i calcoli scadenza. Default: now. */
@@ -87,24 +93,38 @@ export type EsitoSchemaDocumentale =
   | { kind: 'INPUT_INCOMPLETO'; mancanti: string[] };
 
 /**
+ * Vero se l'identificazione avviene con CI elettronica (CIE), che contiene già
+ * il codice fiscale. Privato: dipende dalla variante CI scelta (default
+ * elettronica). Azienda/operatore: la CI del legale rappresentante è trattata
+ * come elettronica. Straniero: usa passaporto/permesso, mai CIE.
+ */
+export function ciElettronica(
+  tipoSoggetto: TipoSoggetto,
+  ciTipo: CiTipo | null | undefined,
+): boolean {
+  if (tipoSoggetto === 'AZIENDA' || tipoSoggetto === 'OPERATORE_AUTO') return true;
+  if (tipoSoggetto === 'PRIVATO_ITALIANO') return (ciTipo ?? 'ELETTRONICA') === 'ELETTRONICA';
+  return false;
+}
+
+/**
  * Regola unica tessera sanitaria / codice fiscale: richiesto SEMPRE tranne
- * quando il documento è una CI e il soggetto è identificato con CIE (la CIE
- * contiene già il codice fiscale). Vale per passaporto/patente di qualsiasi
- * soggetto e per la CI cartacea. Single source of truth condivisa con
- * lib/kyc/parte-docs.
+ * quando il documento è una CI ELETTRONICA (la CIE contiene già il CF). Vale
+ * per passaporto/patente di qualsiasi soggetto e per la CI cartacea. Single
+ * source of truth condivisa con lib/kyc/parte-docs.
  */
 export function richiedeCodiceFiscale(
-  tipoSoggetto: TipoSoggetto,
   docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
+  ciElett: boolean,
 ): boolean {
-  return !(docIdentita === 'CI' && tipoSoggetto === 'PRIVATO_ITALIANO_CIE');
+  return !(docIdentita === 'CI' && ciElett);
 }
 
 function emettiIdentita(
   out: DocumentoRichiesto[],
   parte: ParteDocumento,
   motivoPrefix: string,
-  tipoSoggetto: TipoSoggetto,
+  ciElett: boolean,
   docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
   venditoreOrdine?: number,
 ): void {
@@ -117,7 +137,7 @@ function emettiIdentita(
     out.push({ tipo: 'CI_FRONTE', parte, motivo: `${motivoPrefix}: CI fronte`, venditoreOrdine });
     out.push({ tipo: 'CI_RETRO', parte, motivo: `${motivoPrefix}: CI retro`, venditoreOrdine });
   }
-  if (richiedeCodiceFiscale(tipoSoggetto, docIdentita)) {
+  if (richiedeCodiceFiscale(docIdentita, ciElett)) {
     out.push({
       tipo: 'CODICE_FISCALE',
       parte,
@@ -132,16 +152,17 @@ function aggiungiDocumentiPersona(
   parteCI: ParteDocumento,
   parteAmministratore: ParteDocumento,
   tipo: TipoSoggetto,
+  ciTipo: CiTipo | null | undefined,
   motivoPrefix: string,
   docIdentita: 'CI' | 'PASSAPORTO' | 'PATENTE',
   venditoreOrdine?: number,
 ): void {
-  if (tipo === 'PRIVATO_ITALIANO_CIE' || tipo === 'PRIVATO_ITALIANO_CARTACEA') {
-    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita, venditoreOrdine);
+  if (tipo === 'PRIVATO_ITALIANO') {
+    emettiIdentita(out, parteCI, motivoPrefix, ciElettronica(tipo, ciTipo), docIdentita, venditoreOrdine);
     return;
   }
   if (tipo === 'STRANIERO_EXTRA_UE') {
-    emettiIdentita(out, parteCI, motivoPrefix, tipo, docIdentita, venditoreOrdine);
+    emettiIdentita(out, parteCI, motivoPrefix, false, docIdentita, venditoreOrdine);
     out.push({
       tipo: 'PERMESSO_SOGGIORNO',
       parte: parteCI,
@@ -157,7 +178,8 @@ function aggiungiDocumentiPersona(
       motivo: `${motivoPrefix}: visura camerale rilasciata negli ultimi 6 mesi`,
       venditoreOrdine,
     });
-    emettiIdentita(out, parteAmministratore, motivoPrefix, 'PRIVATO_ITALIANO_CIE', docIdentita, venditoreOrdine);
+    // La CI del legale rappresentante è trattata come elettronica (niente CF).
+    emettiIdentita(out, parteAmministratore, motivoPrefix, true, docIdentita, venditoreOrdine);
   }
 }
 
@@ -203,6 +225,7 @@ export function calcolaDocumentiRichiesti(
       'VENDITORE',
       'AMMINISTRATORE_VENDITORE',
       v.tipoSoggetto!,
+      v.ciTipo,
       'Venditore',
       v.documentoIdentita,
       v.ordine,
@@ -259,6 +282,7 @@ export function calcolaDocumentiRichiesti(
     'ACQUIRENTE',
     'AMMINISTRATORE_ACQUIRENTE',
     input.acquirenteTipoSoggetto!,
+    input.acquirenteCiTipo,
     'Acquirente',
     input.acquirenteDocumentoIdentita,
   );

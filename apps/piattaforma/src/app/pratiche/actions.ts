@@ -18,6 +18,7 @@ import { onPraticaFirmata } from '@/lib/crm/sync';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
 import { fatturaPvAttachment } from '@/lib/fatturazione/documento-pdf';
+import { autoPayoutBrokerDopoFirma } from '@/lib/wallet/auto-payout';
 import { emitEventoPratica } from '@/lib/eventi/emit';
 import {
   eventoPraticaLavorata,
@@ -516,6 +517,12 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
 
   // Email cliente: passaggio di proprietà completato.
   await notifyClientiAvanzamento(praticaId, 'COMPLETATA').catch(() => undefined);
+
+  // Payout automatico (real-time): se il credito pratica ha portato il wallet
+  // del broker alla soglia configurata, esegui SUBITO il payout (Strada B, come
+  // il manuale). Best-effort; il cron `triggerAutoPayout` resta la rete di
+  // sicurezza periodica per tutti i wallet (incl. affiliazione).
+  await autoPayoutBrokerDopoFirma(praticaId).catch(() => undefined);
 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');

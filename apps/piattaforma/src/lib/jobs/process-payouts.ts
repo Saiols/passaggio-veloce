@@ -1,6 +1,5 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import { isPaymentLive } from './payment-live';
 import { settlePayout } from '@/lib/wallet/payout-exec';
 
 const BATCH_SIZE = 20;
@@ -15,14 +14,10 @@ export type ProcessPayoutsResult = {
  * Job payout (path AUTO): prende i Payout RICHIESTO (creati da
  * `triggerAutoPayout`) e li salda uno per uno tramite `settlePayout` — stesso
  * motore del payout istantaneo (provider + safeguard + documento broker).
- * Dormiente finché il provider è mock (`isPaymentLive` false).
+ * Come il payout manuale, opera anche in mock (Strada B): il safeguard sui soldi
+ * reali vive nel provider dentro `settlePayout`.
  */
 export async function processPayouts(): Promise<ProcessPayoutsResult> {
-  if (!isPaymentLive()) {
-    console.warn('[payment] processPayouts sospeso: provider mock, in attesa di Stripe');
-    return { processed: 0, succeeded: 0, failed: 0 };
-  }
-
   const payouts = await prisma.payout.findMany({
     where: { stato: 'RICHIESTO' },
     take: BATCH_SIZE,

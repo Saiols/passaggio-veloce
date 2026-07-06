@@ -1,6 +1,5 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import { isPaymentLive } from './payment-live';
 
 export type TriggerAutoPayoutResult = { created: number };
 
@@ -9,13 +8,13 @@ export type TriggerAutoPayoutResult = { created: number };
  * configurata sulla company di appartenenza (item 12 release 2026-05).
  * Filtriamo lato applicazione anziche' lato DB per non duplicare la
  * regola: e' una query bottleneck periodica, non hot path.
+ *
+ * Rete di sicurezza periodica: l'innesco primario è real-time (vedi
+ * `maybeAutoPayoutForWallet`, chiamato dopo gli accrediti). Come il payout
+ * MANUALE, funziona anche in mock (Strada B): il safeguard sui soldi reali vive
+ * nel provider dentro `settlePayout`, non qui.
  */
 export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
-  if (!isPaymentLive()) {
-    console.warn('[payment] triggerAutoPayout sospeso: provider mock, in attesa di Stripe');
-    return { created: 0 };
-  }
-
   const wallets = await prisma.wallet.findMany({
     select: {
       id: true,

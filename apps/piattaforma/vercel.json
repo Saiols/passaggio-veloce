@@ -14,11 +14,11 @@
       "schedule": "0 5 * * *"
     },
     {
-      "path": "/api/jobs/process-payouts",
+      "path": "/api/jobs/trigger-auto-payout",
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/jobs/trigger-auto-payout",
+      "path": "/api/jobs/process-payouts",
       "schedule": "30 1 * * *"
     },
     {

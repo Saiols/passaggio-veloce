@@ -37,6 +37,15 @@ const PRIORITY: Record<string, number> = {
 
 type SearchParams = { q?: string; stato?: string };
 
+// Griglia condivisa header+righe: righe block-level (NON <tr>/<td>) così
+// `position:relative` fa da containing block affidabile su iOS Safari e lo
+// stretched-link della riga funziona ovunque. Broker+Agenzia compaiono da md,
+// Fee da lg. Vedi il gemello in app/pratiche/page.tsx.
+const GRID_COLS =
+  'grid-cols-[minmax(6rem,auto)_minmax(4.5rem,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
+  'md:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
+  'lg:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,auto)_minmax(3.5rem,auto)_minmax(4.5rem,auto)]';
+
 export default async function AdminPratichePage({
   searchParams,
 }: {
@@ -108,71 +117,62 @@ export default async function AdminPratichePage({
               <p className="text-[14px] text-pv-slate-500">Nessuna pratica trovata.</p>
             </div>
           ) : (
-            <table className="w-full text-[13px]">
-              <thead className="border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                <tr>
-                  <th className="px-5 py-3">Codice</th>
-                  <th className="px-5 py-3">Targa</th>
-                  <th className="px-5 py-3 hidden md:table-cell">Broker</th>
-                  <th className="px-5 py-3 hidden md:table-cell">Agenzia</th>
-                  <th className="px-5 py-3">Stato</th>
-                  <th className="px-5 py-3 hidden lg:table-cell">Fee</th>
-                  <th className="px-5 py-3 text-right">Quando</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pv-slate-200">
+            <div className="text-[13px]">
+              <div
+                className={`grid ${GRID_COLS} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
+              >
+                <div className="px-5 py-3">Codice</div>
+                <div className="px-5 py-3">Targa</div>
+                <div className="px-5 py-3 hidden md:block">Broker</div>
+                <div className="px-5 py-3 hidden md:block">Agenzia</div>
+                <div className="px-5 py-3">Stato</div>
+                <div className="px-5 py-3 hidden lg:block">Fee</div>
+                <div className="px-5 py-3 text-right">Quando</div>
+              </div>
+              <div className="divide-y divide-pv-slate-200">
                 {sorted.map((p) => (
-                  <tr
+                  <div
                     key={p.id}
-                    className="relative cursor-pointer transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50"
+                    className={`relative grid ${GRID_COLS} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
                   >
-                    <td className="px-5 py-3 font-mono font-semibold text-pv-navy-800">
-                      <Link
-                        href={`/pratiche/${p.id}`}
-                        className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
-                      >
-                        <span className="sr-only">
-                          Apri pratica {p.codicePratica ?? 'in bozza'}
-                        </span>
-                      </Link>
-                      <span>{p.codicePratica ?? 'BOZZA'}</span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span>
-                        {p.veicoli[0]?.targa
-                          ? p.veicoli.length > 1
-                            ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
-                            : p.veicoli[0].targa
-                          : '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
-                      <span>{p.broker.ragioneSociale}</span>
-                    </td>
-                    <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
-                      <span>
-                        {p.agenziaAssegnata?.ragioneSociale ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span>
+                    {/* Anchor a tutta riga su parent block-level: containing
+                        block affidabile su iOS Safari (fix tap/landscape). */}
+                    <Link
+                      href={`/pratiche/${p.id}`}
+                      aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
+                      className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+                    />
+                    <div className="px-5 py-3 font-mono font-semibold text-pv-navy-800">
+                      {p.codicePratica ?? 'BOZZA'}
+                    </div>
+                    <div className="px-5 py-3">
+                      {p.veicoli[0]?.targa
+                        ? p.veicoli.length > 1
+                          ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                          : p.veicoli[0].targa
+                        : '—'}
+                    </div>
+                    <div className="px-5 py-3 hidden text-pv-slate-700 md:block">
+                      {p.broker.ragioneSociale}
+                    </div>
+                    <div className="px-5 py-3 hidden text-pv-slate-700 md:block">
+                      {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                    </div>
+                    <div className="px-5 py-3">
+                      <span className="relative z-10 inline-flex">
                         <StatusChip stato={p.stato as PraticaStato} />
                       </span>
-                    </td>
-                    <td className="px-5 py-3 hidden text-pv-slate-700 lg:table-cell">
-                      <span>
-                        {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right text-pv-slate-500">
-                      <span>
-                        {formatRelative(p.submittedAt ?? p.createdAt)}
-                      </span>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="px-5 py-3 hidden text-pv-slate-700 lg:block">
+                      {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                    </div>
+                    <div className="px-5 py-3 text-right text-pv-slate-500">
+                      {formatRelative(p.submittedAt ?? p.createdAt)}
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
           )}
         </div>
       </div>

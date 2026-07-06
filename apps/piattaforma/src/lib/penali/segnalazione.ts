@@ -8,6 +8,7 @@ import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
+import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
 import { PENALI } from './config';
 
 export type SegnalazioneTipo =
@@ -224,7 +225,10 @@ export async function confermaAnnullamentoConPenaleAction(
         });
       }
 
-      // Penale broker (può portare il wallet sotto zero)
+      // Penale broker (può portare il wallet sotto zero). Il motivo (tipo
+      // segnalazione) viene salvato nella nota così il movimento wallet può
+      // esplicitare al broker perché è stato addebitato.
+      const tipoSeg = (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo;
       saldo -= importoPenaleCent;
       await tx.transazioneWallet.create({
         data: {
@@ -233,6 +237,7 @@ export async function confermaAnnullamentoConPenaleAction(
           importoCent: -importoPenaleCent,
           saldoPostCent: saldo,
           praticaId: pratica.id,
+          note: motivoPenaleSegnalazione(tipoSeg),
         },
       });
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   statoExtra,
   tipoSegnalazioneLabel,
+  motivoPenaleSegnalazione,
   type StatoExtraInput,
 } from './stato-extra';
 
@@ -128,5 +129,18 @@ describe('tipoSegnalazioneLabel', () => {
     expect(tipoSegnalazioneLabel('IPOTECA')).toBe('Ipoteca');
     expect(tipoSegnalazioneLabel('DOCUMENTO_NON_VALIDO')).toBe('Documento non valido');
     expect(tipoSegnalazioneLabel('ALTRO')).toBe('Altro');
+  });
+});
+
+describe('motivoPenaleSegnalazione', () => {
+  it('esplicita il motivo della penale in linguaggio naturale', () => {
+    expect(motivoPenaleSegnalazione('FERMO_AMMINISTRATIVO')).toBe(
+      'Segnalazione per fermo amministrativo',
+    );
+    expect(motivoPenaleSegnalazione('IPOTECA')).toBe('Segnalazione per ipoteca');
+    expect(motivoPenaleSegnalazione('DOCUMENTO_NON_VALIDO')).toBe(
+      'Segnalazione per documento non valido',
+    );
+    expect(motivoPenaleSegnalazione('ALTRO')).toBe('Segnalazione per altro');
   });
 });

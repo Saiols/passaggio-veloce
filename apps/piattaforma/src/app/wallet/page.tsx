@@ -15,6 +15,10 @@ import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
 import { RendicontoCard } from './rendiconto-card';
 import { isOwner } from '@/lib/auth/permissions';
+import {
+  motivoPenaleSegnalazione,
+  type SegnalazioneTipo,
+} from '@/lib/pratiche/stato-extra';
 
 const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
 
@@ -71,6 +75,7 @@ export default async function WalletPage({
         select: {
           id: true,
           codicePratica: true,
+          tipoSegnalazione: true,
           veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
         },
       },
@@ -336,7 +341,9 @@ export default async function WalletPage({
           <h2 className="text-[15px] font-bold text-pv-navy-800">Movimenti</h2>
           {movimenti.length ? (
             <ul className="mt-3 divide-y divide-pv-slate-200 text-[13px]">
-              {movimenti.map((t) => (
+              {movimenti.map((t) => {
+                const motivo = motivoMovimento(t);
+                return (
                 <li key={t.id} className="flex items-center justify-between py-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-pv-navy-800">
@@ -359,6 +366,11 @@ export default async function WalletPage({
                         </span>
                       )}
                     </p>
+                    {motivo && (
+                      <p className="mt-0.5 text-[11.5px] font-medium text-pv-slate-600">
+                        {motivo}
+                      </p>
+                    )}
                     <p className="text-[11px] text-pv-slate-500">
                       {formatDateTime(t.createdAt)}
                     </p>
@@ -377,7 +389,8 @@ export default async function WalletPage({
                     </p>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : (
             <p className="mt-3 text-[13px] text-pv-slate-500">
@@ -417,6 +430,24 @@ export default async function WalletPage({
       </div>
     </AppShell>
   );
+}
+
+/**
+ * Motivo da mostrare sotto un movimento wallet. Per le penali esplicita la
+ * causa (tipo segnalazione): usa la nota salvata sulla transazione e, per i
+ * movimenti storici privi di nota, la deriva dalla pratica collegata. Le altre
+ * transazioni con una nota (es. rettifiche admin) la mostrano tale e quale.
+ */
+function motivoMovimento(t: {
+  tipo: string;
+  note: string | null;
+  pratica: { tipoSegnalazione: SegnalazioneTipo | null } | null;
+}): string | null {
+  if (t.note) return t.note;
+  if (t.tipo === 'PENALE_BROKER' && t.pratica?.tipoSegnalazione) {
+    return motivoPenaleSegnalazione(t.pratica.tipoSegnalazione);
+  }
+  return null;
 }
 
 function labelTipoTx(t: string): string {

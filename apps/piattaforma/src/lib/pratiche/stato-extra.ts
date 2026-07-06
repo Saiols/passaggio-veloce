@@ -86,3 +86,13 @@ export function tipoSegnalazioneLabel(t: SegnalazioneTipo): string {
       return 'Altro';
   }
 }
+
+/**
+ * Motivo leggibile di una penale broker, da salvare nella nota della
+ * transazione wallet e mostrare nei movimenti (es. "Segnalazione per fermo
+ * amministrativo"). Fonte unica: usato sia in scrittura (creazione penale) sia
+ * in lettura (fallback derivato per i movimenti storici senza nota).
+ */
+export function motivoPenaleSegnalazione(t: SegnalazioneTipo): string {
+  return `Segnalazione per ${tipoSegnalazioneLabel(t).toLowerCase()}`;
+}

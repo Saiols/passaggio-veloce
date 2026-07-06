@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
-import { appendToFilename } from '@/lib/documenti/filename';
+import { documentoDownloadName } from '@/lib/documenti/labels';
 
 export async function GET(
   _req: Request,
@@ -23,14 +23,14 @@ export async function GET(
       companyId: true,
       storageKey: true,
       mimeType: true,
+      tipo: true,
+      owner: true,
       originalFilename: true,
-      veicolo: { select: { targa: true } },
       pratica: {
         select: {
           brokerId: true,
           agenziaAssegnataId: true,
           codicePratica: true,
-          veicoli: { select: { targa: true } },
         },
       },
     },
@@ -56,17 +56,11 @@ export async function GET(
 
   try {
     const file = await getStorage().get(doc.storageKey);
-    // Nome univoco e rintracciabile: <nome originale> - <numero pratica> - <targa>.
-    // Targa del veicolo specifico del documento, o dell'unico veicolo della
-    // pratica; omessa se la pratica ha più veicoli e il doc non è legato a uno.
-    const veicoli = doc.pratica?.veicoli ?? [];
-    const targa =
-      doc.veicolo?.targa ?? (veicoli.length === 1 ? veicoli[0]!.targa : null);
-    const filename = appendToFilename(
-      doc.originalFilename,
-      doc.pratica?.codicePratica ?? null,
-      targa,
-    );
+    // Nome file = "<numero pratica> - <label documento>": non esponiamo mai il
+    // nome file originale caricato dall'utente.
+    const filename = documentoDownloadName(doc, {
+      codicePratica: doc.pratica?.codicePratica ?? null,
+    });
     const headers = new Headers();
     headers.set('Content-Type', doc.mimeType);
     headers.set(

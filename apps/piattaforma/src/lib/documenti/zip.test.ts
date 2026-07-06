@@ -12,36 +12,36 @@ describe('streamToBuffer', () => {
 });
 
 describe('zipEntryName', () => {
-  it('builds a readable name with owner and extension', () => {
+  it('usa la label leggibile del documento + indice per l\'unicità', () => {
     expect(
       zipEntryName({ tipo: 'CI_FRONTE', owner: 'VENDITORE', originalFilename: 'scan.jpg' }, 0),
-    ).toBe('1-CI_FRONTE-VENDITORE.jpg');
+    ).toBe('documento - CI fronte - venditore - 1.jpg');
   });
 
-  it('omits owner when null and defaults extension to bin', () => {
+  it('omette owner quando null e usa bin come estensione di fallback', () => {
     expect(
       zipEntryName({ tipo: 'LIBRETTO_CIRCOLAZIONE', owner: null, originalFilename: 'libretto' }, 2),
-    ).toBe('3-LIBRETTO_CIRCOLAZIONE.bin');
+    ).toBe('documento - Libretto circolazione - 3.bin');
   });
 
-  it('aggiunge numero pratica e targa quando forniti', () => {
+  it('antepone il numero pratica quando fornito', () => {
     expect(
       zipEntryName(
         { tipo: 'CI_FRONTE', owner: 'VENDITORE', originalFilename: 'scan.jpg' },
         0,
-        { codicePratica: 'PV-2026-00042', targa: 'AB123CD' },
+        { codicePratica: 'PV-2026-00042' },
       ),
-    ).toBe('1-CI_FRONTE-VENDITORE - PV-2026-00042 - AB123CD.jpg');
+    ).toBe('PV-2026-00042 - CI fronte - venditore - 1.jpg');
   });
 
-  it('omette la targa se assente', () => {
-    expect(
-      zipEntryName(
-        { tipo: 'CI_FRONTE', owner: null, originalFilename: 'scan.jpg' },
-        0,
-        { codicePratica: 'PV-2026-00042', targa: null },
-      ),
-    ).toBe('1-CI_FRONTE - PV-2026-00042.jpg');
+  it('non espone MAI il nome file originale (privacy)', () => {
+    const name = zipEntryName(
+      { tipo: 'PATENTE', owner: 'ACQUIRENTE', originalFilename: 'foto-riservata-mario-rossi.png' },
+      3,
+      { codicePratica: 'PV-2026-00099' },
+    );
+    expect(name).toBe('PV-2026-00099 - Patente (fronte) - acquirente - 4.png');
+    expect(name).not.toContain('foto-riservata');
   });
 });
 

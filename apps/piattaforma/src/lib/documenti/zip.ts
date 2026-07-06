@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream';
 import JSZip from 'jszip';
-import { appendToFilename } from './filename';
+import { documentoDownloadName } from './labels';
 
 export type ZipEntry = { name: string; buffer: Buffer };
 
@@ -13,26 +13,17 @@ export async function streamToBuffer(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-/** Estrae l'estensione dal filename originale (fallback "bin"). */
-function extOf(filename: string): string {
-  const dot = filename.lastIndexOf('.');
-  if (dot <= 0 || dot === filename.length - 1) return 'bin';
-  return filename.slice(dot + 1).toLowerCase();
-}
-
 /**
- * Nome leggibile dell'entry zip: "<n>-<tipo>[-<owner>][ - <codice>][ - <targa>].<ext>".
- * Numero pratica e targa (opzionali) rendono i file estratti rintracciabili.
+ * Nome leggibile dell'entry zip: "<codicePratica> - <label>[ - <owner>] - <n>".
+ * Il nome file originale NON viene esposto; l'indice garantisce l'unicità tra
+ * documenti dello stesso tipo/owner nella stessa pratica.
  */
 export function zipEntryName(
   doc: { tipo: string; owner: string | null; originalFilename: string },
   index: number,
-  opts?: { codicePratica?: string | null; targa?: string | null },
+  opts?: { codicePratica?: string | null },
 ): string {
-  const ext = extOf(doc.originalFilename);
-  const ownerPart = doc.owner ? `-${doc.owner}` : '';
-  const baseName = `${index + 1}-${doc.tipo}${ownerPart}.${ext}`;
-  return appendToFilename(baseName, opts?.codicePratica, opts?.targa);
+  return documentoDownloadName(doc, { codicePratica: opts?.codicePratica, index });
 }
 
 /** Costruisce uno zip in-memory dalle entry. Pura (no I/O). */

@@ -71,9 +71,8 @@ export async function GET(
     try {
       const file = await storage.get(doc.storageKey);
       const buffer = await streamToBuffer(file.stream);
-      const targa = doc.veicolo?.targa ?? bundleTarga;
       entries.push({
-        name: zipEntryName(doc, i, { codicePratica: pratica.codicePratica, targa }),
+        name: zipEntryName(doc, i, { codicePratica: pratica.codicePratica }),
         buffer,
       });
     } catch (err) {

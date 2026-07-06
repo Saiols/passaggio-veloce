@@ -62,19 +62,13 @@ export async function GET() {
   for (const pratica of pratiche) {
     if (pratica.documenti.length === 0) continue;
     const folder = sanitizeFolder(pratica.codicePratica ?? pratica.id);
-    // Targa dell'unico veicolo (fallback per i doc non legati a un veicolo);
-    // null se la pratica ha più veicoli.
-    const bundleTarga =
-      pratica.veicoli.length === 1 ? (pratica.veicoli[0]?.targa ?? null) : null;
     for (let i = 0; i < pratica.documenti.length; i++) {
       const doc = pratica.documenti[i]!;
       try {
         const file = await storage.get(doc.storageKey);
         const buffer = await streamToBuffer(file.stream);
-        const targa = doc.veicolo?.targa ?? bundleTarga;
-        // Il codice pratica è la cartella → nel nome file basta la targa.
         entries.push({
-          name: `${folder}/${zipEntryName(doc, i, { targa })}`,
+          name: `${folder}/${zipEntryName(doc, i, { codicePratica: pratica.codicePratica })}`,
           buffer,
         });
       } catch (err) {

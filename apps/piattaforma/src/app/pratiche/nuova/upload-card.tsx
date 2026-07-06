@@ -46,7 +46,6 @@ export function UploadCard({
   // Nome/dimensione: dal File se presente, altrimenti dalla BlobRef (bozza
   // ripristinata dopo un refresh: il file è già su Blob, ma l'oggetto File
   // locale non esiste più).
-  const docName = file?.name ?? ref?.name ?? null;
   const docSize = file?.size ?? ref?.size ?? null;
   const hasDoc = !!file || !!ref;
   // Immagini → editor scansione (ritaglio/migliora); PDF → upload diretto.
@@ -139,10 +138,12 @@ export function UploadCard({
           )}
         </div>
         <div className="min-w-0 flex-1">
-          {docName ? (
+          {hasDoc ? (
             <>
-              <p className="truncate text-[12px] text-pv-slate-700" title={docName}>
-                {docName}
+              {/* Il nome file originale è volutamente nascosto: mostriamo solo
+                  che il documento (identificato dalla label in alto) è caricato. */}
+              <p className="text-[12px] font-medium text-pv-slate-700">
+                {isPdf ? 'Documento PDF caricato' : 'Documento caricato'}
               </p>
               {docSize != null && (
                 <p className="text-[11px] text-pv-slate-500">

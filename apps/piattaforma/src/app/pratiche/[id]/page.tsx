@@ -58,8 +58,8 @@ export default async function PraticaDetailPage({
         : { OR: [{ brokerSedeId: { in: scopeIds } }, { agenziaSedeId: { in: scopeIds } }] }),
     },
     include: {
-      broker: { select: { ragioneSociale: true, citta: true, provincia: true } },
-      agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
+      broker: { select: { ragioneSociale: true, citta: true, provincia: true, telefono: true } },
+      agenziaAssegnata: { select: { ragioneSociale: true, citta: true, telefono: true } },
       agenziaSede: {
         select: {
           nome: true,
@@ -234,14 +234,6 @@ export default async function PraticaDetailPage({
           <div className="flex flex-wrap items-center gap-y-2">
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && <AnnullaPraticaButton praticaId={pratica.id} />}
-            {pratica.documenti.length > 0 && (
-              <a
-                href={`/api/pratiche/${pratica.id}/pdf`}
-                className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-              >
-                Scarica PDF
-              </a>
-            )}
             {pratica.documenti.length > 0 && (
               <DownloadDocumentiButton
                 href={`/api/pratiche/${pratica.id}/zip`}
@@ -501,7 +493,7 @@ export default async function PraticaDetailPage({
                               {d.owner ? ` — ${labelOwner(d.owner)}` : ''}
                             </p>
                             <p className="truncate text-[12px] text-pv-slate-500">
-                              {d.originalFilename} · {formatBytes(d.sizeBytes)}
+                              {formatBytes(d.sizeBytes)}
                             </p>
                           </div>
                           <div className="ml-3 flex shrink-0 items-center gap-2">
@@ -542,9 +534,14 @@ export default async function PraticaDetailPage({
               <h2 className="text-[15px] font-bold text-pv-navy-800">Parti commerciali</h2>
               <dl className="mt-4 space-y-3 text-[13px]">
                 <InfoRow label="Broker" value={pratica.broker.ragioneSociale} />
+                <InfoRow label="Telefono broker" value={pratica.broker.telefono} />
                 <InfoRow
                   label="Agenzia assegnata"
                   value={pratica.agenziaAssegnata?.ragioneSociale ?? '—'}
+                />
+                <InfoRow
+                  label="Telefono agenzia"
+                  value={pratica.agenziaAssegnata?.telefono ?? null}
                 />
                 {as && (
                   <InfoRow

@@ -106,6 +106,45 @@ SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
   });
 });
 
+describe('parseLibrettoText — doppio intestatario "(COMPR)" comproprietario', () => {
+  // Caso reale (anonimizzato): il SECONDO intestatario è marcato "(COMPR)"
+  // (comproprietario) invece di C.3. Document AI linearizza il blocco in modo
+  // SPARSO — dopo "(COMPR) <cognome>" c'è il <nome> su riga a sé e poi salta al
+  // riquadro successivo, mentre "NATO IL … (CF)" del comproprietario finisce
+  // lontano nel testo. Prima del fix il parser (solo C.2/C.3) lo ignorava.
+  const COMPR = `(A) AB123CD
+(B) 04.06.2020
+(C.2.1) ROSSI
+(C.2.2) MARIO
+NATO IL 09.12.1980 (RSSMRA80A01F205X)
+A MILANO (MI)
+(C.2.3) VIA ROMA 1
+MILANO (MI)
+(COMPR) BIANCHI
+LAURA
+A000000M000
+(A)
+AB123CD
+(D.1) FIAT
+(E) ZFA31200000999999
+(I) 07.09.2023
+VIA ROMA 1
+MILANO (MI)
+NATO IL 01.01.1980 (BNCLRA80A41F205G)
+A MILANO (MI)
+SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
+(C.2.1) cognome o ragione sociale`;
+
+  it('rileva il comproprietario (COMPR) come secondo intestatario, col CF associato', () => {
+    const r = parseLibrettoText(COMPR, 0.9);
+    expect(r.proprietari).toEqual(['ROSSI MARIO', 'BIANCHI LAURA']);
+    expect(r.proprietariInfo).toEqual([
+      { isPersonaGiuridica: false, cognome: 'ROSSI', nome: 'MARIO', cf: 'RSSMRA80A01F205X', display: 'ROSSI MARIO' },
+      { isPersonaGiuridica: false, cognome: 'BIANCHI', nome: 'LAURA', cf: 'BNCLRA80A41F205G', display: 'BIANCHI LAURA' },
+    ]);
+  });
+});
+
 describe('parseLibrettoText — ricevuta PRA / minivoltura (venditore commerciante)', () => {
   // Testo OCR reale (Document AI) del documento PRA del commerciante.
   const PRA1 = `Ministero delle Infrastrutture e dei Trasporti

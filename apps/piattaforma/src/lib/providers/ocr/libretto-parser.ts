@@ -53,6 +53,65 @@ function parseOwner(data: string, prefix: string): OwnerInfo | undefined {
   return { isPersonaGiuridica: true, ragioneSociale: p1, piva: pivaM ? pivaM[1] : undefined, display: p1 };
 }
 
+/** Codice cognome del CF: prime 3 consonanti, poi vocali, poi 'X' di padding
+ *  (regola Agenzia delle Entrate per il cognome). Serve ad associare un CF
+ *  sparso nel testo al comproprietario giusto. */
+function cfCognomeCode(cognome: string): string {
+  const up = cognome.toUpperCase().replace(/[^A-Z]/g, '');
+  const cons = up.replace(/[AEIOU]/g, '');
+  const vow = up.replace(/[^AEIOU]/g, '');
+  return (cons + vow + 'XXX').slice(0, 3);
+}
+
+/**
+ * Comproprietario "(COMPR)": secondo intestatario (doppio intestatario) reso
+ * dalla carta con il marcatore (COMPR) invece del codice C.3. Document AI
+ * linearizza il blocco in modo sparso — dopo "(COMPR) <cognome>" c'è il <nome>
+ * su riga a sé, mentre "NATO IL … (CF)" finisce lontano nel testo. Estraiamo
+ * cognome+nome dal marcatore e, best-effort, il CF cercando nel testo intero un
+ * codice fiscale VALIDO il cui codice-cognome combaci (associazione robusta al
+ * disordine dell'OCR).
+ */
+function parseComproprietario(data: string, fullText: string): OwnerInfo | undefined {
+  const i = data.search(/\(COMPR\)/);
+  if (i < 0) return undefined;
+  const lines = data.slice(i).split('\n');
+  const nameParts: string[] = [];
+  const first = lines[0]!.replace(/\(COMPR\)/, '').trim();
+  if (first) nameParts.push(first);
+  // Righe successive di solo lettere = resto del nome; ci si ferma alla prima
+  // riga non-nome (numero carta/targa, codice "(X.Y)", "NATO IL …", indirizzo).
+  for (let k = 1; k < lines.length && k <= 4 && nameParts.length < 4; k++) {
+    const ln = lines[k]!.trim();
+    if (/^[A-Z'][A-Z' ]*$/.test(ln) && !/\bNATO\b|\bDEL\b/.test(ln)) nameParts.push(ln);
+    else break;
+  }
+  const tokens = nameParts.join(' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (!tokens.length) return undefined;
+  const cognome = tokens[0]!;
+  const nome = tokens.length > 1 ? tokens.slice(1).join(' ') : undefined;
+
+  // CF: primo CF valido nel testo il cui codice-cognome combacia col cognome.
+  const code = cfCognomeCode(cognome);
+  let cf: string | undefined;
+  const re = new RegExp(CF_RE.source, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(fullText))) {
+    if (m[1]!.slice(0, 3) === code && isValidCodiceFiscale(m[1]!)) {
+      cf = m[1]!;
+      break;
+    }
+  }
+
+  return {
+    isPersonaGiuridica: false,
+    cognome,
+    nome,
+    cf,
+    display: [cognome, nome].filter(Boolean).join(' '),
+  };
+}
+
 /** Telaio (VIN, 17 caratteri). I VIN non usano mai O/I/Q: se l'OCR li ha
  * introdotti (tipico: O al posto di 0) normalizziamo e ri-validiamo.
  *
@@ -255,10 +314,13 @@ export function parseLibrettoText(text: string, confidence: number): LibrettoCir
     dataAcquisto = acquisto?.iso;
     annoAcquisto = acquisto?.year;
     // Intestatari: C.2 (proprietario) + C.3 (secondo intestatario/utilizzatore,
-    // es. nei leasing). Ciascuno può essere azienda o persona.
-    proprietariInfo = [parseOwner(data, 'C\\.2'), parseOwner(data, 'C\\.3')].filter(
-      (o): o is OwnerInfo => o !== undefined,
-    );
+    // es. nei leasing) + (COMPR) comproprietario (doppio intestatario). Ciascuno
+    // può essere azienda o persona.
+    proprietariInfo = [
+      parseOwner(data, 'C\\.2'),
+      parseOwner(data, 'C\\.3'),
+      parseComproprietario(data, upper),
+    ].filter((o): o is OwnerInfo => o !== undefined);
   }
 
   const proprietari = proprietariInfo.length ? proprietariInfo.map((o) => o.display) : undefined;

@@ -3,8 +3,42 @@ import { isValidCodiceFiscale } from '@/lib/kyc/match';
 
 const TARGA_RE = /\b([A-Z]{2}\d{3}[A-Z]{2})\b/;
 const TELAIO_RE = /\b([A-HJ-NPR-Z0-9]{17})\b/;
-const CF_RE = /\b([A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z])\b/;
+// Maschera posizionale del codice fiscale: L=lettera, D=cifra. Serve a correggere
+// le tipiche confusioni OCR (soprattutto O↔0 sul carattere di controllo finale,
+// che è SEMPRE una lettera) prima di validare col check-digit.
+const CF_MASK = 'LLLLLLDDLDDLDDDL';
+// Candidato CF: token di 16 caratteri alfanumerici (anche con confusioni OCR).
+const CF_LOOSE_RE = /\b[A-Z0-9]{16}\b/g;
 const DATE = String.raw`(\d{2})[./-](\d{2})[./-](\d{4})`;
+
+/** Corregge un candidato 16-char secondo la maschera (O/Q→0, I/L→1 nelle
+ *  posizioni cifra; 0→O, 1→I nelle posizioni lettera) e lo ritorna SOLO se è un
+ *  CF valido (check-digit). La validazione garantisce zero falsi positivi. */
+function coerceCf(raw: string): string | undefined {
+  if (raw.length !== 16) return undefined;
+  let out = '';
+  for (let i = 0; i < 16; i++) {
+    const ch = raw[i]!;
+    if (CF_MASK[i] === 'L') {
+      out += ch === '0' ? 'O' : ch === '1' ? 'I' : ch;
+    } else {
+      out += ch === 'O' || ch === 'Q' ? '0' : ch === 'I' || ch === 'L' ? '1' : ch;
+    }
+  }
+  return isValidCodiceFiscale(out) ? out : undefined;
+}
+
+/** Primo CF valido (con correzione OCR) in un testo; opzionalmente vincolato al
+ *  codice-cognome (per associare un CF sparso al comproprietario giusto). */
+function findCf(text: string, cognomeCode?: string): string | undefined {
+  const re = new RegExp(CF_LOOSE_RE.source, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const cf = coerceCf(m[0]);
+    if (cf && (!cognomeCode || cf.slice(0, 3) === cognomeCode)) return cf;
+  }
+  return undefined;
+}
 
 // La carta di circolazione riporta sul retro la legenda "SIGNIFICATO DEI CODICI
 // COMUNITARI ARMONIZZATI", dove gli stessi codici (C.2.1, (I), ...) compaiono
@@ -44,8 +78,7 @@ function parseOwner(data: string, prefix: string): OwnerInfo | undefined {
   if (p2) {
     const i3 = data.search(new RegExp(`\\(${prefix}\\.3\\)`));
     const seg = i1 >= 0 ? data.slice(i1, i3 > i1 ? i3 : i1 + 400) : '';
-    const cfM = CF_RE.exec(seg);
-    const cf = cfM && isValidCodiceFiscale(cfM[1]!) ? cfM[1]! : undefined;
+    const cf = findCf(seg);
     return { isPersonaGiuridica: false, cognome: p1, nome: p2, cf, display: `${p1} ${p2}`.trim() };
   }
   const seg = i1 >= 0 ? data.slice(i1, i1 + 600) : '';
@@ -91,17 +124,8 @@ function parseComproprietario(data: string, fullText: string): OwnerInfo | undef
   const cognome = tokens[0]!;
   const nome = tokens.length > 1 ? tokens.slice(1).join(' ') : undefined;
 
-  // CF: primo CF valido nel testo il cui codice-cognome combacia col cognome.
-  const code = cfCognomeCode(cognome);
-  let cf: string | undefined;
-  const re = new RegExp(CF_RE.source, 'g');
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(fullText))) {
-    if (m[1]!.slice(0, 3) === code && isValidCodiceFiscale(m[1]!)) {
-      cf = m[1]!;
-      break;
-    }
-  }
+  // CF: primo CF valido (con correzione OCR) il cui codice-cognome combacia.
+  const cf = findCf(fullText, cfCognomeCode(cognome));
 
   return {
     isPersonaGiuridica: false,
@@ -186,8 +210,7 @@ function parseTrasferimentoStickers(upper: string): StickerHit[] {
       continue;
     }
     const after = upper.slice(anchorEnd, anchorEnd + 160);
-    const cfM = CF_RE.exec(after);
-    const cf = cfM && isValidCodiceFiscale(cfM[1]!) ? cfM[1]! : undefined;
+    const cf = findCf(after);
     // Finestra "prima" del nome (dove stanno il marcatore TRASFERIMENTO e la
     // data), limitata all'etichetta precedente per non sconfinare.
     const back = upper.slice(Math.max(prevEnd, anchorStart - 200), anchorStart);

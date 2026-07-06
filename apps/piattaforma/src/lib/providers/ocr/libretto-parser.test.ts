@@ -145,6 +145,32 @@ SIGNIFICATO DEI CODICI COMUNITARI ARMONIZZATI
   });
 });
 
+describe('parseLibrettoText — correzione OCR del codice fiscale (O↔0)', () => {
+  // L'OCR confonde tipicamente O↔0: il carattere di controllo del CF (ultima
+  // posizione, SEMPRE una lettera) può finire reso come "0". Va corretto e
+  // validato col check-digit, altrimenti il CF del proprietario va perso.
+  it('corregge il carattere di controllo reso "0" invece di "O"', () => {
+    const t = `(A) AB123CD
+(C.2.1) VERDI
+(C.2.2) GIULIA
+NATO IL 01.01.1980 (VRDGLI80A41F0140)
+A MILANO (MI)
+(C.2.3) VIA ROMA 1`;
+    const r = parseLibrettoText(t, 0.9);
+    expect(r.proprietarioCf).toBe('VRDGLI80A41F014O');
+  });
+
+  it('non inventa un CF da un token 16-char non valido', () => {
+    const t = `(A) AB123CD
+(C.2.1) NERI
+(C.2.2) PAOLO
+NATO IL 01.01.1980 (ABCDEF12X34Y5678)
+A MILANO (MI)`;
+    const r = parseLibrettoText(t, 0.9);
+    expect(r.proprietarioCf).toBeUndefined();
+  });
+});
+
 describe('parseLibrettoText — ricevuta PRA / minivoltura (venditore commerciante)', () => {
   // Testo OCR reale (Document AI) del documento PRA del commerciante.
   const PRA1 = `Ministero delle Infrastrutture e dei Trasporti

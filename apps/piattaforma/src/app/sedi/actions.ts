@@ -3,8 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { getSedeRole } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { parseSedeFields } from '@/lib/sedi/form';
+import { canEditSedeSettings } from '@/lib/sedi/scope';
 
 export type SedeActionResult = { ok: true } | { ok: false; error: string };
 
@@ -80,24 +82,14 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   return { ok: true };
 }
 
-/** Aggiorna i dati anagrafici/pagamenti di una sede (solo proprietario). */
+/** Aggiorna i dati anagrafici/pagamenti di una sede (proprietario o ADMIN_SEDE della sede). */
 export async function updateSedeAction(
   sedeId: string,
   formData: FormData,
 ): Promise<SedeActionResult> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return { ok: false, error: 'Solo il proprietario può modificare le sedi' };
-  }
-  const companyId = session.user.companyId!;
-
-  const sede = await prisma.sede.findUnique({
-    where: { id: sedeId },
-    select: { companyId: true },
-  });
-  if (!sede || sede.companyId !== companyId) {
-    return { ok: false, error: 'Sede non trovata' };
+  const role = await getSedeRole(sedeId);
+  if (!canEditSedeSettings(role)) {
+    return { ok: false, error: 'Non hai i permessi per modificare questa sede' };
   }
 
   const parsed = parseSedeFields(sedeFormRaw(formData));

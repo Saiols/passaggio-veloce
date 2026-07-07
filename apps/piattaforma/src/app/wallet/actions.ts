@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { getOperatingSede } from '@/lib/auth/session-context';
+import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
+import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { WALLET, validatePayoutThresholdCent } from '@/lib/wallet/config';
 import { eseguiPayoutImmediato } from '@/lib/wallet/payout-exec';
 
@@ -90,13 +91,11 @@ export type UpdatePayoutThresholdResult =
 export async function updatePayoutThresholdAction(
   thresholdCent: number,
 ): Promise<UpdatePayoutThresholdResult> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return {
-      ok: false,
-      error: "Solo l'admin azienda può modificare la soglia",
-    };
+  const sede = await getOperatingSede();
+  if (!sede) return { ok: false, error: 'Seleziona una sede per modificarne la soglia' };
+  const role = await getSedeRole(sede.id);
+  if (!canEditSedeSettings(role)) {
+    return { ok: false, error: 'Non hai i permessi per modificare la soglia di questa sede' };
   }
   const valid = validatePayoutThresholdCent(thresholdCent);
   if (valid === null) {
@@ -105,10 +104,6 @@ export async function updatePayoutThresholdAction(
       error: `Valore fuori range: deve essere tra ${WALLET.AUTO_PAYOUT_MIN_CENT / 100}€ e ${WALLET.AUTO_PAYOUT_MAX_CENT / 100}€`,
     };
   }
-
-  // Multi-sede: la soglia auto-payout è per sede operativa.
-  const sede = await getOperatingSede();
-  if (!sede) return { ok: false, error: 'Seleziona una sede per modificarne la soglia' };
 
   await prisma.sede.update({
     where: { id: sede.id },

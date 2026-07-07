@@ -2,8 +2,9 @@
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/auth';
-import { getOperatingSede } from '@/lib/auth/session-context';
+import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
 import { prisma, Prisma } from '@pv/db';
+import { canEditSedeSettings } from '@/lib/sedi/scope';
 
 type Giorno = 'LUN' | 'MAR' | 'MER' | 'GIO' | 'VEN' | 'SAB' | 'DOM';
 const GIORNI: Giorno[] = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
@@ -38,6 +39,10 @@ export async function updateOrariAction(formData: FormData): Promise<ActionResul
   // aggregata (più sedi) deve prima selezionare una sede.
   const sede = await getOperatingSede();
   if (!sede) return { ok: false, error: 'Seleziona una sede per modificarne gli orari' };
+  const role = await getSedeRole(sede.id);
+  if (!canEditSedeSettings(role)) {
+    return { ok: false, error: 'Solo l’admin di sede può modificare gli orari' };
+  }
 
   for (const g of GIORNI) {
     const f1 = readFascia(formData, g, 1);

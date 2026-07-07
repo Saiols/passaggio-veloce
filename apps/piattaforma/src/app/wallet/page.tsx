@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { getOperatingSede } from '@/lib/auth/session-context';
+import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
+import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
@@ -89,8 +90,8 @@ export default async function WalletPage({
       where: { sedeId: sede.id },
       include: { transazioni: txInclude, payouts: payoutsInclude },
     }),
-    // Wallet madre: commissioni di affiliazione (vivono sull'azienda madre).
-    session.user.companyId
+    // Wallet madre: affiliazione — visibile/incassabile solo dal proprietario.
+    isOwner(session.user.role as string) && session.user.companyId
       ? prisma.wallet.findUnique({
           where: { companyId: session.user.companyId },
           include: { transazioni: txInclude, payouts: payoutsInclude },
@@ -193,7 +194,7 @@ export default async function WalletPage({
     rendimentoPeriod,
     ['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE'],
   );
-  const isAdminAzienda = session.user.role === 'ADMIN_AZIENDA';
+  const sedeRole = await getSedeRole(sede.id);
 
   return (
     <AppShell session={session} activePath="/wallet">
@@ -313,7 +314,7 @@ export default async function WalletPage({
               🎯 Il payout viene erogato subito alla richiesta.
             </p>
           )}
-          {isAdminAzienda && (
+          {canEditSedeSettings(sedeRole) && (
             <div className="mt-5 border-t border-pv-slate-200 pt-4">
               <h3 className="text-[13px] font-bold text-pv-navy-800">
                 Soglia payout automatico

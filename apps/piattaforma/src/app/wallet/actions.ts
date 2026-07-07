@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { isOwner } from '@/lib/auth/permissions';
 import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { canEditSedeSettings } from '@/lib/sedi/scope';
@@ -29,8 +30,10 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
   }
   if (!session.user.companyId) return { ok: false, error: 'Azienda non associata' };
 
-  // Wallet incassabili: sede operativa (pratiche) + madre (affiliazione).
+  // Wallet incassabili: sede operativa (pratiche) + madre (affiliazione,
+  // riservata al proprietario — R5).
   const sede = await getOperatingSede();
+  const includeAffiliazione = isOwner(session.user.role);
   const [walletSede, walletMadre] = await Promise.all([
     sede
       ? prisma.wallet.findUnique({
@@ -38,10 +41,12 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
           select: { id: true, saldoCent: true },
         })
       : null,
-    prisma.wallet.findUnique({
-      where: { companyId: session.user.companyId },
-      select: { id: true, saldoCent: true },
-    }),
+    includeAffiliazione
+      ? prisma.wallet.findUnique({
+          where: { companyId: session.user.companyId },
+          select: { id: true, saldoCent: true },
+        })
+      : null,
   ]);
 
   const wallets = [walletSede, walletMadre].filter(

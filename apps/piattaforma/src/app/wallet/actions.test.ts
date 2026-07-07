@@ -54,3 +54,41 @@ describe('richiediPayoutAction — gate mandato + esecuzione istantanea', () => 
     expect(eseguiPayoutMock).not.toHaveBeenCalled();
   });
 });
+
+describe('richiediPayoutAction — wallet madre riservato al proprietario (R5)', () => {
+  beforeEach(() => {
+    // Entrambi i wallet eleggibili: sede 80_000, madre 90_000.
+    prismaMock.wallet.findUnique.mockImplementation(({ where }: { where: { sedeId?: string; companyId?: string } }) =>
+      Promise.resolve(
+        where.sedeId
+          ? { id: 'w1', saldoCent: 80_000 }
+          : where.companyId
+            ? { id: 'wMadre', saldoCent: 90_000 }
+            : null,
+      ),
+    );
+    prismaMock.mandatoFatturazione.findUnique.mockResolvedValue({ id: 'm1' });
+  });
+
+  it('non-owner (UTENTE_AZIENDA) → incassa solo il wallet sede, mai il wallet madre', async () => {
+    authMock.mockResolvedValue({
+      user: { companyType: 'DEALER', companyId: 'c1', role: 'UTENTE_AZIENDA' },
+    });
+    const r = await richiediPayoutAction();
+    expect(r).toEqual({ ok: true });
+    expect(eseguiPayoutMock).toHaveBeenCalledTimes(1);
+    expect(eseguiPayoutMock).toHaveBeenCalledWith('w1', { automatico: false });
+    expect(eseguiPayoutMock).not.toHaveBeenCalledWith('wMadre', expect.anything());
+  });
+
+  it('owner (ADMIN_AZIENDA) → incassa sia il wallet sede sia il wallet madre', async () => {
+    authMock.mockResolvedValue({
+      user: { companyType: 'DEALER', companyId: 'c1', role: 'ADMIN_AZIENDA' },
+    });
+    const r = await richiediPayoutAction();
+    expect(r).toEqual({ ok: true });
+    expect(eseguiPayoutMock).toHaveBeenCalledTimes(2);
+    expect(eseguiPayoutMock).toHaveBeenCalledWith('w1', { automatico: false });
+    expect(eseguiPayoutMock).toHaveBeenCalledWith('wMadre', { automatico: false });
+  });
+});

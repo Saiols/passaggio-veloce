@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { getOperatingSede } from '@/lib/auth/session-context';
+import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
+import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card } from '@/components/ui';
 import { updateOrariAction } from './actions';
@@ -68,6 +69,9 @@ export default async function OrariPage({
   const byGiorno = new Map<string, Fascia[]>();
   for (const o of orari) byGiorno.set(o.giorno, parseFasce(o.fasceOrarie));
 
+  const role = await getSedeRole(sede.id);
+  const canEdit = canEditSedeSettings(role);
+
   return (
     <AppShell session={session} activePath="/orari">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -106,19 +110,40 @@ export default async function OrariPage({
                 <Card key={key} className="!p-4">
                   <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[110px_1fr_1fr]">
                     <p className="text-[14px] font-bold text-pv-navy-800">{label}</p>
-                    <FasciaInputs giorno={key} slot={1} value={f1} labelPrefix="Mattina" />
-                    <FasciaInputs giorno={key} slot={2} value={f2} labelPrefix="Pomeriggio" />
+                    <FasciaInputs
+                      giorno={key}
+                      slot={1}
+                      value={f1}
+                      labelPrefix="Mattina"
+                      disabled={!canEdit}
+                    />
+                    <FasciaInputs
+                      giorno={key}
+                      slot={2}
+                      value={f2}
+                      labelPrefix="Pomeriggio"
+                      disabled={!canEdit}
+                    />
                   </div>
                 </Card>
               );
             })}
           </div>
 
-          <div className="mt-6 flex justify-end">
-            <Button type="submit" size="md">
-              Salva orari
-            </Button>
-          </div>
+          {canEdit ? (
+            <div className="mt-6 flex justify-end">
+              <Button type="submit" size="md">
+                Salva orari
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-6">
+              <Alert variant="info">
+                Solo l&apos;admin di sede può modificare gli orari. Questa è una
+                visualizzazione di sola lettura.
+              </Alert>
+            </div>
+          )}
         </form>
       </div>
     </AppShell>
@@ -140,11 +165,13 @@ function FasciaInputs({
   slot,
   value,
   labelPrefix,
+  disabled,
 }: {
   giorno: string;
   slot: 1 | 2;
   value?: Fascia;
   labelPrefix: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -155,6 +182,7 @@ function FasciaInputs({
         type="time"
         name={`${giorno}_${slot}_start`}
         defaultValue={value?.inizio ?? ''}
+        disabled={disabled}
         className="w-[100px] rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-2.5 py-1.5 text-[13px] font-medium text-pv-slate-900 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
       />
       <span className="text-pv-slate-500">—</span>
@@ -162,6 +190,7 @@ function FasciaInputs({
         type="time"
         name={`${giorno}_${slot}_end`}
         defaultValue={value?.fine ?? ''}
+        disabled={disabled}
         className="w-[100px] rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-2.5 py-1.5 text-[13px] font-medium text-pv-slate-900 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
       />
     </div>

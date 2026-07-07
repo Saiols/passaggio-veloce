@@ -90,8 +90,8 @@ export type UpdatePayoutThresholdResult =
   | { ok: false; error: string };
 
 /**
- * Aggiorna la soglia auto-payout per la propria company. Riservato a
- * ADMIN_AZIENDA (item 12 release 2026-05).
+ * Aggiorna la soglia auto-payout per la propria company. Consentito al
+ * proprietario (ADMIN_AZIENDA) e all'admin della sede operativa (ADMIN_SEDE).
  */
 export async function updatePayoutThresholdAction(
   thresholdCent: number,

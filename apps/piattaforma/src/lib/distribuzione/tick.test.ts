@@ -34,7 +34,7 @@ beforeEach(() => {
   tx.pratica.findUnique
     .mockResolvedValueOnce({ id: 'p1', provincia: 'VE', assegnazioni: [] })
     .mockResolvedValueOnce({ stato: 'IN_ATTESA_ROUND_1' });
-  // Tre sedi: m1 ne ha due (s1, s2), m2 una (s3). Atteso: una per madre.
+  // Tre sedi: m1 ne ha due (s1, s2), m2 una (s3). Atteso: tutte e tre contattate (nessun dedup).
   tx.sede.findMany.mockResolvedValue([
     { id: 's1', createdAt: new Date('2026-01-01'), nome: 'A1', provincia: 'VE', companyId: 'm1' },
     { id: 's2', createdAt: new Date('2026-01-02'), nome: 'A2', provincia: 'VE', companyId: 'm1' },

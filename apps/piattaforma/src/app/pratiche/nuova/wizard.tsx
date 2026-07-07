@@ -2101,6 +2101,10 @@ function WizardBody({
                             return n;
                           })
                         }
+                        invalid={fe.isInvalid(
+                          `veic:${idx + 1}:cdp`,
+                          !!documenti[cdpDocKey(idx + 1)]?.ref,
+                        )}
                       />
                     </div>
                   </div>
@@ -2706,6 +2710,10 @@ function VeicoloSection({
   onTipoDocumento: (t: TipoDocumentoVeicolo) => void;
   onChange: (patch: Partial<VeicoloInput>) => void;
 }) {
+  const fe = useFieldErrors();
+  // Chiave stabile per veicolo: `ordine` è 1-based e unico per card (anche
+  // nelle pratiche multi-veicolo), quindi lo usiamo come prefisso.
+  const keyPrefix = `veic:${ordine}`;
   const hasOcr = !!veicolo.ocr;
   const isFoglio = veicolo.tipoDocumento === 'FOGLIO_COMPLEMENTARE';
   // Campi anagrafici editabili: per il libretto dopo l'OCR; per il foglio
@@ -2760,6 +2768,7 @@ function VeicoloSection({
               subtitle="Il foglio complementare come PDF o foto (JPG/PNG)."
               onSelect={(f) => onFoglio(f ?? undefined)}
               onRemove={() => onFoglio(undefined)}
+              invalid={fe.isInvalid(`${keyPrefix}:foglio`, !!veicolo.foglioComplementare.ref)}
             />
           </div>
         </>
@@ -2776,12 +2785,14 @@ function VeicoloSection({
               slot={veicolo.libretto}
               onSelect={(f) => onFronte(f ?? undefined)}
               onRemove={() => onFronte(undefined)}
+              invalid={fe.isInvalid(`${keyPrefix}:libFronte`, !!veicolo.libretto.ref)}
             />
             <UploadCard
               label="Libretto — retro"
               slot={veicolo.librettoRetro}
               onSelect={(f) => onRetro(f ?? undefined)}
               onRemove={() => onRetro(undefined)}
+              invalid={fe.isInvalid(`${keyPrefix}:libRetro`, !!veicolo.librettoRetro.ref)}
             />
           </div>
         </>
@@ -2842,12 +2853,16 @@ function VeicoloSection({
               <Input
                 value={veicolo.targa}
                 onChange={(e) => onChange({ targa: e.target.value.toUpperCase() })}
+                onBlur={() => fe.touch(`${keyPrefix}:targa`)}
+                invalid={fe.isInvalid(`${keyPrefix}:targa`, veicolo.targa.length >= 5)}
               />
             </Field>
             <Field label="Telaio" required>
               <Input
                 value={veicolo.telaio}
                 onChange={(e) => onChange({ telaio: e.target.value.toUpperCase() })}
+                onBlur={() => fe.touch(`${keyPrefix}:telaio`)}
+                invalid={fe.isInvalid(`${keyPrefix}:telaio`, veicolo.telaio.length >= 11)}
               />
             </Field>
             <Field label="Proprietario attuale" required className="sm:col-span-2">
@@ -2856,6 +2871,11 @@ function VeicoloSection({
                 onChange={(e) =>
                   onChange({ proprietarioAttuale: e.target.value })
                 }
+                onBlur={() => fe.touch(`${keyPrefix}:proprietario`)}
+                invalid={fe.isInvalid(
+                  `${keyPrefix}:proprietario`,
+                  !!veicolo.proprietarioAttuale.trim(),
+                )}
               />
             </Field>
             <Field label="Data immatricolazione" required>
@@ -2865,6 +2885,11 @@ function VeicoloSection({
                 onChange={(e) =>
                   onChange({ dataImmatricolazione: e.target.value })
                 }
+                onBlur={() => fe.touch(`${keyPrefix}:dataImmatricolazione`)}
+                invalid={fe.isInvalid(
+                  `${keyPrefix}:dataImmatricolazione`,
+                  /^\d{4}-\d{2}-\d{2}$/.test(veicolo.dataImmatricolazione),
+                )}
               />
             </Field>
             <div className="flex flex-col gap-2 pt-6">
@@ -2914,6 +2939,11 @@ function VeicoloSection({
                 placeholder="es. 12000"
                 value={veicolo.prezzoVendita ?? ''}
                 onChange={(e) => onChange({ prezzoVendita: e.target.value })}
+                onBlur={() => fe.touch(`${keyPrefix}:prezzoVendita`)}
+                invalid={fe.isInvalid(
+                  `${keyPrefix}:prezzoVendita`,
+                  Number(veicolo.prezzoVendita) > 0,
+                )}
               />
             </Field>
           </div>

@@ -1503,6 +1503,31 @@ export function WizardNuovaPratica({
             </button>
           )}
         </div>
+        <Field label="Tipo soggetto" required>
+          <Select
+            value={v.tipoSoggetto ?? ''}
+            onChange={(e) => {
+              const next = e.target.value as TipoSoggetto;
+              const isPG = next === 'AZIENDA' || next === 'OPERATORE_AUTO';
+              updateVenditore(v.id, {
+                tipoSoggetto: next,
+                isPG,
+                visuraOcr: isPG ? v.visuraOcr : undefined,
+                permessoOcr: next === 'STRANIERO_EXTRA_UE' ? v.permessoOcr : undefined,
+              });
+            }}
+          >
+            <option value="" disabled>
+              Seleziona tipo…
+            </option>
+            {TIPI_SOGGETTO_VENDITORE.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="my-3 h-px bg-pv-slate-200" />
         <ParteForm
           parte={v}
           onChange={(p) => updateVenditore(v.id, p)}
@@ -1515,6 +1540,7 @@ export function WizardNuovaPratica({
             ? "Documento d'identità del venditore"
             : `Documento d'identità — ${label.toLowerCase()}`
         }
+        hideTipoSoggetto
         docId={v.docId}
         onDocId={(t) => updateVenditore(v.id, { docId: t })}
         files={v.identita}
@@ -2864,10 +2890,8 @@ function ParteForm({
   parte: Parte;
   onChange: (p: Parte) => void;
 }) {
-  // Schema Documentale v7 (SD-B): il tipo soggetto (che popola isPG e determina
-  // quali documenti servono) è scelto nella sezione documenti — IdentitaSection,
-  // così da essere più visibile accanto agli upload. Qui restano solo l'anagrafica
-  // e i contatti della parte.
+  // Schema Documentale v7 (SD-B): il tipo soggetto è scelto in cima a questa
+  // card (fuori da ParteForm); qui restano anagrafica e contatti.
   return (
     <div>
       {parte.isPG ? (
@@ -2987,8 +3011,9 @@ function IdentitaSection({
   onInvalidatePermesso: () => void;
   onCfRef: (ref: BlobRef) => void;
   onInvalidateCf: () => void;
-  /** Nasconde il selettore "Tipo soggetto" (reso esternamente sopra i dati:
-   *  vale solo per lo step acquirente). Default: mostrato inline (venditore). */
+  /** Nasconde il selettore "Tipo soggetto" (reso esternamente sopra i dati
+   *  per tutte le parti: venditore/acquirente/co-acquirente). Qui
+   *  `hideTipoSoggetto` lo nasconde sempre. */
   hideTipoSoggetto?: boolean;
 }) {
   const mostraVisura =

@@ -41,12 +41,14 @@ export function AgenziaShell({
   session,
   activePath,
   buildSha,
+  canManageTeam,
   demoBanner,
   children,
 }: {
   session: AgenziaShellSession;
   activePath?: string;
   buildSha?: string;
+  canManageTeam?: boolean;
   demoBanner?: ReactNode;
   children: ReactNode;
 }) {
@@ -90,11 +92,9 @@ export function AgenziaShell({
         { href: '/orari', label: 'Orari', icon: IconOrari },
         { href: '/notifiche', label: 'Notifiche', icon: IconNotifiche },
         { href: '/profilo', label: 'Profilo', icon: IconProfilo },
-        ...(isAdminAzienda
-          ? [
-              { href: '/sedi', label: 'Sedi', icon: IconAgenzie },
-              { href: '/team', label: 'Team', icon: IconUtenti },
-            ]
+        ...(isAdminAzienda ? [{ href: '/sedi', label: 'Sedi', icon: IconAgenzie }] : []),
+        ...(isAdminAzienda || canManageTeam
+          ? [{ href: '/team', label: 'Team', icon: IconUtenti }]
           : []),
       ],
     },

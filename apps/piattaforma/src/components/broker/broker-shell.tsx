@@ -37,12 +37,14 @@ export function BrokerShell({
   session,
   activePath,
   buildSha,
+  canManageTeam,
   demoBanner,
   children,
 }: {
   session: BrokerShellSession;
   activePath?: string;
   buildSha?: string;
+  canManageTeam?: boolean;
   demoBanner?: ReactNode;
   children: ReactNode;
 }) {
@@ -80,11 +82,9 @@ export function BrokerShell({
       items: [
         { href: '/notifiche', label: 'Notifiche', icon: IconNotifiche },
         { href: '/profilo', label: 'Profilo', icon: IconProfilo },
-        ...(isAdminAzienda
-          ? [
-              { href: '/sedi', label: 'Sedi', icon: IconAgenzie },
-              { href: '/team', label: 'Team', icon: IconUtenti },
-            ]
+        ...(isAdminAzienda ? [{ href: '/sedi', label: 'Sedi', icon: IconAgenzie }] : []),
+        ...(isAdminAzienda || canManageTeam
+          ? [{ href: '/team', label: 'Team', icon: IconUtenti }]
           : []),
       ],
     },

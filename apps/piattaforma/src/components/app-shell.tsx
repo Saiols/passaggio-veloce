@@ -126,6 +126,12 @@ export async function AppShell({
     );
   }
 
+  // "Team" nav appare per chi gestisce almeno una sede (proprietario o admin di
+  // sede). Calcolato una volta qui e propagato a broker/agenzia (client shell) e
+  // al fallback top-bar. NOTA: getManageableSedi() → getSessionContext() aggiunge
+  // un round-trip DB a ogni render di pagina company; accettabile per la scala.
+  const canManageTeam = (await getManageableSedi()).length > 0;
+
   // Le agenzie usano la stessa chrome a sidebar (troppe voci per la top-bar).
   if (session.user.companyType === 'AGENZIA') {
     const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7);
@@ -134,6 +140,7 @@ export async function AppShell({
         session={session}
         activePath={activePath}
         buildSha={buildSha}
+        canManageTeam={canManageTeam}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} />
@@ -151,6 +158,7 @@ export async function AppShell({
         session={session}
         activePath={activePath}
         buildSha={buildSha}
+        canManageTeam={canManageTeam}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} />
@@ -160,12 +168,7 @@ export async function AppShell({
   }
 
   // Fallback (utente senza companyType riconosciuto): top-bar storica.
-  const manageableSediList = await getManageableSedi();
-  const links = navForRole(
-    session.user.role,
-    session.user.companyType,
-    manageableSediList.length > 0,
-  );
+  const links = navForRole(session.user.role, session.user.companyType, canManageTeam);
 
   return (
     <div className="flex min-h-screen flex-col bg-pv-slate-50">

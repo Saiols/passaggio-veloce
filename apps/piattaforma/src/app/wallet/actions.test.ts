@@ -1,23 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { authMock, getOperatingSedeMock, prismaMock, eseguiPayoutMock } = vi.hoisted(() => ({
+const { authMock, getOperatingSedeMock, getSedeRoleMock, prismaMock, eseguiPayoutMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   getOperatingSedeMock: vi.fn(),
+  getSedeRoleMock: vi.fn(),
   prismaMock: {
     wallet: { findUnique: vi.fn() },
     mandatoFatturazione: { findUnique: vi.fn() },
+    sede: { update: vi.fn() },
   },
   eseguiPayoutMock: vi.fn(),
 }));
 
 vi.mock('@/auth', () => ({ auth: authMock }));
-vi.mock('@/lib/auth/session-context', () => ({ getOperatingSede: getOperatingSedeMock }));
+vi.mock('@/lib/auth/session-context', () => ({
+  getOperatingSede: getOperatingSedeMock,
+  getSedeRole: getSedeRoleMock,
+}));
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/lib/wallet/payout-exec', () => ({ eseguiPayoutImmediato: eseguiPayoutMock }));
 vi.mock('next/navigation', () => ({ redirect: (u: string) => { throw new Error('REDIRECT:' + u); } }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
-import { richiediPayoutAction } from './actions';
+import { richiediPayoutAction, updatePayoutThresholdAction } from './actions';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -90,5 +95,34 @@ describe('richiediPayoutAction — wallet madre riservato al proprietario (R5)',
     expect(eseguiPayoutMock).toHaveBeenCalledTimes(2);
     expect(eseguiPayoutMock).toHaveBeenCalledWith('w1', { automatico: false });
     expect(eseguiPayoutMock).toHaveBeenCalledWith('wMadre', { automatico: false });
+  });
+});
+
+describe('updatePayoutThresholdAction — gate autorizzazione impostazioni sede', () => {
+  // thresholdCent valido (dentro AUTO_PAYOUT_MIN/MAX_CENT), riusato anche nei
+  // casi DENY: se il gate `canEditSedeSettings` venisse rimosso, il valore
+  // supererebbe la validazione e arriverebbe a `prisma.sede.update`, quindi
+  // i test DENY restano una guardia reale sul gate.
+  const validThresholdCent = 150_000;
+
+  it('OPERATORE → negato, sede.update NON chiamato', async () => {
+    getSedeRoleMock.mockResolvedValue('OPERATORE');
+    const res = await updatePayoutThresholdAction(validThresholdCent);
+    expect(res.ok).toBe(false);
+    expect(prismaMock.sede.update).not.toHaveBeenCalled();
+  });
+
+  it('sede non accessibile (ruolo null) → negato, sede.update NON chiamato', async () => {
+    getSedeRoleMock.mockResolvedValue(null);
+    const res = await updatePayoutThresholdAction(validThresholdCent);
+    expect(res.ok).toBe(false);
+    expect(prismaMock.sede.update).not.toHaveBeenCalled();
+  });
+
+  it('ADMIN_SEDE → consentito, sede.update chiamato', async () => {
+    getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
+    const res = await updatePayoutThresholdAction(validThresholdCent);
+    expect(res.ok).toBe(true);
+    expect(prismaMock.sede.update).toHaveBeenCalledTimes(1);
   });
 });

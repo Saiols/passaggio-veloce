@@ -649,10 +649,18 @@ export async function submitNuovaPraticaAction(
   // Documento di circolazione per ciascun veicolo. Due forme:
   //  - LIBRETTO: fronte + retro (slot LIBRETTO_<i>_FRONTE / _RETRO), entrambi
   //    obbligatori (il retro può portare etichette di trasferimento).
-  //  - FOGLIO_COMPLEMENTARE: un solo PDF (slot FOGLIO_COMPLEMENTARE_<i>).
+  //  - FOGLIO_COMPLEMENTARE: un solo PDF (slot FOGLIO_COMPLEMENTARE_<i>), più
+  //    gli allegati OPZIONALI del libretto originale (slot
+  //    LIBRETTO_ORIGINALE_<i>_FRONTE/_RETRO): puri allegati, niente OCR, non
+  //    obbligatori.
   type VeicoloDocRef =
     | { tipo: 'LIBRETTO'; fronte: FileRef; retro: FileRef }
-    | { tipo: 'FOGLIO_COMPLEMENTARE'; foglio: FileRef };
+    | {
+        tipo: 'FOGLIO_COMPLEMENTARE';
+        foglio: FileRef;
+        libOrigFronte?: FileRef;
+        libOrigRetro?: FileRef;
+      };
   const veicoloDocRefs: VeicoloDocRef[] = [];
   for (let i = 1; i <= veicoli.length; i++) {
     if (veicoli[i - 1]!.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
@@ -663,7 +671,22 @@ export async function submitNuovaPraticaAction(
       if (rFoglio!.size > MAX_LIBRETTO_BYTES) {
         redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
       }
-      veicoloDocRefs.push({ tipo: 'FOGLIO_COMPLEMENTARE', foglio: rFoglio! });
+      // Libretto originale (fronte/retro): OPZIONALE, nessun redirect se assente.
+      // Valida solo la size se presente.
+      const rLibOrigFronte = getRef(`LIBRETTO_ORIGINALE_${i}_FRONTE`);
+      if (rLibOrigFronte && rLibOrigFronte.size > MAX_LIBRETTO_BYTES) {
+        redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+      }
+      const rLibOrigRetro = getRef(`LIBRETTO_ORIGINALE_${i}_RETRO`);
+      if (rLibOrigRetro && rLibOrigRetro.size > MAX_LIBRETTO_BYTES) {
+        redirect('/pratiche/nuova?error=File%20troppo%20grande%20(max%2010%20MB)');
+      }
+      veicoloDocRefs.push({
+        tipo: 'FOGLIO_COMPLEMENTARE',
+        foglio: rFoglio!,
+        ...(rLibOrigFronte && rLibOrigFronte.size > 0 ? { libOrigFronte: rLibOrigFronte } : {}),
+        ...(rLibOrigRetro && rLibOrigRetro.size > 0 ? { libOrigRetro: rLibOrigRetro } : {}),
+      });
       continue;
     }
     const rFronte = getRef(`LIBRETTO_${i}_FRONTE`);
@@ -1210,7 +1233,12 @@ export async function submitNuovaPraticaAction(
   const ocrManuale = formData.get('ocrManuale') === 'true';
   const veicoloDocUploads = veicoloDocRefs.map((vd) =>
     vd.tipo === 'FOGLIO_COMPLEMENTARE'
-      ? { tipo: 'FOGLIO_COMPLEMENTARE' as const, foglio: refToPut(vd.foglio) }
+      ? {
+          tipo: 'FOGLIO_COMPLEMENTARE' as const,
+          foglio: refToPut(vd.foglio),
+          libOrigFronte: vd.libOrigFronte ? refToPut(vd.libOrigFronte) : undefined,
+          libOrigRetro: vd.libOrigRetro ? refToPut(vd.libOrigRetro) : undefined,
+        }
       : { tipo: 'LIBRETTO' as const, fronte: refToPut(vd.fronte), retro: refToPut(vd.retro) },
   );
 
@@ -1350,6 +1378,43 @@ export async function submitNuovaPraticaAction(
             gatingStato: 'PASSED',
           },
         });
+        // Libretto originale (fronte/retro): allegati OPZIONALI, puri (nessun
+        // OCR). Riusano i tipi Documento esistenti del libretto standard, così
+        // non serve una migration. Creati solo se presenti.
+        if (docUp.libOrigFronte) {
+          await tx.documento.create({
+            data: {
+              tipo: 'LIBRETTO_CIRCOLAZIONE',
+              praticaId: created.id,
+              veicoloId: veicolo.id,
+              storageKey: docUp.libOrigFronte.storageKey,
+              storageProvider: docUp.libOrigFronte.storageProvider,
+              mimeType: docUp.libOrigFronte.mimeType,
+              sizeBytes: docUp.libOrigFronte.sizeBytes,
+              originalFilename: docUp.libOrigFronte.originalFilename,
+              uploadedById: userId,
+              ocrStato: 'NONE',
+              gatingStato: 'PASSED',
+            },
+          });
+        }
+        if (docUp.libOrigRetro) {
+          await tx.documento.create({
+            data: {
+              tipo: 'LIBRETTO_CIRCOLAZIONE_RETRO',
+              praticaId: created.id,
+              veicoloId: veicolo.id,
+              storageKey: docUp.libOrigRetro.storageKey,
+              storageProvider: docUp.libOrigRetro.storageProvider,
+              mimeType: docUp.libOrigRetro.mimeType,
+              sizeBytes: docUp.libOrigRetro.sizeBytes,
+              originalFilename: docUp.libOrigRetro.originalFilename,
+              uploadedById: userId,
+              ocrStato: 'NONE',
+              gatingStato: 'PASSED',
+            },
+          });
+        }
         continue;
       }
 

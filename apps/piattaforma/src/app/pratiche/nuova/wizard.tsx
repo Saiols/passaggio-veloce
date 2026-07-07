@@ -144,6 +144,14 @@ type VeicoloInput = {
   librettoRetro: BlobSlot;
   /** BlobRef del PDF foglio complementare (slot FOGLIO_COMPLEMENTARE_<n> al submit). */
   foglioComplementare: BlobSlot;
+  /** Allegato OPZIONALE (solo ramo foglio complementare): libretto originale —
+   *  fronte. Puro allegato, nessun OCR (slot LIBRETTO_ORIGINALE_<n>_FRONTE al
+   *  submit, solo se presente). Riusa il Documento LIBRETTO_CIRCOLAZIONE. */
+  librettoOrigFronte: BlobSlot;
+  /** Allegato OPZIONALE (solo ramo foglio complementare): libretto originale —
+   *  retro. Puro allegato, nessun OCR (slot LIBRETTO_ORIGINALE_<n>_RETRO al
+   *  submit, solo se presente). Riusa il Documento LIBRETTO_CIRCOLAZIONE_RETRO. */
+  librettoOrigRetro: BlobSlot;
   fileName: string | null;
   fileNameRetro: string | null;
   ocr?: LibrettoCircolazioneData;
@@ -167,6 +175,8 @@ function emptyVeicolo(): VeicoloInput {
     libretto: emptySlot(),
     librettoRetro: emptySlot(),
     foglioComplementare: emptySlot(),
+    librettoOrigFronte: emptySlot(),
+    librettoOrigRetro: emptySlot(),
     fileName: null,
     fileNameRetro: null,
     ocr: undefined,
@@ -331,6 +341,8 @@ function veicoloForStorage(v: VeicoloInput): VeicoloInput {
     libretto: slotForStorage(v.libretto),
     librettoRetro: slotForStorage(v.librettoRetro),
     foglioComplementare: slotForStorage(v.foglioComplementare),
+    librettoOrigFronte: slotForStorage(v.librettoOrigFronte),
+    librettoOrigRetro: slotForStorage(v.librettoOrigRetro),
     extracting: false,
     ocrError: null,
   };
@@ -669,10 +681,18 @@ function WizardBody({
         if (typeof d.multiplo === 'boolean') setMultiplo(d.multiplo);
         if (typeof d.numeroVeicoli === 'number') setNumeroVeicoli(d.numeroVeicoli);
         if (Array.isArray(d.veicoli)) {
-          setVeicoli(d.veicoli);
+          // Backfill degli slot orig per bozze salvate prima della loro
+          // introduzione (altrimenti veicolo.librettoOrigFronte.ref esploderebbe
+          // nel ramo foglio, che li legge senza guardia null).
+          const veicoliNorm = d.veicoli.map((v) => ({
+            ...v,
+            librettoOrigFronte: v.librettoOrigFronte ?? emptySlot(),
+            librettoOrigRetro: v.librettoOrigRetro ?? emptySlot(),
+          }));
+          setVeicoli(veicoliNorm);
           // Allinea la firma intestatari: l'effect di prefill venditori vedrà la
           // stessa sig e NON sovrascriverà i venditori ripristinati.
-          ownersSig.current = computeOwnersSig(d.veicoli);
+          ownersSig.current = computeOwnersSig(veicoliNorm);
         }
         // Backfill dell'id stabile per bozze salvate prima della sua
         // introduzione (altrimenti il targeting per id non troverebbe la parte).
@@ -981,6 +1001,84 @@ function WizardBody({
     });
   };
 
+  // Upload OPZIONALE del libretto originale — fronte (solo ramo foglio
+  // complementare). Puro allegato: NESSUN OCR (i dati veicolo vengono dal
+  // foglio o inseriti a mano). Copia la struttura di onFronteSelected senza il
+  // trigger runLibrettoOcr.
+  const onLibrettoOrigFronteSelected = async (idx: number, file: File | undefined) => {
+    if (!file) {
+      updateVeicolo(idx, { librettoOrigFronte: emptySlot() });
+      return;
+    }
+    updateVeicolo(idx, {
+      librettoOrigFronte: { ref: null, file, uploading: true, progress: 0, error: null },
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx
+              ? { ...v, librettoOrigFronte: { ...v.librettoOrigFronte, progress: pct } }
+              : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        librettoOrigFronte: {
+          ref: null,
+          file,
+          uploading: false,
+          progress: 0,
+          error: (err as Error).message,
+        },
+      });
+      return;
+    }
+    updateVeicolo(idx, {
+      librettoOrigFronte: { ref, file, uploading: false, progress: 100, error: null },
+    });
+  };
+
+  // Upload OPZIONALE del libretto originale — retro (solo ramo foglio
+  // complementare). Puro allegato: NESSUN OCR. Stessa struttura del fronte.
+  const onLibrettoOrigRetroSelected = async (idx: number, file: File | undefined) => {
+    if (!file) {
+      updateVeicolo(idx, { librettoOrigRetro: emptySlot() });
+      return;
+    }
+    updateVeicolo(idx, {
+      librettoOrigRetro: { ref: null, file, uploading: true, progress: 0, error: null },
+    });
+    let ref: BlobRef;
+    try {
+      ref = await uploadToBlob(file, 'pratiche-staging', (pct) => {
+        setVeicoli((prev) =>
+          prev.map((v, i) =>
+            i === idx
+              ? { ...v, librettoOrigRetro: { ...v.librettoOrigRetro, progress: pct } }
+              : v,
+          ),
+        );
+      });
+    } catch (err) {
+      updateVeicolo(idx, {
+        librettoOrigRetro: {
+          ref: null,
+          file,
+          uploading: false,
+          progress: 0,
+          error: (err as Error).message,
+        },
+      });
+      return;
+    }
+    updateVeicolo(idx, {
+      librettoOrigRetro: { ref, file, uploading: false, progress: 100, error: null },
+    });
+  };
+
   // Upload del foglio complementare: PDF o foto (JPG/PNG), entrambi dallo scanner
   // (ritaglio/migliora, come il libretto). Dopo l'upload, OCR best-effort (parser
   // dedicato): pre-compila targa/telaio quando riesce; se fallisce, i campi
@@ -1072,7 +1170,15 @@ function WizardBody({
         extracting: false,
       });
     } else {
-      updateVeicolo(idx, { tipoDocumento: t, foglioComplementare: emptySlot() });
+      // Torna a "Libretto": azzera anche gli allegati opzionali del libretto
+      // originale (rilevanti solo nel ramo foglio) così non restano ref stantie
+      // se l'utente rientra poi nel ramo foglio.
+      updateVeicolo(idx, {
+        tipoDocumento: t,
+        foglioComplementare: emptySlot(),
+        librettoOrigFronte: emptySlot(),
+        librettoOrigRetro: emptySlot(),
+      });
     }
   };
 
@@ -1274,6 +1380,11 @@ function WizardBody({
       if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
         if (v.foglioComplementare.ref)
           blobRefs[`FOGLIO_COMPLEMENTARE_${i + 1}`] = v.foglioComplementare.ref;
+        // Allegati opzionali (nessun OCR): inviati solo se presenti.
+        if (v.librettoOrigFronte.ref)
+          blobRefs[`LIBRETTO_ORIGINALE_${i + 1}_FRONTE`] = v.librettoOrigFronte.ref;
+        if (v.librettoOrigRetro.ref)
+          blobRefs[`LIBRETTO_ORIGINALE_${i + 1}_RETRO`] = v.librettoOrigRetro.ref;
         return;
       }
       if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}_FRONTE`] = v.libretto.ref;
@@ -2078,6 +2189,8 @@ function WizardBody({
                   onFronte={(file) => onFronteSelected(idx, file)}
                   onRetro={(file) => onRetroSelected(idx, file)}
                   onFoglio={(file) => onFoglioSelected(idx, file)}
+                  onLibrettoOrigFronte={(file) => onLibrettoOrigFronteSelected(idx, file)}
+                  onLibrettoOrigRetro={(file) => onLibrettoOrigRetroSelected(idx, file)}
                   onTipoDocumento={(t) => onTipoDocumentoSelected(idx, t)}
                   onChange={(patch) => {
                     // Delega → No: scarta gli allegati delega/procura già
@@ -2713,6 +2826,8 @@ function VeicoloSection({
   onFronte,
   onRetro,
   onFoglio,
+  onLibrettoOrigFronte,
+  onLibrettoOrigRetro,
   onTipoDocumento,
   onChange,
 }: {
@@ -2722,6 +2837,8 @@ function VeicoloSection({
   onFronte: (file: File | undefined) => void;
   onRetro: (file: File | undefined) => void;
   onFoglio: (file: File | undefined) => void;
+  onLibrettoOrigFronte: (file: File | undefined) => void;
+  onLibrettoOrigRetro: (file: File | undefined) => void;
   onTipoDocumento: (t: TipoDocumentoVeicolo) => void;
   onChange: (patch: Partial<VeicoloInput>) => void;
 }) {
@@ -2784,6 +2901,24 @@ function VeicoloSection({
               onSelect={(f) => onFoglio(f ?? undefined)}
               onRemove={() => onFoglio(undefined)}
               invalid={fe.isInvalid(`${keyPrefix}:foglio`, !!veicolo.foglioComplementare.ref)}
+            />
+          </div>
+          <p className="mt-4 mb-2 text-[12.5px] text-pv-slate-500">
+            Facoltativo: puoi allegare anche il <strong>libretto originale</strong> (fronte/retro),
+            se ne sei in possesso. Non è obbligatorio e non viene letto automaticamente.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <UploadCard
+              label="Libretto originale — fronte (facoltativo)"
+              slot={veicolo.librettoOrigFronte}
+              onSelect={(f) => onLibrettoOrigFronte(f ?? undefined)}
+              onRemove={() => onLibrettoOrigFronte(undefined)}
+            />
+            <UploadCard
+              label="Libretto originale — retro (facoltativo)"
+              slot={veicolo.librettoOrigRetro}
+              onSelect={(f) => onLibrettoOrigRetro(f ?? undefined)}
+              onRemove={() => onLibrettoOrigRetro(undefined)}
             />
           </div>
         </>

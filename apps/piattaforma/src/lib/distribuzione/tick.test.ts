@@ -50,7 +50,7 @@ beforeEach(() => {
   prismaMock.praticaAssegnazione.findMany.mockResolvedValue([]);
 });
 
-describe('avviaRound1ForPratica (multi-sede)', () => {
+describe('avviaRound1ForPratica (multi-sede: tutte le sedi in zona)', () => {
   it('seleziona SEDI agenzia attive per provincia (non Company)', async () => {
     await avviaRound1ForPratica('p1');
     expect(tx.sede.findMany).toHaveBeenCalledTimes(1);
@@ -60,16 +60,15 @@ describe('avviaRound1ForPratica (multi-sede)', () => {
     expect(where.deletedAt).toBeNull();
   });
 
-  it('crea una assegnazione per madre, con agenziaId=madre e sedeId=sede', async () => {
+  it('contatta OGNI sede in zona, anche più sedi della stessa madre', async () => {
     await avviaRound1ForPratica('p1');
     const pairs = tx.praticaAssegnazione.create.mock.calls.map((c) => ({
       agenziaId: c[0].data.agenziaId,
       sedeId: c[0].data.sedeId,
     }));
-    expect(pairs).toHaveLength(2); // s2 (stessa madre m1 di s1) dedupata
+    expect(pairs).toHaveLength(3); // s1, s2 (stessa madre m1), s3 — nessun dedup
     expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1' });
+    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2' });
     expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3' });
-    const madri = pairs.map((p) => p.agenziaId);
-    expect(new Set(madri).size).toBe(madri.length); // mai due della stessa madre
   });
 });

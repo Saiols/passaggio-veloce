@@ -4,7 +4,6 @@ import { DISTRIBUZIONE } from './constants';
 import { provinceLimitrofe } from './province-limitrofe';
 import { computeCountdown, loadOrariPerSedi } from './countdown';
 import { attachRating, rankCandidates } from './ranking';
-import { dedupeByMadre } from './dedupe';
 import { checkAutoSuspendForSedi } from './auto-suspend';
 import {
   getAdminEmails,
@@ -128,13 +127,15 @@ async function avviaRound(
   pratica: {
     id: string;
     provincia: string | null;
-    assegnazioni: { agenziaId: string }[];
+    assegnazioni: { sedeId: string | null }[];
   },
   round: 1 | 2 | 3,
 ): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean }> {
   const now = new Date();
   const provincia = (pratica.provincia ?? '').toUpperCase();
-  const giaContattate = new Set(pratica.assegnazioni.map((a) => a.agenziaId));
+  const sediContattate = new Set(
+    pratica.assegnazioni.map((a) => a.sedeId).filter((x): x is string => x != null),
+  );
 
   let provincieTarget: readonly string[];
   if (round === 1 || round === 3) provincieTarget = [provincia];
@@ -142,22 +143,23 @@ async function avviaRound(
 
   const maxPerRound =
     round === 3
-      ? Math.max(0, DISTRIBUZIONE.N_MAX - giaContattate.size)
+      ? Math.max(0, DISTRIBUZIONE.N_MAX - sediContattate.size)
       : DISTRIBUZIONE.N_PER_ROUND;
 
   if (maxPerRound === 0 || provincieTarget.length === 0) {
     return handleNoCandidates(tx, pratica.id, round, now);
   }
 
-  // Multi-sede: i candidati sono SEDI agenzia (non Company). Filtra sedi e
-  // madre attive; `giaContattate` (madri già contattate) esclude la madre.
+  // Multi-sede: i candidati sono SEDI agenzia (non Company). Ogni sede
+  // compete in modo indipendente; `sediContattate` esclude le sedi già
+  // contattate (anche più sedi della stessa madre restano candidate).
   const rawSedi = await tx.sede.findMany({
     where: {
       type: 'AGENZIA',
       deletedAt: null,
       suspendedAt: null,
       provincia: { in: provincieTarget as string[] },
-      companyId: { notIn: Array.from(giaContattate) },
+      id: { notIn: Array.from(sediContattate) },
       company: { deletedAt: null, suspendedAt: null, bloccoPagamentoAt: null },
     },
     select: { id: true, createdAt: true, nome: true, provincia: true, companyId: true },
@@ -172,9 +174,8 @@ async function avviaRound(
   const rankedCandidates = await attachRating(tx, raw);
   const eligible = rankCandidates(rankedCandidates);
 
-  // Decisione "una per madre": tra le sedi idonee dello stesso gruppo tieni
-  // solo la migliore (la lista è già ordinata per ranking).
-  const candidate = dedupeByMadre(eligible).slice(0, maxPerRound);
+  // Tutte le sedi idonee competono in modo indipendente (prima che accetta vince).
+  const candidate = eligible.slice(0, maxPerRound);
 
   if (candidate.length === 0) {
     return handleNoCandidates(tx, pratica.id, round, now);
@@ -418,7 +419,7 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
   const result = await prisma.$transaction(async (tx) => {
     const pratica = await tx.pratica.findUnique({
       where: { id: praticaId },
-      include: { assegnazioni: { select: { agenziaId: true } } },
+      include: { assegnazioni: { select: { sedeId: true } } },
     });
     if (!pratica) throw new Error('Pratica non trovata');
     const r = await avviaRound(tx, pratica, 1);

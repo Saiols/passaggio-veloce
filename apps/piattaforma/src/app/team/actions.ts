@@ -8,6 +8,13 @@ import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
 import { hashPassword } from '@/lib/auth/password';
 import { getEmail } from '@/lib/providers/email';
 import { env } from '@/env';
+import { getSessionContext } from '@/lib/auth/session-context';
+import {
+  manageableSedi,
+  resolveSedeRole,
+  resolveTeamTargetSede,
+  assignableSedeRoles,
+} from '@/lib/sedi/scope';
 
 export type InviteResult =
   | { ok: true; demoLink?: string }
@@ -16,6 +23,12 @@ export type InviteResult =
 /**
  * Multi-sede: risolve la sede a cui assegnare un nuovo utente. Default alla sede
  * unica (caso 1:1); con più sedi serve la scelta esplicita.
+ *
+ * Usata SOLO da `acceptInvitationAction` come fallback per inviti legacy senza
+ * `sedeId` (flusso senza sessione autenticata: l'utente non è ancora loggato,
+ * quindi non può passare dai gate sede-aware `authorizeTeamCreate` /
+ * `authorizeTeamTargetUser` sotto, che richiedono `getSessionContext()`). Le
+ * altre action team ora risolvono/autorizzano la sede tramite quei due helper.
  */
 async function resolveTargetSede(
   companyId: string,
@@ -34,21 +47,90 @@ async function resolveTargetSede(
   return { ok: false, error: 'Specifica una sede per il nuovo utente' };
 }
 
+type RuoloSedeInput = 'ADMIN_SEDE' | 'OPERATORE';
+
+/**
+ * Autorizza la CREAZIONE di un utente su una sede: risolve la sede destinataria
+ * tra quelle gestibili dall'utente e valida il ruolo richiesto.
+ */
+async function authorizeTeamCreate(
+  requestedSedeId: string | undefined,
+  requestedRuolo: RuoloSedeInput | undefined,
+): Promise<
+  | { ok: true; companyId: string; sedeId: string; ruolo: RuoloSedeInput }
+  | { ok: false; error: string }
+> {
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
+  const manageable = manageableSedi({
+    isOwner: ctx.isOwner,
+    accessibleSedi: ctx.accessibleSedi,
+    membershipRuoli: ctx.membershipRuoli,
+  });
+  if (manageable.length === 0) {
+    return { ok: false, error: 'Non hai i permessi per gestire il team' };
+  }
+  const target = resolveTeamTargetSede({ requestedSedeId, manageable });
+  if (!target.ok) return { ok: false, error: target.error };
+  const role = resolveSedeRole({
+    isOwner: ctx.isOwner,
+    accessibleSedi: ctx.accessibleSedi,
+    membershipRuoli: ctx.membershipRuoli,
+    sedeId: target.sedeId,
+  });
+  const ruolo = requestedRuolo ?? 'OPERATORE';
+  if (!assignableSedeRoles(role).includes(ruolo)) {
+    return { ok: false, error: 'Ruolo non assegnabile' };
+  }
+  return { ok: true, companyId: ctx.companyId, sedeId: target.sedeId, ruolo };
+}
+
+/**
+ * Autorizza un'operazione su un utente ESISTENTE (modifica/reset/disabilita):
+ * il chiamante deve gestire una delle sedi di membership del target. Il
+ * proprietario gestisce tutti. Il target deve essere nella stessa madre.
+ */
+async function authorizeTeamTargetUser(
+  userId: string,
+): Promise<
+  | { ok: true; companyId: string; isOwner: boolean; manageableIds: string[] }
+  | { ok: false; error: string }
+> {
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
+  const manageable = manageableSedi({
+    isOwner: ctx.isOwner,
+    accessibleSedi: ctx.accessibleSedi,
+    membershipRuoli: ctx.membershipRuoli,
+  });
+  if (manageable.length === 0) return { ok: false, error: 'Non hai i permessi' };
+
+  const target = await prisma.user.findUnique({ where: { id: userId } });
+  if (!target || target.companyId !== ctx.companyId) {
+    return { ok: false, error: 'Utente non trovato nella tua azienda' };
+  }
+  const manageableIds = manageable.map((s) => s.id);
+  if (!ctx.isOwner) {
+    // Il target deve avere una membership in una sede gestita dal chiamante.
+    const membership = await prisma.userSede.findFirst({
+      where: { userId, sedeId: { in: manageableIds } },
+      select: { id: true },
+    });
+    if (!membership) return { ok: false, error: 'Utente non nella tua sede' };
+  }
+  return { ok: true, companyId: ctx.companyId, isOwner: ctx.isOwner, manageableIds };
+}
+
 export async function createInvitationAction(
   email: string,
   sedeId?: string,
-  ruoloSede?: 'ADMIN_SEDE' | 'OPERATORE',
+  ruoloSede?: RuoloSedeInput,
 ): Promise<InviteResult> {
+  const authz = await authorizeTeamCreate(sedeId, ruoloSede);
+  if (!authz.ok) return { ok: false, error: authz.error };
+  const companyId = authz.companyId;
   const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return { ok: false, error: "Solo l'admin azienda può invitare utenti" };
-  }
-  const companyId = session.user.companyId!;
-  const invitedById = session.user.id!;
-
-  const targetSede = await resolveTargetSede(companyId, sedeId);
-  if (!targetSede.ok) return { ok: false, error: targetSede.error };
+  const invitedById = session!.user!.id!;
 
   const emailLower = email.toLowerCase().trim();
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
@@ -82,8 +164,8 @@ export async function createInvitationAction(
       role: 'UTENTE_AZIENDA',
       status: 'PENDING',
       companyId,
-      sedeId: targetSede.sedeId,
-      ruoloSede: ruoloSede ?? 'OPERATORE',
+      sedeId: authz.sedeId,
+      ruoloSede: authz.ruolo,
       invitedById,
       expiresAt: expiresIn(24 * 7),
     },
@@ -203,19 +285,11 @@ export async function createUserDirectAction(
   cognome: string,
   password: string,
   sedeId?: string,
-  ruoloSede?: 'ADMIN_SEDE' | 'OPERATORE',
+  ruoloSede?: RuoloSedeInput,
 ): Promise<CreateUserResult> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return { ok: false, error: "Solo l'admin azienda può creare account utente" };
-  }
-  const companyId = session.user.companyId!;
-
-  // Multi-sede: l'utente va assegnato a una sede. Default alla sede unica
-  // (caso 1:1); se più sedi e nessuna scelta, richiedi la selezione.
-  const targetSede = await resolveTargetSede(companyId, sedeId);
-  if (!targetSede.ok) return { ok: false, error: targetSede.error };
+  const authz = await authorizeTeamCreate(sedeId, ruoloSede);
+  if (!authz.ok) return { ok: false, error: authz.error };
+  const { companyId } = authz;
 
   const emailLower = email.toLowerCase().trim();
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
@@ -256,7 +330,7 @@ export async function createUserDirectAction(
       },
     });
     await tx.userSede.create({
-      data: { userId: user.id, sedeId: targetSede.sedeId, ruolo: ruoloSede ?? 'OPERATORE' },
+      data: { userId: user.id, sedeId: authz.sedeId, ruolo: authz.ruolo },
     });
   });
 
@@ -300,14 +374,11 @@ export async function updateTeamUserAction(
   nome: string,
   cognome: string,
   sedeId?: string,
-  ruoloSede?: 'ADMIN_SEDE' | 'OPERATORE',
+  ruoloSede?: RuoloSedeInput,
 ): Promise<UpdateTeamUserResult> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return { ok: false, error: "Solo l'admin azienda può modificare gli utenti" };
-  }
-  const companyId = session.user.companyId!;
+  const authz = await authorizeTeamTargetUser(userId);
+  if (!authz.ok) return { ok: false, error: authz.error };
+  const { companyId } = authz;
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target || target.companyId !== companyId) {
@@ -344,6 +415,9 @@ export async function updateTeamUserAction(
       select: { id: true },
     });
     if (!sede) return { ok: false, error: 'Sede non valida' };
+    if (!authz.isOwner && !authz.manageableIds.includes(sedeId!)) {
+      return { ok: false, error: 'Non puoi spostare l’utente su questa sede' };
+    }
   }
   const ruolo = ruoloSede ?? 'OPERATORE';
 
@@ -384,12 +458,9 @@ export type ResetTeamUserPasswordResult =
 export async function resetTeamUserPasswordAction(
   userId: string,
 ): Promise<ResetTeamUserPasswordResult> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return { ok: false, error: "Solo l'admin azienda può resettare le password" };
-  }
-  const companyId = session.user.companyId!;
+  const authz = await authorizeTeamTargetUser(userId);
+  if (!authz.ok) return { ok: false, error: authz.error };
+  const { companyId } = authz;
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target || target.companyId !== companyId) {
@@ -420,18 +491,15 @@ export type DisableTeamUserResult = { ok: true } | { ok: false; error: string };
 export async function disableTeamUserAction(
   userId: string,
 ): Promise<DisableTeamUserResult> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') {
-    return { ok: false, error: "Solo l'admin azienda può eliminare utenti" };
-  }
-  if (userId === session.user.id) {
+  const ctx = await getSessionContext();
+  if (ctx?.user?.id === userId) {
     return { ok: false, error: 'Non puoi eliminare il tuo stesso account' };
   }
-  const companyId = session.user.companyId!;
+  const authz = await authorizeTeamTargetUser(userId);
+  if (!authz.ok) return { ok: false, error: authz.error };
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
-  if (!target || target.companyId !== companyId) {
+  if (!target || target.companyId !== authz.companyId) {
     return { ok: false, error: 'Utente non trovato nella tua azienda' };
   }
   if (target.deletedAt) {
@@ -448,15 +516,16 @@ export async function disableTeamUserAction(
 }
 
 export async function revokeInvitationAction(invitationId: string): Promise<void> {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') redirect('/dashboard');
-  const companyId = session.user.companyId!;
-
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) redirect('/login');
+  const manageable = manageableSedi({
+    isOwner: ctx.isOwner,
+    accessibleSedi: ctx.accessibleSedi,
+    membershipRuoli: ctx.membershipRuoli,
+  });
   const inv = await prisma.invitation.findUnique({ where: { id: invitationId } });
-  if (!inv || inv.companyId !== companyId) return;
-  if (inv.status !== 'PENDING') return;
-
+  if (!inv || inv.companyId !== ctx.companyId || inv.status !== 'PENDING') return;
+  if (!ctx.isOwner && (!inv.sedeId || !manageable.some((s) => s.id === inv.sedeId))) return;
   await prisma.invitation.update({
     where: { id: invitationId },
     data: { status: 'REVOKED' },

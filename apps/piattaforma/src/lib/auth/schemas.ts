@@ -82,6 +82,11 @@ export const registerStep4PaymentSchema = z.object({
   termsAccepted: z.literal(true, {
     message: 'Devi accettare i termini e condizioni',
   }),
+  // Approvazione specifica delle clausole vessatorie ex artt. 1341-1342 c.c.
+  // (raccolta separata dall'accettazione generale, requisito di opponibilità).
+  clausoleVessatorieAccepted: z.literal(true, {
+    message: 'Devi approvare specificamente le clausole indicate (artt. 1341-1342 c.c.)',
+  }),
 });
 
 // Step 5 (sedi): unità operative sotto l'azienda madre (multi-sede). La prima è

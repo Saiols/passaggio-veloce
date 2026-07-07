@@ -1023,8 +1023,25 @@ function PaymentStep({
       <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
         <Checkbox {...register('termsAccepted')} className="mt-0.5" />
         <span>
-          Ho letto e accetto i Termini e Condizioni e l&apos;Informativa Privacy di Passaggio
-          Veloce.
+          Ho letto e accetto i{' '}
+          <a
+            href="/termini"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-pv-navy-700 underline hover:text-pv-navy-800"
+          >
+            Termini e Condizioni
+          </a>{' '}
+          e l&apos;
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-pv-navy-700 underline hover:text-pv-navy-800"
+          >
+            Informativa Privacy
+          </a>{' '}
+          di Passaggio Veloce.
           <span className="ml-1 text-pv-orange-500" aria-hidden="true">
             •
           </span>
@@ -1032,6 +1049,34 @@ function PaymentStep({
       </label>
       {errors.termsAccepted && (
         <p className="text-xs font-medium text-pv-red-500">{errors.termsAccepted.message}</p>
+      )}
+
+      {/* Approvazione specifica ex artt. 1341-1342 c.c. delle clausole vessatorie. */}
+      <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
+        <Checkbox {...register('clausoleVessatorieAccepted')} className="mt-0.5" />
+        <span>
+          Ai sensi degli artt. 1341-1342 c.c. approvo specificamente le clausole nn. 3, 5, 7, 8, 10,
+          11, 12, 16 dei{' '}
+          <a
+            href="/termini"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-pv-navy-700 underline hover:text-pv-navy-800"
+          >
+            Termini e Condizioni
+          </a>{' '}
+          (prezzo del servizio e sue variazioni, condizioni di prelievo, regime fiscale e trattenute,
+          manleva sull&apos;aggiornamento della visura, penali, sospensione, limitazioni di
+          responsabilità, foro competente).
+          <span className="ml-1 text-pv-orange-500" aria-hidden="true">
+            •
+          </span>
+        </span>
+      </label>
+      {errors.clausoleVessatorieAccepted && (
+        <p className="text-xs font-medium text-pv-red-500">
+          {errors.clausoleVessatorieAccepted.message}
+        </p>
       )}
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row">

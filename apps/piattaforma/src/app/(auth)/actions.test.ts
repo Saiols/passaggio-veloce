@@ -70,7 +70,12 @@ const validPayload = {
     provincia: 'RM',
     regimeFiscale: 'ORDINARIO',
   },
-  payment: { iban: 'IT60X0542811101000000123456', sepaMandateAccepted: true, termsAccepted: true },
+  payment: {
+    iban: 'IT60X0542811101000000123456',
+    sepaMandateAccepted: true,
+    termsAccepted: true,
+    clausoleVessatorieAccepted: true,
+  },
 };
 
 function makeFile(): File {

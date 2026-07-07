@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { registerStep2CompanySchema } from './schemas';
+import { registerStep2CompanySchema, registerStep4PaymentSchema } from './schemas';
 
 const baseCompany = {
   type: 'DEALER' as const,
@@ -43,5 +43,43 @@ describe('registerStep2CompanySchema — regime fiscale', () => {
   it('regimeFiscale con valore non ammesso → non valido', () => {
     const r = registerStep2CompanySchema.safeParse({ ...baseCompany, regimeFiscale: 'BOH' });
     expect(r.success).toBe(false);
+  });
+});
+
+describe('registerStep4PaymentSchema — accettazioni', () => {
+  const basePayment = {
+    iban: 'IT60X0542811101000000123456',
+    sepaMandateAccepted: true as const,
+    termsAccepted: true as const,
+    clausoleVessatorieAccepted: true as const,
+  };
+
+  it('con entrambe le accettazioni → valido', () => {
+    expect(registerStep4PaymentSchema.safeParse(basePayment).success).toBe(true);
+  });
+
+  it('senza approvazione specifica clausole vessatorie → non valido', () => {
+    expect(
+      registerStep4PaymentSchema.safeParse({
+        iban: basePayment.iban,
+        sepaMandateAccepted: true,
+        termsAccepted: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('clausole vessatorie = false → non valido', () => {
+    const r = registerStep4PaymentSchema.safeParse({ ...basePayment, clausoleVessatorieAccepted: false });
+    expect(r.success).toBe(false);
+  });
+
+  it('senza accettazione termini → non valido', () => {
+    expect(
+      registerStep4PaymentSchema.safeParse({
+        iban: basePayment.iban,
+        sepaMandateAccepted: true,
+        clausoleVessatorieAccepted: true,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -7,6 +7,12 @@ import {
   sedeScopeIds,
   resolveOperatingSede,
   resolveSubmittedSede,
+  resolveSedeRole,
+  canManageSedeTeam,
+  canEditSedeSettings,
+  assignableSedeRoles,
+  manageableSedi,
+  resolveTeamTargetSede,
   type SedeRef,
 } from './scope';
 
@@ -215,15 +221,6 @@ describe('canSelectSede', () => {
     expect(canSelectSede('a', { isOwner: false, accessibleSedi: [sedeB] })).toBe(false);
   });
 });
-
-import {
-  resolveSedeRole,
-  canManageSedeTeam,
-  canEditSedeSettings,
-  assignableSedeRoles,
-  manageableSedi,
-  resolveTeamTargetSede,
-} from './scope';
 
 const S = (id: string): { id: string; nome: string; type: 'AGENZIA' } => ({
   id,

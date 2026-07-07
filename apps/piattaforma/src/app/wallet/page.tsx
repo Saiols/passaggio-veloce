@@ -91,7 +91,7 @@ export default async function WalletPage({
       include: { transazioni: txInclude, payouts: payoutsInclude },
     }),
     // Wallet madre: affiliazione — visibile/incassabile solo dal proprietario.
-    isOwner(session.user.role as string) && session.user.companyId
+    isOwner(session.user.role) && session.user.companyId
       ? prisma.wallet.findUnique({
           where: { companyId: session.user.companyId },
           include: { transazioni: txInclude, payouts: payoutsInclude },
@@ -299,7 +299,7 @@ export default async function WalletPage({
           <div className="mt-4">
             <PayoutButton
               disabled={!canPayout}
-              isTitolare={isOwner(session.user.role as string)}
+              isTitolare={isOwner(session.user.role)}
               ragioneSociale={company?.ragioneSociale ?? ''}
               wallets={payoutWallets}
             />

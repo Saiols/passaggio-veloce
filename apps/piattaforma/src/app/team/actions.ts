@@ -1,8 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
 import { hashPassword } from '@/lib/auth/password';
@@ -58,7 +56,7 @@ async function authorizeTeamCreate(
   requestedSedeId: string | undefined,
   requestedRuolo: RuoloSedeInput | undefined,
 ): Promise<
-  | { ok: true; companyId: string; sedeId: string; ruolo: RuoloSedeInput }
+  | { ok: true; companyId: string; sedeId: string; ruolo: RuoloSedeInput; userId: string }
   | { ok: false; error: string }
 > {
   const ctx = await getSessionContext();
@@ -83,7 +81,7 @@ async function authorizeTeamCreate(
   if (!assignableSedeRoles(role).includes(ruolo)) {
     return { ok: false, error: 'Ruolo non assegnabile' };
   }
-  return { ok: true, companyId: ctx.companyId, sedeId: target.sedeId, ruolo };
+  return { ok: true, companyId: ctx.companyId, sedeId: target.sedeId, ruolo, userId: ctx.user.id };
 }
 
 /**
@@ -130,8 +128,7 @@ export async function createInvitationAction(
   const authz = await authorizeTeamCreate(sedeId, ruoloSede);
   if (!authz.ok) return { ok: false, error: authz.error };
   const companyId = authz.companyId;
-  const session = await auth();
-  const invitedById = session!.user!.id!;
+  const invitedById = authz.userId;
 
   const emailLower = email.toLowerCase().trim();
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
@@ -525,20 +522,24 @@ export async function disableTeamUserAction(
   return { ok: true };
 }
 
-export async function revokeInvitationAction(invitationId: string): Promise<void> {
+export type RevokeInviteResult = { ok: true } | { ok: false; error: string };
+
+export async function revokeInvitationAction(invitationId: string): Promise<RevokeInviteResult> {
   const ctx = await getSessionContext();
-  if (!ctx?.companyId) redirect('/login');
+  if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
   const manageable = manageableSedi({
     isOwner: ctx.isOwner,
     accessibleSedi: ctx.accessibleSedi,
     membershipRuoli: ctx.membershipRuoli,
   });
   const inv = await prisma.invitation.findUnique({ where: { id: invitationId } });
-  if (!inv || inv.companyId !== ctx.companyId || inv.status !== 'PENDING') return;
-  if (!ctx.isOwner && (!inv.sedeId || !manageable.some((s) => s.id === inv.sedeId))) return;
-  await prisma.invitation.update({
-    where: { id: invitationId },
-    data: { status: 'REVOKED' },
-  });
+  if (!inv || inv.companyId !== ctx.companyId || inv.status !== 'PENDING') {
+    return { ok: false, error: 'Invito non trovato o non più valido' };
+  }
+  if (!ctx.isOwner && (!inv.sedeId || !manageable.some((s) => s.id === inv.sedeId))) {
+    return { ok: false, error: 'Non hai i permessi per revocare questo invito' };
+  }
+  await prisma.invitation.update({ where: { id: invitationId }, data: { status: 'REVOKED' } });
   revalidatePath('/team');
+  return { ok: true };
 }

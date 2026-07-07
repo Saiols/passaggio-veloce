@@ -1547,6 +1547,7 @@ function WizardBody({
                 permessoOcr: next === 'STRANIERO_EXTRA_UE' ? v.permessoOcr : undefined,
               });
             }}
+            invalid={fe.isInvalid(`vend:${v.id}:tipoSoggetto`, !!v.tipoSoggetto)}
           >
             <option value="" disabled>
               Seleziona tipo…
@@ -1562,6 +1563,7 @@ function WizardBody({
         <ParteForm
           parte={v}
           onChange={(p) => updateVenditore(v.id, p)}
+          fieldPrefix={`vend:${v.id}`}
         />
       </div>
 
@@ -1571,6 +1573,7 @@ function WizardBody({
             ? "Documento d'identità del venditore"
             : `Documento d'identità — ${label.toLowerCase()}`
         }
+        fieldPrefix={`vend:${v.id}`}
         hideTipoSoggetto
         docId={v.docId}
         onDocId={(t) => updateVenditore(v.id, { docId: t })}
@@ -1683,6 +1686,7 @@ function WizardBody({
                 permessoOcr: next === 'STRANIERO_EXTRA_UE' ? c.permessoOcr : undefined,
               });
             }}
+            invalid={fe.isInvalid(`co:${c.id}:tipoSoggetto`, !!c.tipoSoggetto)}
           >
             <option value="" disabled>
               Seleziona tipo…
@@ -1695,11 +1699,16 @@ function WizardBody({
           </Select>
         </Field>
         <div className="my-3 h-px bg-pv-slate-200" />
-        <ParteForm parte={c} onChange={(p) => updateCoAcquirente(c.id, p)} />
+        <ParteForm
+          parte={c}
+          onChange={(p) => updateCoAcquirente(c.id, p)}
+          fieldPrefix={`co:${c.id}`}
+        />
       </div>
 
       <IdentitaSection
         titolo={`Documento d'identità — co-intestatario ${idx + 1}`}
+        fieldPrefix={`co:${c.id}`}
         hideTipoSoggetto
         docId={c.docId}
         onDocId={(t) => updateCoAcquirente(c.id, { docId: t })}
@@ -1802,6 +1811,8 @@ function WizardBody({
                 value={c.indirizzoResidenza}
                 onChange={(e) => updateCoAcquirente(c.id, { indirizzoResidenza: e.target.value })}
                 placeholder="Via, civico, città…"
+                onBlur={() => fe.touch(`co:${c.id}:residenza`)}
+                invalid={fe.isInvalid(`co:${c.id}:residenza`, !!c.indirizzoResidenza.trim())}
               />
             )}
           </div>
@@ -2285,6 +2296,7 @@ function WizardBody({
                       permessoOcr: next === 'STRANIERO_EXTRA_UE' ? prev.permessoOcr : undefined,
                     }));
                   }}
+                  invalid={fe.isInvalid('acq:tipoSoggetto', !!acquirente.tipoSoggetto)}
                 >
                   <option value="" disabled>
                     Seleziona tipo…
@@ -2297,7 +2309,7 @@ function WizardBody({
                 </Select>
               </Field>
               <div className="my-3 h-px bg-pv-slate-200" />
-              <ParteForm parte={acquirente} onChange={setAcquirente} />
+              <ParteForm parte={acquirente} onChange={setAcquirente} fieldPrefix="acq" />
             </div>
 
             <IdentitaSection
@@ -2306,6 +2318,7 @@ function WizardBody({
                   ? "Documento d'identità dell'acquirente (dell'amministratore o del delegato alla firma)"
                   : "Documento d'identità dell'acquirente"
               }
+              fieldPrefix="acq"
               hideTipoSoggetto
               docId={acquirenteDocId}
               onDocId={setAcquirenteDocId}
@@ -2416,6 +2429,8 @@ function WizardBody({
                         value={acquirenteIndirizzoResidenza}
                         onChange={(e) => setAcquirenteIndirizzoResidenza(e.target.value)}
                         placeholder="Via Roma 12, 20100 Milano (MI)"
+                        onBlur={() => fe.touch('acq:residenza')}
+                        invalid={fe.isInvalid('acq:residenza', !!acquirenteIndirizzoResidenza.trim())}
                       />
                     </Field>
                   )}
@@ -2956,10 +2971,16 @@ function VeicoloSection({
 function ParteForm({
   parte,
   onChange,
+  fieldPrefix,
 }: {
   parte: Parte;
   onChange: (p: Parte) => void;
+  /** Namespace delle chiavi FieldErrors per questa parte (es. `vend:<id>`,
+   *  `acq`, `co:<id>`): evita che i bordi rossi di una parte si accendano su
+   *  un'altra (stesso nome campo, parti diverse). */
+  fieldPrefix: string;
 }) {
+  const fe = useFieldErrors();
   // Schema Documentale v7 (SD-B): il tipo soggetto è scelto in cima a questa
   // card (fuori da ParteForm); qui restano anagrafica e contatti.
   return (
@@ -2970,6 +2991,8 @@ function ParteForm({
             <Input
               value={parte.ragioneSociale}
               onChange={(e) => onChange({ ...parte, ragioneSociale: e.target.value })}
+              onBlur={() => fe.touch(`${fieldPrefix}:ragioneSociale`)}
+              invalid={fe.isInvalid(`${fieldPrefix}:ragioneSociale`, !!parte.ragioneSociale.trim())}
             />
           </Field>
           <Field label="Partita IVA" required>
@@ -2977,18 +3000,27 @@ function ParteForm({
               value={parte.piva}
               onChange={(e) => onChange({ ...parte, piva: e.target.value.replace(/\D/g, '') })}
               maxLength={11}
+              onBlur={() => fe.touch(`${fieldPrefix}:piva`)}
+              invalid={fe.isInvalid(`${fieldPrefix}:piva`, parte.piva.length === 11)}
             />
           </Field>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nome" required>
-            <Input value={parte.nome} onChange={(e) => onChange({ ...parte, nome: e.target.value })} />
+            <Input
+              value={parte.nome}
+              onChange={(e) => onChange({ ...parte, nome: e.target.value })}
+              onBlur={() => fe.touch(`${fieldPrefix}:nome`)}
+              invalid={fe.isInvalid(`${fieldPrefix}:nome`, !!parte.nome.trim())}
+            />
           </Field>
           <Field label="Cognome" required>
             <Input
               value={parte.cognome}
               onChange={(e) => onChange({ ...parte, cognome: e.target.value })}
+              onBlur={() => fe.touch(`${fieldPrefix}:cognome`)}
+              invalid={fe.isInvalid(`${fieldPrefix}:cognome`, !!parte.cognome.trim())}
             />
           </Field>
           <Field label="Codice fiscale" required className="sm:col-span-2">
@@ -2996,6 +3028,8 @@ function ParteForm({
               value={parte.cf}
               onChange={(e) => onChange({ ...parte, cf: e.target.value.toUpperCase() })}
               maxLength={16}
+              onBlur={() => fe.touch(`${fieldPrefix}:cf`)}
+              invalid={fe.isInvalid(`${fieldPrefix}:cf`, parte.cf.trim().length === 16)}
             />
           </Field>
         </div>
@@ -3007,6 +3041,8 @@ function ParteForm({
             value={parte.telefono}
             onChange={(e) => onChange({ ...parte, telefono: e.target.value })}
             placeholder="+39 333 1234567"
+            onBlur={() => fe.touch(`${fieldPrefix}:telefono`)}
+            invalid={fe.isInvalid(`${fieldPrefix}:telefono`, !!parte.telefono.trim())}
           />
         </Field>
         <Field label="Email" required>
@@ -3015,6 +3051,8 @@ function ParteForm({
             value={parte.email}
             onChange={(e) => onChange({ ...parte, email: e.target.value })}
             placeholder="nome@esempio.it"
+            onBlur={() => fe.touch(`${fieldPrefix}:email`)}
+            invalid={fe.isInvalid(`${fieldPrefix}:email`, EMAIL_RE.test(parte.email.trim()))}
           />
         </Field>
       </div>
@@ -3061,6 +3099,7 @@ function IdentitaSection({
   onCfRef,
   onInvalidateCf,
   hideTipoSoggetto = false,
+  fieldPrefix,
 }: {
   titolo: string;
   docId: DocIdTipo;
@@ -3085,7 +3124,10 @@ function IdentitaSection({
    *  per tutte le parti: venditore/acquirente/co-acquirente). Qui
    *  `hideTipoSoggetto` lo nasconde sempre. */
   hideTipoSoggetto?: boolean;
+  /** Namespace delle chiavi FieldErrors per questa parte (vedi ParteForm). */
+  fieldPrefix: string;
 }) {
+  const fe = useFieldErrors();
   const mostraVisura =
     isPG || tipoSoggetto === 'AZIENDA' || tipoSoggetto === 'OPERATORE_AUTO';
   const mostraPermesso = tipoSoggetto === 'STRANIERO_EXTRA_UE';
@@ -3202,12 +3244,14 @@ function IdentitaSection({
               slot={files.fronte}
               onSelect={(f) => handleField('fronte', f, onMainRef, onInvalidateIdentita)}
               onRemove={() => handleField('fronte', null, onMainRef, onInvalidateIdentita)}
+              invalid={fe.isInvalid(`${fieldPrefix}:idFronte`, !!files.fronte?.ref)}
             />
             <UploadCard
               label={docId === 'PATENTE' ? 'Patente (retro)' : 'Retro'}
               slot={files.retro}
               onSelect={(f) => handleField('retro', f)}
               onRemove={() => handleField('retro', null)}
+              invalid={fe.isInvalid(`${fieldPrefix}:idRetro`, !!files.retro?.ref)}
             />
           </>
         ) : (
@@ -3216,6 +3260,7 @@ function IdentitaSection({
             slot={files.single}
             onSelect={(f) => handleField('single', f, onMainRef, onInvalidateIdentita)}
             onRemove={() => handleField('single', null, onMainRef, onInvalidateIdentita)}
+            invalid={fe.isInvalid(`${fieldPrefix}:idFronte`, !!files.single?.ref)}
           />
         )}
       </div>
@@ -3231,12 +3276,14 @@ function IdentitaSection({
             slot={files.codiceFiscale}
             onSelect={(f) => handleField('codiceFiscale', f, onCfRef, onInvalidateCf)}
             onRemove={() => handleField('codiceFiscale', null, onCfRef, onInvalidateCf)}
+            invalid={fe.isInvalid(`${fieldPrefix}:cfFronte`, !!files.codiceFiscale?.ref)}
           />
           <UploadCard
             label="Tessera sanitaria / Codice fiscale (retro)"
             slot={files.codiceFiscaleRetro}
             onSelect={(f) => handleField('codiceFiscaleRetro', f)}
             onRemove={() => handleField('codiceFiscaleRetro', null)}
+            invalid={fe.isInvalid(`${fieldPrefix}:cfRetro`, !!files.codiceFiscaleRetro?.ref)}
           />
         </div>
       )}
@@ -3252,6 +3299,7 @@ function IdentitaSection({
             subtitle="La visura camerale deve essere in formato PDF. Scaricala dal Registro Imprese e caricala qui."
             onSelect={(f) => handleField('visura', f, onVisuraRef, onInvalidateVisura)}
             onRemove={() => handleField('visura', null, onVisuraRef, onInvalidateVisura)}
+            invalid={fe.isInvalid(`${fieldPrefix}:visura`, !!files.visura?.ref)}
           />
         </div>
       )}
@@ -3265,6 +3313,7 @@ function IdentitaSection({
             slot={files.permesso}
             onSelect={(f) => handleField('permesso', f, onPermessoRef, onInvalidatePermesso)}
             onRemove={() => handleField('permesso', null, onPermessoRef, onInvalidatePermesso)}
+            invalid={fe.isInvalid(`${fieldPrefix}:permesso`, !!files.permesso?.ref)}
           />
         </div>
       )}

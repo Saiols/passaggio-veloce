@@ -23,7 +23,7 @@ export type SedeEditData = {
 };
 
 /** Anagrafica + Pagamenti della sede: vista in sola lettura con toggle "Modifica"
- * che apre il form editabile (solo proprietario). */
+ * che apre il form editabile (proprietario o admin della sede). */
 export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);

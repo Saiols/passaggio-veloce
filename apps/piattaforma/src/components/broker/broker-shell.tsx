@@ -83,6 +83,9 @@ export function BrokerShell({
         { href: '/notifiche', label: 'Notifiche', icon: IconNotifiche },
         { href: '/profilo', label: 'Profilo', icon: IconProfilo },
         ...(isAdminAzienda ? [{ href: '/sedi', label: 'Sedi', icon: IconAgenzie }] : []),
+        ...(!isAdminAzienda && canManageTeam
+          ? [{ href: '/impostazioni-sede', label: 'Impostazioni sede', icon: IconAgenzie }]
+          : []),
         ...(isAdminAzienda || canManageTeam
           ? [{ href: '/team', label: 'Team', icon: IconUtenti }]
           : []),

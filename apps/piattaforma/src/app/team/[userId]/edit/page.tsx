@@ -35,7 +35,7 @@ export default async function TeamUserEditPage({
 
   const isOwnerTarget = target.role === 'ADMIN_AZIENDA';
   const membership = await prisma.userSede.findFirst({
-    where: { userId },
+    where: { userId, sedeId: { in: manageableIds } },
     select: { sedeId: true, ruolo: true },
   });
   // Un ADMIN_SEDE può modificare solo utenti di una sede che amministra; mai il proprietario.

@@ -1,4 +1,5 @@
 import 'server-only';
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
@@ -44,7 +45,7 @@ export type SessionContext = {
  * Fonte unica di scoping per le aree operative. Ritorna null se non loggato.
  * Gli admin piattaforma (companyId null) non hanno contesto sede.
  */
-export async function getSessionContext(): Promise<SessionContext | null> {
+export const getSessionContext = cache(async (): Promise<SessionContext | null> => {
   const session = await auth();
   if (!session?.user) return null;
 
@@ -90,7 +91,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
   for (const m of memberships) membershipRuoli[m.sedeId] = m.ruolo as SedeRuolo;
 
   return { user, companyId, isOwner, accessibleSedi, currentSede, scopeIds, membershipRuoli };
-}
+});
 
 /**
  * Sede in cui l'utente sta operando per una scrittura (es. configurare il

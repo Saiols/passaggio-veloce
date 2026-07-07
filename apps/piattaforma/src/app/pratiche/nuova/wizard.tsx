@@ -476,7 +476,13 @@ function WizardBody({
   // Meccanismo bordi rossi: il reveal (acceso da un clic su "Avanti/Invia" con
   // dati mancanti) vale solo per lo step corrente. Cambiando step si riparte
   // "puliti" (nessun bordo rosso finché l'utente non tocca o non ri-clicca).
-  useEffect(() => {
+  // useLayoutEffect (non useEffect): il reset deve avvenire SINCRONO prima del
+  // paint, altrimenti il primo frame del nuovo step verrebbe dipinto con il
+  // revealed=true "stale" dello step precedente → flash rosso su
+  // sede/comune/provincia vuoti all'arrivo (es. step 3 "Avanti" fallito →
+  // correggi → "Avanti" ok → step 4). Fireing solo al cambio di `step`, non su
+  // reveal(), quindi il reveal del click fallito sullo step corrente resta ok.
+  useLayoutEffect(() => {
     fe.resetReveal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);

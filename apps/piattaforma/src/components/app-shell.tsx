@@ -10,6 +10,7 @@ import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
 import { BrokerShell } from '@/components/broker/broker-shell';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
 import { SedeSwitcher } from '@/components/sede/sede-switcher';
+import { getManageableSedi } from '@/lib/auth/session-context';
 
 export type AppShellSession = {
   user: {
@@ -23,7 +24,11 @@ export type AppShellSession = {
 
 type NavLink = { href: string; label: string };
 
-function navForRole(role: string | undefined, companyType: string | undefined): NavLink[] {
+function navForRole(
+  role: string | undefined,
+  companyType: string | undefined,
+  canManageTeam: boolean,
+): NavLink[] {
   // NOTA: lo staff di piattaforma (ADMIN_PIATTAFORMA / ASSISTENTE) NON passa più
   // di qui — AppShell fa un early-return verso AdminShell (sidebar CRM). Questo
   // ramo resta solo come riferimento storico; la nav admin "viva" è la lista
@@ -77,7 +82,7 @@ function navForRole(role: string | undefined, companyType: string | undefined): 
           { href: '/notifiche', label: 'Notifiche' },
           { href: '/profilo', label: 'Profilo' },
         ];
-  if (role === 'ADMIN_AZIENDA') {
+  if (canManageTeam) {
     links.push({ href: '/team', label: 'Team' });
   }
   return links;
@@ -96,7 +101,7 @@ function initials(name?: string | null): string {
   return (parts[0]![0]! + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
-export function AppShell({
+export async function AppShell({
   session,
   activePath,
   children,
@@ -155,7 +160,12 @@ export function AppShell({
   }
 
   // Fallback (utente senza companyType riconosciuto): top-bar storica.
-  const links = navForRole(session.user.role, session.user.companyType);
+  const manageableSediList = await getManageableSedi();
+  const links = navForRole(
+    session.user.role,
+    session.user.companyType,
+    manageableSediList.length > 0,
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-pv-slate-50">

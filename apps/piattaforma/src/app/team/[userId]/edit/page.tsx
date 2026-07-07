@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
+import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { TeamEditForm } from './edit-form';
@@ -16,38 +17,40 @@ export default async function TeamUserEditPage({
   const { userId } = await params;
   const session = await auth();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') redirect('/dashboard');
-  const companyId = session.user.companyId!;
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) redirect('/dashboard');
+  const manageable = await getManageableSedi();
+  if (manageable.length === 0) redirect('/dashboard');
+  const companyId = ctx.companyId;
+  const manageableIds = manageable.map((s) => s.id);
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
     select: {
-      id: true,
-      email: true,
-      nome: true,
-      cognome: true,
-      role: true,
-      status: true,
-      companyId: true,
-      lastLoginAt: true,
-      createdAt: true,
+      id: true, email: true, nome: true, cognome: true,
+      role: true, status: true, companyId: true, lastLoginAt: true, createdAt: true,
     },
   });
-
   if (!target || target.companyId !== companyId) notFound();
 
-  // Multi-sede: membership corrente (sede + ruolo) e sedi dell'azienda per i
-  // selettori. Il proprietario (ADMIN_AZIENDA) ha accesso implicito a tutte le
-  // sedi e non ha membership: per lui i selettori non si applicano.
   const isOwnerTarget = target.role === 'ADMIN_AZIENDA';
-  const [membership, sedi] = await Promise.all([
-    prisma.userSede.findFirst({ where: { userId }, select: { sedeId: true, ruolo: true } }),
-    prisma.sede.findMany({
-      where: { companyId, deletedAt: null },
-      select: { id: true, nome: true },
-      orderBy: { createdAt: 'asc' },
-    }),
-  ]);
+  const membership = await prisma.userSede.findFirst({
+    where: { userId },
+    select: { sedeId: true, ruolo: true },
+  });
+  // Un ADMIN_SEDE può modificare solo utenti di una sede che amministra; mai il proprietario.
+  if (!ctx.isOwner) {
+    if (isOwnerTarget) notFound();
+    if (!membership || !manageableIds.includes(membership.sedeId)) notFound();
+  }
+  // Selettore sede: il proprietario vede tutte le sedi; l'admin di sede solo le sue.
+  const sedi = ctx.isOwner
+    ? await prisma.sede.findMany({
+        where: { companyId, deletedAt: null },
+        select: { id: true, nome: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    : manageable.map((s) => ({ id: s.id, nome: s.nome }));
 
   return (
     <AppShell session={session} activePath="/team">

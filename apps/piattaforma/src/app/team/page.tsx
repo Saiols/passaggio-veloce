@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
+import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
 import { RevokeButton } from './revoke-button';
 import { DisableTeamUserButton } from './disable-button';
 import { TeamPageClient } from './team-page-client';
@@ -11,12 +12,29 @@ import { formatRelative } from '@/lib/format';
 export default async function TeamPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
-  if (session.user.role !== 'ADMIN_AZIENDA') redirect('/dashboard');
-  const companyId = session.user.companyId!;
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) redirect('/dashboard');
+  const manageable = await getManageableSedi();
+  if (manageable.length === 0) redirect('/dashboard'); // né owner né admin di sede
+  const companyId = ctx.companyId;
+  const manageableIds = manageable.map((s) => s.id);
 
-  const [users, invitations, sedi] = await Promise.all([
+  // Owner: vede tutti gli utenti della madre. Admin di sede: solo gli utenti
+  // con membership nelle sedi che amministra.
+  const usersWhere = ctx.isOwner
+    ? { companyId, deletedAt: null }
+    : {
+        companyId,
+        deletedAt: null,
+        sediMembership: { some: { sedeId: { in: manageableIds } } },
+      };
+  const invitationsWhere = ctx.isOwner
+    ? { companyId, status: 'PENDING' as const }
+    : { companyId, status: 'PENDING' as const, sedeId: { in: manageableIds } };
+
+  const [users, invitations] = await Promise.all([
     prisma.user.findMany({
-      where: { companyId, deletedAt: null },
+      where: usersWhere,
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, email: true, nome: true, cognome: true,
@@ -24,16 +42,12 @@ export default async function TeamPage() {
       },
     }),
     prisma.invitation.findMany({
-      where: { companyId, status: 'PENDING' },
+      where: invitationsWhere,
       orderBy: { createdAt: 'desc' },
       select: { id: true, email: true, createdAt: true, expiresAt: true },
     }),
-    prisma.sede.findMany({
-      where: { companyId, deletedAt: null },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, nome: true },
-    }),
   ]);
+  const sedi = manageable.map((s) => ({ id: s.id, nome: s.nome }));
 
   return (
     <AppShell session={session} activePath="/team">

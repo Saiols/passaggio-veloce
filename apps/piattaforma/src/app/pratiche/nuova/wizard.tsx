@@ -53,6 +53,7 @@ import {
   extractCodiceFiscaleAction,
   submitNuovaPraticaAction,
 } from './actions';
+import { FieldErrorsProvider, useFieldErrors } from './field-errors';
 
 type DocIdTipo = 'CI' | 'PASSAPORTO' | 'PATENTE';
 
@@ -422,13 +423,7 @@ const TIPO_CARDS: {
   },
 ];
 
-export function WizardNuovaPratica({
-  error,
-  atecoAllowed,
-  sedi,
-  defaultSedeId,
-  userId,
-}: {
+type WizardNuovaPraticaProps = {
   error?: string;
   /** Allowlist ATECO DEALER (admin /admin/ateco): gate operatore auto minivoltura. */
   atecoAllowed: AllowedAteco[];
@@ -438,7 +433,29 @@ export function WizardNuovaPratica({
   defaultSedeId?: string;
   /** Utente loggato: la bozza è scoping PER-UTENTE (vedi draftKey). */
   userId: string;
-}) {
+};
+
+/** Wrapper sottile: il meccanismo bordi rossi (FieldErrorsProvider) deve stare
+ *  SOPRA il corpo del wizard nell'albero React, perché `WizardBody` (e i suoi
+ *  sotto-componenti ParteForm/IdentitaSection/VeicoloSection) leggono il
+ *  context via `useFieldErrors()`. Firma export identica a prima: page.tsx
+ *  non cambia. */
+export function WizardNuovaPratica(props: WizardNuovaPraticaProps) {
+  return (
+    <FieldErrorsProvider>
+      <WizardBody {...props} />
+    </FieldErrorsProvider>
+  );
+}
+
+function WizardBody({
+  error,
+  atecoAllowed,
+  sedi,
+  defaultSedeId,
+  userId,
+}: WizardNuovaPraticaProps) {
+  const fe = useFieldErrors();
   const [step, setStep] = useState(1);
   // Multi-sede: sede broker da cui parte la pratica (selettore in step 4).
   const multiSede = sedi.length > 1;
@@ -454,6 +471,14 @@ export function WizardNuovaPratica({
   // OCR + verifiche) e l'utente deve ripartire dall'inizio della sezione.
   useEffect(() => {
     window.scrollTo({ top: 0 });
+  }, [step]);
+
+  // Meccanismo bordi rossi: il reveal (acceso da un clic su "Avanti/Invia" con
+  // dati mancanti) vale solo per lo step corrente. Cambiando step si riparte
+  // "puliti" (nessun bordo rosso finché l'utente non tocca o non ri-clicca).
+  useEffect(() => {
+    fe.resetReveal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
   const [tipo, setTipo] = useState<Tipo>('SEMPLICE');
   const [multiplo, setMultiplo] = useState(false);
@@ -2081,7 +2106,7 @@ export function WizardNuovaPratica({
               <Button
                 className={!canStep1 ? 'opacity-50' : undefined}
                 onClick={() => {
-                  if (!canStep1) return avvisaMancanze(mancanzeStep1());
+                  if (!canStep1) { fe.reveal(); return avvisaMancanze(mancanzeStep1()); }
                   setStep(2);
                 }}
               >
@@ -2210,7 +2235,7 @@ export function WizardNuovaPratica({
               <Button
                 className={!canStep2 ? 'opacity-50' : undefined}
                 onClick={() => {
-                  if (!canStep2) return avvisaMancanze(mancanzeStep2());
+                  if (!canStep2) { fe.reveal(); return avvisaMancanze(mancanzeStep2()); }
                   setStep(3);
                 }}
               >
@@ -2428,7 +2453,7 @@ export function WizardNuovaPratica({
               <Button
                 className={!canStep3 ? 'opacity-50' : undefined}
                 onClick={() => {
-                  if (!canStep3) return avvisaMancanze(mancanzeStep3());
+                  if (!canStep3) { fe.reveal(); return avvisaMancanze(mancanzeStep3()); }
                   setStep(4);
                 }}
               >
@@ -2451,7 +2476,8 @@ export function WizardNuovaPratica({
                   <Select
                     value={brokerSedeId}
                     onChange={(e) => setBrokerSedeId(e.target.value)}
-                    invalid={!brokerSedeId}
+                    onBlur={() => fe.touch('step4:sede')}
+                    invalid={fe.isInvalid('step4:sede', brokerSedeId.length > 0)}
                   >
                     <option value="" disabled>
                       Seleziona una sede…
@@ -2496,13 +2522,21 @@ export function WizardNuovaPratica({
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   <Field label="Comune" required className="sm:col-span-2">
-                    <Input value={comune} onChange={(e) => setComune(e.target.value)} placeholder="Venezia" />
+                    <Input
+                      value={comune}
+                      onChange={(e) => setComune(e.target.value)}
+                      onBlur={() => fe.touch('step4:comune')}
+                      invalid={fe.isInvalid('step4:comune', comune.trim().length > 0)}
+                      placeholder="Venezia"
+                    />
                   </Field>
                   <Field label="Provincia" required>
                     <Input
                       maxLength={2}
                       value={provincia}
                       onChange={(e) => setProvincia(e.target.value.toUpperCase())}
+                      onBlur={() => fe.touch('step4:provincia')}
+                      invalid={fe.isInvalid('step4:provincia', /^[A-Za-z]{2}$/.test(provincia.trim()))}
                       placeholder="VE"
                     />
                   </Field>
@@ -2565,7 +2599,7 @@ export function WizardNuovaPratica({
               <Button
                 className={!canSubmit && !submitting ? 'opacity-50' : undefined}
                 onClick={() => {
-                  if (!canSubmit) return avvisaMancanze(mancanzeStep4());
+                  if (!canSubmit) { fe.reveal(); return avvisaMancanze(mancanzeStep4()); }
                   setDichiarazioneAccettata(false);
                   setShowDichiarazione(true);
                 }}

@@ -215,3 +215,120 @@ describe('canSelectSede', () => {
     expect(canSelectSede('a', { isOwner: false, accessibleSedi: [sedeB] })).toBe(false);
   });
 });
+
+import {
+  resolveSedeRole,
+  canManageSedeTeam,
+  canEditSedeSettings,
+  assignableSedeRoles,
+  manageableSedi,
+  resolveTeamTargetSede,
+} from './scope';
+
+const S = (id: string): { id: string; nome: string; type: 'AGENZIA' } => ({
+  id,
+  nome: id,
+  type: 'AGENZIA',
+});
+
+describe('resolveSedeRole', () => {
+  it('OWNER su qualunque sede accessibile della madre', () => {
+    expect(
+      resolveSedeRole({
+        isOwner: true,
+        accessibleSedi: [S('a'), S('b')],
+        membershipRuoli: {},
+        sedeId: 'b',
+      }),
+    ).toBe('OWNER');
+  });
+
+  it('OWNER → null se la sede non è tra le accessibili', () => {
+    expect(
+      resolveSedeRole({ isOwner: true, accessibleSedi: [S('a')], membershipRuoli: {}, sedeId: 'x' }),
+    ).toBeNull();
+  });
+
+  it('non-owner: ritorna il ruolo di membership sulla sede', () => {
+    expect(
+      resolveSedeRole({
+        isOwner: false,
+        accessibleSedi: [S('a')],
+        membershipRuoli: { a: 'ADMIN_SEDE' },
+        sedeId: 'a',
+      }),
+    ).toBe('ADMIN_SEDE');
+  });
+
+  it('non-owner: default OPERATORE se accessibile ma senza ruolo esplicito', () => {
+    expect(
+      resolveSedeRole({ isOwner: false, accessibleSedi: [S('a')], membershipRuoli: {}, sedeId: 'a' }),
+    ).toBe('OPERATORE');
+  });
+
+  it('non-owner: null se la sede non è accessibile', () => {
+    expect(
+      resolveSedeRole({
+        isOwner: false,
+        accessibleSedi: [S('a')],
+        membershipRuoli: { b: 'ADMIN_SEDE' },
+        sedeId: 'b',
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('canManageSedeTeam / canEditSedeSettings / assignableSedeRoles', () => {
+  it('OWNER e ADMIN_SEDE possono gestire team e impostazioni', () => {
+    for (const r of ['OWNER', 'ADMIN_SEDE'] as const) {
+      expect(canManageSedeTeam(r)).toBe(true);
+      expect(canEditSedeSettings(r)).toBe(true);
+      expect(assignableSedeRoles(r)).toEqual(['ADMIN_SEDE', 'OPERATORE']);
+    }
+  });
+  it('OPERATORE e null non possono', () => {
+    for (const r of ['OPERATORE', null] as const) {
+      expect(canManageSedeTeam(r)).toBe(false);
+      expect(canEditSedeSettings(r)).toBe(false);
+      expect(assignableSedeRoles(r)).toEqual([]);
+    }
+  });
+});
+
+describe('manageableSedi', () => {
+  it('OWNER: tutte le sedi accessibili', () => {
+    expect(
+      manageableSedi({ isOwner: true, accessibleSedi: [S('a'), S('b')], membershipRuoli: {} }).map((s) => s.id),
+    ).toEqual(['a', 'b']);
+  });
+  it('non-owner: solo le sedi dove è ADMIN_SEDE', () => {
+    expect(
+      manageableSedi({
+        isOwner: false,
+        accessibleSedi: [S('a'), S('b'), S('c')],
+        membershipRuoli: { a: 'ADMIN_SEDE', b: 'OPERATORE' },
+      }).map((s) => s.id),
+    ).toEqual(['a']);
+  });
+});
+
+describe('resolveTeamTargetSede', () => {
+  it('id richiesto valido → quello', () => {
+    expect(resolveTeamTargetSede({ requestedSedeId: 'a', manageable: [S('a'), S('b')] })).toEqual({
+      ok: true,
+      sedeId: 'a',
+    });
+  });
+  it('id richiesto non gestibile → errore', () => {
+    expect(resolveTeamTargetSede({ requestedSedeId: 'z', manageable: [S('a')] }).ok).toBe(false);
+  });
+  it('nessun id + una sola gestibile → default', () => {
+    expect(resolveTeamTargetSede({ manageable: [S('a')] })).toEqual({ ok: true, sedeId: 'a' });
+  });
+  it('nessun id + più gestibili → errore (serve scelta)', () => {
+    expect(resolveTeamTargetSede({ manageable: [S('a'), S('b')] }).ok).toBe(false);
+  });
+  it('nessuna gestibile → errore', () => {
+    expect(resolveTeamTargetSede({ manageable: [] }).ok).toBe(false);
+  });
+});

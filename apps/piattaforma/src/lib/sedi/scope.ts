@@ -128,3 +128,67 @@ export function canSelectSede(
   if (target === SEDE_ALL) return ctx.isOwner;
   return assertSedeAccess(target, ctx.accessibleSedi);
 }
+
+export type SedeRuolo = 'ADMIN_SEDE' | 'OPERATORE';
+export type SedeRole = 'OWNER' | 'ADMIN_SEDE' | 'OPERATORE' | null;
+
+/**
+ * Ruolo effettivo dell'utente su una sede specifica.
+ * - OWNER: proprietario madre (accesso implicito a tutte le sue sedi);
+ * - altrimenti il ruolo della membership (default OPERATORE se accessibile ma
+ *   senza ruolo esplicito);
+ * - null se la sede non è accessibile all'utente.
+ */
+export function resolveSedeRole(args: {
+  isOwner: boolean;
+  accessibleSedi: SedeRef[];
+  membershipRuoli: Record<string, SedeRuolo>;
+  sedeId: string;
+}): SedeRole {
+  const { isOwner, accessibleSedi, membershipRuoli, sedeId } = args;
+  const accessible = accessibleSedi.some((s) => s.id === sedeId);
+  if (isOwner) return accessible ? 'OWNER' : null;
+  if (!accessible) return null;
+  return membershipRuoli[sedeId] ?? 'OPERATORE';
+}
+
+export function canManageSedeTeam(role: SedeRole): boolean {
+  return role === 'OWNER' || role === 'ADMIN_SEDE';
+}
+
+export function canEditSedeSettings(role: SedeRole): boolean {
+  return role === 'OWNER' || role === 'ADMIN_SEDE';
+}
+
+export function assignableSedeRoles(role: SedeRole): SedeRuolo[] {
+  return canManageSedeTeam(role) ? ['ADMIN_SEDE', 'OPERATORE'] : [];
+}
+
+/** Sedi su cui l'utente può gestire team/impostazioni (OWNER o ADMIN_SEDE). */
+export function manageableSedi(args: {
+  isOwner: boolean;
+  accessibleSedi: SedeRef[];
+  membershipRuoli: Record<string, SedeRuolo>;
+}): SedeRef[] {
+  if (args.isOwner) return args.accessibleSedi;
+  return args.accessibleSedi.filter((s) => args.membershipRuoli[s.id] === 'ADMIN_SEDE');
+}
+
+/**
+ * Sede destinataria di un'operazione team: id richiesto (se gestibile) oppure,
+ * in assenza, la sede gestibile unica. Errore se serve una scelta esplicita.
+ */
+export function resolveTeamTargetSede(args: {
+  requestedSedeId?: string;
+  manageable: SedeRef[];
+}): { ok: true; sedeId: string } | { ok: false; error: string } {
+  const { requestedSedeId, manageable } = args;
+  if (requestedSedeId) {
+    return manageable.some((s) => s.id === requestedSedeId)
+      ? { ok: true, sedeId: requestedSedeId }
+      : { ok: false, error: 'Sede non gestibile' };
+  }
+  if (manageable.length === 1) return { ok: true, sedeId: manageable[0].id };
+  if (manageable.length === 0) return { ok: false, error: 'Nessuna sede gestibile' };
+  return { ok: false, error: 'Specifica una sede per il nuovo utente' };
+}

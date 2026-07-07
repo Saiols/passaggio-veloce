@@ -7,9 +7,13 @@ import {
   resolveAccessibleSedi,
   resolveCurrentSede,
   resolveOperatingSede,
+  resolveSedeRole,
+  manageableSedi,
   sedeScopeIds,
   type SedeRef,
   type CurrentSede,
+  type SedeRole,
+  type SedeRuolo,
 } from '@/lib/sedi/scope';
 
 /** Cookie che porta la sede operativa corrente (id sede oppure 'ALL' per il proprietario). */
@@ -31,6 +35,8 @@ export type SessionContext = {
   currentSede: CurrentSede | null;
   /** Sedi su cui filtrare le query operative (`{ in: scopeIds }`). */
   scopeIds: string[];
+  /** Ruolo per sede dell'utente (solo membership non-owner). */
+  membershipRuoli: Record<string, SedeRuolo>;
 };
 
 /**
@@ -54,6 +60,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
       accessibleSedi: [],
       currentSede: null,
       scopeIds: [],
+      membershipRuoli: {},
     };
   }
 
@@ -65,7 +72,7 @@ export async function getSessionContext(): Promise<SessionContext | null> {
     }),
     prisma.userSede.findMany({
       where: { userId: user.id, sede: { companyId, deletedAt: null } },
-      select: { sedeId: true },
+      select: { sedeId: true, ruolo: true },
     }),
   ]);
 
@@ -79,7 +86,10 @@ export async function getSessionContext(): Promise<SessionContext | null> {
   const currentSede = resolveCurrentSede({ isOwner, accessibleSedi, cookieValue });
   const scopeIds = sedeScopeIds({ currentSede, accessibleSedi });
 
-  return { user, companyId, isOwner, accessibleSedi, currentSede, scopeIds };
+  const membershipRuoli: Record<string, SedeRuolo> = {};
+  for (const m of memberships) membershipRuoli[m.sedeId] = m.ruolo as SedeRuolo;
+
+  return { user, companyId, isOwner, accessibleSedi, currentSede, scopeIds, membershipRuoli };
 }
 
 /**
@@ -91,4 +101,27 @@ export async function getOperatingSede(): Promise<SedeRef | null> {
   const ctx = await getSessionContext();
   if (!ctx) return null;
   return resolveOperatingSede({ currentSede: ctx.currentSede, accessibleSedi: ctx.accessibleSedi });
+}
+
+/** Ruolo effettivo dell'utente su una sede specifica (OWNER/ADMIN_SEDE/OPERATORE/null). */
+export async function getSedeRole(sedeId: string): Promise<SedeRole> {
+  const ctx = await getSessionContext();
+  if (!ctx) return null;
+  return resolveSedeRole({
+    isOwner: ctx.isOwner,
+    accessibleSedi: ctx.accessibleSedi,
+    membershipRuoli: ctx.membershipRuoli,
+    sedeId,
+  });
+}
+
+/** Sedi su cui l'utente può gestire team/impostazioni (OWNER o ADMIN_SEDE). */
+export async function getManageableSedi(): Promise<SedeRef[]> {
+  const ctx = await getSessionContext();
+  if (!ctx) return [];
+  return manageableSedi({
+    isOwner: ctx.isOwner,
+    accessibleSedi: ctx.accessibleSedi,
+    membershipRuoli: ctx.membershipRuoli,
+  });
 }

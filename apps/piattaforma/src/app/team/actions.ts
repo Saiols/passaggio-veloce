@@ -14,6 +14,7 @@ import {
   resolveSedeRole,
   resolveTeamTargetSede,
   assignableSedeRoles,
+  type SedeRole,
 } from '@/lib/sedi/scope';
 
 export type InviteResult =
@@ -408,6 +409,7 @@ export async function updateTeamUserAction(
   // Multi-sede: aggiorna la membership (sede + ruolo) per gli UTENTE_AZIENDA. Il
   // proprietario (ADMIN_AZIENDA) ha accesso implicito a tutte le sedi → niente
   // membership. La sede deve appartenere all'azienda.
+  const ruolo = ruoloSede ?? 'OPERATORE';
   const aggiornaMembership = target.role !== 'ADMIN_AZIENDA' && sedeId !== undefined;
   if (aggiornaMembership) {
     const sede = await prisma.sede.findFirst({
@@ -418,8 +420,16 @@ export async function updateTeamUserAction(
     if (!authz.isOwner && !authz.manageableIds.includes(sedeId!)) {
       return { ok: false, error: 'Non puoi spostare l’utente su questa sede' };
     }
+    // Difesa in profondità (coerente con authorizeTeamCreate): il ruolo assegnato
+    // dev'essere tra quelli assegnabili dal chiamante sulla sede destinazione. A
+    // questo punto il chiamante è OWNER (isOwner) oppure ADMIN_SEDE della sede
+    // (garantito dal controllo manageableIds sopra) → entrambi assegnano
+    // ADMIN_SEDE/OPERATORE; il guard blocca solo un ruolo runtime non valido.
+    const callerRole: SedeRole = authz.isOwner ? 'OWNER' : 'ADMIN_SEDE';
+    if (!assignableSedeRoles(callerRole).includes(ruolo)) {
+      return { ok: false, error: 'Ruolo non assegnabile' };
+    }
   }
-  const ruolo = ruoloSede ?? 'OPERATORE';
 
   await prisma.$transaction(async (tx) => {
     await tx.user.update({

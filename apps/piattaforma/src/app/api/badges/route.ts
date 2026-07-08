@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/auth';
 import { prisma, type PraticaStato } from '@pv/db';
+import { getSessionContext } from '@/lib/auth/session-context';
+import {
+  toSedeScope,
+  wherePraticaAttiva,
+  whereAssegnazionePending,
+} from '@/lib/sedi/scope-filters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,41 +17,39 @@ const STATI_ESCLUSI = ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as unknown as
 
 /**
  * Conteggi per i badge di navigazione (polled dal client via NavBadge).
- * - `inbox`: pratiche in arrivo da accettare (solo agenzia).
- * - `praticheAttive`: totale pratiche non concluse dell'azienda (broker o
- *   agenzia assegnata), mostrato sulla voce "Pratiche" della sidebar.
+ * Multi-sede: i conteggi seguono le sedi in scope, ESATTAMENTE come le liste
+ * che aprono. Un badge madre-wide su una lista sede-scopata produceva il
+ * classico "numerino pieno, lista vuota".
  */
 export async function GET(): Promise<Response> {
-  const session = await auth();
-  if (!session?.user) {
+  const ctx = await getSessionContext();
+  if (!ctx) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   let inbox = 0;
   let praticheAttive = 0;
-  const companyId = session.user.companyId;
+  const companyId = ctx.companyId;
+  const companyType = ctx.user.companyType as 'AGENZIA' | 'DEALER' | undefined;
+  const scope = toSedeScope(ctx);
 
-  if (companyId) {
-    if (session.user.companyType === 'AGENZIA') {
-      inbox = await prisma.praticaAssegnazione.count({
-        where: { agenziaId: companyId, esito: 'PENDING' },
-      });
-      praticheAttive = await prisma.pratica.count({
-        where: {
-          agenziaAssegnataId: companyId,
-          deletedAt: null,
-          stato: { notIn: STATI_ESCLUSI },
-        },
-      });
-    } else if (session.user.companyType === 'DEALER') {
-      praticheAttive = await prisma.pratica.count({
-        where: {
-          brokerId: companyId,
-          deletedAt: null,
-          stato: { notIn: STATI_ESCLUSI },
-        },
-      });
-    }
+  if (companyId && companyType === 'AGENZIA') {
+    inbox = await prisma.praticaAssegnazione.count({
+      where: whereAssegnazionePending(scope, companyId),
+    });
+    praticheAttive = await prisma.pratica.count({
+      where: {
+        ...wherePraticaAttiva(scope, { companyId, ruolo: 'AGENZIA' }),
+        stato: { notIn: STATI_ESCLUSI },
+      },
+    });
+  } else if (companyId && companyType === 'DEALER') {
+    praticheAttive = await prisma.pratica.count({
+      where: {
+        ...wherePraticaAttiva(scope, { companyId, ruolo: 'DEALER' }),
+        stato: { notIn: STATI_ESCLUSI },
+      },
+    });
   }
 
   return NextResponse.json(

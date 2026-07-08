@@ -16,13 +16,17 @@ import { generateRendicontoPDF } from '@/lib/pdf/rendiconto';
  * OPERATORE di una sede qualsiasi otteneva il rendiconto della madre con un
  * click, senza nemmeno un UUID da indovinare.
  *
- * Fail-closed: niente sessione, niente company, o non proprietario ⇒ 403. Gli
- * admin piattaforma non hanno contesto sede (né company) e non hanno oggi un
- * ramo dedicato: la route non è linkata dall'area admin.
+ * Fail-closed: niente company o non proprietario ⇒ 403; nessuna sessione ⇒ 401
+ * (le due condizioni restano distinte: "non loggato" non è "loggato ma senza
+ * diritti"). Gli admin piattaforma non hanno contesto sede (né company) e non
+ * hanno oggi un ramo dedicato: la route non è linkata dall'area admin.
  */
 export async function GET(req: NextRequest): Promise<NextResponse | Response> {
   const ctx = await getSessionContext();
-  if (!ctx?.companyId || !ctx.isOwner) {
+  if (!ctx) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  if (!ctx.companyId || !ctx.isOwner) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

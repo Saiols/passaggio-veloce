@@ -175,15 +175,16 @@ describe('canAccessPratica', () => {
     ).toBe(false);
   });
 
-  it('null non matcha una company: pratica non assegnata + company estranea → negato', () => {
-    // `agenziaAssegnataId` null non deve "combaciare" con nessuna company: qui il
-    // viewer ha una company vera (estranea) e la sede del broker in scope, quindi
-    // il ramo agenzia viene davvero valutato (`null === 'x'` → false).
+  it('null non matcha una company: pratica non assegnata, sede agenzia IN scope → negato', () => {
+    // La sede agenzia è in scope: il solo termine che può negare è
+    // `agenziaAssegnataId === cid` (null !== 'x'). Se lo si cancellasse da
+    // canAccessPratica, `inScope('as1')` concederebbe e questo test fallirebbe —
+    // è ciò che lo rende non tautologico.
     expect(
-      canAccessPratica(pratica({ agenziaAssegnataId: null, agenziaSedeId: null }), {
+      canAccessPratica(pratica({ agenziaAssegnataId: null, agenziaSedeId: 'as1' }), {
         companyId: 'x',
         isAdminPiattaforma: false,
-        scope: { scopeIds: ['bs1'], aggregate: false, isOwner: true },
+        scope: { scopeIds: ['as1'], aggregate: false, isOwner: true },
       }),
     ).toBe(false);
   });

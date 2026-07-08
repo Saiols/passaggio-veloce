@@ -7,10 +7,9 @@ import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { gestisciSegnalazioneCreazioneAction } from '@/lib/segnalazioni/creazione';
 
 /**
- * Form admin per rispondere a una segnalazione APERTA da creazione pratica
- * (task 6/8). Clone di `admin/revisioni/chiudi-form.tsx`: qui un solo esito
- * (nessuna scelta RISOLTA/ANNULLATA, la segnalazione non blocca alcuna
- * pratica) — una nota che diventa la risposta email al broker (N42).
+ * Form admin per rispondere a una segnalazione APERTA da creazione pratica.
+ * Un solo esito (nessuna scelta RISOLTA/ANNULLATA: la segnalazione non blocca
+ * alcuna pratica) — una nota che diventa la risposta email al broker (N42).
  */
 export function GestisciSegnalazione({ id }: { id: string }) {
   const router = useRouter();

@@ -27,12 +27,11 @@ type SegnalazionePayload = {
 };
 
 /**
- * Segnalazioni FASE creazione pratica (task 5/8): popup attivabile da una CTA
- * discreta in ogni step del wizard "nuova pratica". A differenza della
- * RevisioneManualePopup (che salva una bozza e richiede review), questo popup
- * NON crea né tocca la pratica: invia uno snapshot best-effort dello stato
- * corrente (dati grezzi, anche parziali) al team PV, che risponde via email.
- * Il broker resta nel wizard con i dati intatti (nessun refresh/navigazione).
+ * Popup "segnala un problema" attivabile da una CTA discreta in ogni step del
+ * wizard "nuova pratica". NON crea né tocca la pratica: invia uno snapshot
+ * best-effort dello stato corrente (dati grezzi, anche parziali) al team PV,
+ * che risponde via email. Il broker resta nel wizard con i dati intatti
+ * (nessun refresh/navigazione).
  */
 export function SegnalaProblemaPopup({
   open,

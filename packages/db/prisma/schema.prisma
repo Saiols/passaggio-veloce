@@ -978,9 +978,11 @@ model SegnalazioneCreazione {
   tipo        TipoProblemaSegnalazione
   descrizione String
 
-  /// Fotografia leggibile dei dati inseriti (metadati, NON i file):
-  /// { tipoPratica, multiplo, veicoli:[{targa,telaio,ocr}], venditori, acquirente,
-  ///   coAcquirenti, comune, allegati:[{slot,filename,mimeType}] }.
+  /// Fotografia leggibile dei dati inseriti (metadati, NON i file). Forma reale
+  /// scritta dal wizard: { tipo, veicoli:[{targa,telaio,...,ocrData}], venditori,
+  /// acquirente, coAcquirenti, allegati:[{slot,filename,mimeType}] }. Payload
+  /// parziale ammesso (la segnalazione può partire da uno step qualsiasi), quindi
+  /// la lettura lato admin è difensiva.
   datiSnapshot Json
 
   stato        SegnalazioneCreazioneStato @default(APERTA)

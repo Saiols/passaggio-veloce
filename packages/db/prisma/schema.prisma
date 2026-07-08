@@ -181,6 +181,18 @@ enum GatingStato {
   OVERRIDDEN
 }
 
+// Segnala un problema durante la creazione pratica (wizard broker).
+enum SegnalazioneCreazioneStato {
+  APERTA
+  GESTITA
+}
+
+enum TipoProblemaSegnalazione {
+  LETTURA_DATI // l'OCR ha letto male un dato
+  COMPILAZIONE // non sa come compilare un campo/caso
+  ALTRO
+}
+
 // ============================================================
 // ENUMS — calendario
 // ============================================================
@@ -407,6 +419,9 @@ model Company {
   // Documenti anagrafici aziendali (visura, CI amministratore)
   documenti         Documento[]           @relation("DocumentiCompany")
 
+  // Segnala un problema in creazione pratica (broker che ha creato la pratica)
+  segnalazioniCreazione SegnalazioneCreazione[] @relation("SegnalazioniCreazione")
+
   // Calendario agenzia
   orariApertura         OrariApertura[]
   chiusureStraordinarie ChiusuraStraordinaria[]
@@ -453,7 +468,7 @@ model Company {
   visuraCameraleData DateTime? @db.Date
 
   // Fatturazione (FT-A)
-  regimeFiscale RegimeFiscale @default(ORDINARIO)
+  regimeFiscale     RegimeFiscale      @default(ORDINARIO)
   // Numerazione paper: ID soggetto univoco a 4 cifre nel numero documento broker
   // (es. PV-0047-2026-00001). Postgres sequence: univoco, mai riassegnato.
   numeroSoggetto    Int                @unique @default(dbgenerated("nextval('numero_soggetto_seq')"))
@@ -497,14 +512,14 @@ model User {
 
   /// A9: TOTP 2FA. Se enabled=true, dopo password serve anche il codice TOTP.
   /// twoFactorSecret è il secret base32 condiviso con l'app authenticator.
-  twoFactorEnabled       Boolean  @default(false)
-  twoFactorSecret        String?
+  twoFactorEnabled     Boolean @default(false)
+  twoFactorSecret      String?
   /// 10 backup codes hashati (bcrypt). Array JSON di stringhe.
   /// Ogni codice consumato viene rimosso dall'array.
-  twoFactorBackupCodes   Json?
+  twoFactorBackupCodes Json?
 
   /// Preferenze notifiche opzionali: mappa { "<NotificaTipo>": boolean }. Default opt-in (assenza = true).
-  notifPrefs Json?
+  notifPrefs       Json?
   /// Token per unsubscribe one-click via link email (generato lazy al primo invio opzionale).
   unsubscribeToken String? @unique
 
@@ -536,6 +551,11 @@ model User {
   // OTP email per firma mandato fatturazione (ephemeral, hashato)
   mandatoOtpHash      String?
   mandatoOtpExpiresAt DateTime?
+
+  // Segnala un problema in creazione pratica: segnalazioni fatte da questo utente
+  segnalazioniCreazione        SegnalazioneCreazione[] @relation("SegnalazioniCreazioneAutore")
+  // ...e quelle gestite da questo utente (admin)
+  segnalazioniCreazioneGestite SegnalazioneCreazione[] @relation("SegnalazioneCreazioneGestore")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -598,6 +618,7 @@ model Sede {
   notifiche             NotificaInviata[]
   commissioniAttribuite CommissioneAffiliazione[] @relation("SedeAffiliante")
   companiesAffiliate    Company[]                 @relation("SedeReferral")
+  segnalazioniCreazione SegnalazioneCreazione[]   @relation("SegnalazioniCreazioneSede")
 
   @@index([companyId])
   @@index([type])
@@ -896,6 +917,10 @@ model Documento {
   coAcquirenteId String?       @db.Uuid
   coAcquirente   CoAcquirente? @relation("DocumentiCoAcquirente", fields: [coAcquirenteId], references: [id], onDelete: SetNull)
 
+  // Allegato a una segnalazione problema in creazione pratica (opzionale)
+  segnalazioneId String?                @db.Uuid
+  segnalazione   SegnalazioneCreazione? @relation("DocumentiSegnalazione", fields: [segnalazioneId], references: [id], onDelete: Cascade)
+
   // Storage
   storageKey       String // path/key nel provider (locale o S3)
   storageProvider  String @default("local") // "local" | "s3" | "gcs"
@@ -928,32 +953,71 @@ model Documento {
   @@index([veicoloId])
   @@index([venditoreId])
   @@index([coAcquirenteId])
+  @@index([segnalazioneId])
   @@index([tipo])
   @@index([gatingStato])
   @@map("documenti")
 }
 
+// Segnala un problema durante la creazione pratica (wizard broker): il broker
+// riporta un errore incontrato (lettura dati OCR errata, dubbio di
+// compilazione, altro) con una fotografia dei dati inseriti + eventuali file.
+model SegnalazioneCreazione {
+  id String @id @default(uuid()) @db.Uuid
+
+  companyId String  @db.Uuid
+  company   Company @relation("SegnalazioniCreazione", fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String  @db.Uuid
+  user      User    @relation("SegnalazioniCreazioneAutore", fields: [userId], references: [id])
+  sedeId    String? @db.Uuid
+  sede      Sede?   @relation("SegnalazioniCreazioneSede", fields: [sedeId], references: [id])
+
+  step        Int
+  tipo        TipoProblemaSegnalazione
+  descrizione String
+
+  /// Fotografia leggibile dei dati inseriti (metadati, NON i file):
+  /// { tipoPratica, multiplo, veicoli:[{targa,telaio,ocr}], venditori, acquirente,
+  ///   coAcquirenti, comune, allegati:[{slot,filename,mimeType}] }.
+  datiSnapshot Json
+
+  stato        SegnalazioneCreazioneStato @default(APERTA)
+  notaGestione String?
+  gestitaAt    DateTime?
+  gestitaDaId  String?                    @db.Uuid
+  gestitaDa    User?                      @relation("SegnalazioneCreazioneGestore", fields: [gestitaDaId], references: [id])
+
+  documenti Documento[] @relation("DocumentiSegnalazione")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stato, createdAt])
+  @@index([companyId])
+  @@map("segnalazioni_creazione")
+}
+
 model Veicolo {
-  id                   String    @id @default(uuid()) @db.Uuid
-  praticaId            String    @db.Uuid
-  pratica              Pratica   @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+  id                   String               @id @default(uuid()) @db.Uuid
+  praticaId            String               @db.Uuid
+  pratica              Pratica              @relation(fields: [praticaId], references: [id], onDelete: Cascade)
   ordine               Int
   tipoDocumento        TipoDocumentoVeicolo @default(LIBRETTO)
   targa                String?
   telaio               String?
   proprietarioAttuale  String?
   dataImmatricolazione DateTime?
-  preImm2015           Boolean   @default(false)
-  flagComodatoDuso     Boolean   @default(false)
-  flagDelegaVendita    Boolean   @default(false)
+  preImm2015           Boolean              @default(false)
+  flagComodatoDuso     Boolean              @default(false)
+  flagDelegaVendita    Boolean              @default(false)
   prezzoVenditaCent    Int? // prezzo di vendita veicolo (cent); richiesto in creazione pratica
   ocrData              Json?
   ocrProvider          String?
   ocrAt                DateTime?
-  documenti            Documento[] @relation("DocumentiVeicolo")
-  venditori            Venditore[] @relation("VeicoloVenditori")
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  documenti            Documento[]          @relation("DocumentiVeicolo")
+  venditori            Venditore[]          @relation("VeicoloVenditori")
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   @@index([praticaId])
   @@map("veicoli")
@@ -1134,7 +1198,7 @@ model Payout {
   rendicontoStorageKey String?
   providerRef          String? // riferimento Stripe Payout (post-integrazione)
 
-  transazioni TransazioneWallet[]
+  transazioni      TransazioneWallet[]
   documentoFiscale DocumentoFiscale?
 
   @@index([walletId, stato])
@@ -1187,8 +1251,8 @@ model MandatoFatturazione {
   companyId String  @unique @db.Uuid
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  firmatarioUserId String @db.Uuid
-  firmatario       User   @relation("MandatiFirmati", fields: [firmatarioUserId], references: [id], onDelete: Restrict)
+  firmatarioUserId String   @db.Uuid
+  firmatario       User     @relation("MandatiFirmati", fields: [firmatarioUserId], references: [id], onDelete: Restrict)
   firmatoAt        DateTime @default(now())
 
   storageKey      String
@@ -1384,8 +1448,8 @@ model DocumentoFiscale {
   payoutId  String?  @unique @db.Uuid
   payout    Payout?  @relation(fields: [payoutId], references: [id])
 
-  emittenteCompanyId String?  @db.Uuid
-  emittenteCompany   Company? @relation("DocumentiEmessi", fields: [emittenteCompanyId], references: [id])
+  emittenteCompanyId    String?  @db.Uuid
+  emittenteCompany      Company? @relation("DocumentiEmessi", fields: [emittenteCompanyId], references: [id])
   // Nullable: PV non è una Company (per i DOC_BROKER il destinatario è PV) → si
   // usa lo snapshot `datiDestinatario`. Per FATTURA_PV è valorizzato (agenzia).
   destinatarioCompanyId String?  @db.Uuid
@@ -1395,8 +1459,8 @@ model DocumentoFiscale {
   datiEmittente    Json
   datiDestinatario Json
 
-  numeroProgressivo Int
-  anno              Int
+  numeroProgressivo  Int
+  anno               Int
   // Stringa formattata congelata all'emissione (immutabile): es. "PV-0047-2026-00001".
   numeroDocumentoStr String? @unique
 
@@ -1408,7 +1472,7 @@ model DocumentoFiscale {
 
   statoPagamento DocumentoFiscaleStatoPagamento @default(IN_ATTESA)
   trasmessoSdiAt DateTime?
-  trasmessoSdiBy String?  @db.Uuid
+  trasmessoSdiBy String?                        @db.Uuid
 
   pdfStorageKey String?
   xmlStorageKey String?

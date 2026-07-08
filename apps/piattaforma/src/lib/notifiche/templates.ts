@@ -195,6 +195,19 @@ export type N12AffiliazioneCommissionePayload = {
   saldoWalletCent: number;
 };
 
+export type N41AdminNuovaSegnalazionePayload = {
+  segnalazioneId: string;
+  ragioneSociale: string;
+  step: number;
+  tipo: string;
+  estratto: string;
+};
+
+export type N42BrokerSegnalazioneGestitaPayload = {
+  nota: string;
+  nomeBroker: string;
+};
+
 export type NotificaContent = { subject: string; html: string; text: string };
 
 // Wrapper unificato: delega al layout istituzionale condiviso.
@@ -1042,6 +1055,48 @@ export function tplN25MonthlyAffiliationRecap(
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Continua a invitare colleghi: il tuo link è sempre disponibile nella sezione Affiliazione.
     </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN41AdminNuovaSegnalazione(p: N41AdminNuovaSegnalazionePayload): NotificaContent {
+  const subject = 'Nuova segnalazione da creazione pratica';
+  const text =
+    `${p.ragioneSociale} ha segnalato un problema in creazione pratica.\n` +
+    `Step: ${p.step} — Tipo: ${p.tipo}\n${p.estratto}\n` +
+    `Apri /admin/segnalazioni per rispondere.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Nuova segnalazione</h1>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      <strong>${escapeHtml(p.ragioneSociale)}</strong> ha segnalato un problema durante
+      la creazione di una pratica (step ${p.step}, tipo: ${escapeHtml(p.tipo)}).
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      <em>${escapeHtml(p.estratto)}</em>
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Apri <strong>/admin/segnalazioni</strong> per rispondere.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN42BrokerSegnalazioneGestita(p: N42BrokerSegnalazioneGestitaPayload): NotificaContent {
+  const subject = 'Risposta alla tua segnalazione';
+  const saluto = p.nomeBroker ? `Ciao ${escapeHtml(p.nomeBroker)},` : 'Ciao,';
+  const text =
+    `${p.nomeBroker || ''}\nRiguardo alla tua segnalazione in creazione pratica:\n` +
+    `${p.nota}\nPer dubbi rispondi pure a questa email.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Risposta alla tua segnalazione</h1>
+    <p style="margin:0 0 12px;color:#334155;font-size:14px">${saluto}</p>
+    <p style="margin:0 0 12px;color:#334155;font-size:14px">
+      riguardo alla segnalazione inviata durante la creazione di una pratica:
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      ${escapeHtml(p.nota)}
+    </div>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">Per dubbi rispondi pure a questa email.</p>
   `);
   return { subject, html, text };
 }

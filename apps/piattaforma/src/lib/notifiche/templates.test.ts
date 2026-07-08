@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito } from './templates';
+import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 
 describe('templates usano il nuovo layout', () => {
@@ -148,5 +148,27 @@ describe('N9 addebito fallito agenzia', () => {
     expect(hay).toContain('iban');
     expect(hay).toContain('sospeso');
     expect(html).toContain('https://passaggioveloce.it/blocco-pagamento');
+  });
+});
+
+describe('N41 admin nuova segnalazione creazione', () => {
+  it('mette oggetto + link admin e cita azienda e step', () => {
+    const out = tplN41AdminNuovaSegnalazione({
+      segnalazioneId: 's1',
+      ragioneSociale: 'Auto Rossi',
+      step: 2,
+      tipo: 'LETTURA_DATI',
+      estratto: 'La targa è stata letta male',
+    });
+    expect(out.subject).toMatch(/segnalazione/i);
+    expect(out.html).toContain('Auto Rossi');
+    expect(out.html).toContain('/admin/segnalazioni');
+  });
+});
+
+describe('N42 broker segnalazione gestita', () => {
+  it('include la nota di risposta', () => {
+    const out = tplN42BrokerSegnalazioneGestita({ nota: 'La targa corretta è AB123CD', nomeBroker: 'Mario' });
+    expect(out.html).toContain('La targa corretta è AB123CD');
   });
 });

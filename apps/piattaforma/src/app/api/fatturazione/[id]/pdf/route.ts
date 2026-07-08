@@ -8,6 +8,9 @@ import {
   documentoPdfFilename,
 } from '@/lib/fatturazione/documento-pdf';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
+import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope } from '@/lib/sedi/scope-filters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,11 +39,21 @@ export async function GET(
   }
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
-  const cid = session.user.companyId;
-  const allowed =
-    isAdmin ||
-    (doc.emittenteCompanyId != null && doc.emittenteCompanyId === cid) ||
-    (doc.destinatarioCompanyId != null && doc.destinatarioCompanyId === cid);
+  const ctx = await getSessionContext();
+  const allowed = canViewDocumentoFiscale(
+    {
+      emittenteCompanyId: doc.emittenteCompanyId,
+      destinatarioCompanyId: doc.destinatarioCompanyId,
+      praticaAgenziaSedeId: doc.pratica?.agenziaSedeId ?? null,
+      praticaBrokerSedeId: doc.pratica?.brokerSedeId ?? null,
+      payoutWalletSedeId: doc.payout?.wallet?.sedeId ?? null,
+    },
+    {
+      companyId: session.user.companyId,
+      isAdminPiattaforma: isAdmin,
+      scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
+    },
+  );
   if (!allowed) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }

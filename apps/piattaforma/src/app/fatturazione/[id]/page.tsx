@@ -9,6 +9,8 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { resolveSedeRiferimento, type SedeRiferimento } from '@/lib/fatturazione/descrizione';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope } from '@/lib/sedi/scope-filters';
 import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 import { BackButton } from '@/components/back-button';
 
@@ -55,6 +57,8 @@ export default async function DocumentoFiscaleDetailPage({
         select: {
           id: true,
           codicePratica: true,
+          agenziaSedeId: true,
+          brokerSedeId: true,
           agenziaSede: { select: { nome: true, citta: true, provincia: true } },
           brokerSede: { select: { nome: true, citta: true, provincia: true } },
         },
@@ -67,7 +71,12 @@ export default async function DocumentoFiscaleDetailPage({
             where: { tipo: 'CREDITO_PRATICA' },
             select: { pratica: { select: { id: true, codicePratica: true } } },
           },
-          wallet: { select: { sede: { select: { nome: true, citta: true, provincia: true } } } },
+          wallet: {
+            select: {
+              sedeId: true,
+              sede: { select: { nome: true, citta: true, provincia: true } },
+            },
+          },
         },
       },
       notaVariazionePer: { select: { id: true, numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },
@@ -77,9 +86,22 @@ export default async function DocumentoFiscaleDetailPage({
   if (!doc) notFound();
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
-  if (!canViewDocumentoFiscale(doc, { companyId: session.user.companyId, isAdminPiattaforma: isAdmin })) {
-    notFound();
-  }
+  const ctx = await getSessionContext();
+  const allowed = canViewDocumentoFiscale(
+    {
+      emittenteCompanyId: doc.emittenteCompanyId,
+      destinatarioCompanyId: doc.destinatarioCompanyId,
+      praticaAgenziaSedeId: doc.pratica?.agenziaSedeId ?? null,
+      praticaBrokerSedeId: doc.pratica?.brokerSedeId ?? null,
+      payoutWalletSedeId: doc.payout?.wallet?.sedeId ?? null,
+    },
+    {
+      companyId: session.user.companyId,
+      isAdminPiattaforma: isAdmin,
+      scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
+    },
+  );
+  if (!allowed) notFound();
 
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;

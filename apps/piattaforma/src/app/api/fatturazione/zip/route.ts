@@ -8,6 +8,8 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import { buildPraticaZip, type ZipEntry } from '@/lib/documenti/zip';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, whereDocumentoFiscale } from '@/lib/sedi/scope-filters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,18 +49,29 @@ export async function GET(req: Request): Promise<Response> {
   const companyId = session.user.companyId;
   const companyType = session.user.companyType;
 
-  // Scope per ruolo, identico alle liste; i filtri (q/tipo/date/sede) sono ANDati.
+  // Scope per ruolo, identico alle liste (incluso lo scoping sede); i filtri
+  // (q/tipo/date/sede) sono ANDati — MAI spread: `{ ...scope, ...filtri }`
+  // sovrascriverebbe silenziosamente la chiave `AND` dello scope con quella
+  // dei filtri utente (leak sede).
   let scope: Prisma.DocumentoFiscaleWhereInput;
   if (isAdminPiattaforma(session.user.role)) {
     scope = {};
   } else if (companyType === 'DEALER' && companyId) {
-    scope = { emittenteCompanyId: companyId };
+    const ctx = await getSessionContext();
+    scope = whereDocumentoFiscale(ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false }, {
+      companyId,
+      ruolo: 'DEALER',
+    });
   } else if (companyType === 'AGENZIA' && companyId) {
-    scope = { destinatarioCompanyId: companyId };
+    const ctx = await getSessionContext();
+    scope = whereDocumentoFiscale(ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false }, {
+      companyId,
+      ruolo: 'AGENZIA',
+    });
   } else {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
-  const where: Prisma.DocumentoFiscaleWhereInput = { ...scope, ...fatturaWhereFiltri(filtri) };
+  const where: Prisma.DocumentoFiscaleWhereInput = { AND: [scope, fatturaWhereFiltri(filtri)] };
 
   const docs = await prisma.documentoFiscale.findMany({
     where,

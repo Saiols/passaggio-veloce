@@ -6,6 +6,9 @@ import { toFatturaPaInput } from '@/lib/fatturazione/xml-mapper';
 import { buildFatturaPaXml } from '@/lib/fatturazione/xml-fatturapa';
 import { pvEmittente, type DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
+import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope } from '@/lib/sedi/scope-filters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,7 +35,7 @@ export async function GET(
   const doc = await prisma.documentoFiscale.findUnique({
     where: { id },
     include: {
-      pratica: { select: { codicePratica: true } },
+      pratica: { select: { codicePratica: true, agenziaSedeId: true, brokerSedeId: true } },
       payout: {
         select: {
           eseguitoAt: true,
@@ -40,6 +43,7 @@ export async function GET(
             where: { tipo: 'CREDITO_PRATICA' },
             select: { pratica: { select: { codicePratica: true } } },
           },
+          wallet: { select: { sedeId: true } },
         },
       },
       notaVariazionePer: { select: { numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },
@@ -50,11 +54,21 @@ export async function GET(
   }
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
-  const cid = session.user.companyId;
-  const allowed =
-    isAdmin ||
-    (doc.emittenteCompanyId != null && doc.emittenteCompanyId === cid) ||
-    (doc.destinatarioCompanyId != null && doc.destinatarioCompanyId === cid);
+  const ctx = await getSessionContext();
+  const allowed = canViewDocumentoFiscale(
+    {
+      emittenteCompanyId: doc.emittenteCompanyId,
+      destinatarioCompanyId: doc.destinatarioCompanyId,
+      praticaAgenziaSedeId: doc.pratica?.agenziaSedeId ?? null,
+      praticaBrokerSedeId: doc.pratica?.brokerSedeId ?? null,
+      payoutWalletSedeId: doc.payout?.wallet?.sedeId ?? null,
+    },
+    {
+      companyId: session.user.companyId,
+      isAdminPiattaforma: isAdmin,
+      scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
+    },
+  );
   if (!allowed) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }

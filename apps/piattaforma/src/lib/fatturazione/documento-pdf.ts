@@ -16,7 +16,13 @@ const sedeSelect = { select: { nome: true, citta: true, provincia: true } } as c
 
 export const documentoPdfInclude = {
   pratica: {
-    select: { codicePratica: true, agenziaSede: sedeSelect, brokerSede: sedeSelect },
+    select: {
+      codicePratica: true,
+      agenziaSedeId: true,
+      brokerSedeId: true,
+      agenziaSede: sedeSelect,
+      brokerSede: sedeSelect,
+    },
   },
   payout: {
     select: {
@@ -25,7 +31,7 @@ export const documentoPdfInclude = {
         where: { tipo: 'CREDITO_PRATICA' },
         select: { pratica: { select: { codicePratica: true } } },
       },
-      wallet: { select: { sede: sedeSelect } },
+      wallet: { select: { sedeId: true, sede: sedeSelect } },
     },
   },
   notaVariazionePer: { select: { numeroProgressivo: true, anno: true, numeroDocumentoStr: true } },

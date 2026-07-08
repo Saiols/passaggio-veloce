@@ -46,9 +46,13 @@ export function parseFatturaFiltri(sp: {
 
 /**
  * Clausole Prisma dei filtri (q/tipo/intervallo date/sede), da combinare con lo
- * scope del ruolo (`{ ...scope, ...fatturaWhereFiltri(f) }`). Le date sono
- * giorni interi in UTC. La "sede" matcha la sede agenzia/broker della pratica
- * oppure quella del wallet del payout (documenti broker aggregati).
+ * scope del ruolo. Entrambi possono restituire una chiave `AND`: comporli con
+ * `{ AND: [scope, fatturaWhereFiltri(f)] }`, MAI con lo spread
+ * `{ ...scope, ...fatturaWhereFiltri(f) }`, che sovrascriverebbe silenziosamente
+ * l'`AND` dello scope con quello dei filtri (leak: i filtri utente
+ * cancellerebbero lo scoping per company/sede). Le date sono giorni interi in
+ * UTC. La "sede" matcha la sede agenzia/broker della pratica oppure quella del
+ * wallet del payout (documenti broker aggregati).
  */
 export function fatturaWhereFiltri(f: FatturaFiltri): Prisma.DocumentoFiscaleWhereInput {
   const and: Prisma.DocumentoFiscaleWhereInput[] = [];

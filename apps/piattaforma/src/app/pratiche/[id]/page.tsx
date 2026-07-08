@@ -19,6 +19,7 @@ import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
+import { toSedeScope } from '@/lib/sedi/scope-filters';
 import { PraticaToasts } from './pratica-toasts';
 import { DownloadDocumentiButton } from '../download-documenti-button';
 import { BackButton } from '@/components/back-button';
@@ -101,13 +102,30 @@ export default async function PraticaDetailPage({
   if (!pratica) notFound();
 
   // Mostra solo le fatture che il viewer può effettivamente aprire (admin / sua
-  // emittente / sua destinataria): un broker non deve vedere/cliccare la
-  // FATTURA_PV PV→agenzia della pratica (darebbe 404 sul dettaglio).
+  // emittente / sua destinataria / sua sede): un broker non deve vedere/cliccare
+  // la FATTURA_PV PV→agenzia della pratica (darebbe 404 sul dettaglio).
+  //
+  // `pratica.documentiFiscali` è selezionato SENZA le relazioni `pratica`/
+  // `payout` (righe della pratica stessa, non del documento): passarle al
+  // predicato così com'è darebbe campi sede `undefined` e farebbe sparire le
+  // fatture per ogni non-owner. La pagina è già scopata per `scopeIds` (la
+  // pratica è visibile solo se in scope), quindi i suoi documenti ereditano la
+  // sede della pratica stessa.
   const fattureVisibili = pratica.documentiFiscali.filter((d) =>
-    canViewDocumentoFiscale(d, {
-      companyId,
-      isAdminPiattaforma: session.user.role === 'ADMIN_PIATTAFORMA',
-    }),
+    canViewDocumentoFiscale(
+      {
+        emittenteCompanyId: d.emittenteCompanyId,
+        destinatarioCompanyId: d.destinatarioCompanyId,
+        praticaAgenziaSedeId: pratica.agenziaSedeId,
+        praticaBrokerSedeId: pratica.brokerSedeId,
+        payoutWalletSedeId: null,
+      },
+      {
+        companyId,
+        isAdminPiattaforma: session.user.role === 'ADMIN_PIATTAFORMA',
+        scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
+      },
+    ),
   );
 
   // Indirizzo fisico dell'agenzia assegnata (sede operativa), mostrato in chiaro

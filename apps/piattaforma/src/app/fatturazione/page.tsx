@@ -8,6 +8,8 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, whereDocumentoFiscale } from '@/lib/sedi/scope-filters';
 import {
   TIPI_DOC,
   parseFatturaFiltri,
@@ -102,14 +104,26 @@ export default async function FatturazionePage({
 
   const sp = await searchParams;
   const filtri = parseFatturaFiltri(sp);
+
+  // Multi-sede: lo scope sede restringe la madre (mai la sostituisce). L'owner
+  // in vista aggregata (ALL) vede tutta la madre; il selettore sede della
+  // FiltriBar mostra solo le sedi accessibili, non l'intero elenco azienda.
+  const ctx = await getSessionContext();
+  const sedeScope = toSedeScope(ctx ?? { isOwner: false, scopeIds: [], currentSede: null });
   const sedi = await prisma.sede.findMany({
-    where: { companyId, deletedAt: null },
+    where: {
+      companyId,
+      deletedAt: null,
+      ...(sedeScope.aggregate ? {} : { id: { in: sedeScope.scopeIds } }),
+    },
     select: { id: true, nome: true, citta: true },
     orderBy: { createdAt: 'asc' },
   });
-  const scope: Prisma.DocumentoFiscaleWhereInput =
-    tipo === 'AGENZIA' ? { destinatarioCompanyId: companyId } : { emittenteCompanyId: companyId };
-  const where: Prisma.DocumentoFiscaleWhereInput = { ...scope, ...fatturaWhereFiltri(filtri) };
+  const scope = whereDocumentoFiscale(sedeScope, { companyId, ruolo: tipo });
+  // NON usare `{ ...scope, ...fatturaWhereFiltri(filtri) }`: entrambi possono
+  // restituire una chiave `AND`, e lo spread la sovrascriverebbe silenziosamente
+  // (i filtri utente cancellerebbero lo scope sede ⇒ leak). Combinare in AND.
+  const where: Prisma.DocumentoFiscaleWhereInput = { AND: [scope, fatturaWhereFiltri(filtri)] };
   const exportQs = fatturaFiltriToQuery(filtri);
 
   return (

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
-import { getSessionContext, getOperatingSede } from '@/lib/auth/session-context';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
@@ -40,7 +40,8 @@ export async function richiediRevisioneManualeAction(
   /**
    * Sede scelta nel wizard. Non ci si fida dell'id che arriva dal client:
    * `resolveSubmittedSede` lo accetta solo se è tra le sedi accessibili,
-   * altrimenti ripiega sulla sede operativa.
+   * altrimenti scarta (null, nessun ripiego su un'altra sede). Se assente,
+   * si usa la sede operativa della sessione.
    */
   sedeIdSubmitted: string | null = null,
 ): Promise<RichiediRevisioneResult> {
@@ -115,10 +116,16 @@ export async function richiediRevisioneManualeAction(
     //
     // `brokerSedeId` va valorizzato: la lista /pratiche e il dettaglio filtrano
     // per sede, quindi una bozza senza sede sarebbe invisibile al broker che
-    // l'ha appena richiesta. La sede scelta nel wizard è validata contro le sedi
-    // accessibili (stesso primitivo di submitNuovaPraticaAction); senza id
-    // esplicito si ripiega sulla sede operativa. Resta null solo per il
-    // proprietario in vista aggregata che non ha ancora scelto una sede.
+    // l'ha appena richiesta.
+    //
+    // `resolveSubmittedSede` è fail-closed: un id non tra le sedi accessibili
+    // (altra azienda, sede senza membership, sede eliminata) NON ripiega su
+    // un'altra sede — ritorna null. Senza id esplicito usa la sede operativa.
+    // Quindi `brokerSedeId` resta null in due casi: id invalido, oppure
+    // proprietario in vista aggregata su più sedi che non ne ha scelta una.
+    //
+    // `ctxCreate` non può essere null: `redirect('/login')` è già scattato sopra
+    // se manca la sessione.
     const ctxCreate = await getSessionContext();
     const sede = ctxCreate
       ? resolveSubmittedSede({
@@ -126,7 +133,7 @@ export async function richiediRevisioneManualeAction(
           currentSede: ctxCreate.currentSede,
           accessibleSedi: ctxCreate.accessibleSedi,
         })
-      : await getOperatingSede();
+      : null;
     const created = await prisma.pratica.create({
       data: {
         tipo: 'SEMPLICE',

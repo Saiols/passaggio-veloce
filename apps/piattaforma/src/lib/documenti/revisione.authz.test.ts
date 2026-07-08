@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  *     `/pratiche` filtra per sede.
  */
 
-const { prismaMock, authMock, getSessionContextMock, getOperatingSedeMock, redirectMock } =
+const { prismaMock, authMock, getSessionContextMock, redirectMock } =
   vi.hoisted(() => ({
     prismaMock: {
       pratica: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
@@ -21,7 +21,6 @@ const { prismaMock, authMock, getSessionContextMock, getOperatingSedeMock, redir
     },
     authMock: vi.fn(),
     getSessionContextMock: vi.fn(),
-    getOperatingSedeMock: vi.fn(),
     redirectMock: vi.fn((url: string) => {
       throw new Error(`__REDIRECT__:${url}`);
     }),
@@ -31,11 +30,10 @@ vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/auth', () => ({ auth: authMock }));
 vi.mock('@/lib/auth/session-context', async (orig) => {
   const actual = (await orig()) as object;
-  return {
-    ...actual,
-    getSessionContext: getSessionContextMock,
-    getOperatingSede: getOperatingSedeMock,
-  };
+  // `getOperatingSede` NON va mockata: la sede operativa la deriva
+  // `resolveSubmittedSede` (puro) dal `currentSede` del contesto. Mockarla
+  // darebbe una falsa copertura.
+  return { ...actual, getSessionContext: getSessionContextMock };
 });
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -78,7 +76,6 @@ beforeEach(() => {
     scopeIds: [SEDE_MIA],
     membershipRuoli: {},
   });
-  getOperatingSedeMock.mockResolvedValue({ id: SEDE_MIA, nome: 'Mia', type: 'DEALER' });
   prismaMock.pratica.update.mockResolvedValue({});
   prismaMock.pratica.create.mockResolvedValue({ id: 'nuova', codicePratica: null });
 });
@@ -114,9 +111,8 @@ describe('richiediRevisioneManualeAction — sede sulla bozza placeholder', () =
   });
 
   it('il proprietario in vista aggregata usa la sede scelta nel wizard', async () => {
-    // Owner con 2 sedi in vista ALL: `getOperatingSede()` è null, quindi senza
+    // Owner con 2 sedi in vista ALL: non esiste una sede operativa, quindi senza
     // la sede del wizard la bozza nascerebbe invisibile al suo stesso broker.
-    getOperatingSedeMock.mockResolvedValue(null);
     getSessionContextMock.mockResolvedValue({
       user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'ADMIN_AZIENDA' },
       companyId: BROKER,
@@ -142,7 +138,6 @@ describe('richiediRevisioneManualeAction — sede sulla bozza placeholder', () =
   });
 
   it('un id di sede non accessibile non viene accettato (validato server-side)', async () => {
-    getOperatingSedeMock.mockResolvedValue(null);
     getSessionContextMock.mockResolvedValue({
       user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'ADMIN_AZIENDA' },
       companyId: BROKER,

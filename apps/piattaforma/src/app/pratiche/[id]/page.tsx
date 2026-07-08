@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { prisma, type PraticaTipo } from '@pv/db';
+import { prisma, type Prisma, type PraticaTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
@@ -43,20 +43,34 @@ export default async function PraticaDetailPage({
   // type uuid") → 500 sul dettaglio per gli admin (companyId null).
   const isStaff =
     session.user.role === 'ADMIN_PIATTAFORMA' || session.user.role === 'ASSISTENTE';
-  if (!isStaff && !companyId) notFound();
 
   // Multi-sede: l'accesso non-staff è scoped alle sedi (broker o agenzia).
   const ctx = await getSessionContext();
   const scopeIds = ctx?.scopeIds ?? [];
   const inScope = (sedeId: string | null): boolean => sedeId != null && scopeIds.includes(sedeId);
 
+  // Difesa in profondità: ogni ramo dell'OR vincola ANCHE la company del lato
+  // corrispondente. La sede da sola non è una chiave di accesso: un `where` che
+  // filtrasse solo per `brokerSedeId`/`agenziaSedeId` si appoggerebbe
+  // all'invariante "`brokerSedeId` è sempre una sede di `brokerId`", invariante
+  // su cui `canAccessPratica` (lib/pratiche/access.ts) di proposito non si fida.
+  // Fail-closed: `scopeIds` vuoto ⇒ `{ in: [] }` ⇒ nessuna riga.
+  let whereProprieta: Prisma.PraticaWhereInput = {};
+  if (!isStaff) {
+    if (!companyId) notFound();
+    whereProprieta = {
+      OR: [
+        { brokerId: companyId, brokerSedeId: { in: scopeIds } },
+        { agenziaAssegnataId: companyId, agenziaSedeId: { in: scopeIds } },
+      ],
+    };
+  }
+
   const pratica = await prisma.pratica.findFirst({
     where: {
       id,
       deletedAt: null,
-      ...(isStaff
-        ? {}
-        : { OR: [{ brokerSedeId: { in: scopeIds } }, { agenziaSedeId: { in: scopeIds } }] }),
+      ...whereProprieta,
     },
     include: {
       broker: { select: { ragioneSociale: true, citta: true, provincia: true, telefono: true } },

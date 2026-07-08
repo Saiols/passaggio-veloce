@@ -1,19 +1,29 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { generateRendicontoPDF } from '@/lib/pdf/rendiconto';
 
 /**
  * GET /api/wallet/rendiconto?year=YYYY&month=MM
  *
- * Genera il rendiconto PDF della company dell'utente loggato per il
- * periodo richiesto. Solo dealer/agenzie possono richiamarlo per il
- * proprio wallet (admin platform può chiamare con `companyId` query in
- * un secondo momento — non serve per ora).
+ * Rendiconto PDF dei movimenti del wallet della MADRE (`generateRendicontoPDF`
+ * filtra `wallet: { companyId }`, e `Wallet` ha `sedeId` XOR `companyId`): è il
+ * wallet dell'affiliazione, con i suoi crediti, i codici pratica e le targhe
+ * delle pratiche dei referral.
+ *
+ * Dato della madre, non di una filiale ⇒ lo scarica il SOLO proprietario, in
+ * qualunque vista (`isOwner`, mai `aggregate`) — stesso principio di
+ * `canViewDocumentoFiscale` per i documenti senza sede. Senza questo gate un
+ * OPERATORE di una sede qualsiasi otteneva il rendiconto della madre con un
+ * click, senza nemmeno un UUID da indovinare.
+ *
+ * Fail-closed: niente sessione, niente company, o non proprietario ⇒ 403. Gli
+ * admin piattaforma non hanno contesto sede (né company) e non hanno oggi un
+ * ramo dedicato: la route non è linkata dall'area admin.
  */
 export async function GET(req: NextRequest): Promise<NextResponse | Response> {
-  const session = await auth();
-  if (!session?.user?.companyId) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId || !ctx.isOwner) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   const url = new URL(req.url);
@@ -32,7 +42,7 @@ export async function GET(req: NextRequest): Promise<NextResponse | Response> {
     ? monthParam
     : defaultMonth;
 
-  const pdfBytes = await generateRendicontoPDF(session.user.companyId, {
+  const pdfBytes = await generateRendicontoPDF(ctx.companyId, {
     year,
     month,
   });

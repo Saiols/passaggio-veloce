@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
@@ -25,23 +26,32 @@ export default async function InboxDetailPage({
 
   const agenziaId = session.user.companyId!;
 
-  const [assegnazione, pratica] = await Promise.all([
-    prisma.praticaAssegnazione.findFirst({
-      where: { praticaId: id, agenziaId },
-      orderBy: { invioAt: 'desc' },
-    }),
-    prisma.pratica.findFirst({
-      where: { id, deletedAt: null },
-      include: {
-        broker: { select: { ragioneSociale: true, citta: true, telefono: true, email: true } },
-        documenti: { where: { deletedAt: null } },
-        veicoli: { orderBy: { ordine: 'asc' } },
-        venditori: { orderBy: { ordine: 'asc' } },
-      },
-    }),
-  ]);
+  // Multi-sede: la LETTURA dev'essere simmetrica alle azioni (inbox/actions.ts,
+  // che filtrano `sedeId: { in: scopeIds }`). L'assegnazione è la chiave di
+  // accesso: senza il filtro di sede un OPERATORE di un'altra sede della stessa
+  // madre leggeva, con il solo UUID, i dati personali di venditore, acquirente
+  // e broker di una pratica non sua. La pratica si deriva dall'assegnazione,
+  // mai dall'id in URL. Fail-closed: `scopeIds` vuoto ⇒ nessuna assegnazione.
+  const ctx = await getSessionContext();
+  const scopeIds = ctx?.scopeIds ?? [];
 
-  if (!assegnazione || !pratica) notFound();
+  const assegnazione = await prisma.praticaAssegnazione.findFirst({
+    where: { praticaId: id, agenziaId, sedeId: { in: scopeIds } },
+    orderBy: { invioAt: 'desc' },
+  });
+  if (!assegnazione) notFound();
+
+  const pratica = await prisma.pratica.findFirst({
+    where: { id: assegnazione.praticaId, deletedAt: null },
+    include: {
+      broker: { select: { ragioneSociale: true, citta: true, telefono: true, email: true } },
+      documenti: { where: { deletedAt: null } },
+      veicoli: { orderBy: { ordine: 'asc' } },
+      venditori: { orderBy: { ordine: 'asc' } },
+    },
+  });
+
+  if (!pratica) notFound();
 
   const canDecide = assegnazione.esito === 'PENDING';
 

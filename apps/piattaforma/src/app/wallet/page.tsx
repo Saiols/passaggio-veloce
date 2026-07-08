@@ -68,6 +68,11 @@ export default async function WalletPage({
     );
   }
 
+  // Proprietario della madre: unico a vedere/incassare l'affiliazione (wallet
+  // madre) e unico a poter scaricare il rendiconto PDF, che di quel wallet è
+  // l'estratto conto.
+  const isProprietario = isOwner(session.user.role);
+
   const txInclude = {
     orderBy: { createdAt: 'desc' },
     take: 20,
@@ -91,7 +96,7 @@ export default async function WalletPage({
       include: { transazioni: txInclude, payouts: payoutsInclude },
     }),
     // Wallet madre: affiliazione — visibile/incassabile solo dal proprietario.
-    isOwner(session.user.role) && session.user.companyId
+    isProprietario && session.user.companyId
       ? prisma.wallet.findUnique({
           where: { companyId: session.user.companyId },
           include: { transazioni: txInclude, payouts: payoutsInclude },
@@ -299,7 +304,7 @@ export default async function WalletPage({
           <div className="mt-4">
             <PayoutButton
               disabled={!canPayout}
-              isTitolare={isOwner(session.user.role)}
+              isTitolare={isProprietario}
               ragioneSociale={company?.ragioneSociale ?? ''}
               wallets={payoutWallets}
             />
@@ -334,9 +339,17 @@ export default async function WalletPage({
           )}
         </div>
 
-        <div className="mb-5">
-          <RendicontoCard minYear={2026} />
-        </div>
+        {/*
+          Il rendiconto PDF è l'estratto conto del wallet della madre (crediti
+          affiliazione, con codici pratica e targhe dei referral): dato della
+          madre, quindi del solo proprietario. La route `/api/wallet/rendiconto`
+          applica lo stesso gate — qui non mostriamo un bottone che darebbe 403.
+        */}
+        {isProprietario && (
+          <div className="mb-5">
+            <RendicontoCard minYear={2026} />
+          </div>
+        )}
 
         <Card className="mb-5">
           <h2 className="text-[15px] font-bold text-pv-navy-800">Movimenti</h2>

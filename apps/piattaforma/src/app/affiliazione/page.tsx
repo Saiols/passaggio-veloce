@@ -55,6 +55,17 @@ export default async function AffiliazionePage() {
   const scope = toSedeScope(ctx);
   const operatingSede = await getOperatingSede();
 
+  // Per il proprietario in vista aggregata con PIÙ sedi `getOperatingSede()`
+  // ritorna null (per una scrittura dovrebbe prima sceglierne una). Il link
+  // affiliazione però è una lettura e deve esserci sempre: ricadiamo sulla prima
+  // sede accessibile e diciamo nella card di quale sede è il link (gli altri li
+  // elenca la classifica sedi più sotto). Senza questo fallback si ripiegava su
+  // `Company.referralCode`, colonna deprecata mai valorizzata per le aziende
+  // registrate dopo il multi-sede: il proprietario vedeva "Codice referral non
+  // disponibile" sul PROPRIO link.
+  const sedeLink = operatingSede ?? ctx.accessibleSedi[0] ?? null;
+  const sedeLinkNome = !operatingSede && sedeLink ? sedeLink.nome : null;
+
   const filtroSede = scope.aggregate ? {} : { referenteSedeId: { in: scope.scopeIds } };
   const filtroClick = scope.aggregate ? {} : { sedeId: { in: scope.scopeIds } };
 
@@ -74,8 +85,8 @@ export default async function AffiliazionePage() {
       scope.isOwner
         ? prisma.wallet.findUnique({ where: { companyId }, select: { id: true } })
         : Promise.resolve(null),
-      operatingSede
-        ? prisma.sede.findUnique({ where: { id: operatingSede.id }, select: { referralCode: true } })
+      sedeLink
+        ? prisma.sede.findUnique({ where: { id: sedeLink.id }, select: { referralCode: true } })
         : Promise.resolve(null),
       prisma.company.findMany({
         where: { referenteId: companyId, deletedAt: null, ...filtroSede },
@@ -150,7 +161,8 @@ export default async function AffiliazionePage() {
   // Punta a /r/<code> (non /register?ref=) per fare pixel tracking del click
   // prima del redirect al wizard.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  // Codice referral della sede operativa (fallback: legacy Company.referralCode).
+  // Codice referral della sede del link (operativa, o la prima accessibile per il
+  // proprietario in vista aggregata). Fallback: legacy Company.referralCode.
   const referralCode = sedeRow?.referralCode ?? company.referralCode ?? null;
   const link = referralCode ? `${appUrl}/r/${referralCode}` : null;
 
@@ -248,6 +260,14 @@ export default async function AffiliazionePage() {
           </p>
           {link ? (
             <>
+              {sedeLinkNome && (
+                <p className="mt-2 text-[12px] text-pv-slate-500">
+                  Stai vedendo il link della sede{' '}
+                  <span className="font-semibold text-pv-navy-800">{sedeLinkNome}</span>.
+                  Ogni sede ha un proprio link: li trovi tutti nella classifica sedi
+                  qui sotto.
+                </p>
+              )}
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <code className="flex-1 truncate rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 px-3 py-2 text-[12.5px] text-pv-navy-800">
                   {link}

@@ -34,8 +34,11 @@ import { env } from '@/env';
 export type QuickActionResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Scope sede della sessione corrente. `getSessionContext` è memoizzata per
- * request: chiamarla qui non aggiunge query.
+ * Scope sede della sessione corrente.
+ *
+ * Costa 2 query (`sede.findMany` + `userSede.findMany`): la memoizzazione di
+ * `cache()` è per-request, e una Server Action è una request a sé. Va chiamata
+ * PRIMA di aprire la `$transaction`, così non ne allunga la durata.
  */
 async function sedeScopeCorrente(): Promise<SedeScope> {
   const ctx = await getSessionContext();

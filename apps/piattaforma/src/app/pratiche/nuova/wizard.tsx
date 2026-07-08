@@ -2766,6 +2766,7 @@ function WizardBody({
 
       <RevisioneManualePopup
         praticaId={null}
+        brokerSedeId={brokerSedeId || null}
         open={showRevisione}
         onClose={() => setShowRevisione(false)}
       />

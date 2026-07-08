@@ -112,4 +112,59 @@ describe('richiediRevisioneManualeAction — sede sulla bozza placeholder', () =
     expect(data.brokerId).toBe(BROKER);
     expect(data.brokerSedeId).toBe(SEDE_MIA);
   });
+
+  it('il proprietario in vista aggregata usa la sede scelta nel wizard', async () => {
+    // Owner con 2 sedi in vista ALL: `getOperatingSede()` è null, quindi senza
+    // la sede del wizard la bozza nascerebbe invisibile al suo stesso broker.
+    getOperatingSedeMock.mockResolvedValue(null);
+    getSessionContextMock.mockResolvedValue({
+      user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'ADMIN_AZIENDA' },
+      companyId: BROKER,
+      isOwner: true,
+      accessibleSedi: [
+        { id: SEDE_MIA, nome: 'Mia', type: 'DEALER' },
+        { id: SEDE_ALTRA, nome: 'Altra', type: 'DEALER' },
+      ],
+      currentSede: { kind: 'ALL' },
+      scopeIds: [SEDE_MIA, SEDE_ALTRA],
+      membershipRuoli: {},
+    });
+
+    const res = await richiediRevisioneManualeAction(
+      null,
+      'CASO_NON_PREVISTO_DA_SCHEMA',
+      NOTE,
+      SEDE_ALTRA,
+    );
+
+    expect(res.ok).toBe(true);
+    expect(prismaMock.pratica.create.mock.calls[0]?.[0]?.data.brokerSedeId).toBe(SEDE_ALTRA);
+  });
+
+  it('un id di sede non accessibile non viene accettato (validato server-side)', async () => {
+    getOperatingSedeMock.mockResolvedValue(null);
+    getSessionContextMock.mockResolvedValue({
+      user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'ADMIN_AZIENDA' },
+      companyId: BROKER,
+      isOwner: true,
+      accessibleSedi: [
+        { id: SEDE_MIA, nome: 'Mia', type: 'DEALER' },
+        { id: SEDE_ALTRA, nome: 'Altra', type: 'DEALER' },
+      ],
+      currentSede: { kind: 'ALL' },
+      scopeIds: [SEDE_MIA, SEDE_ALTRA],
+      membershipRuoli: {},
+    });
+
+    const res = await richiediRevisioneManualeAction(
+      null,
+      'CASO_NON_PREVISTO_DA_SCHEMA',
+      NOTE,
+      'sede-di-un-altra-azienda',
+    );
+
+    expect(res.ok).toBe(true);
+    // Rifiutata: non finisce sulla bozza. Nessun leak cross-azienda.
+    expect(prismaMock.pratica.create.mock.calls[0]?.[0]?.data.brokerSedeId).toBeNull();
+  });
 });

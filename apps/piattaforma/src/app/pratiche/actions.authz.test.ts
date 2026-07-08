@@ -18,7 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted(() => ({
   prismaMock: {
-    pratica: { findUnique: vi.fn(), update: vi.fn(), create: vi.fn() },
+    pratica: { findUnique: vi.fn(), update: vi.fn() },
     praticaAssegnazione: { updateMany: vi.fn() },
     valutazione: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),

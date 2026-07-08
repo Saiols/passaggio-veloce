@@ -24,10 +24,17 @@ const MOTIVI: { value: MotivoRevisione; label: string }[] = [
  */
 export function RevisioneManualePopup({
   praticaId,
+  brokerSedeId,
   open,
   onClose,
 }: {
   praticaId: string | null;
+  /**
+   * Sede scelta nel wizard ("sede di partenza"). Serve alla bozza placeholder:
+   * senza sede sarebbe invisibile nella lista /pratiche, che filtra per sede.
+   * L'id è comunque validato server-side contro le sedi accessibili.
+   */
+  brokerSedeId: string | null;
   open: boolean;
   onClose: () => void;
 }) {
@@ -43,7 +50,7 @@ export function RevisioneManualePopup({
   const handleSubmit = (): void => {
     setError(null);
     startTransition(async () => {
-      const res = await richiediRevisioneManualeAction(praticaId, motivo, note);
+      const res = await richiediRevisioneManualeAction(praticaId, motivo, note, brokerSedeId);
       if (!res.ok) {
         setError(res.error);
         return;

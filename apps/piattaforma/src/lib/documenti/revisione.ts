@@ -6,6 +6,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { getSessionContext, getOperatingSede } from '@/lib/auth/session-context';
+import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
@@ -36,6 +37,12 @@ export async function richiediRevisioneManualeAction(
   praticaId: string | null,
   motivo: MotivoRevisione,
   note: string,
+  /**
+   * Sede scelta nel wizard. Non ci si fida dell'id che arriva dal client:
+   * `resolveSubmittedSede` lo accetta solo se è tra le sedi accessibili,
+   * altrimenti ripiega sulla sede operativa.
+   */
+  sedeIdSubmitted: string | null = null,
 ): Promise<RichiediRevisioneResult> {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
@@ -108,16 +115,24 @@ export async function richiediRevisioneManualeAction(
     //
     // `brokerSedeId` va valorizzato: la lista /pratiche e il dettaglio filtrano
     // per sede, quindi una bozza senza sede sarebbe invisibile al broker che
-    // l'ha appena richiesta. Se il proprietario è in vista aggregata su più
-    // sedi non c'è una sede operativa: resta null, com'era prima (l'admin
-    // contatta comunque il broker, e la bozza non ha azioni utente).
-    const operatingSede = await getOperatingSede();
+    // l'ha appena richiesta. La sede scelta nel wizard è validata contro le sedi
+    // accessibili (stesso primitivo di submitNuovaPraticaAction); senza id
+    // esplicito si ripiega sulla sede operativa. Resta null solo per il
+    // proprietario in vista aggregata che non ha ancora scelto una sede.
+    const ctxCreate = await getSessionContext();
+    const sede = ctxCreate
+      ? resolveSubmittedSede({
+          submittedId: sedeIdSubmitted,
+          currentSede: ctxCreate.currentSede,
+          accessibleSedi: ctxCreate.accessibleSedi,
+        })
+      : await getOperatingSede();
     const created = await prisma.pratica.create({
       data: {
         tipo: 'SEMPLICE',
         stato: 'BOZZA',
         brokerId,
-        brokerSedeId: operatingSede?.id ?? null,
+        brokerSedeId: sede?.id ?? null,
         richiedeRevisioneManuale: true,
         motivoRevisione: motivo,
         noteRevisione: trimmedNote,

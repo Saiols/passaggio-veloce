@@ -14,10 +14,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted(() => ({
+  // La segnalazione è denormalizzata su `Pratica` (flagSegnalata, tipoSegnalazione,
+  // …): non esiste un modello dedicato, e `segnalaPraticaAction` non apre una
+  // transazione. Il mock rispecchia esattamente ciò che l'action tocca.
   prismaMock: {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
-    segnalazionePratica: { create: vi.fn() },
-    $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),
   getSessionContextMock: vi.fn(),
@@ -107,8 +108,12 @@ describe('segnalaPraticaAction — scoping sede', () => {
 
     const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
 
-    // Non è l'errore di sede: il gate è passato e ha respinto lo stato.
-    expect(res).not.toEqual({ ok: false, error: 'Pratica non assegnata alla tua sede' });
-    expect(res.ok).toBe(false);
+    // Asserzione ESATTA sul messaggio di stato: una negativa
+    // (`not.toEqual(errore-di-sede)`) passerebbe anche se il gate negasse con
+    // un messaggio qualsiasi, quindi non proverebbe che il gate è stato superato.
+    expect(res).toEqual({
+      ok: false,
+      error: 'Le segnalazioni sono possibili solo prima della firma',
+    });
   });
 });

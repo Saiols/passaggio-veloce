@@ -9,6 +9,14 @@ import type { Prisma } from '@pv/db';
  *
  * Il filtro sulla company NON viene mai rimosso: la sede restringe la madre,
  * non la sostituisce (una sede compromessa non può leggere altre aziende).
+ *
+ * ATTENZIONE — asimmetria voluta tra i predicati qui sotto: `wherePraticaAttiva`
+ * e `whereAssegnazionePending` NON hanno un ramo `aggregate` perché le pagine
+ * che i loro conteggi rispecchiano (`/pratiche`, `/inbox`) filtrano SEMPRE per
+ * `scopeIds`, anche per l'owner. Gli altri predicati (`whereFeeAddebito`,
+ * `whereValutazione`, `whereDocumentoFiscale`) mantengono il ramo `aggregate`
+ * perché le loro pagine mostrano davvero tutta la madre all'owner. Non
+ * "uniformare" questi due gruppi: renderebbe badge e lista di nuovo divergenti.
  */
 export type SedeScope = { scopeIds: string[]; aggregate: boolean };
 
@@ -35,6 +43,12 @@ export function whereValutazione(scope: SedeScope, agenziaId: string): Prisma.Va
   return { agenziaId, agenziaSedeId: { in: scope.scopeIds } };
 }
 
+/**
+ * Niente ramo `aggregate`: filtra SEMPRE per `scopeIds`, anche per l'owner in
+ * vista ALL. La lista corrispondente (`/pratiche`) filtra sempre per sede, un
+ * badge senza filtro conterebbe righe che la lista non mostra ("numerino
+ * pieno, lista vuota").
+ */
 export function wherePraticaAttiva(
   scope: SedeScope,
   args: { companyId: string; ruolo: 'AGENZIA' | 'DEALER' },
@@ -43,19 +57,22 @@ export function wherePraticaAttiva(
     args.ruolo === 'AGENZIA'
       ? { agenziaAssegnataId: args.companyId, deletedAt: null }
       : { brokerId: args.companyId, deletedAt: null };
-  if (scope.aggregate) return base;
   return args.ruolo === 'AGENZIA'
     ? { ...base, agenziaSedeId: { in: scope.scopeIds } }
     : { ...base, brokerSedeId: { in: scope.scopeIds } };
 }
 
+/**
+ * Niente ramo `aggregate`: filtra SEMPRE per `scopeIds`, anche per l'owner in
+ * vista ALL. La lista corrispondente (`/inbox`) filtra sempre per sede, un
+ * badge senza filtro conterebbe righe che la lista non mostra ("numerino
+ * pieno, lista vuota").
+ */
 export function whereAssegnazionePending(
   scope: SedeScope,
   agenziaId: string,
 ): Prisma.PraticaAssegnazioneWhereInput {
-  const base: Prisma.PraticaAssegnazioneWhereInput = { agenziaId, esito: 'PENDING' };
-  if (scope.aggregate) return base;
-  return { ...base, sedeId: { in: scope.scopeIds } };
+  return { agenziaId, esito: 'PENDING', sedeId: { in: scope.scopeIds } };
 }
 
 /**

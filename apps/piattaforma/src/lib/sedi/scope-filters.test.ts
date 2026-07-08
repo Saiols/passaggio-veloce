@@ -87,17 +87,19 @@ describe('wherePraticaAttiva', () => {
     });
   });
 
-  it('owner aggregato: nessun filtro sede', () => {
+  it("anche l'owner aggregato filtra per sede (il badge deve coincidere con la lista)", () => {
     expect(wherePraticaAttiva(toSedeScope(OWNER_ALL), { companyId: 'c1', ruolo: 'AGENZIA' })).toEqual({
       agenziaAssegnataId: 'c1',
       deletedAt: null,
+      agenziaSedeId: { in: ['s1', 's2'] },
     });
   });
 
-  it('owner aggregato broker: nessun filtro sede', () => {
+  it("anche l'owner aggregato broker filtra per sede (il badge deve coincidere con la lista)", () => {
     expect(wherePraticaAttiva(toSedeScope(OWNER_ALL), { companyId: 'c1', ruolo: 'DEALER' })).toEqual({
       brokerId: 'c1',
       deletedAt: null,
+      brokerSedeId: { in: ['s1', 's2'] },
     });
   });
 
@@ -119,10 +121,11 @@ describe('whereAssegnazionePending', () => {
     });
   });
 
-  it('owner aggregato: nessun filtro sede', () => {
+  it("anche l'owner aggregato filtra per sede (il badge deve coincidere con la lista)", () => {
     expect(whereAssegnazionePending(toSedeScope(OWNER_ALL), 'c1')).toEqual({
       agenziaId: 'c1',
       esito: 'PENDING',
+      sedeId: { in: ['s1', 's2'] },
     });
   });
 

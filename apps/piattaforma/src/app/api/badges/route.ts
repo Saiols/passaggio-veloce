@@ -39,15 +39,19 @@ export async function GET(): Promise<Response> {
     });
     praticheAttive = await prisma.pratica.count({
       where: {
-        ...wherePraticaAttiva(scope, { companyId, ruolo: 'AGENZIA' }),
-        stato: { notIn: STATI_ESCLUSI },
+        AND: [
+          wherePraticaAttiva(scope, { companyId, ruolo: 'AGENZIA' }),
+          { stato: { notIn: STATI_ESCLUSI } },
+        ],
       },
     });
   } else if (companyId && companyType === 'DEALER') {
     praticheAttive = await prisma.pratica.count({
       where: {
-        ...wherePraticaAttiva(scope, { companyId, ruolo: 'DEALER' }),
-        stato: { notIn: STATI_ESCLUSI },
+        AND: [
+          wherePraticaAttiva(scope, { companyId, ruolo: 'DEALER' }),
+          { stato: { notIn: STATI_ESCLUSI } },
+        ],
       },
     });
   }

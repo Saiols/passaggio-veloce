@@ -42,14 +42,19 @@ describe('GET /api/badges — scoping sede', () => {
     await GET();
 
     expect(prismaMock.pratica.count).toHaveBeenCalledWith({
-      where: expect.objectContaining({ agenziaSedeId: { in: ['sedeAssago'] } }),
+      where: {
+        AND: [
+          { agenziaAssegnataId: 'c1', deletedAt: null, agenziaSedeId: { in: ['sedeAssago'] } },
+          { stato: { notIn: ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] } },
+        ],
+      },
     });
     expect(prismaMock.praticaAssegnazione.count).toHaveBeenCalledWith({
-      where: expect.objectContaining({ sedeId: { in: ['sedeAssago'] } }),
+      where: { agenziaId: 'c1', esito: 'PENDING', sedeId: { in: ['sedeAssago'] } },
     });
   });
 
-  it("l'owner in vista aggregata conta tutta la madre", async () => {
+  it("l'owner in vista aggregata conta comunque solo le sue sedi (badge = lista)", async () => {
     getSessionContextMock.mockResolvedValue({
       user: { id: 'u1', role: 'ADMIN_AZIENDA', companyType: 'AGENZIA' },
       companyId: 'c1',
@@ -62,10 +67,14 @@ describe('GET /api/badges — scoping sede', () => {
 
     await GET();
 
-    const where = (prismaMock.pratica.count.mock.calls[0]?.[0] as { where?: Record<string, unknown> })
-      ?.where ?? {};
-    expect(where.agenziaSedeId).toBeUndefined();
-    expect(where.agenziaAssegnataId).toBe('c1');
+    expect(prismaMock.pratica.count).toHaveBeenCalledWith({
+      where: {
+        AND: [
+          { agenziaAssegnataId: 'c1', deletedAt: null, agenziaSedeId: { in: ['s1', 's2'] } },
+          { stato: { notIn: ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] } },
+        ],
+      },
+    });
   });
 
   it('senza sedi accessibili non conta nulla (fail-closed)', async () => {
@@ -82,7 +91,12 @@ describe('GET /api/badges — scoping sede', () => {
     await GET();
 
     expect(prismaMock.pratica.count).toHaveBeenCalledWith({
-      where: expect.objectContaining({ agenziaSedeId: { in: [] } }),
+      where: {
+        AND: [
+          { agenziaAssegnataId: 'c1', deletedAt: null, agenziaSedeId: { in: [] } },
+          { stato: { notIn: ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] } },
+        ],
+      },
     });
   });
 });

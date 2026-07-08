@@ -6,9 +6,9 @@ import { toFatturaPaInput } from '@/lib/fatturazione/xml-mapper';
 import { buildFatturaPaXml } from '@/lib/fatturazione/xml-fatturapa';
 import { pvEmittente, type DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
-import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
+import { canViewDocumentoFiscale, docSedeFields } from '@/lib/fatturazione/access';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { toSedeScope } from '@/lib/sedi/scope-filters';
+import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,10 @@ type TipoXml = (typeof TIPI_XML)[number];
  * GET /api/fatturazione/[id]/xml — scarica l'XML FatturaPA del documento.
  * Disponibile solo per i documenti con `fatturaPaTipo` valorizzato (TD01/TD06/
  * TD04): i compensi a broker PRIVATO e le penali non generano XML SDI.
- * Access control identico al PDF: admin, oppure emittente/destinatario.
+ * Access control identico al PDF (`canViewDocumentoFiscale`): admin, oppure
+ * emittente/destinatario E documento agganciato a una sede in scope (pratica o
+ * wallet del payout). I documenti senza alcuna sede sono dell'entità legale:
+ * solo il proprietario.
  */
 export async function GET(
   _req: Request,
@@ -55,20 +58,11 @@ export async function GET(
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
   const ctx = await getSessionContext();
-  const allowed = canViewDocumentoFiscale(
-    {
-      emittenteCompanyId: doc.emittenteCompanyId,
-      destinatarioCompanyId: doc.destinatarioCompanyId,
-      praticaAgenziaSedeId: doc.pratica?.agenziaSedeId ?? null,
-      praticaBrokerSedeId: doc.pratica?.brokerSedeId ?? null,
-      payoutWalletSedeId: doc.payout?.wallet?.sedeId ?? null,
-    },
-    {
-      companyId: session.user.companyId,
-      isAdminPiattaforma: isAdmin,
-      scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
-    },
-  );
+  const allowed = canViewDocumentoFiscale(docSedeFields(doc), {
+    companyId: session.user.companyId,
+    isAdminPiattaforma: isAdmin,
+    scope: ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE,
+  });
   if (!allowed) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }

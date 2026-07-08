@@ -3,11 +3,14 @@ import { canViewDocumentoFiscale } from './access';
 
 // Comportamento company-level preesistente: equivale all'owner in vista
 // aggregata (aggregate: true → vede tutta la madre, nessun filtro sede).
-const AGGREGATE_ALL = { scopeIds: [], aggregate: true };
+const AGGREGATE_ALL = { scopeIds: [], aggregate: true, isOwner: true };
 
 const doc = (emittenteCompanyId: string | null, destinatarioCompanyId: string | null) => ({
   emittenteCompanyId,
   destinatarioCompanyId,
+  praticaAgenziaSedeId: null,
+  praticaBrokerSedeId: null,
+  payoutWalletSedeId: null,
 });
 
 describe('canViewDocumentoFiscale', () => {
@@ -89,8 +92,11 @@ const docSede = (over: Partial<Parameters<typeof canViewDocumentoFiscale>[0]> = 
 });
 
 describe('canViewDocumentoFiscale — scoping sede', () => {
-  const aggregate = { scopeIds: ['s1', 's2'], aggregate: true };
-  const membro = { scopeIds: ['s2'], aggregate: false };
+  const aggregate = { scopeIds: ['s1', 's2'], aggregate: true, isOwner: true };
+  const membro = { scopeIds: ['s2'], aggregate: false, isOwner: false };
+  // Il proprietario che ha selezionato la sola sede s1 (vista ONE).
+  const ownerUnaSede = { scopeIds: ['s1'], aggregate: false, isOwner: true };
+  const scopeVuoto = { scopeIds: [], aggregate: false, isOwner: false };
 
   it("l'owner aggregato vede anche i documenti senza pratica né payout", () => {
     expect(
@@ -137,6 +143,36 @@ describe('canViewDocumentoFiscale — scoping sede', () => {
   it("l'admin piattaforma vede tutto, a prescindere dallo scope", () => {
     expect(
       canViewDocumentoFiscale(docSede(), { companyId: null, isAdminPiattaforma: true, scope: membro }),
+    ).toBe(true);
+  });
+
+  it("l'owner con una sede selezionata vede comunque i documenti senza alcuna sede (fattura di affiliazione)", () => {
+    expect(
+      canViewDocumentoFiscale(docSede(), {
+        companyId: 'c1',
+        isAdminPiattaforma: false,
+        scope: ownerUnaSede,
+      }),
+    ).toBe(true);
+  });
+
+  it("l'owner con una sede selezionata NON vede i documenti dell'altra sede", () => {
+    expect(
+      canViewDocumentoFiscale(docSede({ praticaAgenziaSedeId: 's2' }), {
+        companyId: 'c1',
+        isAdminPiattaforma: false,
+        scope: ownerUnaSede,
+      }),
+    ).toBe(false);
+  });
+
+  it("l'admin piattaforma vede i documenti senza sede anche con scope vuoto", () => {
+    expect(
+      canViewDocumentoFiscale(docSede(), {
+        companyId: null,
+        isAdminPiattaforma: true,
+        scope: scopeVuoto,
+      }),
     ).toBe(true);
   });
 });

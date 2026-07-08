@@ -9,7 +9,7 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { toSedeScope, whereDocumentoFiscale } from '@/lib/sedi/scope-filters';
+import { toSedeScope, whereDocumentoFiscale, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import {
   TIPI_DOC,
   parseFatturaFiltri,
@@ -109,7 +109,7 @@ export default async function FatturazionePage({
   // in vista aggregata (ALL) vede tutta la madre; il selettore sede della
   // FiltriBar mostra solo le sedi accessibili, non l'intero elenco azienda.
   const ctx = await getSessionContext();
-  const sedeScope = toSedeScope(ctx ?? { isOwner: false, scopeIds: [], currentSede: null });
+  const sedeScope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
   const sedi = await prisma.sede.findMany({
     where: {
       companyId,

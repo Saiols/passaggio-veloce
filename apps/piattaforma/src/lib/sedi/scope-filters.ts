@@ -18,7 +18,10 @@ import type { Prisma } from '@pv/db';
  * perché le loro pagine mostrano davvero tutta la madre all'owner. Non
  * "uniformare" questi due gruppi: renderebbe badge e lista di nuovo divergenti.
  */
-export type SedeScope = { scopeIds: string[]; aggregate: boolean };
+export type SedeScope = { scopeIds: string[]; aggregate: boolean; isOwner: boolean };
+
+/** Scope fail-closed per contesti senza sessione: nessuna sede, nessun privilegio. */
+export const NO_SEDE_SCOPE: SedeScope = { scopeIds: [], aggregate: false, isOwner: false };
 
 type CtxLike = {
   isOwner: boolean;
@@ -30,6 +33,7 @@ export function toSedeScope(ctx: CtxLike): SedeScope {
   return {
     scopeIds: ctx.scopeIds,
     aggregate: ctx.isOwner && ctx.currentSede?.kind === 'ALL',
+    isOwner: ctx.isOwner,
   };
 }
 
@@ -79,7 +83,8 @@ export function whereAssegnazionePending(
  * `DocumentoFiscale` non ha colonna sede (P.IVA unica: il documento è
  * dell'entità legale). Si scopa via relazione: la pratica che l'ha generato,
  * oppure il wallet del payout per i documenti broker aggregati. I documenti
- * con nessuno dei due agganci restano visibili al solo owner aggregato.
+ * senza nessuno dei due agganci sono dell'entità legale e restano visibili al
+ * solo proprietario — in vista aggregata come in vista su singola sede.
  */
 export function whereDocumentoFiscale(
   scope: SedeScope,
@@ -94,7 +99,20 @@ export function whereDocumentoFiscale(
     args.ruolo === 'AGENZIA'
       ? { pratica: { agenziaSedeId: { in: scope.scopeIds } } }
       : { pratica: { brokerSedeId: { in: scope.scopeIds } } };
+  const payoutSede: Prisma.DocumentoFiscaleWhereInput = {
+    payout: { wallet: { sedeId: { in: scope.scopeIds } } },
+  };
+  // Un documento senza alcuna sede (es. DOC_BROKER del payout sul wallet madre:
+  // nessuna pratica, wallet della madre) non appartiene a nessuna filiale: è
+  // dell'entità legale, quindi lo vede solo il proprietario — anche quando ha
+  // selezionato una singola sede.
+  const senzaSede: Prisma.DocumentoFiscaleWhereInput = {
+    AND: [
+      { OR: [{ praticaId: null }, { pratica: { agenziaSedeId: null, brokerSedeId: null } }] },
+      { OR: [{ payoutId: null }, { payout: { wallet: { sedeId: null } } }] },
+    ],
+  };
   return {
-    AND: [base, { OR: [perPratica, { payout: { wallet: { sedeId: { in: scope.scopeIds } } } }] }],
+    AND: [base, { OR: [perPratica, payoutSede, ...(scope.isOwner ? [senzaSede] : [])] }],
   };
 }

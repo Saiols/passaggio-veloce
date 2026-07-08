@@ -8,9 +8,9 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { resolveSedeRiferimento, type SedeRiferimento } from '@/lib/fatturazione/descrizione';
-import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
+import { canViewDocumentoFiscale, docSedeFields } from '@/lib/fatturazione/access';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { toSedeScope } from '@/lib/sedi/scope-filters';
+import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 import { BackButton } from '@/components/back-button';
 
@@ -87,20 +87,11 @@ export default async function DocumentoFiscaleDetailPage({
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
   const ctx = await getSessionContext();
-  const allowed = canViewDocumentoFiscale(
-    {
-      emittenteCompanyId: doc.emittenteCompanyId,
-      destinatarioCompanyId: doc.destinatarioCompanyId,
-      praticaAgenziaSedeId: doc.pratica?.agenziaSedeId ?? null,
-      praticaBrokerSedeId: doc.pratica?.brokerSedeId ?? null,
-      payoutWalletSedeId: doc.payout?.wallet?.sedeId ?? null,
-    },
-    {
-      companyId: session.user.companyId,
-      isAdminPiattaforma: isAdmin,
-      scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
-    },
-  );
+  const allowed = canViewDocumentoFiscale(docSedeFields(doc), {
+    companyId: session.user.companyId,
+    isAdminPiattaforma: isAdmin,
+    scope: ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE,
+  });
   if (!allowed) notFound();
 
   const emittente = doc.datiEmittente as unknown as DatiFiscali;

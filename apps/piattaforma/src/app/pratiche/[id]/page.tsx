@@ -19,7 +19,7 @@ import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
-import { toSedeScope } from '@/lib/sedi/scope-filters';
+import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { PraticaToasts } from './pratica-toasts';
 import { DownloadDocumentiButton } from '../download-documenti-button';
 import { BackButton } from '@/components/back-button';
@@ -123,7 +123,7 @@ export default async function PraticaDetailPage({
       {
         companyId,
         isAdminPiattaforma: session.user.role === 'ADMIN_PIATTAFORMA',
-        scope: ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false },
+        scope: ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE,
       },
     ),
   );

@@ -9,7 +9,7 @@ import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtr
 import { buildPraticaZip, type ZipEntry } from '@/lib/documenti/zip';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 import { getSessionContext } from '@/lib/auth/session-context';
-import { toSedeScope, whereDocumentoFiscale } from '@/lib/sedi/scope-filters';
+import { toSedeScope, whereDocumentoFiscale, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,6 +29,10 @@ function safe(s: string): string {
  *  - ADMIN_PIATTAFORMA → tutti i documenti (filtri q + tipo);
  *  - DEALER (broker)   → documenti emessi (emittenteCompanyId);
  *  - AGENZIA           → documenti ricevuti (destinatarioCompanyId).
+ * Lo scope company è poi ristretto per sede da `whereDocumentoFiscale`: fuori
+ * dalla vista aggregata passano solo i documenti agganciati a una sede in scope
+ * (pratica o wallet del payout), più — per il solo proprietario — i documenti
+ * senza alcuna sede, che sono dell'entità legale.
  * I PDF sono nominati in base alla pratica: "<codicePratica>_<n°documento>.pdf".
  */
 export async function GET(req: Request): Promise<Response> {
@@ -58,13 +62,13 @@ export async function GET(req: Request): Promise<Response> {
     scope = {};
   } else if (companyType === 'DEALER' && companyId) {
     const ctx = await getSessionContext();
-    scope = whereDocumentoFiscale(ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false }, {
+    scope = whereDocumentoFiscale(ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE, {
       companyId,
       ruolo: 'DEALER',
     });
   } else if (companyType === 'AGENZIA' && companyId) {
     const ctx = await getSessionContext();
-    scope = whereDocumentoFiscale(ctx ? toSedeScope(ctx) : { scopeIds: [], aggregate: false }, {
+    scope = whereDocumentoFiscale(ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE, {
       companyId,
       ruolo: 'AGENZIA',
     });

@@ -22,13 +22,25 @@ const MEMBRO = {
 const SENZA_SEDI = { isOwner: false, scopeIds: [], currentSede: null };
 
 describe('toSedeScope', () => {
-  it('aggrega solo per il proprietario in vista ALL', () => {
-    expect(toSedeScope(OWNER_ALL)).toEqual({ scopeIds: ['s1', 's2'], aggregate: true });
-    expect(toSedeScope(OWNER_ONE)).toEqual({ scopeIds: ['s1'], aggregate: false });
-    expect(toSedeScope(MEMBRO)).toEqual({ scopeIds: ['s2'], aggregate: false });
-    expect(toSedeScope(SENZA_SEDI)).toEqual({ scopeIds: [], aggregate: false });
+  it('aggrega solo per il proprietario in vista ALL, ma riporta sempre isOwner', () => {
+    expect(toSedeScope(OWNER_ALL)).toEqual({
+      scopeIds: ['s1', 's2'],
+      aggregate: true,
+      isOwner: true,
+    });
+    expect(toSedeScope(OWNER_ONE)).toEqual({ scopeIds: ['s1'], aggregate: false, isOwner: true });
+    expect(toSedeScope(MEMBRO)).toEqual({ scopeIds: ['s2'], aggregate: false, isOwner: false });
+    expect(toSedeScope(SENZA_SEDI)).toEqual({ scopeIds: [], aggregate: false, isOwner: false });
   });
 });
+
+/** Il predicato "documento non agganciato ad alcuna sede", riservato all'owner. */
+const SENZA_SEDE = {
+  AND: [
+    { OR: [{ praticaId: null }, { pratica: { agenziaSedeId: null, brokerSedeId: null } }] },
+    { OR: [{ payoutId: null }, { payout: { wallet: { sedeId: null } } }] },
+  ],
+};
 
 describe('whereFeeAddebito', () => {
   it("owner aggregato: tutta la madre (include le righe legacy senza sede)", () => {
@@ -143,6 +155,35 @@ describe('whereDocumentoFiscale', () => {
     expect(whereDocumentoFiscale(toSedeScope(OWNER_ALL), { companyId: 'c1', ruolo: 'AGENZIA' })).toEqual(
       { destinatarioCompanyId: 'c1' },
     );
+  });
+
+  it("l'owner su UNA sede vede la sede scelta più i documenti senza alcuna sede", () => {
+    expect(whereDocumentoFiscale(toSedeScope(OWNER_ONE), { companyId: 'c1', ruolo: 'AGENZIA' })).toEqual({
+      AND: [
+        { destinatarioCompanyId: 'c1' },
+        {
+          OR: [
+            { pratica: { agenziaSedeId: { in: ['s1'] } } },
+            { payout: { wallet: { sedeId: { in: ['s1'] } } } },
+            SENZA_SEDE,
+          ],
+        },
+      ],
+    });
+  });
+
+  it('il membro su UNA sede NON vede i documenti senza alcuna sede', () => {
+    expect(whereDocumentoFiscale(toSedeScope(MEMBRO), { companyId: 'c1', ruolo: 'DEALER' })).toEqual({
+      AND: [
+        { emittenteCompanyId: 'c1' },
+        {
+          OR: [
+            { pratica: { brokerSedeId: { in: ['s2'] } } },
+            { payout: { wallet: { sedeId: { in: ['s2'] } } } },
+          ],
+        },
+      ],
+    });
   });
 
   it('agenzia membro: fattura della sua pratica oppure payout del suo wallet', () => {

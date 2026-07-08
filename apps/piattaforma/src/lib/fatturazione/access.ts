@@ -49,15 +49,40 @@ export function canViewDocumentoFiscale(
   // Documento non agganciato ad alcuna sede: è dell'entità legale, lo vede solo
   // il proprietario (in qualunque vista). Un membro di sede non lo vede mai.
   if (senzaSede) return viewer.scope.isOwner;
+  // `some` è role-agnostic: matcha `sedi` contro TUTTI e tre i campi (agenzia,
+  // broker, wallet), mentre `whereDocumentoFiscale` (scope-filters.ts) filtra
+  // solo il campo del ruolo del viewer (agenziaSedeId per AGENZIA, brokerSedeId
+  // per DEALER). Qui è comunque corretto — non un allargamento — perché lo
+  // `scopeIds` del viewer contiene solo id di sedi della PROPRIA company e gli
+  // id sede sono univoci e vincolati al `type` della company: una sede AGENZIA
+  // non può mai comparire nello scope di un DEALER (e viceversa), quindi il
+  // campo "dell'altro ruolo" nel documento non potrà mai matchare `sedi`.
+  // Si romperebbe se in futuro una company potesse avere sedi di tipo diverso
+  // dal proprio, o se gli id sede smettessero di essere globalmente univoci:
+  // in quel caso questo `some` diventerebbe un superset reale della lista.
   return docSedi.some((s) => s != null && sedi.includes(s));
 }
 
-/** Estrae i campi che `canViewDocumentoFiscale` legge da un documento con le relazioni caricate. */
+/**
+ * Estrae i campi che `canViewDocumentoFiscale` legge da un documento con le
+ * relazioni caricate.
+ *
+ * `pratica` e `payout` sono OBBLIGATORI (possono valere `null`, ma la chiave
+ * deve esistere nel tipo): se fossero opzionali, un chiamante il cui
+ * `select`/`include` dimentica di caricare la relazione compilerebbe lo
+ * stesso, l'helper restituirebbe in silenzio `null` per quel campo, e
+ * `canViewDocumentoFiscale` classificherebbe il documento come "senza
+ * sede" — con la regola attuale questo NON nega l'accesso ma lo CONCEDE
+ * a qualunque owner in vista su singola sede (silent grant), invece di
+ * far fallire il typecheck. `payout.wallet` non ha `| null`: `Payout.walletId`
+ * è una FK non-null nello schema, quindi quando `payout` esiste `wallet`
+ * esiste sempre.
+ */
 export function docSedeFields(doc: {
   emittenteCompanyId: string | null;
   destinatarioCompanyId: string | null;
-  pratica?: { agenziaSedeId: string | null; brokerSedeId: string | null } | null;
-  payout?: { wallet: { sedeId: string | null } | null } | null;
+  pratica: { agenziaSedeId: string | null; brokerSedeId: string | null } | null;
+  payout: { wallet: { sedeId: string | null } } | null;
 }): {
   emittenteCompanyId: string | null;
   destinatarioCompanyId: string | null;
@@ -70,6 +95,6 @@ export function docSedeFields(doc: {
     destinatarioCompanyId: doc.destinatarioCompanyId,
     praticaAgenziaSedeId: doc.pratica?.agenziaSedeId ?? null,
     praticaBrokerSedeId: doc.pratica?.brokerSedeId ?? null,
-    payoutWalletSedeId: doc.payout?.wallet?.sedeId ?? null,
+    payoutWalletSedeId: doc.payout?.wallet.sedeId ?? null,
   };
 }

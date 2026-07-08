@@ -67,7 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/pratiche', label: 'Pratiche', icon: IconPratiche },
       { href: '/admin/escalation', label: 'Escalation', icon: IconEscalation },
       { href: '/admin/segnalazioni', label: 'Segnalazioni', icon: IconSegnalazioni, adminOnly: true },
-      { href: '/admin/revisioni', label: 'Revisioni', icon: IconRevisioni, adminOnly: true },
+      { href: '/admin/segnalazioni-creazione', label: 'Problemi creazione', icon: IconRevisioni, adminOnly: true },
     ],
   },
   {

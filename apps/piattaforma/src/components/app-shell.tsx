@@ -46,7 +46,7 @@ function navForRole(
     if (role === 'ADMIN_PIATTAFORMA') {
       adminLinks.splice(1, 0, { href: '/admin/dashboard', label: 'Finanze' });
       adminLinks.push({ href: '/admin/segnalazioni', label: 'Segnalazioni' });
-      adminLinks.push({ href: '/admin/revisioni', label: 'Revisioni' });
+      adminLinks.push({ href: '/admin/segnalazioni-creazione', label: 'Problemi creazione' });
       adminLinks.push({ href: '/admin/affiliazioni', label: 'Affiliazioni' });
       adminLinks.push({ href: '/admin/codici-promozionali', label: 'Promo' });
       adminLinks.push({ href: '/admin/ateco', label: 'ATECO' });

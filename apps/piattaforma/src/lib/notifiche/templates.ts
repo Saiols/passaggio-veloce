@@ -1064,7 +1064,7 @@ export function tplN41AdminNuovaSegnalazione(p: N41AdminNuovaSegnalazionePayload
   const text =
     `${p.ragioneSociale} ha segnalato un problema in creazione pratica.\n` +
     `Step: ${p.step} — Tipo: ${p.tipo}\n${p.estratto}\n` +
-    `Apri /admin/segnalazioni per rispondere.`;
+    `Apri /admin/segnalazioni-creazione per rispondere.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Nuova segnalazione</h1>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
@@ -1075,7 +1075,7 @@ export function tplN41AdminNuovaSegnalazione(p: N41AdminNuovaSegnalazionePayload
       <em>${escapeHtml(p.estratto)}</em>
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
-      Apri <strong>/admin/segnalazioni</strong> per rispondere.
+      Apri <strong>/admin/segnalazioni-creazione</strong> per rispondere.
     </p>
   `);
   return { subject, html, text };

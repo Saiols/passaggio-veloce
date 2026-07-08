@@ -57,6 +57,17 @@ describe('whereValutazione', () => {
       agenziaSedeId: { in: ['s2'] },
     });
   });
+
+  it('owner aggregato: nessun filtro sede', () => {
+    expect(whereValutazione(toSedeScope(OWNER_ALL), 'c1')).toEqual({ agenziaId: 'c1' });
+  });
+
+  it('senza sedi accessibili: fail-closed, nessuna riga', () => {
+    expect(whereValutazione(toSedeScope(SENZA_SEDI), 'c1')).toEqual({
+      agenziaId: 'c1',
+      agenziaSedeId: { in: [] },
+    });
+  });
 });
 
 describe('wherePraticaAttiva', () => {
@@ -82,6 +93,21 @@ describe('wherePraticaAttiva', () => {
       deletedAt: null,
     });
   });
+
+  it('owner aggregato broker: nessun filtro sede', () => {
+    expect(wherePraticaAttiva(toSedeScope(OWNER_ALL), { companyId: 'c1', ruolo: 'DEALER' })).toEqual({
+      brokerId: 'c1',
+      deletedAt: null,
+    });
+  });
+
+  it('senza sedi accessibili: fail-closed, nessuna riga', () => {
+    expect(wherePraticaAttiva(toSedeScope(SENZA_SEDI), { companyId: 'c1', ruolo: 'AGENZIA' })).toEqual({
+      agenziaAssegnataId: 'c1',
+      deletedAt: null,
+      agenziaSedeId: { in: [] },
+    });
+  });
 });
 
 describe('whereAssegnazionePending', () => {
@@ -90,6 +116,21 @@ describe('whereAssegnazionePending', () => {
       agenziaId: 'c1',
       esito: 'PENDING',
       sedeId: { in: ['s2'] },
+    });
+  });
+
+  it('owner aggregato: nessun filtro sede', () => {
+    expect(whereAssegnazionePending(toSedeScope(OWNER_ALL), 'c1')).toEqual({
+      agenziaId: 'c1',
+      esito: 'PENDING',
+    });
+  });
+
+  it('senza sedi accessibili: fail-closed, nessuna riga', () => {
+    expect(whereAssegnazionePending(toSedeScope(SENZA_SEDI), 'c1')).toEqual({
+      agenziaId: 'c1',
+      esito: 'PENDING',
+      sedeId: { in: [] },
     });
   });
 });
@@ -123,6 +164,20 @@ describe('whereDocumentoFiscale', () => {
           OR: [
             { pratica: { brokerSedeId: { in: ['s2'] } } },
             { payout: { wallet: { sedeId: { in: ['s2'] } } } },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('senza sedi accessibili: fail-closed su entrambi gli agganci', () => {
+    expect(whereDocumentoFiscale(toSedeScope(SENZA_SEDI), { companyId: 'c1', ruolo: 'AGENZIA' })).toEqual({
+      AND: [
+        { destinatarioCompanyId: 'c1' },
+        {
+          OR: [
+            { pratica: { agenziaSedeId: { in: [] } } },
+            { payout: { wallet: { sedeId: { in: [] } } } },
           ],
         },
       ],

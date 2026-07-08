@@ -5,6 +5,8 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, whereValutazione } from '@/lib/sedi/scope-filters';
 import { Stars } from './stars';
 
 export const dynamic = 'force-dynamic';
@@ -25,11 +27,18 @@ export default async function FeedbackPage() {
     );
   }
 
-  const agenziaId = session.user.companyId!;
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) redirect('/login');
+  const agenziaId = ctx.companyId;
+
+  // Multi-sede: i feedback sono della sede valutata, non di tutta la madre.
+  // La media va calcolata sullo stesso insieme della lista, altrimenti la
+  // pagina mostrerebbe "3 recensioni" e una media su 40.
+  const where = whereValutazione(toSedeScope(ctx), agenziaId);
 
   const [valutazioni, agg] = await Promise.all([
     prisma.valutazione.findMany({
-      where: { agenziaId },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         dealer: { select: { ragioneSociale: true } },
@@ -37,7 +46,7 @@ export default async function FeedbackPage() {
       },
     }),
     prisma.valutazione.aggregate({
-      where: { agenziaId },
+      where,
       _avg: { stelle: true },
       _count: { _all: true },
     }),

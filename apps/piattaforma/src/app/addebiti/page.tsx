@@ -6,6 +6,8 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { groupFeeByMonth, type FeeRow } from '@/lib/fee/recap';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, whereFeeAddebito } from '@/lib/sedi/scope-filters';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,11 +44,14 @@ export default async function AddebitiPage() {
       </AppShell>
     );
   }
-  const companyId = session.user.companyId!;
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) redirect('/login');
+  const companyId = ctx.companyId;
   const now = new Date();
 
   const fees = await prisma.feeAddebito.findMany({
-    where: { agenziaId: companyId },
+    // Multi-sede: gli addebiti sono della sede che ha lavorato la pratica.
+    where: whereFeeAddebito(toSedeScope(ctx), companyId),
     orderBy: { createdAt: 'desc' },
     include: {
       pratica: {

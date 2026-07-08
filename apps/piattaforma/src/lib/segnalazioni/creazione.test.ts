@@ -24,11 +24,8 @@ vi.mock('@/lib/notifiche', () => ({
 }));
 vi.mock('@/lib/providers/storage', () => ({ getStorage: () => ({ name: 'vercel-blob' }) }));
 
-import {
-  buildDatiSnapshot,
-  documentiDaBlobRefs,
-  inviaSegnalazioneCreazioneAction,
-} from './creazione';
+import { buildDatiSnapshot, documentiDaBlobRefs } from './snapshot';
+import { inviaSegnalazioneCreazioneAction } from './creazione';
 
 const BROKER = 'br-1';
 const SEDE = 'sede-1';

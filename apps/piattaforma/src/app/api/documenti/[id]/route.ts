@@ -4,6 +4,8 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
 import { documentoDownloadName } from '@/lib/documenti/labels';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 
 export async function GET(
   _req: Request,
@@ -30,6 +32,8 @@ export async function GET(
         select: {
           brokerId: true,
           agenziaAssegnataId: true,
+          brokerSedeId: true,
+          agenziaSedeId: true,
           codicePratica: true,
         },
       },
@@ -42,13 +46,24 @@ export async function GET(
 
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
   const userCompanyId = session.user.companyId;
+  const ctx = await getSessionContext();
+  const scope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
+
+  // Multi-sede: la company non basta — un ADMIN_SEDE non scarica i documenti
+  // di un'altra filiale. L'owner aggregato mantiene l'accesso a tutto il gruppo.
+  const inSede = (sedeId: string | null): boolean =>
+    scope.aggregate || (sedeId != null && scope.scopeIds.includes(sedeId));
 
   const allowed =
     isAdmin ||
-    (doc.companyId && doc.companyId === userCompanyId) ||
-    (doc.pratica?.brokerId && doc.pratica.brokerId === userCompanyId) ||
-    (doc.pratica?.agenziaAssegnataId &&
-      doc.pratica.agenziaAssegnataId === userCompanyId);
+    // documento caricato dalla company stessa (non legato a pratica)
+    (doc.companyId != null && doc.companyId === userCompanyId && !doc.praticaId) ||
+    (doc.pratica != null &&
+      doc.pratica.brokerId === userCompanyId &&
+      inSede(doc.pratica.brokerSedeId)) ||
+    (doc.pratica != null &&
+      doc.pratica.agenziaAssegnataId === userCompanyId &&
+      inSede(doc.pratica.agenziaSedeId));
 
   if (!allowed) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });

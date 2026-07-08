@@ -25,10 +25,49 @@ import {
   eventoPraticaFirmata,
   eventoPraticaAnnullata,
 } from '@/lib/eventi/pratica-eventi';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, NO_SEDE_SCOPE, type SedeScope } from '@/lib/sedi/scope-filters';
+import { canAccessPratica } from '@/lib/pratiche/access';
 import { env } from '@/env';
 
 /** Esito delle quick-action usate dalla lista pratiche (nessuna navigazione). */
 export type QuickActionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Scope sede della sessione corrente. `getSessionContext` è memoizzata per
+ * request: chiamarla qui non aggiunge query.
+ */
+async function sedeScopeCorrente(): Promise<SedeScope> {
+  const ctx = await getSessionContext();
+  return ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
+}
+
+/**
+ * Gate di SCRITTURA per sede.
+ *
+ * La lettura è già scopata (lista, dettaglio, download), ma senza questo gate un
+ * utente che conosce l'UUID muta la pratica di un'altra filiale: la marca
+ * firmata, accredita quel wallet, genera un FeeAddebito a carico della madre.
+ * Stessa identica regola della lettura (`canAccessPratica`): company del lato +
+ * sede di quel lato, nessun bypass per la vista aggregata, fail-closed.
+ *
+ * Va chiamato SEMPRE dopo il controllo di company, così il messaggio distingue
+ * "non è tua" da "non è della tua sede".
+ */
+function assertSedeInScope(
+  pratica: {
+    brokerId: string;
+    brokerSedeId: string | null;
+    agenziaAssegnataId: string | null;
+    agenziaSedeId: string | null;
+  },
+  companyId: string,
+  scope: SedeScope,
+): void {
+  if (!canAccessPratica(pratica, { companyId, isAdminPiattaforma: false, scope })) {
+    throw new Error('Pratica non assegnata alla tua sede');
+  }
+}
 
 /**
  * AF-N: notifiche affiliazione post-firma. Per ogni accredit eseguito:
@@ -93,6 +132,7 @@ async function processaPraticaCore(praticaId: string): Promise<QuickActionResult
   }
   const agenziaId = session.user.companyId!;
   if (await isAgenziaBloccata(agenziaId)) redirect('/blocco-pagamento');
+  const scope = await sedeScopeCorrente();
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -101,6 +141,7 @@ async function processaPraticaCore(praticaId: string): Promise<QuickActionResult
       if (pratica.agenziaAssegnataId !== agenziaId) {
         throw new Error('Pratica non assegnata a questa agenzia');
       }
+      assertSedeInScope(pratica, agenziaId, scope);
       if (pratica.stato !== 'ACCETTATA') {
         throw new Error('Pratica non nello stato ACCETTATA');
       }
@@ -216,6 +257,7 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
   }
   const agenziaId = session.user.companyId!;
   if (await isAgenziaBloccata(agenziaId)) redirect('/blocco-pagamento');
+  const scope = await sedeScopeCorrente();
 
   let accreditiResult: AccreditoEseguito[] = [];
   let feeAgenziaCentFattura = 0;
@@ -245,6 +287,7 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
       if (pratica.agenziaAssegnataId !== agenziaId) {
         throw new Error('Pratica non assegnata a questa agenzia');
       }
+      assertSedeInScope(pratica, agenziaId, scope);
       if (pratica.stato !== 'PROCESSATA') {
         throw new Error('La pratica deve essere prima processata');
       }
@@ -556,6 +599,7 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
     redirect('/dashboard');
   }
   const brokerId = session.user.companyId!;
+  const scope = await sedeScopeCorrente();
 
   let eraBozza = false;
 
@@ -566,6 +610,7 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
       if (pratica.brokerId !== brokerId) {
         throw new Error('Non sei il broker di questa pratica');
       }
+      assertSedeInScope(pratica, brokerId, scope);
       if (pratica.stato === 'FIRMATA') {
         throw new Error('Non puoi annullare una pratica già firmata');
       }
@@ -643,6 +688,7 @@ export async function submitValutazioneAction(formData: FormData): Promise<Actio
   }
   const dealerId = session.user.companyId;
   if (!dealerId) return { ok: false, error: 'Azienda non associata' };
+  const scope = await sedeScopeCorrente();
 
   const parsed = valutazioneSchema.safeParse(Object.fromEntries(formData.entries()));
   if (!parsed.success) {
@@ -662,6 +708,7 @@ export async function submitValutazioneAction(formData: FormData): Promise<Actio
       });
       if (!pratica) throw new Error('Pratica non trovata');
       if (pratica.brokerId !== dealerId) throw new Error('Non sei il broker di questa pratica');
+      assertSedeInScope(pratica, dealerId, scope);
       if (pratica.stato !== 'FIRMATA') throw new Error('Puoi valutare solo pratiche firmate');
       if (!pratica.agenziaAssegnataId) throw new Error('Nessuna agenzia assegnata');
       if (pratica.valutazione) throw new Error('Hai già valutato questa pratica');

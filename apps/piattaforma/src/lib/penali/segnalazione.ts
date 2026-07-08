@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { canAccessPratica } from '@/lib/pratiche/access';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
@@ -45,6 +48,11 @@ export async function segnalaPraticaAction(
       id: true,
       stato: true,
       agenziaAssegnataId: true,
+      // Le 4 colonne che `canAccessPratica` esige: il gate sede non compila
+      // senza. `brokerId`/`brokerSedeId` servono al lato broker della regola.
+      brokerId: true,
+      brokerSedeId: true,
+      agenziaSedeId: true,
       flagSegnalata: true,
       codicePratica: true,
       veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
@@ -55,6 +63,14 @@ export async function segnalaPraticaAction(
   if (!pratica) return { ok: false, error: 'Pratica non trovata' };
   if (pratica.agenziaAssegnataId !== agenziaId) {
     return { ok: false, error: 'Pratica non assegnata alla tua agenzia' };
+  }
+  // Scoping sede: segnalare apre una penale di €25 a carico del broker. Senza
+  // questo gate un utente della sede A poteva segnalare la pratica accettata
+  // dalla sede B, contro un broker con cui non ha mai lavorato.
+  const ctx = await getSessionContext();
+  const scope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
+  if (!canAccessPratica(pratica, { companyId: agenziaId, isAdminPiattaforma: false, scope })) {
+    return { ok: false, error: 'Pratica non assegnata alla tua sede' };
   }
   if (pratica.stato !== 'ACCETTATA' && pratica.stato !== 'PROCESSATA') {
     return {

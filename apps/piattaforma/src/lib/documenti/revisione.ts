@@ -5,6 +5,9 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { getSessionContext, getOperatingSede } from '@/lib/auth/session-context';
+import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { canAccessPratica } from '@/lib/pratiche/access';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
 
 export type MotivoRevisione =
@@ -60,9 +63,26 @@ export async function richiediRevisioneManualeAction(
     // Revisione richiesta su pratica esistente in bozza
     const existing = await prisma.pratica.findUnique({
       where: { id: praticaId },
-      select: { id: true, brokerId: true, stato: true, codicePratica: true },
+      select: {
+        id: true,
+        brokerId: true,
+        stato: true,
+        codicePratica: true,
+        // Le 4 colonne che `canAccessPratica` esige (il gate non compila senza).
+        brokerSedeId: true,
+        agenziaAssegnataId: true,
+        agenziaSedeId: true,
+      },
     });
     if (!existing || existing.brokerId !== brokerId) {
+      return { ok: false, error: 'Pratica non trovata' };
+    }
+    // Scoping sede: senza questo, un utente della sede A marcava "richiede
+    // revisione" la bozza della sede B. Stesso messaggio del not-found: non
+    // riveliamo l'esistenza di una pratica che il chiamante non può vedere.
+    const ctx = await getSessionContext();
+    const scope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
+    if (!canAccessPratica(existing, { companyId: brokerId, isAdminPiattaforma: false, scope })) {
       return { ok: false, error: 'Pratica non trovata' };
     }
     if (existing.stato !== 'BOZZA') {
@@ -85,11 +105,19 @@ export async function richiediRevisioneManualeAction(
   } else {
     // Crea una bozza placeholder con sole note di revisione (no dati pratica
     // ancora). L'admin contatta il broker direttamente.
+    //
+    // `brokerSedeId` va valorizzato: la lista /pratiche e il dettaglio filtrano
+    // per sede, quindi una bozza senza sede sarebbe invisibile al broker che
+    // l'ha appena richiesta. Se il proprietario è in vista aggregata su più
+    // sedi non c'è una sede operativa: resta null, com'era prima (l'admin
+    // contatta comunque il broker, e la bozza non ha azioni utente).
+    const operatingSede = await getOperatingSede();
     const created = await prisma.pratica.create({
       data: {
         tipo: 'SEMPLICE',
         stato: 'BOZZA',
         brokerId,
+        brokerSedeId: operatingSede?.id ?? null,
         richiedeRevisioneManuale: true,
         motivoRevisione: motivo,
         noteRevisione: trimmedNote,

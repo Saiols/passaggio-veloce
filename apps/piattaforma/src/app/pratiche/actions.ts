@@ -293,6 +293,9 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
           data: {
             praticaId: pratica.id,
             agenziaId,
+            // Multi-sede: l'addebito appartiene alla SEDE che ha lavorato la pratica.
+            // Senza questo, /addebiti (scopato per sede) non vedrebbe la riga.
+            agenziaSedeId: pratica.agenziaSedeId,
             importoCent: pratica.feeAgenziaCent,
             tipo: 'ADDEBITO_FIRMA',
             stato: 'SCHEDULED',

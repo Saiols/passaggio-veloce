@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Alert, Button, Checkbox, Field, Input, NumberInput, Select, useToast } from '@/components/ui';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
-import { RevisioneManualePopup } from '@/components/revisione-manuale-popup';
+import { SegnalaProblemaPopup } from '@/components/segnala-problema-popup';
 import { PENALI } from '@/lib/penali/config';
 import { docKey } from '@/lib/documenti/richiesti';
 import { AddressAutocomplete } from '@/components/address-autocomplete';
@@ -814,8 +814,10 @@ function WizardBody({
   const [showDichiarazione, setShowDichiarazione] = useState(false);
   const [dichiarazioneAccettata, setDichiarazioneAccettata] = useState(false);
 
-  // Schema Documentale v7 — SD-C: bottone/popup "Non trovo la mia situazione"
-  // per richiedere review manuale al team PV (caso non riconosciuto).
+  // Segnalazioni FASE creazione pratica (task 5/8): CTA/popup "Hai
+  // riscontrato un problema?" presente in ogni step (SegnalaProblemaPopup).
+  // Nome storico (nasceva come SD-C "richiedi revisione manuale"): il valore
+  // dello state resta invariato, solo l'uso è cambiato.
   const [showRevisione, setShowRevisione] = useState(false);
 
   // Schema Documentale v7 (SD-B): preview lista documenti richiesti calcolata
@@ -1333,6 +1335,173 @@ function WizardBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  // --- Costruzione payload wizard --------------------------------------
+  // Funzioni pure sullo stato corrente (nessun side-effect): usate dal submit
+  // finale QUI SOTTO e riusate identiche da buildSegnalazionePayload per il
+  // popup "Hai riscontrato un problema?" (segnala-problema-popup.tsx), che
+  // manda uno snapshot NON validato dello stato corrente — nessuna
+  // duplicazione della logica di costruzione.
+
+  /** Veicoli (JSON): stessa forma inviata al submit nel campo `veicoli`. */
+  const buildVeicoliSnapshot = () =>
+    veicoli.map((v) => ({
+      tipoDocumento: v.tipoDocumento,
+      targa: v.targa,
+      telaio: v.telaio,
+      proprietarioAttuale: v.proprietarioAttuale,
+      dataImmatricolazione: v.dataImmatricolazione || null,
+      preImm2015: v.preImm2015,
+      flagComodatoDuso: v.flagComodatoDuso,
+      flagDelegaVendita: v.flagDelegaVendita,
+      prezzoVenditaCent: Math.round(Number(v.prezzoVendita) * 100),
+      // OCR grezzo (libretto o foglio complementare), pre-correzione.
+      ocrData: v.ocr ?? null,
+    }));
+
+  /** Venditori/co-intestatari (JSON): stessa forma inviata al submit in `venditori`. */
+  const buildVenditoriSnapshot = () =>
+    venditori.map((v, i) => ({
+      ordine: i + 1,
+      veicoloOrdine: v.veicoloOrdine,
+      isPG: v.isPG,
+      tipoSoggetto: v.tipoSoggetto,
+      ciTipo: v.ciTipo,
+      nome: v.nome,
+      cognome: v.cognome,
+      cf: v.cf,
+      ragioneSociale: v.ragioneSociale,
+      piva: v.piva,
+      telefono: v.telefono,
+      email: v.email,
+      docId: v.docId,
+    }));
+
+  /** Co-acquirenti (JSON): stessa forma inviata al submit in `coAcquirenti`. */
+  const buildCoAcquirentiSnapshot = () =>
+    coAcquirenti.map((c, i) => ({
+      ordine: i + 1,
+      isPG: c.isPG,
+      nome: c.nome,
+      cognome: c.cognome,
+      cf: c.cf,
+      ragioneSociale: c.ragioneSociale,
+      piva: c.piva,
+      telefono: c.telefono,
+      email: c.email,
+      tipoSoggetto: c.tipoSoggetto,
+      ciTipo: c.ciTipo,
+      docId: c.docId,
+      indirizzoResidenza: c.residenzaDiversa ? c.indirizzoResidenza.trim() : null,
+    }));
+
+  /**
+   * Acquirente principale come oggetto unico. Il submit invia questi stessi
+   * dati come campi FormData singoli e condizionali (vedi sotto): qui serve
+   * un oggetto solo per lo snapshot della segnalazione, forma analoga a un
+   * CoAcquirenteInput.
+   */
+  const buildAcquirenteSnapshot = () => ({
+    isPG: acquirente.isPG,
+    nome: acquirente.nome,
+    cognome: acquirente.cognome,
+    cf: acquirente.cf,
+    ragioneSociale: acquirente.ragioneSociale,
+    piva: acquirente.piva,
+    telefono: acquirente.telefono,
+    email: acquirente.email,
+    tipoSoggetto: acquirente.tipoSoggetto,
+    ciTipo: acquirente.ciTipo,
+    docId: acquirenteDocId,
+    indirizzoResidenza: acquirenteResidenzaDiversa ? acquirenteIndirizzoResidenza.trim() : null,
+  });
+
+  /** Mappa slot → BlobRef di TUTTI i file caricati finora (veicoli, documenti
+   *  richiesti, identità venditori/acquirente/co-acquirenti). Stessa forma e
+   *  stesse chiavi del `blobRefs` costruito per il submit. */
+  const buildBlobRefsSnapshot = (): Record<string, BlobRef> => {
+    const refs: Record<string, BlobRef> = {};
+    veicoli.forEach((v, i) => {
+      if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
+        if (v.foglioComplementare.ref)
+          refs[`FOGLIO_COMPLEMENTARE_${i + 1}`] = v.foglioComplementare.ref;
+        // Allegati opzionali (nessun OCR): inviati solo se presenti.
+        if (v.librettoOrigFronte.ref)
+          refs[`LIBRETTO_ORIGINALE_${i + 1}_FRONTE`] = v.librettoOrigFronte.ref;
+        if (v.librettoOrigRetro.ref)
+          refs[`LIBRETTO_ORIGINALE_${i + 1}_RETRO`] = v.librettoOrigRetro.ref;
+        return;
+      }
+      if (v.libretto.ref) refs[`LIBRETTO_${i + 1}_FRONTE`] = v.libretto.ref;
+      if (v.librettoRetro.ref) refs[`LIBRETTO_${i + 1}_RETRO`] = v.librettoRetro.ref;
+    });
+    // Documenti richiesti (step Documenti) come slot DOC__<docKey> (BlobRef).
+    // Eccezione: i due allegati delega/procura usano la propria chiave DELEGA_*
+    // (non passano per l'engine documenti richiesti).
+    for (const [key, slot] of Object.entries(documenti)) {
+      if (!slot.ref) continue;
+      refs[key.startsWith('DELEGA_') ? key : `DOC__${key}`] = slot.ref;
+    }
+    // B6: documento d'identità + visura + permesso PER venditore negli slot
+    // VEND<n>_* (BlobRef). Il tipo documento (docId) viaggia nel JSON `venditori`.
+    venditori.forEach((v, i) => {
+      const n = i + 1;
+      if (v.docId === 'CI' || v.docId === 'PATENTE') {
+        if (v.identita.fronte?.ref) refs[`VEND${n}_ID_FRONTE`] = v.identita.fronte.ref;
+        if (v.identita.retro?.ref) refs[`VEND${n}_ID_RETRO`] = v.identita.retro.ref;
+      } else if (v.identita.single?.ref) {
+        refs[`VEND${n}_ID`] = v.identita.single.ref;
+      }
+      if (v.identita.permesso?.ref) refs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
+      if (v.identita.visura?.ref) refs[`VEND${n}_VISURA`] = v.identita.visura.ref;
+      if (v.identita.codiceFiscale?.ref) refs[`VEND${n}_CF`] = v.identita.codiceFiscale.ref;
+      if (v.identita.codiceFiscaleRetro?.ref)
+        refs[`VEND${n}_CF_RETRO`] = v.identita.codiceFiscaleRetro.ref;
+    });
+    // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
+    if (acquirenteDocId === 'CI' || acquirenteDocId === 'PATENTE') {
+      if (acquirenteIdentita.fronte?.ref) refs['ACQ_ID_FRONTE'] = acquirenteIdentita.fronte.ref;
+      if (acquirenteIdentita.retro?.ref) refs['ACQ_ID_RETRO'] = acquirenteIdentita.retro.ref;
+    } else if (acquirenteIdentita.single?.ref) {
+      refs['ACQ_ID'] = acquirenteIdentita.single.ref;
+    }
+    if (acquirenteIdentita.permesso?.ref) refs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
+    if (acquirenteIdentita.visura?.ref) refs['ACQ_VISURA'] = acquirenteIdentita.visura.ref;
+    if (acquirenteIdentita.codiceFiscale?.ref) refs['ACQ_CF'] = acquirenteIdentita.codiceFiscale.ref;
+    if (acquirenteIdentita.codiceFiscaleRetro?.ref)
+      refs['ACQ_CF_RETRO'] = acquirenteIdentita.codiceFiscaleRetro.ref;
+    coAcquirenti.forEach((c, i) => {
+      const n = i + 1;
+      if (c.docId === 'CI' || c.docId === 'PATENTE') {
+        if (c.identita.fronte?.ref) refs[`COACQ${n}_ID_FRONTE`] = c.identita.fronte.ref;
+        if (c.identita.retro?.ref) refs[`COACQ${n}_ID_RETRO`] = c.identita.retro.ref;
+      } else if (c.identita.single?.ref) {
+        refs[`COACQ${n}_ID`] = c.identita.single.ref;
+      }
+      if (c.identita.permesso?.ref) refs[`COACQ${n}_PERMESSO`] = c.identita.permesso.ref;
+      if (c.identita.visura?.ref) refs[`COACQ${n}_VISURA`] = c.identita.visura.ref;
+      if (c.identita.codiceFiscale?.ref) refs[`COACQ${n}_CF`] = c.identita.codiceFiscale.ref;
+      if (c.identita.codiceFiscaleRetro?.ref)
+        refs[`COACQ${n}_CF_RETRO`] = c.identita.codiceFiscaleRetro.ref;
+    });
+    return refs;
+  };
+
+  /**
+   * Segnalazioni FASE creazione pratica (task 5/8): snapshot NON validato
+   * dello stato corrente, passato al popup "Hai riscontrato un problema?".
+   * Nessuna validazione (a differenza del submit): manda quel che c'è, anche
+   * parziale.
+   */
+  const buildSegnalazionePayload = () => ({
+    tipoPratica: tipo,
+    veicoli: buildVeicoliSnapshot(),
+    venditori: buildVenditoriSnapshot(),
+    acquirente: buildAcquirenteSnapshot(),
+    coAcquirenti: buildCoAcquirentiSnapshot(),
+    blobRefs: buildBlobRefsSnapshot(),
+    brokerSedeId: brokerSedeId || null,
+  });
+
   const handleFinalSubmit = () => {
     // Il documento di circolazione di ogni veicolo dev'essere pronto: libretto
     // fronte+retro+OCR OPPURE foglio complementare (solo PDF). Il guard è
@@ -1359,37 +1528,13 @@ function WizardBody({
 
     // Mappa slot → BlobRef: i file sono già su Blob (client upload), alla
     // Server Action passa SOLO le chiavi (BlobRef) in un unico campo JSON.
-    const blobRefs: Record<string, BlobRef> = {};
+    // Costruita da buildBlobRefsSnapshot (condivisa col popup segnalazione,
+    // vedi sopra).
+    const blobRefs: Record<string, BlobRef> = buildBlobRefsSnapshot();
 
     // Lista veicoli (JSON). I libretti vanno negli slot LIBRETTO_1..LIBRETTO_n.
-    const veicoliPayload = veicoli.map((v) => ({
-      tipoDocumento: v.tipoDocumento,
-      targa: v.targa,
-      telaio: v.telaio,
-      proprietarioAttuale: v.proprietarioAttuale,
-      dataImmatricolazione: v.dataImmatricolazione || null,
-      preImm2015: v.preImm2015,
-      flagComodatoDuso: v.flagComodatoDuso,
-      flagDelegaVendita: v.flagDelegaVendita,
-      prezzoVenditaCent: Math.round(Number(v.prezzoVendita) * 100),
-      // OCR grezzo (libretto o foglio complementare), pre-correzione.
-      ocrData: v.ocr ?? null,
-    }));
+    const veicoliPayload = buildVeicoliSnapshot();
     fd.append('veicoli', JSON.stringify(veicoliPayload));
-    veicoli.forEach((v, i) => {
-      if (v.tipoDocumento === 'FOGLIO_COMPLEMENTARE') {
-        if (v.foglioComplementare.ref)
-          blobRefs[`FOGLIO_COMPLEMENTARE_${i + 1}`] = v.foglioComplementare.ref;
-        // Allegati opzionali (nessun OCR): inviati solo se presenti.
-        if (v.librettoOrigFronte.ref)
-          blobRefs[`LIBRETTO_ORIGINALE_${i + 1}_FRONTE`] = v.librettoOrigFronte.ref;
-        if (v.librettoOrigRetro.ref)
-          blobRefs[`LIBRETTO_ORIGINALE_${i + 1}_RETRO`] = v.librettoOrigRetro.ref;
-        return;
-      }
-      if (v.libretto.ref) blobRefs[`LIBRETTO_${i + 1}_FRONTE`] = v.libretto.ref;
-      if (v.librettoRetro.ref) blobRefs[`LIBRETTO_${i + 1}_RETRO`] = v.librettoRetro.ref;
-    });
 
     // ocrManuale: true se almeno un veicolo è stato compilato a mano.
     fd.append(
@@ -1397,24 +1542,9 @@ function WizardBody({
       veicoli.some((v) => v.ocrManuale) ? 'true' : 'false',
     );
 
-    // B6: N venditori (co-intestatari) come JSON. Ordine = indice + 1. Include
-    // tutti i campi parte + docId per ciascuno; i file identità vanno negli slot
-    // VEND<n>_* (BlobRef) qui sotto.
-    const venditoriPayload = venditori.map((v, i) => ({
-      ordine: i + 1,
-      veicoloOrdine: v.veicoloOrdine,
-      isPG: v.isPG,
-      tipoSoggetto: v.tipoSoggetto,
-      ciTipo: v.ciTipo,
-      nome: v.nome,
-      cognome: v.cognome,
-      cf: v.cf,
-      ragioneSociale: v.ragioneSociale,
-      piva: v.piva,
-      telefono: v.telefono,
-      email: v.email,
-      docId: v.docId,
-    }));
+    // B6: N venditori (co-intestatari) come JSON. Ordine = indice + 1. Le
+    // identità (BlobRef) sono già in blobRefs qui sopra.
+    const venditoriPayload = buildVenditoriSnapshot();
     fd.append('venditori', JSON.stringify(venditoriPayload));
 
     fd.append('acquirenteIsPG', acquirente.isPG ? 'true' : 'false');
@@ -1432,13 +1562,8 @@ function WizardBody({
       fd.append('acquirenteIndirizzoResidenza', acquirenteIndirizzoResidenza.trim());
     }
 
-    // Documenti richiesti (step Documenti) come slot DOC__<docKey> (BlobRef).
-    // Eccezione: i due allegati delega/procura usano la propria chiave DELEGA_*
-    // (non passano per l'engine documenti richiesti).
-    for (const [key, slot] of Object.entries(documenti)) {
-      if (!slot.ref) continue;
-      blobRefs[key.startsWith('DELEGA_') ? key : `DOC__${key}`] = slot.ref;
-    }
+    // Documenti richiesti, identità venditori/acquirente (BlobRef): già
+    // incluse in blobRefs via buildBlobRefsSnapshot sopra.
 
     // Schema Documentale v7 (SD-B): tipo soggetto acquirente.
     // (Per i venditori questo campo è nel JSON `venditori` qui sopra. Le date
@@ -1449,69 +1574,13 @@ function WizardBody({
       fd.append('acquirenteCiTipo', acquirente.ciTipo);
     }
 
-    // B6: documento d'identità + visura + permesso PER venditore negli slot
-    // VEND<n>_* (BlobRef). Il tipo documento (docId) viaggia nel JSON `venditori`.
-    venditori.forEach((v, i) => {
-      const n = i + 1;
-      if (v.docId === 'CI' || v.docId === 'PATENTE') {
-        if (v.identita.fronte?.ref) blobRefs[`VEND${n}_ID_FRONTE`] = v.identita.fronte.ref;
-        if (v.identita.retro?.ref) blobRefs[`VEND${n}_ID_RETRO`] = v.identita.retro.ref;
-      } else if (v.identita.single?.ref) {
-        blobRefs[`VEND${n}_ID`] = v.identita.single.ref;
-      }
-      if (v.identita.permesso?.ref) blobRefs[`VEND${n}_PERMESSO`] = v.identita.permesso.ref;
-      if (v.identita.visura?.ref) blobRefs[`VEND${n}_VISURA`] = v.identita.visura.ref;
-      if (v.identita.codiceFiscale?.ref) blobRefs[`VEND${n}_CF`] = v.identita.codiceFiscale.ref;
-      if (v.identita.codiceFiscaleRetro?.ref)
-        blobRefs[`VEND${n}_CF_RETRO`] = v.identita.codiceFiscaleRetro.ref;
-    });
-
-    // A7: documento d'identità + visura + permesso acquirente (tipo + slot BlobRef).
+    // A7: tipo documento d'identità acquirente (il file BlobRef è già in blobRefs).
     fd.append('acquirenteDocumentoIdentita', acquirenteDocId);
-    if (acquirenteDocId === 'CI' || acquirenteDocId === 'PATENTE') {
-      if (acquirenteIdentita.fronte?.ref) blobRefs['ACQ_ID_FRONTE'] = acquirenteIdentita.fronte.ref;
-      if (acquirenteIdentita.retro?.ref) blobRefs['ACQ_ID_RETRO'] = acquirenteIdentita.retro.ref;
-    } else if (acquirenteIdentita.single?.ref) {
-      blobRefs['ACQ_ID'] = acquirenteIdentita.single.ref;
-    }
-    if (acquirenteIdentita.permesso?.ref) blobRefs['ACQ_PERMESSO'] = acquirenteIdentita.permesso.ref;
-    if (acquirenteIdentita.visura?.ref) blobRefs['ACQ_VISURA'] = acquirenteIdentita.visura.ref;
-    if (acquirenteIdentita.codiceFiscale?.ref) blobRefs['ACQ_CF'] = acquirenteIdentita.codiceFiscale.ref;
-    if (acquirenteIdentita.codiceFiscaleRetro?.ref)
-      blobRefs['ACQ_CF_RETRO'] = acquirenteIdentita.codiceFiscaleRetro.ref;
 
-    // Co-intestatari acquirente (solo SEMPLICE): JSON + slot COACQ<n>_*.
-    const coAcquirentiPayload = coAcquirenti.map((c, i) => ({
-      ordine: i + 1,
-      isPG: c.isPG,
-      nome: c.nome,
-      cognome: c.cognome,
-      cf: c.cf,
-      ragioneSociale: c.ragioneSociale,
-      piva: c.piva,
-      telefono: c.telefono,
-      email: c.email,
-      tipoSoggetto: c.tipoSoggetto,
-      ciTipo: c.ciTipo,
-      docId: c.docId,
-      indirizzoResidenza: c.residenzaDiversa ? c.indirizzoResidenza.trim() : null,
-    }));
+    // Co-intestatari acquirente (solo SEMPLICE): JSON (le identità BlobRef
+    // sono già in blobRefs via buildBlobRefsSnapshot sopra).
+    const coAcquirentiPayload = buildCoAcquirentiSnapshot();
     fd.append('coAcquirenti', JSON.stringify(coAcquirentiPayload));
-
-    coAcquirenti.forEach((c, i) => {
-      const n = i + 1;
-      if (c.docId === 'CI' || c.docId === 'PATENTE') {
-        if (c.identita.fronte?.ref) blobRefs[`COACQ${n}_ID_FRONTE`] = c.identita.fronte.ref;
-        if (c.identita.retro?.ref) blobRefs[`COACQ${n}_ID_RETRO`] = c.identita.retro.ref;
-      } else if (c.identita.single?.ref) {
-        blobRefs[`COACQ${n}_ID`] = c.identita.single.ref;
-      }
-      if (c.identita.permesso?.ref) blobRefs[`COACQ${n}_PERMESSO`] = c.identita.permesso.ref;
-      if (c.identita.visura?.ref) blobRefs[`COACQ${n}_VISURA`] = c.identita.visura.ref;
-      if (c.identita.codiceFiscale?.ref) blobRefs[`COACQ${n}_CF`] = c.identita.codiceFiscale.ref;
-      if (c.identita.codiceFiscaleRetro?.ref)
-        blobRefs[`COACQ${n}_CF_RETRO`] = c.identita.codiceFiscaleRetro.ref;
-    });
 
     // Unico campo FormData con la mappa slot → BlobRef (niente File nel body).
     fd.append('blobRefs', JSON.stringify(blobRefs));
@@ -2750,6 +2819,19 @@ function WizardBody({
             </div>
           </div>
         )}
+
+        {/* CTA discreta comune a tutti gli step (task 5/8 "segnala un
+            problema"): un punto solo nel contenitore condiviso, non ripetuto
+            per ogni {step === N && ...}. */}
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => setShowRevisione(true)}
+            className="text-[12px] text-pv-slate-500 underline underline-offset-2 hover:text-pv-navy-700"
+          >
+            Hai riscontrato un errore nella lettura automatica o nella compilazione? Segnalacelo.
+          </button>
+        </div>
       </div>
 
       <DichiarazionePopup
@@ -2764,11 +2846,11 @@ function WizardBody({
         onClose={() => setShowDichiarazione(false)}
       />
 
-      <RevisioneManualePopup
-        praticaId={null}
-        brokerSedeId={brokerSedeId || null}
+      <SegnalaProblemaPopup
         open={showRevisione}
         onClose={() => setShowRevisione(false)}
+        step={step}
+        buildPayload={buildSegnalazionePayload}
       />
     </>
   );

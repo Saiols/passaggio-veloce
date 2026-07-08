@@ -7,6 +7,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { getStorage } from '@/lib/providers/storage';
 import { sendNotification, getAdminEmails } from '@/lib/notifiche';
+import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { buildDatiSnapshot, documentiDaBlobRefs, type InviaSegnalazioneInput } from './snapshot';
 
 export async function inviaSegnalazioneCreazioneAction(
@@ -84,4 +85,47 @@ export async function inviaSegnalazioneCreazioneAction(
   }
 
   return { ok: true, id: seg.id };
+}
+
+export async function gestisciSegnalazioneCreazioneAction(
+  id: string,
+  nota: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user?.id) redirect('/login');
+  if (!isAdminPiattaforma(session.user.role)) {
+    return { ok: false, error: "Solo l'admin piattaforma può gestire le segnalazioni" };
+  }
+  const notaClean = nota.trim().slice(0, 2000);
+  if (notaClean.length === 0) {
+    return { ok: false, error: 'Scrivi una risposta prima di chiudere la segnalazione' };
+  }
+
+  const seg = await prisma.segnalazioneCreazione.findUnique({
+    where: { id },
+    select: { id: true, stato: true, userId: true, user: { select: { email: true, nome: true } } },
+  });
+  if (!seg) return { ok: false, error: 'Segnalazione non trovata' };
+  if (seg.stato === 'GESTITA') return { ok: false, error: 'Segnalazione già gestita' };
+
+  await prisma.segnalazioneCreazione.update({
+    where: { id },
+    data: {
+      stato: 'GESTITA',
+      notaGestione: notaClean,
+      gestitaAt: new Date(),
+      gestitaDaId: session.user.id,
+    },
+  });
+
+  // Risposta al broker — best effort.
+  if (seg.user?.email) {
+    await sendNotification({
+      tipo: 'N42_BROKER_SEGNALAZIONE_GESTITA',
+      target: { email: seg.user.email, userId: seg.userId },
+      payload: { nota: notaClean, nomeBroker: seg.user.nome ?? '' },
+    }).catch(() => undefined);
+  }
+
+  return { ok: true };
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prismaMock, authMock, getSessionContextMock } = vi.hoisted(() => ({
   prismaMock: {
-    segnalazioneCreazione: { create: vi.fn() },
+    segnalazioneCreazione: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     documento: { createMany: vi.fn() },
     pratica: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
@@ -25,7 +25,7 @@ vi.mock('@/lib/notifiche', () => ({
 vi.mock('@/lib/providers/storage', () => ({ getStorage: () => ({ name: 'vercel-blob' }) }));
 
 import { buildDatiSnapshot, documentiDaBlobRefs } from './snapshot';
-import { inviaSegnalazioneCreazioneAction } from './creazione';
+import { inviaSegnalazioneCreazioneAction, gestisciSegnalazioneCreazioneAction } from './creazione';
 
 const BROKER = 'br-1';
 const SEDE = 'sede-1';
@@ -105,5 +105,35 @@ describe('inviaSegnalazioneCreazioneAction', () => {
     const res = await inviaSegnalazioneCreazioneAction({ ...base, descrizione: 'x'.repeat(25) });
     expect(res.ok).toBe(false);
     expect(prismaMock.segnalazioneCreazione.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('gestisciSegnalazioneCreazioneAction', () => {
+  it('rifiuta un non-admin (nessuna mutazione)', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u1', role: 'OPERATORE', companyType: 'DEALER' } });
+    const res = await gestisciSegnalazioneCreazioneAction('seg1', 'La targa corretta è AB123CD');
+    expect(res.ok).toBe(false);
+    expect(prismaMock.segnalazioneCreazione.update).not.toHaveBeenCalled();
+  });
+
+  it('admin: marca GESTITA, invia email al broker', async () => {
+    authMock.mockResolvedValue({ user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } });
+    prismaMock.segnalazioneCreazione.findUnique.mockResolvedValue({
+      id: 'seg1', stato: 'APERTA', userId: 'u1',
+      user: { email: 'broker@x.it', nome: 'Mario' },
+    });
+    prismaMock.segnalazioneCreazione.update.mockResolvedValue({});
+    const res = await gestisciSegnalazioneCreazioneAction('seg1', 'La targa corretta è AB123CD');
+    expect(res).toEqual({ ok: true });
+    expect(prismaMock.segnalazioneCreazione.update).toHaveBeenCalledTimes(1);
+    const arg = prismaMock.segnalazioneCreazione.update.mock.calls[0][0];
+    expect(arg.data.stato).toBe('GESTITA');
+    expect(arg.data.notaGestione).toContain('AB123CD');
+  });
+
+  it('rifiuta nota vuota', async () => {
+    authMock.mockResolvedValue({ user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } });
+    const res = await gestisciSegnalazioneCreazioneAction('seg1', '   ');
+    expect(res.ok).toBe(false);
   });
 });

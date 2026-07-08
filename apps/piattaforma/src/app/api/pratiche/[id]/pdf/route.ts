@@ -7,6 +7,7 @@ import { appendToFilename } from '@/lib/documenti/filename';
 import { buildPraticaPdf, type PdfEntry } from '@/lib/documenti/pdf';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { canAccessPratica } from '@/lib/pratiche/access';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,20 +48,14 @@ export async function GET(
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
-  const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
-  const userCompanyId = session.user.companyId;
   const ctx = await getSessionContext();
   const scope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
 
-  // Multi-sede: la company non basta — un ADMIN_SEDE non scarica i documenti
-  // di un'altra filiale. L'owner aggregato mantiene l'accesso a tutto il gruppo.
-  const inSede = (sedeId: string | null): boolean =>
-    scope.aggregate || (sedeId != null && scope.scopeIds.includes(sedeId));
-
-  const allowed =
-    isAdmin ||
-    (pratica.brokerId === userCompanyId && inSede(pratica.brokerSedeId)) ||
-    (pratica.agenziaAssegnataId === userCompanyId && inSede(pratica.agenziaSedeId));
+  const allowed = canAccessPratica(pratica, {
+    companyId: session.user.companyId,
+    isAdminPiattaforma: session.user.role === 'ADMIN_PIATTAFORMA',
+    scope,
+  });
 
   if (!allowed) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });

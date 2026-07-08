@@ -6,6 +6,7 @@ import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
 import { documentoDownloadName } from '@/lib/documenti/labels';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { canAccessPratica } from '@/lib/pratiche/access';
 
 export async function GET(
   _req: Request,
@@ -49,21 +50,24 @@ export async function GET(
   const ctx = await getSessionContext();
   const scope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
 
-  // Multi-sede: la company non basta — un ADMIN_SEDE non scarica i documenti
-  // di un'altra filiale. L'owner aggregato mantiene l'accesso a tutto il gruppo.
-  const inSede = (sedeId: string | null): boolean =>
-    scope.aggregate || (sedeId != null && scope.scopeIds.includes(sedeId));
+  // Documento aziendale (nessuna pratica): visura camerale e documento
+  // d'identità del legale rappresentante caricati in registrazione. Appartiene
+  // alla madre, non a una filiale: lo vede il SOLO proprietario, in qualunque
+  // vista — stesso principio di `canViewDocumentoFiscale` per i documenti senza
+  // sede. Senza il gate `isOwner`, un OPERATORE di un'altra sede che indovina
+  // l'UUID scaricherebbe la carta d'identità dell'amministratore.
+  const documentoAziendale =
+    doc.companyId != null && doc.companyId === userCompanyId && !doc.praticaId;
 
   const allowed =
     isAdmin ||
-    // documento caricato dalla company stessa (non legato a pratica)
-    (doc.companyId != null && doc.companyId === userCompanyId && !doc.praticaId) ||
+    (documentoAziendale && scope.isOwner) ||
     (doc.pratica != null &&
-      doc.pratica.brokerId === userCompanyId &&
-      inSede(doc.pratica.brokerSedeId)) ||
-    (doc.pratica != null &&
-      doc.pratica.agenziaAssegnataId === userCompanyId &&
-      inSede(doc.pratica.agenziaSedeId));
+      canAccessPratica(doc.pratica, {
+        companyId: userCompanyId,
+        isAdminPiattaforma: isAdmin,
+        scope,
+      }));
 
   if (!allowed) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });

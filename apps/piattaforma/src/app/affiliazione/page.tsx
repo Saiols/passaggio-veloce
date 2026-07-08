@@ -339,6 +339,18 @@ export default async function AffiliazionePage() {
                 <p className="mt-1 text-[12.5px] text-pv-slate-500">
                   Solo commissioni accreditate dai tuoi referral.
                 </p>
+                {/*
+                  Il grafico legge il wallet affiliazione della madre: mostra
+                  sempre tutte le sedi, anche quando lo switcher ne ha
+                  selezionata una sola (le StatCard invece sono sede-scoped).
+                  È voluto — senza didascalia sembra un errore di calcolo.
+                */}
+                {!scope.aggregate && (
+                  <p className="mt-1 text-[12px] text-pv-slate-500">
+                    Include tutte le sedi: gli incassi di affiliazione sono
+                    dell&apos;azienda, non della sede selezionata.
+                  </p>
+                )}
               </div>
               <p className="text-[20px] font-extrabold text-pv-navy-900">
                 {formatCurrencyCent(earningsRendimento.totalCent)}

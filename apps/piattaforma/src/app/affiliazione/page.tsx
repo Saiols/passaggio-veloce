@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { auth } from '@/auth';
-import { getOperatingSede } from '@/lib/auth/session-context';
+import { getSessionContext, getOperatingSede } from '@/lib/auth/session-context';
+import { toSedeScope } from '@/lib/sedi/scope-filters';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
@@ -43,10 +44,19 @@ export default async function AffiliazionePage() {
 
   const companyId = session.user.companyId!;
 
-  // Multi-sede: il link di affiliazione è quello della sede operativa; le
-  // commissioni e i referral restano a livello madre (companyId). Il rendimento
-  // affiliazione viene dal wallet affiliazione della madre.
+  // Multi-sede: il link di affiliazione è quello della sede operativa e resta
+  // sempre visibile (è lo strumento di lavoro di chiunque). Referral,
+  // commissioni e click invece si restringono alla sede quando non si è in
+  // vista aggregata: `filtroSede`/`filtroClick` sono {} solo per il
+  // proprietario in vista ALL (scope.aggregate), altrimenti filtrano per
+  // `scope.scopeIds` (fail-closed: [] ⇒ nessuna riga).
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) redirect('/login');
+  const scope = toSedeScope(ctx);
   const operatingSede = await getOperatingSede();
+
+  const filtroSede = scope.aggregate ? {} : { referenteSedeId: { in: scope.scopeIds } };
+  const filtroClick = scope.aggregate ? {} : { sedeId: { in: scope.scopeIds } };
 
   const [company, affWallet, sedeRow, referrals, commissioni, clickCount, mieCommissioni] =
     await Promise.all([
@@ -58,12 +68,17 @@ export default async function AffiliazionePage() {
           referralCode: true,
         },
       }),
-      prisma.wallet.findUnique({ where: { companyId }, select: { id: true } }),
+      // Il wallet affiliazione è della madre (companyId, sedeId null): il suo
+      // rendimento resta al proprietario, in qualunque vista sia (isOwner, non
+      // aggregate — vedi nota nel blocco JSX più sotto).
+      scope.isOwner
+        ? prisma.wallet.findUnique({ where: { companyId }, select: { id: true } })
+        : Promise.resolve(null),
       operatingSede
         ? prisma.sede.findUnique({ where: { id: operatingSede.id }, select: { referralCode: true } })
         : Promise.resolve(null),
       prisma.company.findMany({
-        where: { referenteId: companyId, deletedAt: null },
+        where: { referenteId: companyId, deletedAt: null, ...filtroSede },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -76,15 +91,18 @@ export default async function AffiliazionePage() {
         },
       }),
       prisma.commissioneAffiliazione.aggregate({
-        where: { referenteId: companyId, stato: 'ACCREDITATA' },
+        where: { referenteId: companyId, stato: 'ACCREDITATA', ...filtroSede },
         _sum: { importoNettoCent: true },
         _count: { _all: true },
       }),
-      prisma.referralClick.count({ where: { companyId } }),
+      prisma.referralClick.count({ where: { companyId, ...filtroClick } }),
       // Le MIE commissioni (referente = io) con il broker/agenzia della pratica:
       // servono ad attribuire ogni commissione al referral che l'ha generata.
+      // Stesso filtroSede di `referrals`: sono la stessa lista di referral,
+      // devono restare coerenti (altrimenti la tabella mostra importi di
+      // referral che la lista sopra non elenca più).
       prisma.commissioneAffiliazione.findMany({
-        where: { referenteId: companyId },
+        where: { referenteId: companyId, ...filtroSede },
         select: {
           stato: true,
           importoNettoCent: true,
@@ -120,9 +138,13 @@ export default async function AffiliazionePage() {
   const totaleAccreditatoCent = commissioni._sum.importoNettoCent ?? 0;
   const numCommissioni = commissioni._count._all;
 
-  const earningsRendimento = await getRendimento(affWallet?.id ?? null, '12m', [
-    'CREDITO_AFFILIAZIONE',
-  ]);
+  // Rendimento del wallet affiliazione (madre): riservato al proprietario, in
+  // qualunque vista (isOwner) — NON gattato su scope.aggregate: il proprietario
+  // che seleziona una sede nello switcher non deve perdere i propri incassi di
+  // affiliazione, che sono suoi indipendentemente dalla vista corrente.
+  const earningsRendimento = affWallet
+    ? await getRendimento(affWallet.id, '12m', ['CREDITO_AFFILIAZIONE'])
+    : null;
 
   // Base URL per il link di affiliazione: priorità env, fallback host attuale.
   // Punta a /r/<code> (non /register?ref=) per fare pixel tracking del click
@@ -142,24 +164,31 @@ export default async function AffiliazionePage() {
     : null;
 
   // Multi-sede: classifica delle sedi per affiliazione ("chi affilia di più").
-  const sediMadre = await prisma.sede.findMany({
-    where: { companyId, deletedAt: null },
-    select: { id: true, nome: true, referralCode: true },
-    orderBy: { createdAt: 'asc' },
-  });
-  const [clicksBySede, commBySede] = await Promise.all([
-    prisma.referralClick.groupBy({
-      by: ['sedeId'],
-      where: { companyId, sedeId: { not: null } },
-      _count: { _all: true },
-    }),
-    prisma.commissioneAffiliazione.groupBy({
-      by: ['referenteSedeId'],
-      where: { referenteId: companyId, stato: 'ACCREDITATA' },
-      _sum: { importoNettoCent: true },
-      _count: { _all: true },
-    }),
-  ]);
+  // Confronto TRA sedi: ha senso solo per chi le vede tutte insieme, cioè il
+  // proprietario in vista aggregata (scope.aggregate). Per un ADMIN_SEDE
+  // sarebbe una finestra sui numeri dei colleghi delle altre sedi.
+  const sediMadre = scope.aggregate
+    ? await prisma.sede.findMany({
+        where: { companyId, deletedAt: null },
+        select: { id: true, nome: true, referralCode: true },
+        orderBy: { createdAt: 'asc' },
+      })
+    : [];
+  const [clicksBySede, commBySede] = scope.aggregate
+    ? await Promise.all([
+        prisma.referralClick.groupBy({
+          by: ['sedeId'],
+          where: { companyId, sedeId: { not: null } },
+          _count: { _all: true },
+        }),
+        prisma.commissioneAffiliazione.groupBy({
+          by: ['referenteSedeId'],
+          where: { referenteId: companyId, stato: 'ACCREDITATA' },
+          _sum: { importoNettoCent: true },
+          _count: { _all: true },
+        }),
+      ])
+    : [[], []];
   const clickMap = new Map(clicksBySede.map((c) => [c.sedeId, c._count._all]));
   const commMap = new Map(
     commBySede.map((c) => [c.referenteSedeId, c._sum.importoNettoCent ?? 0]),
@@ -262,7 +291,7 @@ export default async function AffiliazionePage() {
           )}
         </Card>
 
-        {sedeLeaderboard.length > 1 && (
+        {scope.aggregate && sedeLeaderboard.length > 1 && (
           <Card className="mb-6">
             <h2 className="text-[15px] font-bold text-pv-navy-800">Classifica sedi</h2>
             <p className="mt-1 text-[12.5px] text-pv-slate-500">
@@ -300,7 +329,7 @@ export default async function AffiliazionePage() {
           </Card>
         )}
 
-        {earningsRendimento.count > 0 && (
+        {earningsRendimento && earningsRendimento.count > 0 && (
           <Card className="mb-6">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>

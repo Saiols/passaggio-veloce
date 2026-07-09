@@ -382,6 +382,7 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
   // scende alla sua sede, poi all'admin azienda. Vedi lib/notifiche/pratica.ts.
   const destinatari = await destinatariBroker(praticaId);
   for (const d of destinatari) {
+    // Un destinatario che fallisce non deve azzerare l'invio agli altri.
     await sendNotification({
       tipo: 'N11_BROKER_ESCALATION',
       target: { email: d.email, userId: d.userId, companyId: pratica.broker.id },
@@ -390,7 +391,7 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
         targa: targaPratica,
         nomeBroker: d.nome,
       },
-    });
+    }).catch(() => undefined);
   }
 
   // Evento in-app (modale) per il broker: nessuna agenzia disponibile.

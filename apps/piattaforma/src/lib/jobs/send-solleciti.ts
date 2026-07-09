@@ -94,8 +94,10 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
             giorniTrascorsi,
           },
         });
-        n3Sent++;
       }
+      // n3Sent conta le pratiche sollecitate, non le email inviate: un solo
+      // incremento anche quando la pratica ha più destinatari (sede + admin).
+      if (destinatari.length > 0) n3Sent++;
     } catch {
       /* errori swallowed — già tracciati in NotificaInviata (stato=FAILED) */
     }

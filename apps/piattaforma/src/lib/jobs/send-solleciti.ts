@@ -79,6 +79,8 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
       const agenziaNome = p.agenziaAssegnata?.ragioneSociale ?? 'agenzia assegnata';
 
       for (const d of destinatari) {
+        // Un destinatario che fallisce (es. hiccup DB in sendNotification) non
+        // deve impedire l'invio agli altri destinatari della stessa pratica.
         await sendNotification({
           tipo: 'N3_BROKER_SOLLECITO',
           target: {
@@ -93,7 +95,7 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
             nomeBroker: d.nome,
             giorniTrascorsi,
           },
-        });
+        }).catch(() => undefined);
       }
       // n3Sent conta le pratiche sollecitate, non le email inviate: un solo
       // incremento anche quando la pratica ha più destinatari (sede + admin).

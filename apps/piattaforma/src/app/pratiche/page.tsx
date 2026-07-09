@@ -12,21 +12,9 @@ import { DownloadDocumentiButton } from './download-documenti-button';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 import { StatoExtraInfo } from './stato-extra-info';
 import { statoExtra } from '@/lib/pratiche/stato-extra';
+import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 
 const PAGE_SIZE = 15;
-
-// Griglia condivisa header+righe della lista pratiche. Ogni riga è un box
-// block-level (NON <tr>/<td>): così `position:relative` sulla riga fa da
-// containing block AFFIDABILE anche su iOS Safari/WebKit — che invece NON onora
-// relative sugli elementi interni di tabella, rompendo lo stretched-link (tap
-// che apre la pratica sbagliata / righe non cliccabili in landscape). Il numero
-// di tracce cambia per breakpoint per combaciare con le colonne visibili
-// (proprietario da sm, broker da md, fee da lg).
-const GRID_COLS =
-  'grid-cols-[minmax(6rem,auto)_minmax(4.5rem,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
-  'sm:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
-  'md:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
-  'lg:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,auto)_minmax(3.5rem,auto)_minmax(4.5rem,auto)]';
 
 // Filtri stato per la lista pratiche broker/agenzia (item 10 release 2026-05).
 // Niente R1/R2/R3 ne "Escalation": questi dettagli sono interni al motore di
@@ -83,6 +71,7 @@ export default async function PratichePage({
   const sp = await searchParams;
   const companyType = session.user.companyType;
   const companyId = session.user.companyId;
+  const isAgenzia = companyType === 'AGENZIA';
 
   if (!companyId) {
     return (
@@ -155,7 +144,7 @@ export default async function PratichePage({
         <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-              {companyType === 'AGENZIA' ? 'Pratiche assegnate' : 'Le tue pratiche'}
+              {isAgenzia ? 'Pratiche assegnate' : 'Le tue pratiche'}
             </p>
             <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
               Pratiche
@@ -165,7 +154,7 @@ export default async function PratichePage({
               {sp.stato || sp.periodo || q ? ' · filtri attivi' : ''}
             </p>
           </div>
-          {companyType !== 'AGENZIA' && (
+          {!isAgenzia && (
             <div className="flex flex-wrap items-center gap-2">
               {/* Bundle ZIP di tutti i documenti delle pratiche del broker,
                   una cartella per codice pratica (+ toast al click). */}
@@ -189,108 +178,106 @@ export default async function PratichePage({
           {items.length === 0 ? (
             <div className="px-5 py-16 text-center">
               <p className="text-[14px] text-pv-slate-500">Nessuna pratica trovata.</p>
-              {companyType !== 'AGENZIA' && (
+              {!isAgenzia && (
                 <Link href="/pratiche/nuova" className="mt-3 inline-block">
                   <Button size="sm">Crea la prima</Button>
                 </Link>
               )}
             </div>
           ) : (
-            <div className="text-[13px]">
-              <div
-                className={`grid ${GRID_COLS} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
-              >
-                <div className="px-5 py-3">Codice</div>
-                <div className="px-5 py-3">Targa</div>
-                <div className="px-5 py-3 hidden sm:block">Proprietario</div>
-                <div className="px-5 py-3 hidden md:block">
-                  {companyType === 'AGENZIA' ? 'Broker' : 'Agenzia'}
-                </div>
-                <div className="px-5 py-3">Stato</div>
-                <div className="px-5 py-3 hidden lg:block">Fee</div>
-                <div className="px-5 py-3 text-right">Quando</div>
-              </div>
-              <div className="divide-y divide-pv-slate-200">
-                {items.map((p) => {
-                  const extra = statoExtra({
-                    stato: p.stato as PraticaStato,
-                    flagSegnalata: p.flagSegnalata,
-                    segnalazioneStato: p.segnalazioneStato,
-                    tipoSegnalazione: p.tipoSegnalazione,
-                    notaSegnalazione: p.notaSegnalazione,
-                    penaleAddebitatoCent: p.penaleAddebitatoCent,
-                    revisioneCompletata: p.revisioneCompletata,
-                    richiedeRevisioneManuale: p.richiedeRevisioneManuale,
-                  });
-                  return (
-                  <div
-                    key={p.id}
-                    className={`relative grid ${GRID_COLS} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
-                  >
-                    {/* Anchor a tutta riga: block-level parent → containing block
-                        affidabile su ogni browser (fix iOS). Resta un vero <a>,
-                        quindi overlay di navigazione, apri-in-nuova-scheda e
-                        focus da tastiera continuano a funzionare. */}
-                    <Link
-                      href={`/pratiche/${p.id}`}
-                      aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
-                      className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
-                    />
-                    <div className="px-5 py-3 font-mono font-semibold text-pv-navy-800">
-                      {p.codicePratica ?? 'BOZZA'}
-                    </div>
-                    <div className="px-5 py-3 font-semibold text-pv-slate-900">
-                      {p.veicoli[0]?.targa
-                        ? p.veicoli.length > 1
-                          ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
-                          : p.veicoli[0].targa
-                        : '—'}
-                    </div>
-                    <div className="px-5 py-3 hidden text-pv-slate-700 sm:block">
-                      {p.veicoli[0]?.proprietarioAttuale ?? '—'}
-                    </div>
-                    <div className="px-5 py-3 hidden text-pv-slate-700 md:block">
-                      {companyType === 'AGENZIA'
-                        ? p.broker.ragioneSociale
-                        : p.agenziaAssegnata?.ragioneSociale ?? '—'}
-                    </div>
-                    <div className="px-5 py-3">
-                      {/* z-10 per stare SOPRA lo stretched-link: chip, info e i
-                          pulsanti azione restano cliccabili senza navigare. */}
-                      <span className="relative z-10 inline-flex items-center gap-2">
-                        <StatusChip
-                          stato={p.stato as PraticaStato}
-                          tone={extra?.kind === 'ANNULLATA_TEAM' ? 'danger' : undefined}
-                          viewerRole={companyType === 'AGENZIA' ? 'AGENZIA' : 'BROKER'}
-                        />
-                        <StatoExtraInfo extra={extra} />
-                        {companyType === 'AGENZIA' &&
-                          p.agenziaAssegnataId === companyId &&
-                          p.stato === 'ACCETTATA' && (
-                            <QuickActionButton
-                              praticaId={p.id}
-                              action="processata"
-                            />
-                          )}
-                        {companyType === 'AGENZIA' &&
-                          p.agenziaAssegnataId === companyId &&
-                          p.stato === 'PROCESSATA' && (
-                            <QuickActionButton
-                              praticaId={p.id}
-                              action="firma"
-                            />
-                          )}
-                      </span>
-                    </div>
-                    <div className="px-5 py-3 hidden text-pv-slate-700 lg:block">
-                      {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
-                    </div>
-                    <div className="px-5 py-3 text-right text-pv-slate-500">
-                      {formatRelative(p.submittedAt ?? p.createdAt)}
-                    </div>
+            <div className="overflow-x-auto">
+              <div className={`${PRATICHE_TABLE_MIN_W} text-[13px]`}>
+                <div
+                  className={`grid ${PRATICHE_GRID.utenteSenzaSede} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
+                >
+                  <div className="py-3 pl-5 pr-3">Codice</div>
+                  <div className="px-3 py-3">Targa</div>
+                  <div className="hidden px-3 py-3 sm:block">Proprietario</div>
+                  <div className="hidden px-3 py-3 md:block">
+                    {isAgenzia ? 'Broker' : 'Agenzia'}
                   </div>
-                  );
-                })}
+                  <div className="px-3 py-3">Stato</div>
+                  <div className="hidden px-3 py-3 lg:block">Fee</div>
+                  <div className="py-3 pl-3 pr-5 text-right">Quando</div>
+                </div>
+                <div className="divide-y divide-pv-slate-200">
+                  {items.map((p) => {
+                    const extra = statoExtra({
+                      stato: p.stato as PraticaStato,
+                      flagSegnalata: p.flagSegnalata,
+                      segnalazioneStato: p.segnalazioneStato,
+                      tipoSegnalazione: p.tipoSegnalazione,
+                      notaSegnalazione: p.notaSegnalazione,
+                      penaleAddebitatoCent: p.penaleAddebitatoCent,
+                      revisioneCompletata: p.revisioneCompletata,
+                      richiedeRevisioneManuale: p.richiedeRevisioneManuale,
+                    });
+                    return (
+                      <div
+                        key={p.id}
+                        className={`relative grid ${PRATICHE_GRID.utenteSenzaSede} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
+                      >
+                        {/* Anchor a tutta riga: block-level parent → containing block
+                            affidabile su ogni browser (fix iOS). Resta un vero <a>,
+                            quindi overlay di navigazione, apri-in-nuova-scheda e
+                            focus da tastiera continuano a funzionare. */}
+                        <Link
+                          href={`/pratiche/${p.id}`}
+                          aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
+                          className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+                        />
+                        <div className="min-w-0 truncate py-3 pl-5 pr-3 font-mono font-semibold text-pv-navy-800">
+                          {p.codicePratica ?? 'BOZZA'}
+                        </div>
+                        <div className="min-w-0 truncate px-3 py-3 font-semibold text-pv-slate-900">
+                          {p.veicoli[0]?.targa
+                            ? p.veicoli.length > 1
+                              ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                              : p.veicoli[0].targa
+                            : '—'}
+                        </div>
+                        <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 sm:block">
+                          {p.veicoli[0]?.proprietarioAttuale ?? '—'}
+                        </div>
+                        <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 md:block">
+                          {isAgenzia
+                            ? p.broker.ragioneSociale
+                            : p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                        </div>
+                        <div className="min-w-0 px-3 py-3">
+                          {/* z-10 per stare SOPRA lo stretched-link: chip, info e i
+                              pulsanti azione restano cliccabili senza navigare.
+                              flex-wrap: il pulsante va a capo invece di allargare
+                              la traccia e disallineare la colonna. */}
+                          <span className="relative z-10 inline-flex flex-wrap items-center gap-2">
+                            <StatusChip
+                              stato={p.stato as PraticaStato}
+                              tone={extra?.kind === 'ANNULLATA_TEAM' ? 'danger' : undefined}
+                              viewerRole={isAgenzia ? 'AGENZIA' : 'BROKER'}
+                            />
+                            <StatoExtraInfo extra={extra} />
+                            {isAgenzia &&
+                              p.agenziaAssegnataId === companyId &&
+                              p.stato === 'ACCETTATA' && (
+                                <QuickActionButton praticaId={p.id} action="processata" />
+                              )}
+                            {isAgenzia &&
+                              p.agenziaAssegnataId === companyId &&
+                              p.stato === 'PROCESSATA' && (
+                                <QuickActionButton praticaId={p.id} action="firma" />
+                              )}
+                          </span>
+                        </div>
+                        <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
+                          {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                        </div>
+                        <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
+                          {formatRelative(p.submittedAt ?? p.createdAt)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}

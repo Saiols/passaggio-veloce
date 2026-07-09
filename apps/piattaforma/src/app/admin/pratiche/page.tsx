@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { AdminPraticheFilters } from './filters';
+import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 
 const STATI: { value: string; label: string }[] = [
   { value: '', label: 'Tutti gli stati' },
@@ -36,15 +37,6 @@ const PRIORITY: Record<string, number> = {
 };
 
 type SearchParams = { q?: string; stato?: string };
-
-// Griglia condivisa header+righe: righe block-level (NON <tr>/<td>) così
-// `position:relative` fa da containing block affidabile su iOS Safari e lo
-// stretched-link della riga funziona ovunque. Broker+Agenzia compaiono da md,
-// Fee da lg. Vedi il gemello in app/pratiche/page.tsx.
-const GRID_COLS =
-  'grid-cols-[minmax(6rem,auto)_minmax(4.5rem,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
-  'md:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,auto)_minmax(4.5rem,auto)] ' +
-  'lg:grid-cols-[minmax(6rem,auto)_minmax(4.5rem,auto)_minmax(0,1fr)_minmax(0,1fr)_minmax(7rem,auto)_minmax(3.5rem,auto)_minmax(4.5rem,auto)]';
 
 export default async function AdminPratichePage({
   searchParams,
@@ -117,60 +109,62 @@ export default async function AdminPratichePage({
               <p className="text-[14px] text-pv-slate-500">Nessuna pratica trovata.</p>
             </div>
           ) : (
-            <div className="text-[13px]">
-              <div
-                className={`grid ${GRID_COLS} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
-              >
-                <div className="px-5 py-3">Codice</div>
-                <div className="px-5 py-3">Targa</div>
-                <div className="px-5 py-3 hidden md:block">Broker</div>
-                <div className="px-5 py-3 hidden md:block">Agenzia</div>
-                <div className="px-5 py-3">Stato</div>
-                <div className="px-5 py-3 hidden lg:block">Fee</div>
-                <div className="px-5 py-3 text-right">Quando</div>
-              </div>
-              <div className="divide-y divide-pv-slate-200">
-                {sorted.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`relative grid ${GRID_COLS} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
-                  >
-                    {/* Anchor a tutta riga su parent block-level: containing
-                        block affidabile su iOS Safari (fix tap/landscape). */}
-                    <Link
-                      href={`/pratiche/${p.id}`}
-                      aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
-                      className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
-                    />
-                    <div className="px-5 py-3 font-mono font-semibold text-pv-navy-800">
-                      {p.codicePratica ?? 'BOZZA'}
+            <div className="overflow-x-auto">
+              <div className={`${PRATICHE_TABLE_MIN_W} text-[13px]`}>
+                <div
+                  className={`grid ${PRATICHE_GRID.admin} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
+                >
+                  <div className="py-3 pl-5 pr-3">Codice</div>
+                  <div className="px-3 py-3">Targa</div>
+                  <div className="hidden px-3 py-3 md:block">Broker</div>
+                  <div className="hidden px-3 py-3 md:block">Agenzia</div>
+                  <div className="px-3 py-3">Stato</div>
+                  <div className="hidden px-3 py-3 lg:block">Fee</div>
+                  <div className="py-3 pl-3 pr-5 text-right">Quando</div>
+                </div>
+                <div className="divide-y divide-pv-slate-200">
+                  {sorted.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`relative grid ${PRATICHE_GRID.admin} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
+                    >
+                      {/* Anchor a tutta riga su parent block-level: containing
+                          block affidabile su iOS Safari (fix tap/landscape). */}
+                      <Link
+                        href={`/pratiche/${p.id}`}
+                        aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
+                        className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
+                      />
+                      <div className="min-w-0 truncate py-3 pl-5 pr-3 font-mono font-semibold text-pv-navy-800">
+                        {p.codicePratica ?? 'BOZZA'}
+                      </div>
+                      <div className="min-w-0 truncate px-3 py-3">
+                        {p.veicoli[0]?.targa
+                          ? p.veicoli.length > 1
+                            ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                            : p.veicoli[0].targa
+                          : '—'}
+                      </div>
+                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 md:block">
+                        {p.broker.ragioneSociale}
+                      </div>
+                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 md:block">
+                        {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                      </div>
+                      <div className="min-w-0 px-3 py-3">
+                        <span className="relative z-10 inline-flex flex-wrap items-center gap-2">
+                          <StatusChip stato={p.stato as PraticaStato} />
+                        </span>
+                      </div>
+                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
+                        {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                      </div>
+                      <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
+                        {formatRelative(p.submittedAt ?? p.createdAt)}
+                      </div>
                     </div>
-                    <div className="px-5 py-3">
-                      {p.veicoli[0]?.targa
-                        ? p.veicoli.length > 1
-                          ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
-                          : p.veicoli[0].targa
-                        : '—'}
-                    </div>
-                    <div className="px-5 py-3 hidden text-pv-slate-700 md:block">
-                      {p.broker.ragioneSociale}
-                    </div>
-                    <div className="px-5 py-3 hidden text-pv-slate-700 md:block">
-                      {p.agenziaAssegnata?.ragioneSociale ?? '—'}
-                    </div>
-                    <div className="px-5 py-3">
-                      <span className="relative z-10 inline-flex">
-                        <StatusChip stato={p.stato as PraticaStato} />
-                      </span>
-                    </div>
-                    <div className="px-5 py-3 hidden text-pv-slate-700 lg:block">
-                      {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
-                    </div>
-                    <div className="px-5 py-3 text-right text-pv-slate-500">
-                      {formatRelative(p.submittedAt ?? p.createdAt)}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           )}

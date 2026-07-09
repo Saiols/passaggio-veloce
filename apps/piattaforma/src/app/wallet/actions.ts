@@ -33,14 +33,23 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
   // Wallet incassabili: sede operativa (pratiche) + madre (affiliazione,
   // riservata al proprietario — R5).
   const sede = await getOperatingSede();
+  if (!sede) {
+    return { ok: false, error: 'Seleziona una sede per richiedere il payout' };
+  }
+  // Il payout è un'operazione finanziaria della sede: la chiede il titolare o
+  // l'admin di quella sede, non un operatore. Stesso predicato usato per la
+  // soglia payout (updatePayoutThresholdAction, poco più sotto).
+  const role = await getSedeRole(sede.id);
+  if (!canEditSedeSettings(role)) {
+    return { ok: false, error: 'Non hai i permessi per richiedere il payout di questa sede' };
+  }
+
   const includeAffiliazione = isOwner(session.user.role);
   const [walletSede, walletMadre] = await Promise.all([
-    sede
-      ? prisma.wallet.findUnique({
-          where: { sedeId: sede.id },
-          select: { id: true, saldoCent: true },
-        })
-      : null,
+    prisma.wallet.findUnique({
+      where: { sedeId: sede.id },
+      select: { id: true, saldoCent: true },
+    }),
     includeAffiliazione
       ? prisma.wallet.findUnique({
           where: { companyId: session.user.companyId },

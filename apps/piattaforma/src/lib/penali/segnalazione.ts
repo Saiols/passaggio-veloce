@@ -13,6 +13,7 @@ import { destinatariAgenzia } from '@/lib/notifiche/pratica';
 import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
+import { walletBrokerDellaPratica } from '@/lib/wallet/wallet-pratica';
 import { PENALI } from './config';
 
 export type SegnalazioneTipo =
@@ -208,12 +209,10 @@ export async function confermaAnnullamentoConPenaleAction(
       const now = new Date();
       const importoPenaleCent = PENALI.PENALE_BROKER_DEFAULT_CENT;
 
-      // Wallet broker (lazy create)
-      const wallet = await tx.wallet.upsert({
-        where: { companyId: pratica.brokerId },
-        update: {},
-        create: { companyId: pratica.brokerId, saldoCent: 0 },
-      });
+      // Wallet operativo della pratica: quello della SEDE del broker. Cercarlo
+      // per companyId ne creava uno nuovo "madre", invisibile a operatori e
+      // admin di sede — e lo storno qui sotto non trovava mai il credito.
+      const wallet = await walletBrokerDellaPratica(tx, pratica);
       let saldo = wallet.saldoCent;
 
       // Storno del compenso pratica SOLO se già accreditato. Di norma la

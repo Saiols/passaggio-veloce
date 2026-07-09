@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
+import {
+  getOperatingSede,
+  getSedeRole,
+  getSessionContext,
+} from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
@@ -15,6 +19,7 @@ import { getRendimento, type RendimentoPeriod } from './rendimento';
 import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
 import { RendicontoCard } from './rendiconto-card';
+import { WalletAggregato } from './wallet-aggregato';
 import { isOwner } from '@/lib/auth/permissions';
 import {
   motivoPenaleSegnalazione,
@@ -57,12 +62,110 @@ export default async function WalletPage({
   // Multi-sede: il wallet operativo è quello della sede corrente.
   const sede = await getOperatingSede();
   if (!sede) {
+    const ctx = await getSessionContext();
+    // Solo il proprietario può trovarsi senza sede operativa (vista "tutte le
+    // sedi"). Per chiunque altro `resolveOperatingSede` restituisce una sede.
+    if (!ctx?.isOwner || ctx.accessibleSedi.length === 0) {
+      return (
+        <AppShell session={session} activePath="/wallet">
+          <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
+            <Alert variant="info">
+              Seleziona una sede dal menù in alto per vederne il wallet.
+            </Alert>
+          </div>
+        </AppShell>
+      );
+    }
+
+    const sedeIds = ctx.accessibleSedi.map((s) => s.id);
+    const nomeSede = new Map(ctx.accessibleSedi.map((s) => [s.id, s.nome]));
+
+    const [walletsSede, walletMadreAgg] = await Promise.all([
+      prisma.wallet.findMany({
+        where: { sedeId: { in: sedeIds } },
+        include: { transazioni: { orderBy: { createdAt: 'desc' }, take: 20 } },
+      }),
+      ctx.companyId
+        ? prisma.wallet.findUnique({
+            where: { companyId: ctx.companyId },
+            include: { transazioni: { orderBy: { createdAt: 'desc' }, take: 20 } },
+          })
+        : null,
+    ]);
+
+    const saldoAffiliazioneCent = walletMadreAgg?.saldoCent ?? 0;
+    const totaleCent =
+      walletsSede.reduce((acc, w) => acc + w.saldoCent, 0) + saldoAffiliazioneCent;
+
+    // Una riga per OGNI sede accessibile, anche senza wallet: saldo 0.
+    const righe = ctx.accessibleSedi.map((s) => ({
+      sedeId: s.id,
+      nome: s.nome,
+      saldoCent: walletsSede.find((w) => w.sedeId === s.id)?.saldoCent ?? 0,
+    }));
+
+    const movimenti = [
+      ...walletsSede.flatMap((w) =>
+        w.transazioni.map((t) => ({
+          id: t.id,
+          createdAt: t.createdAt,
+          tipo: labelTipoTx(t.tipo),
+          importoCent: t.importoCent,
+          // `w.sedeId` è sempre valorizzato qui: la query filtra
+          // `sedeId: { in: sedeIds }`. Narrowing esplicito invece di `!`.
+          origine: w.sedeId ? (nomeSede.get(w.sedeId) ?? null) : null,
+        })),
+      ),
+      ...(walletMadreAgg?.transazioni ?? []).map((t) => ({
+        id: t.id,
+        createdAt: t.createdAt,
+        tipo: labelTipoTx(t.tipo),
+        importoCent: t.importoCent,
+        origine: null,
+      })),
+    ]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 20);
+
+    // Rendimento aggregato: `getRendimento` accetta già una lista di walletId,
+    // quindi aggregare i wallet di tutte le sedi costa una riga.
+    const periodAgg: RendimentoPeriod = PERIOD_OPTIONS.some((o) => o.value === sp.rendimento)
+      ? (sp.rendimento as RendimentoPeriod)
+      : '30d';
+    const rendimentoAgg = await getRendimento(
+      [...walletsSede.map((w) => w.id), walletMadreAgg?.id].filter((x): x is string => !!x),
+      periodAgg,
+      ['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE'],
+    );
+
     return (
       <AppShell session={session} activePath="/wallet">
-        <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
-          <Alert variant="info">
-            Seleziona una sede dal menù in alto per vederne il wallet.
-          </Alert>
+        <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+          <header className="mb-7">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+              Area finanziaria
+            </p>
+            <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
+              Wallet · tutte le sedi
+            </h1>
+            <p className="mt-1 text-[14px] text-pv-slate-500">
+              Vista di sola lettura. Per richiedere un payout seleziona la sede.
+            </p>
+          </header>
+
+          <WalletAggregato
+            totaleCent={totaleCent}
+            saldoAffiliazioneCent={saldoAffiliazioneCent}
+            righe={righe}
+            movimenti={movimenti}
+          />
+
+          <Card className="mt-6">
+            <h2 className="text-base font-bold text-pv-navy-900">Rendimento</h2>
+            <div className="mt-4">
+              <RendimentoChart buckets={rendimentoAgg.buckets} accent="navy" />
+            </div>
+          </Card>
         </div>
       </AppShell>
     );
@@ -292,6 +395,7 @@ export default async function WalletPage({
           <RendimentoChart buckets={rendimento.buckets} accent="navy" />
         </Card>
 
+        {canEditSedeSettings(sedeRole) && (
         <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
           <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
           <p className="mt-1 text-sm text-pv-slate-500">
@@ -338,6 +442,7 @@ export default async function WalletPage({
             </div>
           )}
         </div>
+        )}
 
         {/*
           Il rendiconto PDF è l'estratto conto del wallet della madre (crediti

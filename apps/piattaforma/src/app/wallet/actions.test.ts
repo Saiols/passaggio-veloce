@@ -28,6 +28,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { companyType: 'DEALER', companyId: 'c1' } });
   getOperatingSedeMock.mockResolvedValue({ id: 's1' });
+  // Default: titolare della sede. I test su richiediPayoutAction in questo file
+  // coprono mandato/esecuzione/R5, non il gate di ruolo (coperto in
+  // actions.authz.test.ts) — i test su updatePayoutThresholdAction più sotto
+  // sovrascrivono questo mock per-caso.
+  getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
   // Wallet di sede eleggibile; nessun wallet madre (broker senza affiliazione).
   prismaMock.wallet.findUnique.mockImplementation(({ where }: { where: { sedeId?: string; companyId?: string } }) =>
     Promise.resolve(where.sedeId ? { id: 'w1', saldoCent: 80_000 } : null),

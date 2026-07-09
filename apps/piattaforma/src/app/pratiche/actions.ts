@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
+import { destinatariBroker } from '@/lib/notifiche/pratica';
 import {
   accreditCommissioniAffiliazione,
   type AccreditoEseguito,
@@ -181,30 +182,31 @@ async function processaPraticaCore(praticaId: string): Promise<QuickActionResult
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
     });
-    const brokerUser = full?.broker.users[0];
-    // Ripiega sull'email azienda se manca l'admin attivo: la notifica non deve
-    // sparire in silenzio (coerente con N3).
-    const brokerEmail = brokerUser?.email ?? full?.broker.email;
-    if (full && brokerEmail) {
-      await sendNotification({
-        tipo: 'N13_BROKER_PRATICA_PROCESSATA',
-        target: {
-          email: brokerEmail,
-          userId: brokerUser?.id ?? null,
-          companyId: full.broker.id,
-        },
-        payload: {
-          codicePratica: full.codicePratica ?? '—',
-          targa:
-            full.veicoli[0]?.targa
-              ? full.veicoli.length > 1
-                ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
-                : full.veicoli[0].targa
-              : null,
-          agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
-          nomeBroker: brokerUser?.nome ?? full.broker.ragioneSociale,
-        },
-      }).catch(() => undefined);
+    // Recapito: chi ha creato la pratica; se non è più raggiungibile la catena
+    // scende alla sua sede, poi all'admin azienda. Vedi lib/notifiche/pratica.ts.
+    const destinatari = await destinatariBroker(praticaId);
+    if (full) {
+      for (const d of destinatari) {
+        await sendNotification({
+          tipo: 'N13_BROKER_PRATICA_PROCESSATA',
+          target: {
+            email: d.email,
+            userId: d.userId,
+            companyId: full.broker.id,
+          },
+          payload: {
+            codicePratica: full.codicePratica ?? '—',
+            targa:
+              full.veicoli[0]?.targa
+                ? full.veicoli.length > 1
+                  ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
+                  : full.veicoli[0].targa
+                : null,
+            agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
+            nomeBroker: d.nome,
+          },
+        }).catch(() => undefined);
+      }
     }
     if (full?.codicePratica) {
       await emitEventoPratica(
@@ -424,8 +426,10 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
             : full.veicoli[0].targa
           : null;
       const brokerUser = full.broker.users[0];
-      // Ripiega sull'email azienda se manca l'admin attivo: N4/N31 non devono
-      // sparire in silenzio (coerente con N3).
+      // Ripiega sull'email azienda se manca l'admin attivo: N4 non deve
+      // sparire in silenzio (coerente con N3). N4 resta all'admin azienda,
+      // non passa dal risolutore: espone credito e saldo wallet, dati
+      // dell'entità legale.
       const brokerEmail = brokerUser?.email ?? full.broker.email;
       const nomeBroker = brokerUser?.nome ?? full.broker.ragioneSociale;
       if (brokerEmail) {
@@ -445,19 +449,24 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
             nomeBroker,
           },
         }).catch(() => undefined);
+      }
 
+      // N31: recapito diverso da N4 -- chi lavora la pratica (creatore, sede,
+      // admin azienda a scendere), non l'admin azienda soltanto.
+      const destinatari = await destinatariBroker(praticaId);
+      for (const d of destinatari) {
         await sendNotification({
           tipo: 'N31_VALUTA_AGENZIA',
           target: {
-            email: brokerEmail,
-            userId: brokerUser?.id ?? null,
+            email: d.email,
+            userId: d.userId,
             companyId: full.broker.id,
           },
           payload: {
             codicePratica: full.codicePratica ?? '—',
             targa: fullTarga,
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
-            nomeBroker,
+            nomeBroker: d.nome,
             praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${praticaId}`,
           },
         }).catch(() => undefined);

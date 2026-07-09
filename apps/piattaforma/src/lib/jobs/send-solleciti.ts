@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { env } from '@/env';
 import { sendNotification } from '@/lib/notifiche';
+import { destinatariBroker } from '@/lib/notifiche/pratica';
 
 /** In DEMO i solleciti scattano dopo 5 minuti dall'accettazione; in produzione dopo 5 giorni. */
 const SOGLIA_DEMO_MS = 5 * 60_000;
@@ -71,27 +72,30 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
 
     // N3 — sollecito al broker (dealer) affinché solleciti l'agenzia a firmare
     try {
-      const brokerUser = p.broker.users[0];
-      const brokerEmail = brokerUser?.email ?? p.broker.email;
-      const nomeBroker = brokerUser?.nome ?? p.broker.ragioneSociale;
+      // Recapito: chi ha creato la pratica; se non è più raggiungibile la
+      // catena scende alla sua sede, poi all'admin azienda. Vedi
+      // lib/notifiche/pratica.ts.
+      const destinatari = await destinatariBroker(p.id);
       const agenziaNome = p.agenziaAssegnata?.ragioneSociale ?? 'agenzia assegnata';
 
-      await sendNotification({
-        tipo: 'N3_BROKER_SOLLECITO',
-        target: {
-          email: brokerEmail,
-          userId: brokerUser?.id ?? null,
-          companyId: p.broker.id,
-        },
-        payload: {
-          codicePratica: codice,
-          targa: targaPratica,
-          agenziaNome,
-          nomeBroker,
-          giorniTrascorsi,
-        },
-      });
-      n3Sent++;
+      for (const d of destinatari) {
+        await sendNotification({
+          tipo: 'N3_BROKER_SOLLECITO',
+          target: {
+            email: d.email,
+            userId: d.userId,
+            companyId: p.broker.id,
+          },
+          payload: {
+            codicePratica: codice,
+            targa: targaPratica,
+            agenziaNome,
+            nomeBroker: d.nome,
+            giorniTrascorsi,
+          },
+        });
+        n3Sent++;
+      }
     } catch {
       /* errori swallowed — già tracciati in NotificaInviata (stato=FAILED) */
     }

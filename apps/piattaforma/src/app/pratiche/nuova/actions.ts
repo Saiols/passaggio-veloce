@@ -19,6 +19,7 @@ import {
 import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { avviaRound1ForPratica } from '@/lib/distribuzione';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
+import { destinatariBroker } from '@/lib/notifiche/pratica';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { crossCheckPerVeicolo } from './venditori-per-veicolo';
 import {
@@ -1626,26 +1627,24 @@ export async function submitNuovaPraticaAction(
   const round1 = await avviaRound1ForPratica(pratica.id);
 
   // N1 — conferma invio al broker.
-  // Email/nome freschi dal DB, NON dalla sessione: il JWT porta l'email
-  // congelata al login, quindi se l'utente l'ha appena cambiata dal profilo la
-  // conferma finirebbe al vecchio recapito finché non ri-logga. Il DB è la
-  // fonte autoritativa del recapito corrente.
+  // Recapito dal DB, non dalla sessione (il JWT porta l'email congelata al
+  // login). Il risolutore lo garantisce, e applica la regola del super admin:
+  // se a creare è il titolare, riceve anche la sede da cui ha operato.
   if (round1.assegnazioni > 0) {
-    const dest = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true, nome: true },
-    });
-    if (dest?.email) {
+    const destinatari = await destinatariBroker(pratica.id);
+    // Nome breve: "dest" per non ombreggiare "d" (i dati del form, usati sotto
+    // per comune/provincia e ancora in scope in questa funzione).
+    for (const dest of destinatari) {
       await sendNotification({
         tipo: 'N1_BROKER_INVIO_PRATICA',
-        target: { email: dest.email, userId, companyId: brokerId },
+        target: { email: dest.email, userId: dest.userId, companyId: brokerId },
         payload: {
           codicePratica,
           targa: veicoli[0]!.targa,
           comune: d.comune,
           provincia: d.provincia,
           numeroAgenzie: round1.assegnazioni,
-          nomeBroker: dest.nome?.split(' ')[0] ?? 'utente',
+          nomeBroker: dest.nome.split(' ')[0],
         },
       }).catch(() => undefined);
     }

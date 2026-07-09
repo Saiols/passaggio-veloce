@@ -13,6 +13,7 @@ import {
 } from '@/lib/notifiche';
 import { emitEventiPratica, emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoNuovaPratica, eventoPraticaEscalation } from '@/lib/eventi/pratica-eventi';
+import { destinatariBroker } from '@/lib/notifiche/pratica';
 
 const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
   1: DISTRIBUZIONE.T1_HOURS,
@@ -377,18 +378,17 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
 
   await sendNotifications(targets);
 
-  const brokerUser = pratica.broker.users[0];
-  // Ripiega sull'email azienda se manca l'admin attivo (coerente con N3): la
-  // notifica al broker non deve sparire in silenzio.
-  const brokerEmail = brokerUser?.email ?? pratica.broker.email;
-  if (brokerEmail) {
+  // Recapito: chi ha creato la pratica; se non è più raggiungibile la catena
+  // scende alla sua sede, poi all'admin azienda. Vedi lib/notifiche/pratica.ts.
+  const destinatari = await destinatariBroker(praticaId);
+  for (const d of destinatari) {
     await sendNotification({
       tipo: 'N11_BROKER_ESCALATION',
-      target: { email: brokerEmail, userId: brokerUser?.id ?? null, companyId: pratica.broker.id },
+      target: { email: d.email, userId: d.userId, companyId: pratica.broker.id },
       payload: {
         codicePratica: pratica.codicePratica ?? '—',
         targa: targaPratica,
-        nomeBroker: brokerUser?.nome ?? pratica.broker.ragioneSociale,
+        nomeBroker: d.nome,
       },
     });
   }

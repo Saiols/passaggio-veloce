@@ -7,6 +7,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { tickPratica } from '@/lib/distribuzione';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
+import { destinatariBroker } from '@/lib/notifiche/pratica';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { emitEventoPratica, dismissNuovaPraticaEventi } from '@/lib/eventi/emit';
 import { eventoPraticaAccettata } from '@/lib/eventi/pratica-eventi';
@@ -114,34 +115,34 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
       },
     });
     const broker = full?.broker;
-    const brokerUser = broker?.users[0];
     const agenzia = full?.agenziaAssegnata;
-    // Recapito broker: preferisci l'admin azienda attivo, ma ripiega sull'email
-    // dell'azienda se manca (account non ancora attivo o pratica creata da un
-    // collaboratore) così la notifica non viene mai persa in silenzio (vedi N3).
-    const brokerEmail = brokerUser?.email ?? broker?.email;
-    if (full && broker && brokerEmail && agenzia) {
-      await sendNotification({
-        tipo: 'N2_BROKER_ACCETTATA',
-        target: { email: brokerEmail, userId: brokerUser?.id ?? null, companyId: broker.id },
-        payload: {
-          codicePratica: full.codicePratica ?? '—',
-          targa:
-            full.veicoli[0]?.targa
-              ? full.veicoli.length > 1
-                ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
-                : full.veicoli[0].targa
-              : null,
-          agenziaNome: agenzia.ragioneSociale,
-          agenziaIndirizzo: agenzia.indirizzo,
-          agenziaCap: agenzia.cap,
-          agenziaCitta: agenzia.citta,
-          agenziaProvincia: agenzia.provincia,
-          agenziaEmail: agenzia.email,
-          agenziaTelefono: agenzia.telefono,
-          nomeBroker: brokerUser?.nome ?? broker.ragioneSociale,
-        },
-      }).catch(() => undefined);
+    // Recapito: chi ha creato la pratica; se non è più raggiungibile la catena
+    // scende alla sua sede, poi all'admin azienda. Vedi lib/notifiche/pratica.ts.
+    const destinatari = await destinatariBroker(praticaId);
+    if (full && broker && agenzia && destinatari.length > 0) {
+      for (const d of destinatari) {
+        await sendNotification({
+          tipo: 'N2_BROKER_ACCETTATA',
+          target: { email: d.email, userId: d.userId, companyId: broker.id },
+          payload: {
+            codicePratica: full.codicePratica ?? '—',
+            targa:
+              full.veicoli[0]?.targa
+                ? full.veicoli.length > 1
+                  ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
+                  : full.veicoli[0].targa
+                : null,
+            agenziaNome: agenzia.ragioneSociale,
+            agenziaIndirizzo: agenzia.indirizzo,
+            agenziaCap: agenzia.cap,
+            agenziaCitta: agenzia.citta,
+            agenziaProvincia: agenzia.provincia,
+            agenziaEmail: agenzia.email,
+            agenziaTelefono: agenzia.telefono,
+            nomeBroker: d.nome,
+          },
+        }).catch(() => undefined);
+      }
     }
   } catch {
     // best-effort, non blocca

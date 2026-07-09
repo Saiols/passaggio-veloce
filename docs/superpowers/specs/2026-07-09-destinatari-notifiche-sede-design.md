@@ -85,15 +85,19 @@ Segue il pattern già presente nel codebase: `cliente-recipients.ts` è puro e
 `cliente.ts` fa il caricamento DB.
 
 ```ts
-export type Destinatario = { email: string; userId: string | null };
+export type Destinatario = { email: string; userId: string | null; nome: string };
+/** Il preferito porta con sé il ruolo: decide l'ampiezza del primo livello. */
+export type Preferito = Destinatario & { isOwner: boolean };
 
 export function destinatariPratica(args: {
   /** Creatore o accettante, già filtrato ACTIVE + non cancellato. `null` se assente. */
-  preferito: Destinatario | null;
+  preferito: Preferito | null;
   /** Membri di `user_sedi` della sede della pratica. */
   membriSede: Destinatario[];
   adminAzienda: Destinatario | null;
   emailAzienda: string | null;
+  /** Nome del destinatario quando si ripiega su `emailAzienda`. */
+  ragioneSociale: string;
 }): Destinatario[];
 ```
 
@@ -104,6 +108,21 @@ preferito → membriSede → adminAzienda → emailAzienda → []
 ```
 
 Ritorna una **lista** deduplicata per email (trim + lowercase), come `buildClienteRecipients`.
+
+### Chi opera decide l'ampiezza del primo livello
+
+- **Ha operato un membro del team di sede** (admin di sede o operatore): riceve **solo lui**. Sta
+  seguendo quella pratica; il resto della filiale non ha bisogno di saperlo.
+- **Ha operato il super admin** (`role: ADMIN_AZIENDA`, il proprietario): ricevono **lui e tutti i
+  membri della sede da cui ha operato**. Il titolare che lavora una pratica da una filiale non deve
+  lasciare quella filiale all'oscuro: chi la presidia deve poter proseguire.
+
+La sede "da cui ha operato" è già registrata sulla pratica: `brokerSedeId` in creazione,
+`agenziaSedeId` in accettazione. Il super admin è di norma anche membro di quella sede
+(`UserSede.ruolo = ADMIN_SEDE`), quindi la deduplica per email lo lascia una volta sola.
+
+Nota: `isOwner` guarda il **ruolo di piattaforma** (`ADMIN_AZIENDA`), non `UserSede.ruolo`. Un
+`ADMIN_SEDE` è admin *di quella filiale*, non dell'azienda: riceve solo lui.
 
 La `N6` non ha un preferito — nessuno ha ancora preso in carico la pratica — quindi ricade
 naturalmente sui membri della sede. Non serve un secondo risolutore: è lo stesso, con
@@ -116,7 +135,7 @@ dall'azienda o sospeso semplicemente non c'è, e la catena scende da sola.
 
 | Email | Destinatario | Preferito passato al risolutore |
 |---|---|---|
-| N1 invio | invariato: l'utente che invia | — (non usa il risolutore) |
+| N1 invio | creatore (e, se è il super admin, anche la sua sede) | `creatoDaUserId` |
 | N2 accettata, N13 processata, N3 sollecito, N11 escalation, N31 valuta agenzia | creatore | `creatoDaUserId` |
 | N6 nuova pratica assegnata | membri della sede assegnataria | `null` |
 | N7 promemoria firma, N18 segnalazione confermata | chi ha accettato | `accettataDaUserId` |
@@ -137,7 +156,12 @@ all'agenzia. Per la N6, che precede l'accettazione, la sede è `PraticaAssegnazi
   `ADMIN_AZIENDA` dealer hanno tutti una membership `ADMIN_SEDE`, quindi restano destinatari, e gli
   operatori si aggiungono. Il livello `adminAzienda` resta come rete per le sedi senza membri e per
   le righe davvero prive di sede.
-- **Sede senza membri**: `membriSede` vuoto → si scende ad `adminAzienda`.
+- **Sede senza membri**: `membriSede` vuoto → si scende ad `adminAzienda`. Vale anche per il super
+  admin: se opera da una sede senza altri membri, riceve solo lui.
+- **Super admin su pratica senza sede** (righe legacy con `brokerSedeId` null): non c'è filiale da
+  informare, riceve solo lui.
+- **Chi opera è un `ADMIN_SEDE`**: riceve solo lui. È admin della filiale, non dell'azienda — la
+  regola guarda il ruolo di piattaforma (`ADMIN_AZIENDA`), non `UserSede.ruolo`.
 - **Più destinatari**: la N6 può ora produrre più email (una per membro della sede). Oggi le
   sedi dealer hanno 7 membri su 5 sedi, le agenzie 1 su 1: nessuna esplosione.
 - **Preferenze e disiscrizione**: `sendNotification` valuta `shouldSend` solo se
@@ -156,7 +180,9 @@ Nuovi, con gli stessi nomi del gemello già in `lib/notifiche` (`cliente.ts` orc
 
 Modificati:
 - `packages/db/prisma/schema.prisma` — due colonne + relazioni inverse su `User`
-- `apps/piattaforma/src/app/pratiche/nuova/actions.ts` — scrive `creatoDaUserId`
+- `apps/piattaforma/src/app/pratiche/nuova/actions.ts` — scrive `creatoDaUserId`; N1 passa dal
+  risolutore invece di usare direttamente `userId`. La regola dell'email fresca dal DB (commit
+  `b99d847`) resta rispettata: il risolutore legge `User.email` dal database, non dalla sessione.
 - `apps/piattaforma/src/app/inbox/actions.ts` — scrive `accettataDaUserId`; N2 → creatore
 - `apps/piattaforma/src/app/pratiche/actions.ts` — N13, N31 → creatore (N4 invariato)
 - `apps/piattaforma/src/lib/jobs/send-solleciti.ts` — N3 → creatore; N7 → accettante
@@ -169,7 +195,10 @@ Modificati:
 ## Verifica
 
 - **Unit (vitest)** su `pratica-recipients.ts`: ogni livello della catena, salto dei livelli
-  vuoti, dedup per email case-insensitive, lista vuota quando non c'è nulla.
+  vuoti, dedup per email case-insensitive, lista vuota quando non c'è nulla. E soprattutto le due
+  facce della regola su chi opera: un operatore (o un `ADMIN_SEDE`) riceve **da solo** anche se la
+  sua sede ha altri membri; un `ADMIN_AZIENDA` fa ricevere **anche** i membri della sede, comparendo
+  una volta sola se ne è a sua volta membro.
 - **Query su DB reale, in sola lettura** (regola appresa: i test mockano Prisma): eseguire le
   query nuove — `user_sedi` per sede, `include` del creatore — contro il Postgres locale, e
   verificare che un filtro che deve restringere discrimini davvero.

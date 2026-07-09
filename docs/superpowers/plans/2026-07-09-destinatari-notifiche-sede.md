@@ -4,7 +4,7 @@
 
 **Goal:** Recapitare le email del ciclo di vita di una pratica a chi la lavora davvero — il creatore lato broker, la sede assegnataria e chi accetta lato agenzia — invece che sempre all'admin dell'azienda madre.
 
-**Architecture:** Due colonne nullable su `Pratica` (`creatoDaUserId`, `accettataDaUserId`) registrano chi ha creato e chi ha accettato. Un risolutore **puro** applica una catena di fallback (preferito → membri della sede → admin azienda → email azienda) e ritorna una lista deduplicata; un orchestratore **server-only** carica i candidati dal DB e delega al risolutore. Le email amministrative (addebito, fattura, credito wallet, penale) restano all'azienda madre e non passano dal risolutore.
+**Architecture:** Due colonne nullable su `Pratica` (`creatoDaUserId`, `accettataDaUserId`) registrano chi ha creato e chi ha accettato. Un risolutore **puro** applica una catena di fallback (preferito → membri della sede → admin azienda → email azienda) e ritorna una lista deduplicata; il primo livello si allarga ai membri della sede quando a operare è il **super admin**, così la filiale da cui ha lavorato non resta all'oscuro. Un orchestratore **server-only** carica i candidati dal DB e delega al risolutore. Le email amministrative (addebito, fattura, credito wallet, penale) restano all'azienda madre e non passano dal risolutore.
 
 **Tech Stack:** Next.js 16 (App Router, Server Actions), Prisma + Postgres, vitest.
 
@@ -14,8 +14,9 @@
 
 - **Node**: `nvm use 22.15.0` prima di qualunque comando `pnpm` — dopo un riavvio la shell non ha `node` sul PATH.
 - **Nessuna notifica può sparire in silenzio.** Se un livello della catena è vuoto si scende al successivo; l'ultimo livello è `Company.email`. Mai `return` senza inviare perché "il destinatario preferito non c'è".
+- **Chi opera decide l'ampiezza.** Un membro del team di sede (admin di sede o operatore) che crea o accetta una pratica la riceve **da solo**. Il **super admin** (`role: ADMIN_AZIENDA`) la fa ricevere **a sé e a tutti i membri della sede da cui ha operato**, così la filiale non resta all'oscuro. `isOwner` guarda il ruolo di piattaforma, **non** `UserSede.ruolo`.
 - **Le email amministrative restano all'azienda madre e NON vanno toccate**: `N4_BROKER_FIRMA_E_CREDITO` (espone `creditoCent`/`saldoCent` del wallet), `N17_BROKER_PENALE_ADDEBITATA`, `N8_AGENZIA_ADDEBITO` (allega la fattura PDF), `N9_AGENZIA_ADDEBITO_FALLITO` (blocca i pagamenti).
-- **`N1_BROKER_INVIO_PRATICA` non cambia destinatario**: è già l'utente che invia. L'unica modifica al suo file è scrivere `creatoDaUserId`.
+- **`N1_BROKER_INVIO_PRATICA` passa dal risolutore** come le altre, così la regola del super admin vale anche per la conferma di invio. La ragione per cui l'email va letta dal DB e non dalla sessione (commit `b99d847`) resta valida: il risolutore legge `User.email` dal database.
 - **Migration additiva**: solo colonne nullable + FK. Nessun campo esistente rimosso o modificato.
 - **Le pratiche storiche NON restano identiche.** Hanno entrambe le colonne `null`, ma tutte e 16 hanno già `brokerSedeId`: la catena si ferma ai **membri della sede**, non all'admin azienda. Verificato sul DB che nessuno perde email — i 4 `ADMIN_AZIENDA` dealer hanno una membership `ADMIN_SEDE` — e che gli operatori si aggiungono. È il comportamento voluto: non "aggiustarlo" facendo scendere la catena all'admin.
 - **Logica pura separata dall'IO**: `pratica-recipients.ts` non importa Prisma né `server-only`; `pratica.ts` sì. È il pattern già presente (`cliente-recipients.ts` / `cliente.ts`).
@@ -43,7 +44,7 @@ Modificati:
 | File | Modifica |
 |---|---|
 | `packages/db/prisma/schema.prisma` | 2 colonne + 2 relazioni su `Pratica`, 2 relazioni inverse su `User` |
-| `apps/piattaforma/src/app/pratiche/nuova/actions.ts` | scrive `creatoDaUserId` |
+| `apps/piattaforma/src/app/pratiche/nuova/actions.ts` | scrive `creatoDaUserId`; N1 → risolutore |
 | `apps/piattaforma/src/app/inbox/actions.ts` | scrive `accettataDaUserId`; N2 → creatore |
 | `apps/piattaforma/src/app/pratiche/actions.ts` | N13 e N31 → creatore (N4 e N8 invariati) |
 | `apps/piattaforma/src/lib/jobs/send-solleciti.ts` | N3 → creatore; N7 → accettante |
@@ -62,7 +63,20 @@ Modificati:
 **Interfaces:**
 - Produces:
   - `type Destinatario = { email: string; userId: string | null; nome: string }`
-  - `destinatariPratica(args: { preferito: Destinatario | null; membriSede: Destinatario[]; adminAzienda: Destinatario | null; emailAzienda: string | null; ragioneSociale: string }): Destinatario[]`
+  - `type Preferito = Destinatario & { isOwner: boolean }`
+  - `destinatariPratica(args: { preferito: Preferito | null; membriSede: Destinatario[]; adminAzienda: Destinatario | null; emailAzienda: string | null; ragioneSociale: string }): Destinatario[]`
+
+#### La regola che governa il primo livello
+
+Chi ha operato decide **quanto si allarga** il recapito:
+
+- un **membro del team di sede** (admin di sede oppure operatore) che crea o accetta una pratica la
+  riceve **da solo**: sta seguendo lui quella pratica;
+- il **super admin** (`role: ADMIN_AZIENDA`, il proprietario) che opera da una filiale la fa ricevere
+  **a sé e a tutti i membri di quella sede**, così la filiale non resta all'oscuro e può proseguire.
+
+`isOwner` guarda il **ruolo di piattaforma** (`ADMIN_AZIENDA`), non `UserSede.ruolo`: un `ADMIN_SEDE`
+è admin della filiale, non dell'azienda, quindi riceve solo lui.
 
 - [ ] **Step 1: Scrivi il test che fallisce**
 
@@ -70,12 +84,15 @@ Crea `apps/piattaforma/src/lib/notifiche/pratica-recipients.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { destinatariPratica, type Destinatario } from './pratica-recipients';
+import { destinatariPratica, type Destinatario, type Preferito } from './pratica-recipients';
 
-const creatore: Destinatario = { email: 'operatore@dealer.it', userId: 'u1', nome: 'Luca' };
+const creatore: Preferito = { email: 'operatore@dealer.it', userId: 'u1', nome: 'Luca', isOwner: false };
 const membro1: Destinatario = { email: 'sede1@dealer.it', userId: 'u2', nome: 'Anna' };
 const membro2: Destinatario = { email: 'sede2@dealer.it', userId: 'u3', nome: 'Marco' };
 const admin: Destinatario = { email: 'admin@dealer.it', userId: 'u4', nome: 'Titolare' };
+
+/** Il preferito restituito è un Destinatario puro: `isOwner` non esce dal risolutore. */
+const soloDestinatario = ({ email, userId, nome }: Preferito): Destinatario => ({ email, userId, nome });
 
 const vuoto = {
   preferito: null,
@@ -85,11 +102,46 @@ const vuoto = {
   ragioneSociale: 'ROSSI SRL',
 };
 
+describe('destinatariPratica — chi opera decide l\'ampiezza', () => {
+  it('operatore di sede: riceve solo lui, non i colleghi', () => {
+    expect(
+      destinatariPratica({ ...vuoto, preferito: creatore, membriSede: [membro1, membro2] }),
+    ).toEqual([soloDestinatario(creatore)]);
+  });
+
+  it('admin di sede: è admin della filiale, non dell\'azienda → riceve solo lui', () => {
+    const adminSede: Preferito = { email: 'as@dealer.it', userId: 'u7', nome: 'Elena', isOwner: false };
+    expect(
+      destinatariPratica({ ...vuoto, preferito: adminSede, membriSede: [membro1] }),
+    ).toEqual([soloDestinatario(adminSede)]);
+  });
+
+  it('super admin: ricevono lui e tutti i membri della sede da cui ha operato', () => {
+    const owner: Preferito = { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare', isOwner: true };
+    expect(
+      destinatariPratica({ ...vuoto, preferito: owner, membriSede: [membro1, membro2] }),
+    ).toEqual([soloDestinatario(owner), membro1, membro2]);
+  });
+
+  it('super admin già membro della sede: compare una volta sola', () => {
+    const owner: Preferito = { email: 'Titolare@Dealer.it ', userId: 'u4', nome: 'Titolare', isOwner: true };
+    const stessoOwner: Destinatario = { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare' };
+    expect(
+      destinatariPratica({ ...vuoto, preferito: owner, membriSede: [stessoOwner, membro1] }),
+    ).toEqual([{ email: 'Titolare@Dealer.it ', userId: 'u4', nome: 'Titolare' }, membro1]);
+  });
+
+  it('super admin senza sede (pratica legacy): riceve solo lui', () => {
+    const owner: Preferito = { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare', isOwner: true };
+    expect(destinatariPratica({ ...vuoto, preferito: owner })).toEqual([soloDestinatario(owner)]);
+  });
+});
+
 describe('destinatariPratica — la catena si ferma al primo livello non vuoto', () => {
-  it('il preferito vince su tutto il resto', () => {
+  it('il preferito vince su membri e admin', () => {
     expect(
       destinatariPratica({ ...vuoto, preferito: creatore, membriSede: [membro1], adminAzienda: admin }),
-    ).toEqual([creatore]);
+    ).toEqual([soloDestinatario(creatore)]);
   });
 
   it('senza preferito: tutti i membri della sede', () => {
@@ -131,7 +183,7 @@ describe('destinatariPratica — igiene degli indirizzi', () => {
   });
 
   it('scarta i candidati con email vuota invece di inviare al nulla', () => {
-    const rotto: Destinatario = { email: '   ', userId: 'u8', nome: 'Rotto' };
+    const rotto: Preferito = { email: '   ', userId: 'u8', nome: 'Rotto', isOwner: false };
     expect(destinatariPratica({ ...vuoto, preferito: rotto, adminAzienda: admin })).toEqual([admin]);
   });
 
@@ -169,12 +221,19 @@ Crea `apps/piattaforma/src/lib/notifiche/pratica-recipients.ts`:
 
 export type Destinatario = { email: string; userId: string | null; nome: string };
 
+/** Il preferito porta con sé il ruolo: decide quanto si allarga il primo livello. */
+export type Preferito = Destinatario & { isOwner: boolean };
+
 /** Un indirizzo è utilizzabile solo se, ripulito, non è vuoto. */
 function emailValida(email: string): boolean {
   return email.trim().length > 0;
 }
 
-/** Deduplica per email normalizzata (trim + lowercase), preservando l'ordine. */
+/**
+ * Deduplica per email normalizzata (trim + lowercase), preservando l'ordine, e
+ * normalizza la forma: `isOwner` è un dettaglio del risolutore e non deve
+ * uscirne.
+ */
 function dedup(candidati: Destinatario[]): Destinatario[] {
   const visti = new Set<string>();
   const out: Destinatario[] = [];
@@ -183,7 +242,7 @@ function dedup(candidati: Destinatario[]): Destinatario[] {
     const chiave = c.email.trim().toLowerCase();
     if (visti.has(chiave)) continue;
     visti.add(chiave);
-    out.push(c);
+    out.push({ email: c.email, userId: c.userId, nome: c.nome });
   }
   return out;
 }
@@ -197,19 +256,30 @@ function dedup(candidati: Destinatario[]): Destinatario[] {
  * già filtrato ACTIVE e non cancellato dal chiamante: se è uscito dall'azienda
  * o è sospeso semplicemente non arriva qui, e la catena scende da sola.
  *
+ * Chi ha operato decide l'ampiezza del primo livello. Un membro del team di
+ * sede — admin di sede o operatore — segue lui quella pratica e la riceve da
+ * solo. Il super admin, invece, opera *da* una filiale: se ricevesse solo lui,
+ * quella filiale resterebbe all'oscuro di una pratica che dovrà proseguire.
+ * Quindi con lui ricevono anche tutti i membri della sede su cui ha operato.
+ * `isOwner` è il ruolo di piattaforma `ADMIN_AZIENDA`, non `UserSede.ruolo`.
+ *
  * La N6 "nuova pratica assegnata" parte prima che qualcuno prenda in carico la
  * pratica: passa `preferito: null` e ricade sui membri della sede. Non serve un
  * secondo risolutore.
  */
 export function destinatariPratica(args: {
-  preferito: Destinatario | null;
+  preferito: Preferito | null;
   membriSede: Destinatario[];
   adminAzienda: Destinatario | null;
   emailAzienda: string | null;
   ragioneSociale: string;
 }): Destinatario[] {
   if (args.preferito) {
-    const p = dedup([args.preferito]);
+    // Il super admin porta con sé la sua filiale; chi è di sede resta solo.
+    const primoLivello = args.preferito.isOwner
+      ? [args.preferito as Destinatario, ...args.membriSede]
+      : [args.preferito as Destinatario];
+    const p = dedup(primoLivello);
     if (p.length > 0) return p;
   }
 
@@ -234,7 +304,7 @@ export function destinatariPratica(args: {
 pnpm --filter piattaforma exec vitest run src/lib/notifiche/pratica-recipients.test.ts
 ```
 
-Atteso: PASS, 9 test.
+Atteso: PASS, 14 test.
 
 - [ ] **Step 5: Commit**
 
@@ -246,6 +316,11 @@ feat(notifiche): risolutore puro dei destinatari di una pratica
 Catena preferito -> membri sede -> admin azienda -> email azienda, con dedup
 per email normalizzata. Nessun livello vuoto interrompe l'invio: e' la regola
 per cui una notifica non deve mai sparire in silenzio.
+
+Chi opera decide l'ampiezza del primo livello: un membro del team di sede
+riceve da solo, il super admin fa ricevere anche tutti i membri della sede da
+cui ha operato, cosi' la filiale non resta all'oscuro di una pratica che dovra'
+proseguire.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 EOF
@@ -518,16 +593,48 @@ beforeEach(() => {
 });
 
 describe('destinatariBroker', () => {
-  it('preferisce il creatore, se ancora attivo', async () => {
+  it('operatore che ha creato la pratica: riceve solo lui', async () => {
     prismaMock.pratica.findUnique.mockResolvedValue({
       creatoDaUserId: 'u1',
       brokerSedeId: 's1',
       brokerId: 'c1',
     });
-    prismaMock.user.findFirst.mockResolvedValueOnce({ id: 'u1', email: 'op@dealer.it', nome: 'Luca' });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'u1',
+      email: 'op@dealer.it',
+      nome: 'Luca',
+      role: 'UTENTE_AZIENDA',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'u2', email: 'collega@dealer.it', nome: 'Anna', role: 'UTENTE_AZIENDA' } },
+    ]);
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
       { email: 'op@dealer.it', userId: 'u1', nome: 'Luca' },
+    ]);
+  });
+
+  it('super admin che ha creato la pratica: lui e tutta la sede da cui ha operato', async () => {
+    prismaMock.pratica.findUnique.mockResolvedValue({
+      creatoDaUserId: 'u4',
+      brokerSedeId: 's1',
+      brokerId: 'c1',
+    });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'u4',
+      email: 'titolare@dealer.it',
+      nome: 'Titolare',
+      role: 'ADMIN_AZIENDA',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'u4', email: 'titolare@dealer.it', nome: 'Titolare', role: 'ADMIN_AZIENDA' } },
+      { user: { id: 'u2', email: 'anna@dealer.it', nome: 'Anna', role: 'UTENTE_AZIENDA' } },
+    ]);
+
+    // il titolare compare una volta sola: la dedup lo riconosce fra i membri
+    await expect(destinatariBroker('p1')).resolves.toEqual([
+      { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare' },
+      { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna' },
     ]);
   });
 
@@ -540,7 +647,7 @@ describe('destinatariBroker', () => {
     // il findFirst del creatore filtra ACTIVE: non lo trova
     prismaMock.user.findFirst.mockResolvedValueOnce(null);
     prismaMock.userSede.findMany.mockResolvedValue([
-      { user: { id: 'u2', email: 'anna@dealer.it', nome: 'Anna' } },
+      { user: { id: 'u2', email: 'anna@dealer.it', nome: 'Anna', role: 'UTENTE_AZIENDA' } },
     ]);
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
@@ -554,7 +661,12 @@ describe('destinatariBroker', () => {
       brokerSedeId: null,
       brokerId: 'c1',
     });
-    prismaMock.user.findFirst.mockResolvedValueOnce({ id: 'u4', email: 'admin@dealer.it', nome: 'Titolare' });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'u4',
+      email: 'admin@dealer.it',
+      nome: 'Titolare',
+      role: 'ADMIN_AZIENDA',
+    });
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
       { email: 'admin@dealer.it', userId: 'u4', nome: 'Titolare' },
@@ -571,16 +683,46 @@ describe('destinatariBroker', () => {
 });
 
 describe('destinatariAgenzia', () => {
-  it('preferisce chi ha accettato', async () => {
+  it('operatore che ha accettato: riceve solo lui', async () => {
     prismaMock.pratica.findUnique.mockResolvedValue({
       accettataDaUserId: 'a1',
       agenziaSedeId: 's9',
       agenziaAssegnataId: 'c9',
     });
-    prismaMock.user.findFirst.mockResolvedValueOnce({ id: 'a1', email: 'acc@ag.it', nome: 'Sara' });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'a1',
+      email: 'acc@ag.it',
+      nome: 'Sara',
+      role: 'UTENTE_AZIENDA',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'a2', email: 'collega@ag.it', nome: 'Gino', role: 'UTENTE_AZIENDA' } },
+    ]);
 
     await expect(destinatariAgenzia('p1')).resolves.toEqual([
       { email: 'acc@ag.it', userId: 'a1', nome: 'Sara' },
+    ]);
+  });
+
+  it('super admin che ha accettato: lui e tutta la sede assegnataria', async () => {
+    prismaMock.pratica.findUnique.mockResolvedValue({
+      accettataDaUserId: 'a0',
+      agenziaSedeId: 's9',
+      agenziaAssegnataId: 'c9',
+    });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'a0',
+      email: 'titolare@ag.it',
+      nome: 'Titolare',
+      role: 'ADMIN_AZIENDA',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'a2', email: 'gino@ag.it', nome: 'Gino', role: 'UTENTE_AZIENDA' } },
+    ]);
+
+    await expect(destinatariAgenzia('p1')).resolves.toEqual([
+      { email: 'titolare@ag.it', userId: 'a0', nome: 'Titolare' },
+      { email: 'gino@ag.it', userId: 'a2', nome: 'Gino' },
     ]);
   });
 
@@ -591,7 +733,7 @@ describe('destinatariAgenzia', () => {
       agenziaAssegnataId: 'c9',
     });
     prismaMock.userSede.findMany.mockResolvedValue([
-      { user: { id: 'a2', email: 'sede@ag.it', nome: 'Gino' } },
+      { user: { id: 'a2', email: 'sede@ag.it', nome: 'Gino', role: 'UTENTE_AZIENDA' } },
     ]);
 
     await expect(destinatariAgenzia('p1')).resolves.toEqual([
@@ -613,7 +755,7 @@ describe('destinatariSedeAgenzia', () => {
   it('membri della sede: nessun preferito, la pratica non è ancora presa in carico', async () => {
     prismaMock.sede.findUnique.mockResolvedValue({ companyId: 'c9' });
     prismaMock.userSede.findMany.mockResolvedValue([
-      { user: { id: 'a2', email: 'sede@ag.it', nome: 'Gino' } },
+      { user: { id: 'a2', email: 'sede@ag.it', nome: 'Gino', role: 'UTENTE_AZIENDA' } },
     ]);
 
     await expect(destinatariSedeAgenzia('s9')).resolves.toEqual([
@@ -655,7 +797,7 @@ Crea `apps/piattaforma/src/lib/notifiche/pratica.ts`:
 ```ts
 import 'server-only';
 import { prisma } from '@pv/db';
-import { destinatariPratica, type Destinatario } from './pratica-recipients';
+import { destinatariPratica, type Destinatario, type Preferito } from './pratica-recipients';
 
 /**
  * Chi riceve le email del ciclo di vita di una pratica: carica i candidati dal
@@ -666,12 +808,21 @@ import { destinatariPratica, type Destinatario } from './pratica-recipients';
  * blocchi di pagamento riguardano l'entità legale, non chi lavora la pratica.
  */
 
-const SELECT_UTENTE = { id: true, email: true, nome: true } as const;
+const SELECT_UTENTE = { id: true, email: true, nome: true, role: true } as const;
 
-type UtenteDb = { id: string; email: string; nome: string | null };
+type UtenteDb = { id: string; email: string; nome: string | null; role: string };
 
 function toDestinatario(u: UtenteDb, fallbackNome: string): Destinatario {
   return { email: u.email, userId: u.id, nome: u.nome?.trim() || fallbackNome };
+}
+
+/**
+ * `isOwner` è il ruolo di PIATTAFORMA, non `UserSede.ruolo`: un `ADMIN_SEDE` è
+ * admin della filiale, non dell'azienda. Stessa definizione di
+ * `lib/auth/permissions.ts#isOwner`.
+ */
+function toPreferito(u: UtenteDb, fallbackNome: string): Preferito {
+  return { ...toDestinatario(u, fallbackNome), isOwner: u.role === 'ADMIN_AZIENDA' };
 }
 
 /**
@@ -723,7 +874,7 @@ async function risolvi(args: {
   ]);
 
   return destinatariPratica({
-    preferito: preferito ? toDestinatario(preferito, azienda.ragioneSociale) : null,
+    preferito: preferito ? toPreferito(preferito, azienda.ragioneSociale) : null,
     membriSede: membri.map((m) => toDestinatario(m, azienda.ragioneSociale)),
     adminAzienda: admin ? toDestinatario(admin, azienda.ragioneSociale) : null,
     emailAzienda: azienda.email,
@@ -784,7 +935,7 @@ export async function destinatariSedeAgenzia(sedeId: string): Promise<Destinatar
 pnpm --filter piattaforma exec vitest run src/lib/notifiche/pratica.test.ts
 ```
 
-Atteso: PASS, 10 test.
+Atteso: PASS, 12 test.
 
 - [ ] **Step 5: Commit**
 
@@ -796,6 +947,8 @@ feat(notifiche): orchestratore server-only dei destinatari pratica
 destinatariBroker / destinatariAgenzia / destinatariSedeAgenzia caricano i
 candidati dal DB e delegano la catena al risolutore puro. Il preferito viene
 cercato ACTIVE e non cancellato: se e' uscito dall'azienda la catena scende.
+Il suo ruolo di piattaforma viaggia col preferito: se e' ADMIN_AZIENDA ricevono
+anche i membri della sede da cui ha operato.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 EOF
@@ -806,13 +959,15 @@ EOF
 
 ### Task 4: Reinstrada le email al broker
 
-N2, N13, N3, N11, N31 → creatore. **N4 e N17 restano invariate.**
+N1, N2, N13, N3, N11, N31 → creatore (e, se è il super admin, anche i membri della sua sede).
+**N4 e N17 restano invariate.**
 
 **Files:**
 - Modify: `apps/piattaforma/src/app/inbox/actions.ts` (blocco N2)
 - Modify: `apps/piattaforma/src/app/pratiche/actions.ts` (blocchi N13 e N31)
 - Modify: `apps/piattaforma/src/lib/jobs/send-solleciti.ts` (blocco N3)
 - Modify: `apps/piattaforma/src/lib/distribuzione/tick.ts` (blocco N11, in `emitEscalationNotifications`)
+- Modify: `apps/piattaforma/src/app/pratiche/nuova/actions.ts` (blocco N1)
 
 **Interfaces:**
 - Consumes: `destinatariBroker(praticaId): Promise<Destinatario[]>` dove `Destinatario = { email: string; userId: string | null; nome: string }` (Task 3).
@@ -922,7 +1077,53 @@ diventa il `for (const d of destinatari)`. Payload invariato salvo `nomeBroker: 
 La `include` degli `users` del broker in `emitEscalationNotifications` può restare: la N10 admin
 nello stesso file non la usa, ma toglierla non serve a nulla e rischia di rompere il payload.
 
-- [ ] **Step 6: Verifica**
+- [ ] **Step 6: N1 — pratiche/nuova/actions.ts**
+
+Oggi la N1 interroga direttamente `prisma.user.findUnique({ where: { id: userId } })` e invia a
+quell'indirizzo. Ora deve passare dal risolutore, così la regola del super admin vale anche per la
+conferma di invio: se a creare è il titolare, la sua sede lo sa subito.
+
+La colonna `creatoDaUserId` è già stata scritta (Task 2) dentro la transazione che crea la pratica,
+quindi al momento della N1 è persistita e `destinatariBroker` la trova.
+
+Import `destinatariBroker`. Sostituisci il blocco:
+
+```ts
+  if (round1.assegnazioni > 0) {
+    const dest = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, nome: true },
+    });
+    if (dest?.email) {
+      await sendNotification({ /* ... */ }).catch(() => undefined);
+    }
+  }
+```
+
+con:
+
+```ts
+  if (round1.assegnazioni > 0) {
+    // Recapito dal DB, non dalla sessione (il JWT porta l'email congelata al
+    // login). Il risolutore lo garantisce, e applica la regola del super admin:
+    // se a creare è il titolare, riceve anche la sede da cui ha operato.
+    const destinatari = await destinatariBroker(pratica.id);
+    for (const d of destinatari) {
+      await sendNotification({
+        tipo: 'N1_BROKER_INVIO_PRATICA',
+        target: { email: d.email, userId: d.userId, companyId: brokerId },
+        // payload identico a quello attuale, con:
+        //   nomeBroker: dest.nome?.split(' ')[0] ?? 'utente'
+        //     → nomeBroker: d.nome.split(' ')[0]
+      }).catch(() => undefined);
+    }
+  }
+```
+
+⚠️ Il commento sopra la vecchia N1 spiega perché l'email va letta dal DB e non dalla sessione: quella
+ragione **resta valida**, il risolutore fa esattamente questo. Riscrivi il commento, non cancellarlo.
+
+- [ ] **Step 7: Verifica**
 
 ```bash
 nvm use 22.15.0
@@ -932,17 +1133,18 @@ pnpm --filter piattaforma test
 
 Atteso: typecheck pulito; suite verde. Se un test esistente mocka `@pv/db` e ora fallisce perché `pratica.ts` interroga tabelle non mockate (`userSede`, `company`, `sede`), aggiungi i mock mancanti a quel test — non cambiare il codice di produzione per compiacere un mock.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/piattaforma/src/app/inbox/actions.ts apps/piattaforma/src/app/pratiche/actions.ts apps/piattaforma/src/lib/jobs/send-solleciti.ts apps/piattaforma/src/lib/distribuzione/tick.ts
+git add apps/piattaforma/src/app/inbox/actions.ts apps/piattaforma/src/app/pratiche/actions.ts apps/piattaforma/src/app/pratiche/nuova/actions.ts apps/piattaforma/src/lib/jobs/send-solleciti.ts apps/piattaforma/src/lib/distribuzione/tick.ts
 git commit -m "$(cat <<'EOF'
 fix(notifiche): le email al broker vanno a chi ha creato la pratica
 
-N2 accettata, N13 processata, N3 sollecito, N11 escalation e N31 valuta agenzia
-usano ora destinatariBroker(): creatore -> membri della sua sede -> admin
-azienda -> email azienda. N4 (credito e saldo wallet) e N17 (penale) restano
-all'azienda madre: riguardano l'entita' legale, non l'operatore.
+N1 invio, N2 accettata, N13 processata, N3 sollecito, N11 escalation e N31
+valuta agenzia usano ora destinatariBroker(): creatore -> membri della sua sede
+-> admin azienda -> email azienda. Se a creare e' il super admin ricevono anche
+i membri della sede da cui ha operato. N4 (credito e saldo wallet) e N17
+(penale) restano all'azienda madre: riguardano l'entita' legale.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 EOF

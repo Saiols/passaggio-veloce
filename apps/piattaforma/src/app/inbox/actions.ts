@@ -75,6 +75,9 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
           agenziaAssegnataId: assegnazione.agenziaId,
           agenziaSedeId: assegnazione.sedeId,
           accettataAt: now,
+          // Chi accetta è chi seguirà la pratica: le email successive (promemoria
+          // firma, segnalazione confermata) devono arrivare a lui, non alla madre.
+          accettataDaUserId: session.user.id,
         },
       });
     });

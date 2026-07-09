@@ -559,6 +559,10 @@ model User {
   // ...e quelle gestite da questo utente (admin)
   segnalazioniCreazioneGestite SegnalazioneCreazione[] @relation("SegnalazioneCreazioneGestore")
 
+  // Pratiche create da questo utente e pratiche che ha accettato per la sua agenzia.
+  praticheCreate    Pratica[] @relation("PraticheCreate")
+  praticheAccettate Pratica[] @relation("PraticheAccettate")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -789,6 +793,13 @@ model Pratica {
   notaSegnalazione      String?
   segnalataAt           DateTime?
   segnalataDaUserId     String?                   @db.Uuid
+  // Chi ha creato la pratica e chi l'ha accettata: le email del ciclo di vita
+  // partono dopo, quando la sessione di quelle persone non esiste più. Senza
+  // queste due colonne l'unico recapito noto resta l'admin dell'azienda madre.
+  creatoDaUserId    String? @db.Uuid
+  creatoDa          User?   @relation("PraticheCreate", fields: [creatoDaUserId], references: [id], onDelete: SetNull)
+  accettataDaUserId String? @db.Uuid
+  accettataDa       User?   @relation("PraticheAccettate", fields: [accettataDaUserId], references: [id], onDelete: SetNull)
   segnalazioneStato     SegnalazionePraticaStato?
   segnalazioneEsitaAt   DateTime?
   segnalazioneEsitaDaId String?                   @db.Uuid

@@ -1287,6 +1287,11 @@ export async function submitNuovaPraticaAction(
       numeroVeicoli: d.numeroVeicoli,
       stato: 'BOZZA',
 
+      // Chi sta creando la pratica. Le email successive (accettata, processata,
+      // sollecito) partono quando la sua sessione non esiste più: senza questa
+      // colonna finirebbero all'admin dell'azienda madre.
+      creatoDaUserId: userId,
+
       // Dati venditore: ora normalizzati in N righe Venditore (vedi sotto).
 
       acquirenteIsPersonaGiuridica: d.acquirenteIsPG,

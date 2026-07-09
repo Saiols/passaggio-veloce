@@ -2,6 +2,7 @@
 
 import { type ComponentType, type ReactNode } from 'react';
 import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
+import { NavBadge } from '@/components/nav-badge';
 import {
   IconAffiliazioni,
   IconAgenzie,
@@ -47,6 +48,8 @@ type NavItem = {
   icon: ComponentType<AdminIconProps>;
   /** Visibile solo ad ADMIN_PIATTAFORMA (non ad ASSISTENTE). */
   adminOnly?: boolean;
+  /** Badge opzionale accanto alla label (conteggio da /api/badges). */
+  badge?: ReactNode;
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -66,8 +69,20 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/pratiche', label: 'Pratiche', icon: IconPratiche },
       { href: '/admin/escalation', label: 'Escalation', icon: IconEscalation },
-      { href: '/admin/segnalazioni', label: 'Segnalazioni', icon: IconSegnalazioni, adminOnly: true },
-      { href: '/admin/segnalazioni-creazione', label: 'Problemi creazione', icon: IconRevisioni, adminOnly: true },
+      {
+        href: '/admin/segnalazioni',
+        label: 'Segnalazioni',
+        icon: IconSegnalazioni,
+        adminOnly: true,
+        badge: <NavBadge keyName="segnalazioni" />,
+      },
+      {
+        href: '/admin/segnalazioni-creazione',
+        label: 'Problemi creazione',
+        icon: IconRevisioni,
+        adminOnly: true,
+        badge: <NavBadge keyName="segnalazioniCreazione" />,
+      },
     ],
   },
   {

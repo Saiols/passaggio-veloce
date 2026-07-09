@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
+import { isOwner } from '@/lib/auth/permissions';
 import { BloccoPagamentoClient } from './client';
 
 export default async function BloccoPagamentoPage() {
@@ -24,9 +25,14 @@ export default async function BloccoPagamentoPage() {
   // "in elaborazione" = nessun fee ritentabile ma uno o più in volo (retry processing)
   const inElaborazione = scoperti === 0 && inVolo > 0;
 
+  // Solo il titolare può cambiare l'IBAN: a chi non può, non lo mandiamo nemmeno
+  // nel payload della pagina.
+  const titolare = isOwner(u.role);
+
   return (
     <BloccoPagamentoClient
-      ibanAttuale={agenzia.iban ?? ''}
+      isOwner={titolare}
+      ibanAttuale={titolare ? (agenzia.iban ?? '') : ''}
       motivo={agenzia.bloccoPagamentoMotivo ?? null}
       inElaborazione={inElaborazione}
     />

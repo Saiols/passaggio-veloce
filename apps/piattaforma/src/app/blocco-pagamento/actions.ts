@@ -5,23 +5,30 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
+import { isOwner as isOwnerRole } from '@/lib/auth/permissions';
 import { ritentaAddebitiAgenzia } from '@/lib/fee/retry';
 import { applySepaMandateToAgency } from '@/lib/providers/payment/stripe-mandate';
 
 export type RimedioResult = { ok: true } | { ok: false; error: string };
 
-async function getAgenziaIdLoggata(): Promise<string | null> {
+type AgenziaContext = { agenziaId: string; isOwner: boolean };
+
+async function getAgenziaContext(): Promise<AgenziaContext | null> {
   const session = await auth();
   const u = session?.user;
   if (!u || u.companyType !== 'AGENZIA' || !u.companyId) return null;
-  return u.companyId;
+  return { agenziaId: u.companyId, isOwner: isOwnerRole(u.role) };
 }
 
-/** Riprova l'addebito col mandato esistente (l'agenzia ha sistemato con la banca). */
+/**
+ * Riprova l'addebito col mandato esistente (l'agenzia ha sistemato con la banca).
+ * Aperta a tutta l'agenzia: non tocca IBAN né importi, rilancia un addebito
+ * già dovuto. È il rimedio al caso più frequente (banca sistemata, IBAN invariato).
+ */
 export async function ritentaAddebitoAction(): Promise<RimedioResult> {
-  const agenziaId = await getAgenziaIdLoggata();
-  if (!agenziaId) return { ok: false, error: 'Non autorizzato' };
-  await ritentaAddebitiAgenzia(agenziaId);
+  const ctx = await getAgenziaContext();
+  if (!ctx) return { ok: false, error: 'Non autorizzato' };
+  await ritentaAddebitiAgenzia(ctx.agenziaId);
   revalidatePath('/blocco-pagamento');
   return { ok: true };
 }
@@ -49,10 +56,20 @@ const ibanSchema = z.object({
   ),
 });
 
-/** Aggiorna l'IBAN, ri-crea il mandato SEPA, poi riprova l'addebito. */
+/**
+ * Aggiorna l'IBAN, ri-crea il mandato SEPA, poi riprova l'addebito.
+ *
+ * Riservata al titolare dell'account (ADMIN_AZIENDA): riscrive l'IBAN
+ * dell'azienda madre — quello su cui arrivano i payout — e riappoggia il
+ * mandato SEPA sul nuovo conto. Un ADMIN_SEDE o un operatore non ci arriva.
+ */
 export async function aggiornaIbanERitentaAction(formData: FormData): Promise<RimedioResult> {
-  const agenziaId = await getAgenziaIdLoggata();
-  if (!agenziaId) return { ok: false, error: 'Non autorizzato' };
+  const ctx = await getAgenziaContext();
+  if (!ctx) return { ok: false, error: 'Non autorizzato' };
+  if (!ctx.isOwner) {
+    return { ok: false, error: "Solo il titolare dell'account può aggiornare l'IBAN" };
+  }
+  const agenziaId = ctx.agenziaId;
 
   const parsed = ibanSchema.safeParse({ iban: formData.get('iban') });
   if (!parsed.success) return { ok: false, error: 'IBAN non valido' };

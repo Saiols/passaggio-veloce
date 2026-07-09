@@ -768,7 +768,7 @@ con un ramo che, per il proprietario, mostra la vista aggregata. Serve `getSessi
         w.transazioni.map((t) => ({
           id: t.id,
           createdAt: t.createdAt,
-          tipo: t.tipo as string,
+          tipo: labelTipoTx(t.tipo),
           importoCent: t.importoCent,
           origine: nomeSede.get(w.sedeId!) ?? null,
         })),
@@ -776,7 +776,7 @@ con un ramo che, per il proprietario, mostra la vista aggregata. Serve `getSessi
       ...(walletMadreAgg?.transazioni ?? []).map((t) => ({
         id: t.id,
         createdAt: t.createdAt,
-        tipo: t.tipo as string,
+        tipo: labelTipoTx(t.tipo),
         importoCent: t.importoCent,
         origine: null,
       })),

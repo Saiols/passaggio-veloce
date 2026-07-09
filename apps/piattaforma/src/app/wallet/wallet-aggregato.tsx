@@ -1,11 +1,20 @@
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { Card, StatCard } from '@/components/ui';
+import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
+import type { TransazioneWalletTipo } from '@pv/db';
 
 export type RigaSede = { sedeId: string; nome: string; saldoCent: number };
 export type MovimentoAggregato = {
   id: string;
   createdAt: Date;
-  tipo: string;
+  /**
+   * Tipo grezzo dell'enum Prisma: l'etichetta la applica questo componente.
+   * Tipizzato con l'enum e non con `string` apposta: se il chiamante passasse
+   * già un'etichetta (es. `labelTipoTx(t.tipo)`), `isPenale` fallirebbe sempre
+   * in silenzio — con `string` compilerebbe comunque. Un enum è assegnabile a
+   * `string`, quindi qui non si perde nulla.
+   */
+  tipo: TransazioneWalletTipo;
   importoCent: number;
   /** Nome della sede, oppure `null` per il wallet madre (affiliazione). */
   origine: string | null;
@@ -65,9 +74,16 @@ export function WalletAggregato({
             <p className="py-6 text-center text-sm text-pv-slate-500">Nessun movimento.</p>
           ) : (
             movimenti.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-3 py-3">
+              <div
+                key={m.id}
+                className={`flex items-center justify-between gap-3 py-3 ${
+                  isPenale(m.tipo) ? CLASSI_RIGA_PENALE : ''
+                }`}
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-pv-slate-700">{m.tipo}</p>
+                  <p className="truncate text-sm font-medium text-pv-slate-700">
+                    {labelTipoTx(m.tipo)}
+                  </p>
                   <p className="text-[12px] text-pv-slate-500">
                     {formatDateTime(m.createdAt)}
                     {m.origine ? ` · ${m.origine}` : ' · Affiliazione'}

@@ -48,8 +48,13 @@ l'accettazione) e per `N18_AGENZIA_SEGNALAZIONE_CONFERMATA`.
   IBAN, fatture e blocchi riguardano l'azienda, non l'operatore.
 - **Nessuna notifica può sparire in silenzio.** È la regola introdotta da `94be688`: se il
   destinatario preferito non è raggiungibile si scende di livello, non si annulla l'invio.
-- **Retrocompatibilità.** Le pratiche storiche non hanno i campi nuovi; devono continuare a
-  comportarsi esattamente come oggi.
+- **Retrocompatibilità.** Le pratiche storiche non hanno i campi nuovi. Non "si comportano come
+  prima" in senso stretto: senza `creatoDaUserId` la catena scende al livello successivo, cioè i
+  membri della loro sede. Sui dati reali questo **non fa perdere email a nessuno**, perché ogni
+  `ADMIN_AZIENDA` dealer ha una membership `ADMIN_SEDE` sulla propria sede: continua a ricevere, e
+  gli operatori di quella sede iniziano a ricevere. L'unico cambio voluto è che l'admin non riceve
+  più le email delle pratiche di sedi di cui non è membro — che è precisamente lo scopo della
+  feature.
 - **Migration additiva.** Solo colonne nullable; nessun campo esistente rimosso o modificato.
 
 ## Design
@@ -126,9 +131,12 @@ all'agenzia. Per la N6, che precede l'accettazione, la sede è `PraticaAssegnazi
   `ACCETTATA` senza che nessuno in agenzia accetti, quindi `accettataDaUserId` resta `null` e
   la N7 ricade sui membri della sede. Corretto: è esattamente il livello successivo. La N6 che
   quella action invia va anch'essa ai membri della sede (l'`sedeId` è già noto lì).
-- **Pratiche storiche**: entrambe le colonne `null`, nessuna sede su righe legacy
-  (`brokerSedeId`/`agenziaSedeId` nullable) → la catena scende ad `adminAzienda`, cioè il
-  comportamento di oggi. Nessuna email persa, nessun cambiamento percepito.
+- **Pratiche storiche**: entrambe le colonne `null`. ⚠️ Verificato sul DB: **tutte** le 16 pratiche
+  esistenti hanno già `brokerSedeId` valorizzato (il multi-sede è in prod da giugno), quindi la
+  catena non arriva ad `adminAzienda` ma si ferma ai **membri della sede**. Non è una perdita: i 4
+  `ADMIN_AZIENDA` dealer hanno tutti una membership `ADMIN_SEDE`, quindi restano destinatari, e gli
+  operatori si aggiungono. Il livello `adminAzienda` resta come rete per le sedi senza membri e per
+  le righe davvero prive di sede.
 - **Sede senza membri**: `membriSede` vuoto → si scende ad `adminAzienda`.
 - **Più destinatari**: la N6 può ora produrre più email (una per membro della sede). Oggi le
   sedi dealer hanno 7 membri su 5 sedi, le agenzie 1 su 1: nessuna esplosione.

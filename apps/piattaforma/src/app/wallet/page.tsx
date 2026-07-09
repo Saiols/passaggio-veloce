@@ -292,6 +292,7 @@ export default async function WalletPage({
           <RendimentoChart buckets={rendimento.buckets} accent="navy" />
         </Card>
 
+        {canEditSedeSettings(sedeRole) && (
         <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
           <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
           <p className="mt-1 text-sm text-pv-slate-500">
@@ -338,6 +339,7 @@ export default async function WalletPage({
             </div>
           )}
         </div>
+        )}
 
         {/*
           Il rendiconto PDF è l'estratto conto del wallet della madre (crediti

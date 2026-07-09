@@ -13,6 +13,9 @@ import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 import { StatoExtraInfo } from './stato-extra-info';
 import { statoExtra } from '@/lib/pratiche/stato-extra';
 import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
+import { mostraColonnaSede, filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
+import { opzioniSedeProprie, opzioniSedeAgenziaDaPratiche } from '@/lib/pratiche/opzioni-sede';
+import { SedeCell } from '@/components/sede/sede-cell';
 
 const PAGE_SIZE = 15;
 
@@ -56,6 +59,7 @@ type SearchParams = {
   stato?: string;
   q?: string;
   periodo?: string;
+  sede?: string;
   page?: string;
 };
 
@@ -100,6 +104,36 @@ export default async function PratichePage({
     where.brokerSedeId = { in: scopeIds };
   }
 
+  // Colonna Sede: sempre la sede dell'agenzia assegnataria. Il broker la vede
+  // sempre; l'agenzia solo se il suo scope copre più di una sede propria.
+  const mostraSede = mostraColonnaSede({ companyType, scopeIds });
+
+  const sediDisponibili = !mostraSede
+    ? []
+    : isAgenzia
+      ? await opzioniSedeProprie(scopeIds)
+      : await opzioniSedeAgenziaDaPratiche({ deletedAt: null, brokerSedeId: { in: scopeIds } });
+
+  const fSede = filtroSede({
+    selezione: sp.sede,
+    opzioniIds: sediDisponibili.map((o) => o.value),
+    // Per l'agenzia `agenziaSedeId` È lo scope: il filtro deve intersecarlo.
+    scopeIds: isAgenzia ? scopeIds : null,
+    consentiNonAssegnata: !isAgenzia,
+  });
+  if (fSede.tipo === 'sede') where.agenziaSedeId = { in: fSede.sedeIds };
+  else if (fSede.tipo === 'nonAssegnata') where.agenziaSedeId = null;
+
+  const sediSelect = mostraSede
+    ? [
+        { value: '', label: 'Tutte le sedi' },
+        ...(isAgenzia ? [] : [{ value: SEDE_NON_ASSEGNATA, label: 'Non assegnate' }]),
+        ...sediDisponibili,
+      ]
+    : [];
+
+  const grid = mostraSede ? PRATICHE_GRID.utenteConSede : PRATICHE_GRID.utenteSenzaSede;
+
   if (sp.stato && STATI_USER.some((s) => s.value === sp.stato)) {
     if (sp.stato === 'IN_ATTESA') {
       where.stato = { in: STATI_IN_ATTESA as unknown as PraticaStato[] };
@@ -130,6 +164,7 @@ export default async function PratichePage({
       include: {
         agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
         broker: { select: { ragioneSociale: true } },
+        agenziaSede: { select: { nome: true, citta: true } },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
       },
     }),
@@ -151,7 +186,7 @@ export default async function PratichePage({
             </h1>
             <p className="mt-1 text-[13px] text-pv-slate-500">
               {total} risultat{total === 1 ? 'o' : 'i'}
-              {sp.stato || sp.periodo || q ? ' · filtri attivi' : ''}
+              {sp.stato || sp.periodo || sp.sede || q ? ' · filtri attivi' : ''}
             </p>
           </div>
           {!isAgenzia && (
@@ -170,8 +205,10 @@ export default async function PratichePage({
           q={q}
           stato={sp.stato}
           periodo={sp.periodo}
+          sede={sp.sede}
           stati={STATI_USER}
           periodi={PERIODI}
+          sedi={sediSelect}
         />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
@@ -188,7 +225,7 @@ export default async function PratichePage({
             <div className="overflow-x-auto">
               <div className={`${PRATICHE_TABLE_MIN_W} text-[13px]`}>
                 <div
-                  className={`grid ${PRATICHE_GRID.utenteSenzaSede} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
+                  className={`grid ${grid} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
                 >
                   <div className="py-3 pl-5 pr-3">Codice</div>
                   <div className="px-3 py-3">Targa</div>
@@ -196,6 +233,7 @@ export default async function PratichePage({
                   <div className="hidden px-3 py-3 md:block">
                     {isAgenzia ? 'Broker' : 'Agenzia'}
                   </div>
+                  {mostraSede && <div className="hidden px-3 py-3 lg:block">Sede</div>}
                   <div className="px-3 py-3">Stato</div>
                   <div className="hidden px-3 py-3 lg:block">Fee</div>
                   <div className="py-3 pl-3 pr-5 text-right">Quando</div>
@@ -215,7 +253,7 @@ export default async function PratichePage({
                     return (
                       <div
                         key={p.id}
-                        className={`relative grid ${PRATICHE_GRID.utenteSenzaSede} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
+                        className={`relative grid ${grid} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
                       >
                         {/* Anchor a tutta riga: block-level parent → containing block
                             affidabile su ogni browser (fix iOS). Resta un vero <a>,
@@ -244,6 +282,11 @@ export default async function PratichePage({
                             ? p.broker.ragioneSociale
                             : p.agenziaAssegnata?.ragioneSociale ?? '—'}
                         </div>
+                        {mostraSede && (
+                          <div className="hidden min-w-0 px-3 py-3 lg:block">
+                            <SedeCell sede={p.agenziaSede} />
+                          </div>
+                        )}
                         <div className="min-w-0 px-3 py-3">
                           {/* z-10 per stare SOPRA lo stretched-link: chip, info e i
                               pulsanti azione restano cliccabili senza navigare.
@@ -305,6 +348,7 @@ function Pagination({
     if (sp.stato) params.set('stato', sp.stato);
     if (sp.q) params.set('q', sp.q);
     if (sp.periodo) params.set('periodo', sp.periodo);
+    if (sp.sede) params.set('sede', sp.sede);
     if (p > 1) params.set('page', String(p));
     const s = params.toString();
     return s ? `/pratiche?${s}` : '/pratiche';

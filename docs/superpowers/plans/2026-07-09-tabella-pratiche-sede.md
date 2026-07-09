@@ -17,7 +17,7 @@
 - **Tailwind v4 non risolve nomi di classe costruiti a runtime.** Ogni classe (`lg:grid-cols-[…]`, `sm:grid-cols-[1fr_auto_auto]`) deve comparire come stringa letterale intera nel sorgente.
 - **Numero di tracce = numero di celle visibili a quel breakpoint.** Le celle nascoste hanno `display:none` e non occupano traccia.
 - **Nessun colore hardcoded**: solo token `pv-*` del design system.
-- **Scoping sede**: il filtro restringe, non sostituisce. Mai `session.user.companyId` nudo in un `where`. Un `?sede=<uuid altrui>` deve produrre lista vuota.
+- **Scoping sede**: il filtro restringe, non sostituisce. Mai `session.user.companyId` nudo in un `where`. Un `?sede=<uuid altrui>` non è fra le opzioni ammesse, quindi **viene ignorato**: l'utente vede la lista intera del proprio scope, mai dati altrui. (Corretto dopo la review del Task 3: la prima stesura diceva "lista vuota", incoerente con la regola che ignora gli id non ammessi.)
 - **Commit** in italiano, conventional commits, con trailer `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 - **`pnpm typecheck` a cache fredda è inaffidabile** (stack overflow / falsi errori Prisma). Se esplode con errori assurdi sui tipi Prisma è la cache, non la modifica.
 - **Branch**: si continua su `feat/segnala-problema-creazione`, dove è già atterrata la spec (commit `6464e6e`). Questo lavoro è indipendente dalle segnalazioni: se preferisci un branch dedicato, va creato prima della Task 1.
@@ -917,7 +917,7 @@ Su `/pratiche` a larghezza ≥ 1024px:
 3. **Agenzia owner** che seleziona una sede sola dallo switcher → colonna e select spariscono.
 4. **Agenzia admin di sede / operatore** → colonna e select assenti.
 5. Filtra per una sede, poi vai a pagina 2: il filtro **resta**.
-6. Come agenzia, forza a mano `?sede=<uuid di un'altra azienda>` → lista vuota, nessun dato altrui.
+6. Come agenzia, forza a mano `?sede=<uuid di un'altra azienda>` → il filtro viene ignorato: select su "Tutte le sedi" e lista completa del proprio scope. Nessun dato di un'altra azienda, in nessun caso.
 
 - [ ] **Step 6: Esegui tutti i test del modulo**
 

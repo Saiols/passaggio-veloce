@@ -140,7 +140,20 @@ devono essere letterali, non costruite a runtime.
    viene ignorato (nessun filtro), non applicato alla cieca;
 2. per l'**agenzia** si **interseca** con `scopeIds` invece di sostituirlo:
    `where.agenziaSedeId = { in: scopeIds.filter((id) => id === sedeSel) }`.
-   Un `sede=<uuid di un'altra azienda>` produce lista vuota, mai dati altrui.
+
+Cosa vede l'utente con un `sede=<uuid di un'altra azienda>`: **la lista intera del proprio
+scope, senza filtro** — decide la regola 1, che scatta per prima. La select ricade su
+"Tutte le sedi" (il valore non è fra le opzioni), quindi select e lista concordano. In
+nessun caso compaiono dati di un'altra azienda.
+
+L'intersezione della regola 2 non è quindi ciò che protegge da un id ostile — a quello
+pensa la regola 1. Serve come difesa in profondità: se un domani le opzioni venissero da
+una fonte più larga dello scope, l'intersezione continuerebbe a clampare il risultato allo
+scope invece di allargarlo.
+
+⚠️ Una versione precedente di questa spec affermava che un id estraneo "produce lista
+vuota". Era falso e internamente incoerente con la regola 1. Corretto dopo la review del
+Task 3, con decisione esplicita: si ignora il filtro (2026-07-09).
 
 L'opzione **"Non assegnate"** (`agenziaSedeId: null`) esiste solo per broker e admin. Per
 l'agenzia sarebbe contraddittoria: sovrascriverebbe il vincolo `{ in: scopeIds }`, e una

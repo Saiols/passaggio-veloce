@@ -34,9 +34,15 @@ export type FiltroSede =
  * Traduce `?sede=` in un vincolo su `agenziaSedeId`, fail-closed.
  *
  * Il valore arriva dalla querystring: un id fuori dalle opzioni ammesse viene
- * ignorato, non applicato alla cieca. Per l'agenzia si INTERSECA con `scopeIds`
- * invece di sostituirlo — la sede restringe la madre, non la rimpiazza — quindi
- * un id fuori scope produce `sedeIds: []`, cioè lista vuota, mai dati altrui.
+ * ignorato (`nessuno`), non applicato alla cieca. È questa la difesa contro un id
+ * ostile — chi passa la sede di un'altra azienda vede la propria lista non
+ * filtrata, mai dati altrui.
+ *
+ * L'intersezione con `scopeIds` per l'agenzia è difesa in profondità: oggi le
+ * opzioni derivano già dallo scope, quindi `sedeIds` non può risultare vuoto per
+ * questa via. Se un domani le opzioni venissero da una fonte più larga, il filtro
+ * continuerebbe a clampare allo scope — la sede restringe la madre, non la
+ * rimpiazza — invece di allargare i risultati.
  *
  * `scopeIds` è `null` per broker e admin: lì `agenziaSedeId` non è il campo su
  * cui poggia lo scoping, quindi non c'è nulla da intersecare.

@@ -40,14 +40,14 @@ export function isPenale(tipo: string): boolean {
  * dentro il padding della lista — niente margini negativi da accordare al
  * padding della `Card`, che è `p-5 sm:p-6` e cambia al breakpoint.
  *
- * Il segnale è una `box-shadow` inset, non un `border-l`: entrambe le viste
- * mettono questa riga dentro una lista `divide-y divide-pv-slate-200`, il cui
- * selettore (`>:not(:last-child)`) ha specificità (0,2,0) contro (0,1,0) di
- * `.border-pv-red-500` e vince sempre, ridipingendo di grigio il bordo
- * sinistro di ogni riga che non sia l'ultima — cioè quasi sempre, essendo i
- * movimenti ordinati per data decrescente. `divide-*` imposta solo
- * `border-color`: una `box-shadow` è una proprietà diversa che non tocca,
- * quindi la barra resta rossa in ogni posizione della lista.
+ * Il segnale è una `box-shadow` inset, non un `border-l`. Entrambe le viste
+ * mettono questa riga dentro una lista `divide-y divide-pv-slate-200`, che
+ * dipinge un separatore di 1px in basso su ogni riga tranne l'ultima. Un
+ * `border-pv-red-500` sulla riga imposta la shorthand `border-color`, che
+ * copre tutti e quattro i lati: ridipingerebbe di rosso anche quel
+ * separatore, sottolineando la riga. Una `box-shadow` non tocca nessuna
+ * proprietà `border-*`, quindi il separatore resta grigio e la barra resta
+ * rossa in qualunque posizione della lista.
  */
 export const CLASSI_RIGA_PENALE =
   'bg-pv-red-50/40 pl-3 pr-2 rounded-r-[6px] shadow-[inset_2px_0_0_var(--color-pv-red-500)]';

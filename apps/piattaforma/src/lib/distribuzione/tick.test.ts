@@ -26,8 +26,14 @@ vi.mock('@/lib/eventi/emit', () => ({
   emitEventiPratica: vi.fn(() => Promise.resolve()),
   emitEventoPratica: vi.fn(() => Promise.resolve()),
 }));
+vi.mock('@/lib/notifiche/pratica', () => ({
+  destinatariSedeAgenzia: vi.fn(() => Promise.resolve([])),
+  destinatariBroker: vi.fn(() => Promise.resolve([])),
+}));
 
 import { avviaRound1ForPratica } from './tick';
+import { sendNotifications } from '@/lib/notifiche';
+import { destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,5 +76,190 @@ describe('avviaRound1ForPratica (multi-sede: tutte le sedi in zona)', () => {
     expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1' });
     expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2' });
     expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3' });
+  });
+});
+
+// Forma semplificata di SendInput per N6, solo i campi che asseriamo: evita di
+// dover discriminare l'intera union di `sendNotifications` nei test.
+type N6InputForTest = {
+  tipo: string;
+  target: { email: string; userId: string | null; companyId: string | null };
+  payload: {
+    codicePratica: string;
+    feeCent: number;
+    comune: string | null;
+    provincia: string | null;
+  };
+};
+
+function n6Inputs(): N6InputForTest[] {
+  return vi.mocked(sendNotifications).mock.calls[0][0] as unknown as N6InputForTest[];
+}
+
+describe('N6_AGENZIA_NUOVA_PRATICA: fan-out ai membri della sede assegnataria', () => {
+  it('due assegnazioni con sede e due membri ciascuna → quattro notifiche, una per coppia', async () => {
+    // Una sola sede per madre, per isolare il fan-out dal test multi-sede sopra.
+    tx.sede.findMany.mockResolvedValue([
+      { id: 'sA', createdAt: new Date('2026-01-01'), nome: 'Agenzia A', provincia: 'VE', companyId: 'compA' },
+      { id: 'sB', createdAt: new Date('2026-01-02'), nome: 'Agenzia B', provincia: 'VE', companyId: 'compB' },
+    ]);
+
+    // Query post-commit (fuori tx): indipendente da come sono state create le
+    // assegnazioni, controlla direttamente cosa emitN6ForAssegnazioni riceve.
+    prismaMock.praticaAssegnazione.findMany.mockResolvedValue([
+      {
+        id: 'a1',
+        praticaId: 'p1',
+        round: 1,
+        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
+        agenzia: { id: 'compA', ragioneSociale: 'Agenzia A', email: 'agenziaA@example.com', users: [] },
+        sedeId: 'sA',
+        pratica: {
+          codicePratica: 'PV-2026-000001',
+          veicoli: [{ targa: 'AA000AA' }],
+          comune: 'Venezia',
+          provincia: 'VE',
+          feeAgenziaCent: 5000,
+        },
+      },
+      {
+        id: 'a2',
+        praticaId: 'p1',
+        round: 1,
+        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
+        agenzia: { id: 'compB', ragioneSociale: 'Agenzia B', email: 'agenziaB@example.com', users: [] },
+        sedeId: 'sB',
+        pratica: {
+          codicePratica: 'PV-2026-000001',
+          veicoli: [{ targa: 'AA000AA' }],
+          comune: 'Venezia',
+          provincia: 'VE',
+          feeAgenziaCent: 5000,
+        },
+      },
+    ]);
+
+    vi.mocked(destinatariSedeAgenzia).mockImplementation((sedeId: string) => {
+      if (sedeId === 'sA') {
+        return Promise.resolve([
+          { email: 'mario@agenziaA.it', userId: 'u1', nome: 'Mario' },
+          { email: 'luigi@agenziaA.it', userId: 'u2', nome: 'Luigi' },
+        ]);
+      }
+      if (sedeId === 'sB') {
+        return Promise.resolve([
+          { email: 'anna@agenziaB.it', userId: 'u3', nome: 'Anna' },
+          { email: 'elsa@agenziaB.it', userId: 'u4', nome: 'Elsa' },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    await avviaRound1ForPratica('p1');
+
+    expect(destinatariSedeAgenzia).toHaveBeenCalledTimes(2);
+    expect(destinatariSedeAgenzia).toHaveBeenCalledWith('sA');
+    expect(destinatariSedeAgenzia).toHaveBeenCalledWith('sB');
+
+    expect(sendNotifications).toHaveBeenCalledTimes(1);
+    const inputs = n6Inputs();
+    expect(inputs).toHaveLength(4); // 2 assegnazioni × 2 membri
+
+    const byEmail = Object.fromEntries(inputs.map((i) => [i.target.email, i]));
+    expect(Object.keys(byEmail)).toHaveLength(4);
+
+    expect(byEmail['mario@agenziaA.it'].target).toEqual({ email: 'mario@agenziaA.it', userId: 'u1', companyId: 'compA' });
+    expect(byEmail['luigi@agenziaA.it'].target).toEqual({ email: 'luigi@agenziaA.it', userId: 'u2', companyId: 'compA' });
+    expect(byEmail['anna@agenziaB.it'].target).toEqual({ email: 'anna@agenziaB.it', userId: 'u3', companyId: 'compB' });
+    expect(byEmail['elsa@agenziaB.it'].target).toEqual({ email: 'elsa@agenziaB.it', userId: 'u4', companyId: 'compB' });
+
+    // Il payload (dati della pratica/assegnazione) non dipende dal membro: è
+    // identico per ogni notifica dello stesso fan-out.
+    for (const input of inputs) {
+      expect(input.tipo).toBe('N6_AGENZIA_NUOVA_PRATICA');
+      expect(input.payload.codicePratica).toBe('PV-2026-000001');
+      expect(input.payload.feeCent).toBe(5000);
+      expect(input.payload.comune).toBe('Venezia');
+      expect(input.payload.provincia).toBe('VE');
+    }
+  });
+
+  it('ramo legacy (sedeId null): una sola notifica all\'admin madre, destinatariSedeAgenzia non chiamata', async () => {
+    tx.sede.findMany.mockResolvedValue([
+      { id: 'sL', createdAt: new Date('2026-01-01'), nome: 'Agenzia Legacy', provincia: 'VE', companyId: 'compL' },
+    ]);
+
+    prismaMock.praticaAssegnazione.findMany.mockResolvedValue([
+      {
+        id: 'a1',
+        praticaId: 'p1',
+        round: 1,
+        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
+        agenzia: {
+          id: 'compL',
+          ragioneSociale: 'Agenzia Legacy',
+          email: 'agenzia-legacy@example.com',
+          users: [{ id: 'u-legacy', email: 'admin-legacy@example.com' }],
+        },
+        sedeId: null,
+        pratica: {
+          codicePratica: 'PV-2026-000002',
+          veicoli: [],
+          comune: 'Venezia',
+          provincia: 'VE',
+          feeAgenziaCent: 3000,
+        },
+      },
+    ]);
+
+    // Se il ramo legacy chiamasse comunque il risolutore di sede sarebbe un bug:
+    // lo facciamo esplodere per farlo emergere subito nel test.
+    vi.mocked(destinatariSedeAgenzia).mockImplementation(() => {
+      throw new Error('destinatariSedeAgenzia non deve essere chiamata per assegnazioni legacy (sedeId null)');
+    });
+
+    await avviaRound1ForPratica('p1');
+
+    expect(destinatariSedeAgenzia).not.toHaveBeenCalled();
+    expect(sendNotifications).toHaveBeenCalledTimes(1);
+    const inputs = n6Inputs();
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0].target).toEqual({
+      email: 'admin-legacy@example.com',
+      userId: 'u-legacy',
+      companyId: 'compL',
+    });
+  });
+
+  it('sede senza membri attivi: destinatariSedeAgenzia torna [] → nessuna notifica per quella assegnazione, nessuna eccezione', async () => {
+    tx.sede.findMany.mockResolvedValue([
+      { id: 'sE', createdAt: new Date('2026-01-01'), nome: 'Agenzia Vuota', provincia: 'VE', companyId: 'compE' },
+    ]);
+
+    prismaMock.praticaAssegnazione.findMany.mockResolvedValue([
+      {
+        id: 'a1',
+        praticaId: 'p1',
+        round: 1,
+        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
+        agenzia: { id: 'compE', ragioneSociale: 'Agenzia Vuota', email: 'vuota@example.com', users: [] },
+        sedeId: 'sE',
+        pratica: {
+          codicePratica: 'PV-2026-000003',
+          veicoli: [],
+          comune: 'Venezia',
+          provincia: 'VE',
+          feeAgenziaCent: 4000,
+        },
+      },
+    ]);
+
+    vi.mocked(destinatariSedeAgenzia).mockImplementation(() => Promise.resolve([]));
+
+    await expect(avviaRound1ForPratica('p1')).resolves.toBeDefined();
+
+    expect(destinatariSedeAgenzia).toHaveBeenCalledWith('sE');
+    expect(sendNotifications).toHaveBeenCalledTimes(1);
+    expect(n6Inputs()).toEqual([]);
   });
 });

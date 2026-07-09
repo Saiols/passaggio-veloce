@@ -9,6 +9,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
+import { destinatariAgenzia } from '@/lib/notifiche/pratica';
 import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
@@ -161,8 +162,6 @@ export async function confermaAnnullamentoConPenaleAction(
     brokerCompanyId: string;
     brokerSedeId: string | null;
     brokerNome: string;
-    agenziaEmail: string | null;
-    agenziaUserId: string | null;
     agenziaCompanyId: string | null;
     agenziaSedeId: string | null;
     agenziaNome: string;
@@ -289,7 +288,6 @@ export async function confermaAnnullamentoConPenaleAction(
       });
 
       const brokerUser = pratica.broker.users[0];
-      const agenziaUser = pratica.agenziaAssegnata?.users[0];
 
       return {
         codicePratica: pratica.codicePratica ?? '—',
@@ -307,8 +305,6 @@ export async function confermaAnnullamentoConPenaleAction(
         brokerCompanyId: pratica.brokerId,
         brokerSedeId: pratica.brokerSedeId,
         brokerNome: brokerUser?.nome ?? pratica.broker.ragioneSociale,
-        agenziaEmail: agenziaUser?.email ?? pratica.agenziaAssegnata?.email ?? null,
-        agenziaUserId: agenziaUser?.id ?? null,
         agenziaCompanyId: pratica.agenziaAssegnataId,
         agenziaSedeId: pratica.agenziaSedeId,
         agenziaNome:
@@ -339,12 +335,15 @@ export async function confermaAnnullamentoConPenaleAction(
         },
       }).catch(() => undefined);
     }
-    if (payload.agenziaEmail) {
+    // Destinatario: chi ha accettato la pratica, poi la sua sede, poi
+    // l'admin azienda. Vedi lib/notifiche/pratica.ts.
+    const destinatariAg = await destinatariAgenzia(praticaId);
+    for (const d of destinatariAg) {
       await sendNotification({
         tipo: 'N18_AGENZIA_SEGNALAZIONE_CONFERMATA',
         target: {
-          email: payload.agenziaEmail,
-          userId: payload.agenziaUserId,
+          email: d.email,
+          userId: d.userId,
           companyId: payload.agenziaCompanyId,
         },
         payload: {

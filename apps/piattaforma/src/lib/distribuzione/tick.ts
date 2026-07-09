@@ -13,6 +13,7 @@ import {
 } from '@/lib/notifiche';
 import { emitEventiPratica, emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoNuovaPratica, eventoPraticaEscalation } from '@/lib/eventi/pratica-eventi';
+import { destinatariBroker, destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
 
 const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
   1: DISTRIBUZIONE.T1_HOURS,
@@ -293,30 +294,46 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
   });
 
   const batchTotal = assegnazioni.length;
-  const inputs = assegnazioni.map((a) => ({
-    tipo: 'N6_AGENZIA_NUOVA_PRATICA' as const,
-    target: {
-      email: a.agenzia.users[0]?.email ?? a.agenzia.email,
-      companyId: a.agenzia.id,
-      userId: a.agenzia.users[0]?.id ?? null,
-    },
-    payload: {
-      codicePratica: a.pratica.codicePratica ?? '—',
-      targa:
-        a.pratica.veicoli[0]?.targa
-          ? a.pratica.veicoli.length > 1
-            ? `${a.pratica.veicoli[0].targa} +${a.pratica.veicoli.length - 1}`
-            : a.pratica.veicoli[0].targa
-          : null,
-      comune: a.pratica.comune,
-      provincia: a.pratica.provincia,
-      feeCent: a.pratica.feeAgenziaCent,
-      round: a.round,
-      altreAgenzie: Math.max(0, batchTotal - 1),
-      countdownFineAt: a.countdownFineAt,
-      nomeAgenzia: a.agenzia.ragioneSociale,
-    } satisfies N6AgenziaNuovaPayload,
-  }));
+
+  // L'assegnataria è la SEDE: la N6 va a chi lavora in quella filiale, non
+  // all'admin della madre. Nessun preferito: nessuno l'ha ancora presa in carico.
+  // Le righe legacy senza sedeId ricadono sul comportamento storico.
+  const inputs = (
+    await Promise.all(
+      assegnazioni.map(async (a) => {
+        const destinatari = a.sedeId
+          ? await destinatariSedeAgenzia(a.sedeId)
+          : [
+              {
+                email: a.agenzia.users[0]?.email ?? a.agenzia.email,
+                userId: a.agenzia.users[0]?.id ?? null,
+                nome: a.agenzia.ragioneSociale,
+              },
+            ];
+
+        return destinatari.map((d) => ({
+          tipo: 'N6_AGENZIA_NUOVA_PRATICA' as const,
+          target: { email: d.email, userId: d.userId, companyId: a.agenzia.id },
+          payload: {
+            codicePratica: a.pratica.codicePratica ?? '—',
+            targa:
+              a.pratica.veicoli[0]?.targa
+                ? a.pratica.veicoli.length > 1
+                  ? `${a.pratica.veicoli[0].targa} +${a.pratica.veicoli.length - 1}`
+                  : a.pratica.veicoli[0].targa
+                : null,
+            comune: a.pratica.comune,
+            provincia: a.pratica.provincia,
+            feeCent: a.pratica.feeAgenziaCent,
+            round: a.round,
+            altreAgenzie: Math.max(0, batchTotal - 1),
+            countdownFineAt: a.countdownFineAt,
+            nomeAgenzia: a.agenzia.ragioneSociale,
+          } satisfies N6AgenziaNuovaPayload,
+        }));
+      }),
+    )
+  ).flat();
 
   await sendNotifications(inputs);
 
@@ -377,20 +394,20 @@ async function emitEscalationNotifications(praticaId: string): Promise<void> {
 
   await sendNotifications(targets);
 
-  const brokerUser = pratica.broker.users[0];
-  // Ripiega sull'email azienda se manca l'admin attivo (coerente con N3): la
-  // notifica al broker non deve sparire in silenzio.
-  const brokerEmail = brokerUser?.email ?? pratica.broker.email;
-  if (brokerEmail) {
+  // Recapito: chi ha creato la pratica; se non è più raggiungibile la catena
+  // scende alla sua sede, poi all'admin azienda. Vedi lib/notifiche/pratica.ts.
+  const destinatari = await destinatariBroker(praticaId);
+  for (const d of destinatari) {
+    // Un destinatario che fallisce non deve azzerare l'invio agli altri.
     await sendNotification({
       tipo: 'N11_BROKER_ESCALATION',
-      target: { email: brokerEmail, userId: brokerUser?.id ?? null, companyId: pratica.broker.id },
+      target: { email: d.email, userId: d.userId, companyId: pratica.broker.id },
       payload: {
         codicePratica: pratica.codicePratica ?? '—',
         targa: targaPratica,
-        nomeBroker: brokerUser?.nome ?? pratica.broker.ragioneSociale,
+        nomeBroker: d.nome,
       },
-    });
+    }).catch(() => undefined);
   }
 
   // Evento in-app (modale) per il broker: nessuna agenzia disponibile.

@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { env } from '@/env';
 import { sendNotification } from '@/lib/notifiche';
+import { destinatariAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
 
 /** In DEMO i solleciti scattano dopo 5 minuti dall'accettazione; in produzione dopo 5 giorni. */
 const SOGLIA_DEMO_MS = 5 * 60_000;
@@ -71,57 +72,69 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
 
     // N3 — sollecito al broker (dealer) affinché solleciti l'agenzia a firmare
     try {
-      const brokerUser = p.broker.users[0];
-      const brokerEmail = brokerUser?.email ?? p.broker.email;
-      const nomeBroker = brokerUser?.nome ?? p.broker.ragioneSociale;
+      // Recapito: chi ha creato la pratica; se non è più raggiungibile la
+      // catena scende alla sua sede, poi all'admin azienda. Vedi
+      // lib/notifiche/pratica.ts.
+      const destinatari = await destinatariBroker(p.id);
       const agenziaNome = p.agenziaAssegnata?.ragioneSociale ?? 'agenzia assegnata';
 
-      await sendNotification({
-        tipo: 'N3_BROKER_SOLLECITO',
-        target: {
-          email: brokerEmail,
-          userId: brokerUser?.id ?? null,
-          companyId: p.broker.id,
-        },
-        payload: {
-          codicePratica: codice,
-          targa: targaPratica,
-          agenziaNome,
-          nomeBroker,
-          giorniTrascorsi,
-        },
-      });
-      n3Sent++;
+      for (const d of destinatari) {
+        // Un destinatario che fallisce (es. hiccup DB in sendNotification) non
+        // deve impedire l'invio agli altri destinatari della stessa pratica.
+        await sendNotification({
+          tipo: 'N3_BROKER_SOLLECITO',
+          target: {
+            email: d.email,
+            userId: d.userId,
+            companyId: p.broker.id,
+          },
+          payload: {
+            codicePratica: codice,
+            targa: targaPratica,
+            agenziaNome,
+            nomeBroker: d.nome,
+            giorniTrascorsi,
+          },
+        }).catch(() => undefined);
+      }
+      // n3Sent conta le pratiche sollecitate, non le email inviate: un solo
+      // incremento anche quando la pratica ha più destinatari (sede + admin).
+      if (destinatari.length > 0) n3Sent++;
     } catch {
       /* errori swallowed — già tracciati in NotificaInviata (stato=FAILED) */
     }
 
-    // N7 — promemoria countdown all'agenzia assegnata
+    // N7 — promemoria countdown all'agenzia assegnata: parte dopo
+    // l'accettazione, quindi il destinatario è chi ha accettato (poi la sua
+    // sede, poi l'admin azienda). Vedi lib/notifiche/pratica.ts.
     if (p.agenziaAssegnata) {
       try {
-        const agenziaUser = p.agenziaAssegnata.users[0];
-        const agenziaEmail = agenziaUser?.email ?? p.agenziaAssegnata.email;
         const nomeAgenzia = p.agenziaAssegnata.ragioneSociale;
 
         // Data entro cui si attende la firma: soglia + accettataAt
         const firmaEntroAt = new Date(accettataMs + soglia * 4); // ~20gg in prod, ~20min in demo
 
-        await sendNotification({
-          tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN',
-          target: {
-            email: agenziaEmail,
-            userId: agenziaUser?.id ?? null,
-            companyId: p.agenziaAssegnata.id,
-          },
-          payload: {
-            codicePratica: codice,
-            targa: targaPratica,
-            nomeAgenzia,
-            feeCent: p.feeAgenziaCent,
-            firmaEntroAt,
-          },
-        });
-        n7Sent++;
+        const destinatari = await destinatariAgenzia(p.id);
+        for (const d of destinatari) {
+          await sendNotification({
+            tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN',
+            target: {
+              email: d.email,
+              userId: d.userId,
+              companyId: p.agenziaAssegnata.id,
+            },
+            payload: {
+              codicePratica: codice,
+              targa: targaPratica,
+              nomeAgenzia,
+              feeCent: p.feeAgenziaCent,
+              firmaEntroAt,
+            },
+          }).catch(() => undefined);
+        }
+        // n7Sent conta le pratiche sollecitate, non le email inviate: stesso
+        // criterio di n3Sent qui sopra.
+        if (destinatari.length > 0) n7Sent++;
       } catch {
         /* errori swallowed */
       }

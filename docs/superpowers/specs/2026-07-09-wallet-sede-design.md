@@ -61,7 +61,7 @@ portandosi dietro la transazione. Il bug colpisce solo le penali applicate dopo 
 Nessun controllo di ruolo. Il `PayoutButton` è renderizzato per tutti, con `disabled` legato al
 solo saldo; la prop `isTitolare` serve al testo della modale, **non** è un gate.
 
-Il pattern corretto esiste già venti righe più sotto, in `aggiornaPayoutThresholdAction`:
+Il pattern corretto esiste già venti righe più sotto, in `updatePayoutThresholdAction`:
 
 ```ts
 const role = await getSedeRole(sede.id);

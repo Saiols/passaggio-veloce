@@ -85,6 +85,17 @@ describe('destinatariBroker', () => {
     await expect(destinatariBroker('p1')).resolves.toEqual([
       { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna' },
     ]);
+    // il filtro ACTIVE/deletedAt sul creatore deve restare: senza, un utente
+    // sospeso o cancellato tornerebbe raggiungibile da questa query.
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'u1', status: 'ACTIVE', deletedAt: null } }),
+    );
+    // idem per i membri della sede: solo utenti attivi e non cancellati.
+    expect(prismaMock.userSede.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { sedeId: 's1', user: { status: 'ACTIVE', deletedAt: null } },
+      }),
+    );
   });
 
   it('pratica storica (nessun creatore, nessuna sede) → admin azienda', async () => {
@@ -105,6 +116,14 @@ describe('destinatariBroker', () => {
     ]);
     // senza sede non si interroga user_sedi
     expect(prismaMock.userSede.findMany).not.toHaveBeenCalled();
+    // il ruolo ADMIN_AZIENDA (oltre ad ACTIVE/deletedAt e alla company giusta)
+    // deve restare nel filtro: senza, qualunque utente attivo dell'azienda
+    // diventerebbe un candidato admin.
+    expect(prismaMock.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { companyId: 'c1', role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
+      }),
+    );
   });
 
   it('pratica inesistente → nessun destinatario, nessuna query a valle', async () => {

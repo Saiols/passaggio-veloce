@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
+import { destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
 import { emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoPraticaAssegnata } from '@/lib/eventi/pratica-eventi';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
@@ -12,8 +13,6 @@ import { isAdminOrAssistente } from '@/lib/auth/permissions';
 export type AssignResult = { ok: true } | { ok: false; error: string };
 
 type NotificaData = {
-  agenziaEmail: string;
-  agenziaUserId: string | null;
   agenziaRagioneSociale: string;
   codicePratica: string | null;
   targa: string | null;
@@ -111,8 +110,6 @@ export async function assegnaEscalationAction(
         return {
           agenziaCompanyId: sede.companyId,
           agenziaSedeId: sede.id,
-          agenziaEmail: sede.company.users[0]?.email ?? sede.email ?? sede.company.email,
-          agenziaUserId: sede.company.users[0]?.id ?? null,
           agenziaRagioneSociale: sede.nome,
         codicePratica: pratica.codicePratica,
         targa:
@@ -127,27 +124,31 @@ export async function assegnaEscalationAction(
       };
     });
 
-    // Best-effort notification (fuori transazione)
+    // Best-effort notification (fuori transazione). L'assegnataria è la SEDE:
+    // la N6 va a chi ci lavora, non all'admin della madre.
     try {
-      await sendNotification({
-        tipo: 'N6_AGENZIA_NUOVA_PRATICA',
-        target: {
-          email: notificaData.agenziaEmail,
-          userId: notificaData.agenziaUserId,
-          companyId: notificaData.agenziaCompanyId,
-        },
-        payload: {
-          codicePratica: notificaData.codicePratica ?? '—',
-          targa: notificaData.targa,
-          comune: notificaData.comune,
-          provincia: notificaData.provincia,
-          feeCent: notificaData.feeCent,
-          round: ESCALATION_ROUND,
-          altreAgenzie: 0,
-          countdownFineAt: null,
-          nomeAgenzia: notificaData.agenziaRagioneSociale,
-        },
-      });
+      const destinatari = await destinatariSedeAgenzia(notificaData.agenziaSedeId);
+      for (const d of destinatari) {
+        await sendNotification({
+          tipo: 'N6_AGENZIA_NUOVA_PRATICA',
+          target: {
+            email: d.email,
+            userId: d.userId,
+            companyId: notificaData.agenziaCompanyId,
+          },
+          payload: {
+            codicePratica: notificaData.codicePratica ?? '—',
+            targa: notificaData.targa,
+            comune: notificaData.comune,
+            provincia: notificaData.provincia,
+            feeCent: notificaData.feeCent,
+            round: ESCALATION_ROUND,
+            altreAgenzie: 0,
+            countdownFineAt: null,
+            nomeAgenzia: notificaData.agenziaRagioneSociale,
+          },
+        }).catch(() => undefined);
+      }
     } catch {
       // swallow notification errors — assegnazione già avvenuta
     }

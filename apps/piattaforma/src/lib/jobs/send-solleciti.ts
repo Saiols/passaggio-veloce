@@ -2,7 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { env } from '@/env';
 import { sendNotification } from '@/lib/notifiche';
-import { destinatariBroker } from '@/lib/notifiche/pratica';
+import { destinatariAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
 
 /** In DEMO i solleciti scattano dopo 5 minuti dall'accettazione; in produzione dopo 5 giorni. */
 const SOGLIA_DEMO_MS = 5 * 60_000;
@@ -102,32 +102,37 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
       /* errori swallowed — già tracciati in NotificaInviata (stato=FAILED) */
     }
 
-    // N7 — promemoria countdown all'agenzia assegnata
+    // N7 — promemoria countdown all'agenzia assegnata: parte dopo
+    // l'accettazione, quindi il destinatario è chi ha accettato (poi la sua
+    // sede, poi l'admin azienda). Vedi lib/notifiche/pratica.ts.
     if (p.agenziaAssegnata) {
       try {
-        const agenziaUser = p.agenziaAssegnata.users[0];
-        const agenziaEmail = agenziaUser?.email ?? p.agenziaAssegnata.email;
         const nomeAgenzia = p.agenziaAssegnata.ragioneSociale;
 
         // Data entro cui si attende la firma: soglia + accettataAt
         const firmaEntroAt = new Date(accettataMs + soglia * 4); // ~20gg in prod, ~20min in demo
 
-        await sendNotification({
-          tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN',
-          target: {
-            email: agenziaEmail,
-            userId: agenziaUser?.id ?? null,
-            companyId: p.agenziaAssegnata.id,
-          },
-          payload: {
-            codicePratica: codice,
-            targa: targaPratica,
-            nomeAgenzia,
-            feeCent: p.feeAgenziaCent,
-            firmaEntroAt,
-          },
-        });
-        n7Sent++;
+        const destinatari = await destinatariAgenzia(p.id);
+        for (const d of destinatari) {
+          await sendNotification({
+            tipo: 'N7_AGENZIA_PROMEMORIA_COUNTDOWN',
+            target: {
+              email: d.email,
+              userId: d.userId,
+              companyId: p.agenziaAssegnata.id,
+            },
+            payload: {
+              codicePratica: codice,
+              targa: targaPratica,
+              nomeAgenzia,
+              feeCent: p.feeAgenziaCent,
+              firmaEntroAt,
+            },
+          }).catch(() => undefined);
+        }
+        // n7Sent conta le pratiche sollecitate, non le email inviate: stesso
+        // criterio di n3Sent qui sopra.
+        if (destinatari.length > 0) n7Sent++;
       } catch {
         /* errori swallowed */
       }

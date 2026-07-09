@@ -6,7 +6,7 @@ import { auth } from '@/auth';
 import { getSedeRole } from '@/lib/auth/session-context';
 import { prisma } from '@pv/db';
 import { parseSedeFields } from '@/lib/sedi/form';
-import { canEditSedeSettings } from '@/lib/sedi/scope';
+import { canEditSedeSettings, canEditPaymentSettings } from '@/lib/sedi/scope';
 
 export type SedeActionResult = { ok: true } | { ok: false; error: string };
 
@@ -82,7 +82,11 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   return { ok: true };
 }
 
-/** Aggiorna i dati anagrafici/pagamenti di una sede (proprietario o ADMIN_SEDE della sede). */
+/**
+ * Aggiorna i dati anagrafici/pagamenti di una sede.
+ * Anagrafica: proprietario o ADMIN_SEDE della sede.
+ * IBAN e soglia payout: solo il proprietario della madre.
+ */
 export async function updateSedeAction(
   sedeId: string,
   formData: FormData,
@@ -96,6 +100,8 @@ export async function updateSedeAction(
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
 
+  // I campi di incasso vengono OMESSI, non azzerati: `parseSedeFields` mappa
+  // "campo assente" → `iban: null`, che a DB cancellerebbe l'IBAN della sede.
   await prisma.sede.update({
     where: { id: sedeId },
     data: {
@@ -108,8 +114,9 @@ export async function updateSedeAction(
       telefono: f.telefono,
       email: f.email,
       codiceInterno: f.codiceInterno,
-      iban: f.iban,
-      payoutThresholdCent: f.payoutThresholdCent,
+      ...(canEditPaymentSettings(role)
+        ? { iban: f.iban, payoutThresholdCent: f.payoutThresholdCent }
+        : {}),
     },
   });
 

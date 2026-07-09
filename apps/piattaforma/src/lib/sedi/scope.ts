@@ -160,6 +160,15 @@ export function canEditSedeSettings(role: SedeRole): boolean {
   return role === 'OWNER' || role === 'ADMIN_SEDE';
 }
 
+/**
+ * Impostazioni di incasso della sede (IBAN, soglia payout): solo il
+ * proprietario della madre. L'ADMIN_SEDE resta autonomo su anagrafica, team e
+ * orari (`canEditSedeSettings`), ma non decide dove finiscono i soldi.
+ */
+export function canEditPaymentSettings(role: SedeRole): boolean {
+  return role === 'OWNER';
+}
+
 export function assignableSedeRoles(role: SedeRole): SedeRuolo[] {
   return canManageSedeTeam(role) ? ['ADMIN_SEDE', 'OPERATORE'] : [];
 }

@@ -23,8 +23,20 @@ export type SedeEditData = {
 };
 
 /** Anagrafica + Pagamenti della sede: vista in sola lettura con toggle "Modifica"
- * che apre il form editabile (proprietario o admin della sede). */
-export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData }) {
+ * che apre il form editabile (proprietario o admin della sede).
+ *
+ * `canEditPagamenti` (solo il proprietario della madre) governa IBAN e soglia
+ * payout: senza, i due campi non compaiono nel form e non vengono inviati.
+ * Il gate vero resta lato server in `updateSedeAction`. */
+export function SedeEdit({
+  sedeId,
+  data,
+  canEditPagamenti,
+}: {
+  sedeId: string;
+  data: SedeEditData;
+  canEditPagamenti: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
@@ -45,8 +57,13 @@ export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData 
       provincia: p.provincia,
     }));
 
-  const ibanOk = f.iban.trim() === '' || /^IT\d{2}[A-Z0-9]{1,30}$/i.test(f.iban.trim());
-  const payoutOk = f.payoutEuro.trim() === '' || Number(f.payoutEuro.replace(',', '.')) >= 0;
+  // Campi non renderizzati → non vincolano il submit dell'anagrafica.
+  const ibanOk =
+    !canEditPagamenti || f.iban.trim() === '' || /^IT\d{2}[A-Z0-9]{1,30}$/i.test(f.iban.trim());
+  const payoutOk =
+    !canEditPagamenti ||
+    f.payoutEuro.trim() === '' ||
+    Number(f.payoutEuro.replace(',', '.')) >= 0;
   const valid =
     f.nome.trim().length >= 2 &&
     f.indirizzo.trim().length >= 2 &&
@@ -65,7 +82,11 @@ export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!valid) {
-      setError('Controlla i campi: nome, indirizzo, città, CAP, provincia (2 lettere), IBAN e soglia.');
+      setError(
+        canEditPagamenti
+          ? 'Controlla i campi: nome, indirizzo, città, CAP, provincia (2 lettere), IBAN e soglia.'
+          : 'Controlla i campi: nome, indirizzo, città, CAP, provincia (2 lettere).',
+      );
       return;
     }
     setError(null);
@@ -80,8 +101,10 @@ export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData 
       fd.set('telefono', f.telefono);
       fd.set('email', f.email);
       fd.set('codiceInterno', f.codiceInterno);
-      fd.set('iban', f.iban);
-      fd.set('payoutThresholdEuro', f.payoutEuro);
+      if (canEditPagamenti) {
+        fd.set('iban', f.iban);
+        fd.set('payoutThresholdEuro', f.payoutEuro);
+      }
       const res = await updateSedeAction(sedeId, fd);
       if (res.ok) {
         setEditing(false);
@@ -126,6 +149,11 @@ export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData 
               value={formatCurrencyCent(data.payoutThresholdCent)}
             />
           </dl>
+          {!canEditPagamenti && (
+            <p className="mt-4 text-[12.5px] text-pv-slate-500">
+              Solo il titolare dell’account può modificare queste impostazioni.
+            </p>
+          )}
         </Card>
       </>
     );
@@ -164,30 +192,34 @@ export function SedeEdit({ sedeId, data }: { sedeId: string; data: SedeEditData 
           <Field label="Codice interno">
             <Input value={f.codiceInterno} onChange={(e) => set('codiceInterno', e.target.value)} />
           </Field>
-          <Field
-            label="IBAN dedicato (opzionale)"
-            error={!ibanOk ? 'IBAN italiano non valido' : undefined}
-          >
-            <Input
-              value={f.iban}
-              invalid={!ibanOk}
-              placeholder="IT60X0542811101000000123456"
-              onChange={(e) => set('iban', e.target.value)}
-            />
-          </Field>
-          <Field
-            label="Soglia payout automatico (€)"
-            error={!payoutOk ? 'Importo non valido' : undefined}
-          >
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={f.payoutEuro}
-              invalid={!payoutOk}
-              onChange={(e) => set('payoutEuro', e.target.value)}
-            />
-          </Field>
+          {canEditPagamenti && (
+            <>
+              <Field
+                label="IBAN dedicato (opzionale)"
+                error={!ibanOk ? 'IBAN italiano non valido' : undefined}
+              >
+                <Input
+                  value={f.iban}
+                  invalid={!ibanOk}
+                  placeholder="IT60X0542811101000000123456"
+                  onChange={(e) => set('iban', e.target.value)}
+                />
+              </Field>
+              <Field
+                label="Soglia payout automatico (€)"
+                error={!payoutOk ? 'Importo non valido' : undefined}
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={f.payoutEuro}
+                  invalid={!payoutOk}
+                  onChange={(e) => set('payoutEuro', e.target.value)}
+                />
+              </Field>
+            </>
+          )}
         </div>
 
         {error && <Alert variant="error">{error}</Alert>}

@@ -10,6 +10,7 @@ import {
   resolveSedeRole,
   canManageSedeTeam,
   canEditSedeSettings,
+  canEditPaymentSettings,
   assignableSedeRoles,
   manageableSedi,
   resolveTeamTargetSede,
@@ -288,6 +289,23 @@ describe('canManageSedeTeam / canEditSedeSettings / assignableSedeRoles', () => 
       expect(canManageSedeTeam(r)).toBe(false);
       expect(canEditSedeSettings(r)).toBe(false);
       expect(assignableSedeRoles(r)).toEqual([]);
+    }
+  });
+});
+
+describe('canEditPaymentSettings', () => {
+  it('solo il proprietario della madre modifica IBAN e soglia payout', () => {
+    expect(canEditPaymentSettings('OWNER')).toBe(true);
+  });
+
+  it("l'ADMIN_SEDE gestisce la sede ma NON le impostazioni di incasso", () => {
+    expect(canEditSedeSettings('ADMIN_SEDE')).toBe(true);
+    expect(canEditPaymentSettings('ADMIN_SEDE')).toBe(false);
+  });
+
+  it('OPERATORE e null non possono', () => {
+    for (const r of ['OPERATORE', null] as const) {
+      expect(canEditPaymentSettings(r)).toBe(false);
     }
   });
 });

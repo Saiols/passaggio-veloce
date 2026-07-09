@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
-import { canEditSedeSettings } from '@/lib/sedi/scope';
+import { canEditSedeSettings, canEditPaymentSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { SedeEdit } from '../sedi/[id]/sede-edit';
@@ -27,6 +27,7 @@ export default async function ImpostazioniSedePage() {
 
   const role = await getSedeRole(sede.id);
   if (!canEditSedeSettings(role)) redirect('/dashboard');
+  const canEditPagamenti = canEditPaymentSettings(role);
 
   const row = await prisma.sede.findFirst({ where: { id: sede.id, deletedAt: null } });
   if (!row) redirect('/dashboard');
@@ -43,12 +44,15 @@ export default async function ImpostazioniSedePage() {
             Impostazioni sede
           </h1>
           <p className="mt-1 text-[14px] text-pv-slate-500">
-            Gestisci anagrafica, IBAN e soglia payout di {row.nome}.
+            {canEditPagamenti
+              ? `Gestisci anagrafica, IBAN e soglia payout di ${row.nome}.`
+              : `Gestisci l’anagrafica di ${row.nome}.`}
           </p>
         </header>
 
         <SedeEdit
           sedeId={row.id}
+          canEditPagamenti={canEditPagamenti}
           data={{
             nome: row.nome,
             indirizzo: row.indirizzo,

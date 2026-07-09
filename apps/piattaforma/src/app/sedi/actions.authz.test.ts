@@ -37,6 +37,12 @@ function validFormData(): FormData {
   return fd;
 }
 
+/** I `data` passati all'ultima `prisma.sede.update`. */
+function lastUpdateData(): Record<string, unknown> {
+  const call = prismaMock.sede.update.mock.calls.at(-1);
+  return (call?.[0] as { data: Record<string, unknown> }).data;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -61,5 +67,63 @@ describe('updateSedeAction — gate autorizzazione impostazioni sede', () => {
     const res = await updateSedeAction('s1', validFormData());
     expect(res.ok).toBe(true);
     expect(prismaMock.sede.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Impostazioni di incasso (IBAN + soglia payout): solo il proprietario della
+ * madre. Le asserzioni usano `not.toHaveProperty` e non un confronto di valore,
+ * così falliscono anche quando l'action scrive `iban: null` — che non sarebbe
+ * un permesso negato ma una CANCELLAZIONE dell'IBAN della sede.
+ */
+describe('updateSedeAction — IBAN e soglia payout sono owner-only', () => {
+  it('OWNER → iban e payoutThresholdCent finiscono nei data', async () => {
+    getSedeRoleMock.mockResolvedValue('OWNER');
+    const fd = validFormData();
+    fd.set('iban', 'IT60X0542811101000000123456');
+
+    const res = await updateSedeAction('s1', fd);
+
+    expect(res.ok).toBe(true);
+    const data = lastUpdateData();
+    expect(data.iban).toBe('IT60X0542811101000000123456');
+    expect(data.payoutThresholdCent).toBe(120_000);
+  });
+
+  it('ADMIN_SEDE → i data NON contengono iban né payoutThresholdCent', async () => {
+    getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
+
+    const res = await updateSedeAction('s1', validFormData());
+
+    expect(res.ok).toBe(true);
+    const data = lastUpdateData();
+    expect(data).not.toHaveProperty('iban');
+    expect(data).not.toHaveProperty('payoutThresholdCent');
+    // l'anagrafica passa comunque
+    expect(data.nome).toBe('Sede Test');
+  });
+
+  it('ADMIN_SEDE con iban vuoto → NON azzera l\'IBAN esistente della sede', async () => {
+    getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
+    const fd = validFormData();
+    fd.set('iban', ''); // il campo non è nel form: FormData lo manda vuoto
+
+    await updateSedeAction('s1', fd);
+
+    // `iban: null` cancellerebbe l'IBAN a DB: la chiave non deve esserci proprio.
+    expect(lastUpdateData()).not.toHaveProperty('iban');
+  });
+
+  it('ADMIN_SEDE che forgia la POST con un IBAN valido → il valore è ignorato', async () => {
+    getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
+    const fd = validFormData();
+    fd.set('iban', 'IT40S0542811101000000123456'); // strutturalmente valido: il gate è l'unica difesa
+    fd.set('payoutThresholdEuro', '1');
+
+    await updateSedeAction('s1', fd);
+
+    const data = lastUpdateData();
+    expect(data).not.toHaveProperty('iban');
+    expect(data).not.toHaveProperty('payoutThresholdCent');
   });
 });

@@ -73,6 +73,8 @@ export default async function SedeDetailPage({
 
         <SedeEdit
           sedeId={sede.id}
+          // La pagina è già ADMIN_AZIENDA-only (redirect sopra): chi arriva qui è il proprietario.
+          canEditPagamenti
           data={{
             nome: sede.nome,
             indirizzo: sede.indirizzo,

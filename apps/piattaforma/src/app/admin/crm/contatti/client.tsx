@@ -294,13 +294,14 @@ export function CrmContactsClient({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
-          <table className="w-full min-w-[820px] text-left text-[13px]">
+          <table className="w-full min-w-[940px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-pv-slate-200 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
                 <th className="px-4 py-3">Azienda</th>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Città</th>
                 <th className="px-4 py-3">Telefono</th>
+                <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Assegnato</th>
                 <th className="px-4 py-3">Ultimo contatto</th>
                 <th className="px-4 py-3">Stato</th>
@@ -322,6 +323,7 @@ export function CrmContactsClient({
                     {c.regione ? ` (${c.regione})` : ''}
                   </td>
                   <td className="px-4 py-2.5 text-pv-slate-700">{c.tel}</td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">{c.email ?? '—'}</td>
                   <td className="px-4 py-2.5 text-pv-slate-700">
                     {c.assignedToName ?? '—'}
                   </td>

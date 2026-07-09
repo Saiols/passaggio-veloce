@@ -922,9 +922,32 @@ pnpm --filter piattaforma dev
 3. Come **proprietario** con più sedi, senza sede selezionata: vista aggregata con totale, righe per sede e movimenti; nessun payout.
 4. Come proprietario, selezionando una sede: pagina normale, payout presente.
 
-- [ ] **Step 4: Rilascio — nota per il controller**
+- [ ] **Step 4: Rilascio — l'ordine è INVERSO rispetto al solito**
 
-La migration `20260709190000_penale_su_wallet_sede` **non** è stata applicata a Neon. Va applicata **prima** del push, come sempre. È una migration di soli dati: il codice vecchio ancora live continua a funzionare con i dati spostati (legge il wallet della sede tramite la pagina, e il flusso penale vecchio creerebbe di nuovo un wallet madre — motivo in più per non lasciare passare tempo fra migration e deploy).
+⚠️ **Correzione dopo la review finale.** La regola di progetto "migration prima del push" vale per le
+migration di **schema**: il codice nuovo ha bisogno delle colonne nuove. Questa è una migration di
+**dati**, e il bug che ripara è chiuso dal codice che esce nello stesso rilascio. Se la applichi a
+Neon mentre il codice **vecchio** è ancora live, una penale confermata in quella finestra crea di
+nuovo un wallet madre — e la migration, già eseguita, non lo spazzerà mai. Ricreeresti in silenzio
+la deriva che hai appena pulito.
+
+Sequenza corretta:
+
+1. **Prima il codice**: merge in `main` e push. Da quel momento le penali nuove finiscono sul wallet
+   di sede. Le penali storiche mal attribuite restano visibili al solo proprietario: innocuo, e
+   comunque meglio di prima.
+2. **Pre-flight su Neon** (sola lettura): verifica che ogni `brokerSedeId` appartenga davvero alla
+   company della pratica, altrimenti la migration sposterebbe denaro fra aziende diverse.
+   ```sql
+   SELECT count(*) FROM pratiche p LEFT JOIN sedi s ON s.id = p."brokerSedeId"
+   WHERE p."brokerSedeId" IS NOT NULL AND s."companyId" IS DISTINCT FROM p."brokerId";
+   ```
+   Deve dare **0**. In locale dà 0 su 16 pratiche. Se in prod non desse 0, **fermarsi**.
+3. **Poi la migration**: `prisma migrate deploy` contro Neon.
+4. Ri-eseguire le tre query di verifica dello Step 4 del Task 3 contro Neon.
+5. La migration è **idempotente**: se una penale è passata durante la finestra di deploy, rieseguire
+   l'SQL a mano la spazza.
+6. Ruotare le credenziali Neon.
 
 ---
 

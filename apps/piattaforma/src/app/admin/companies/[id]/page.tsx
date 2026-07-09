@@ -182,6 +182,7 @@ export default async function AdminCompanyDetailPage({
             cancelHref={listaHref}
             successMessage="Dati aziendali aggiornati."
             showPayoutThreshold={session.user.role === 'ADMIN_PIATTAFORMA'}
+            showIban={session.user.role === 'ADMIN_PIATTAFORMA'}
           />
         </Card>
 

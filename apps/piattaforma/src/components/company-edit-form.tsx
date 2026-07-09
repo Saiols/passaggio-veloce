@@ -35,6 +35,7 @@ export function CompanyEditForm({
   cancelHref,
   successMessage = 'Profilo aziendale aggiornato.',
   showPayoutThreshold = false,
+  showIban = true,
 }: {
   defaults: CompanyEditDefaults;
   action: (formData: FormData) => Promise<UpdateResult>;
@@ -42,6 +43,13 @@ export function CompanyEditForm({
   successMessage?: string;
   /** Mostra il campo soglia payout (visibile solo all'admin platform). */
   showPayoutThreshold?: boolean;
+  /**
+   * Mostra il campo IBAN. Default `true` perché /profilo/azienda è già
+   * owner-only a monte (pagina + action). In /admin/companies va passato
+   * `role === 'ADMIN_PIATTAFORMA'`: l'ASSISTENTE non tocca l'IBAN.
+   * Il gate autoritativo resta comunque nella server action.
+   */
+  showIban?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -97,14 +105,16 @@ export function CompanyEditForm({
         <Field label="Provincia" required>
           <Input name="provincia" defaultValue={defaults.provincia} maxLength={2} required />
         </Field>
-        <Field label="IBAN" className="sm:col-span-2">
-          <Input
-            name="iban"
-            defaultValue={defaults.iban ?? ''}
-            placeholder="IT60..."
-            maxLength={34}
-          />
-        </Field>
+        {showIban && (
+          <Field label="IBAN" className="sm:col-span-2">
+            <Input
+              name="iban"
+              defaultValue={defaults.iban ?? ''}
+              placeholder="IT60..."
+              maxLength={34}
+            />
+          </Field>
+        )}
         {showPayoutThreshold && (
           <Field
             label="Soglia payout automatico (€)"

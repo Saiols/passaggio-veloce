@@ -34,6 +34,10 @@ const updateSchema = z.object({
  * ma con companyId esplicito (non quello in sessione).
  *
  * P.IVA NON modificabile (richiede flow legale).
+ *
+ * Leve finanziarie (IBAN, soglia payout) riservate ad ADMIN_PIATTAFORMA:
+ * l'ASSISTENTE è un ruolo operativo (decisione D-02) e modifica la sola
+ * anagrafica.
  */
 export async function updateCompanyAdminAction(
   companyId: string,
@@ -79,6 +83,8 @@ export async function updateCompanyAdminAction(
     payoutThresholdCent = valid;
   }
 
+  // IBAN: solo admin platform. Va OMESSO, non azzerato — l'ASSISTENTE invia un
+  // form senza il campo, e `iban: null` gli cancellerebbe l'IBAN dell'azienda.
   await prisma.company.update({
     where: { id: companyId },
     data: {
@@ -91,7 +97,9 @@ export async function updateCompanyAdminAction(
       citta: d.citta,
       cap: d.cap,
       provincia: d.provincia,
-      iban: d.iban ? d.iban.toUpperCase() : null,
+      ...(isAdminPiattaforma(session.user.role)
+        ? { iban: d.iban ? d.iban.toUpperCase() : null }
+        : {}),
       ...(payoutThresholdCent !== undefined ? { payoutThresholdCent } : {}),
     },
   });

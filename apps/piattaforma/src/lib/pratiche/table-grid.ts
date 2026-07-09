@@ -35,12 +35,12 @@ export const PRATICHE_GRID = {
     'md:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6.5rem] ' +
     'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_9.5rem_5rem_7rem]',
 
-  /** Codice · Targa · Broker(md) · Agenzia(md) · Stato · Fee(lg) · Quando */
+  /** Codice · Targa · Broker(md) · Agenzia(md) · Sede(lg) · Stato · Fee(lg) · Quando */
   admin:
     'grid-cols-[8.5rem_minmax(0,1fr)_7.5rem_6.5rem] ' +
     'sm:grid-cols-[8.5rem_minmax(0,1fr)_9.5rem_6.5rem] ' +
     'md:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6.5rem] ' +
-    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_5rem_7rem]',
+    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_9.5rem_5rem_7rem]',
 } as const;
 
 /**

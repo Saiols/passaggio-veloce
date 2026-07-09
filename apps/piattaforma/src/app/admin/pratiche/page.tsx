@@ -6,6 +6,9 @@ import { StatusChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { AdminPraticheFilters } from './filters';
 import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
+import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
+import { opzioniSedeAgenziaTutte } from '@/lib/pratiche/opzioni-sede';
+import { SedeCell } from '@/components/sede/sede-cell';
 
 const STATI: { value: string; label: string }[] = [
   { value: '', label: 'Tutti gli stati' },
@@ -36,7 +39,7 @@ const PRIORITY: Record<string, number> = {
   ANNULLATA: 5,
 };
 
-type SearchParams = { q?: string; stato?: string };
+type SearchParams = { q?: string; stato?: string; sede?: string };
 
 export default async function AdminPratichePage({
   searchParams,
@@ -64,6 +67,24 @@ export default async function AdminPratichePage({
     ];
   }
 
+  // L'admin di piattaforma non è associato a nessuna sede: nessuno scope da
+  // intersecare, e le pratiche non ancora assegnate sono un filtro legittimo.
+  const sediDisponibili = await opzioniSedeAgenziaTutte();
+  const fSede = filtroSede({
+    selezione: sp.sede,
+    opzioniIds: sediDisponibili.map((o) => o.value),
+    scopeIds: null,
+    consentiNonAssegnata: true,
+  });
+  if (fSede.tipo === 'sede') where.agenziaSedeId = { in: fSede.sedeIds };
+  else if (fSede.tipo === 'nonAssegnata') where.agenziaSedeId = null;
+
+  const sediSelect = [
+    { value: '', label: 'Tutte le sedi' },
+    { value: SEDE_NON_ASSEGNATA, label: 'Non assegnate' },
+    ...sediDisponibili,
+  ];
+
   const pratiche = await prisma.pratica.findMany({
     where,
     orderBy: { createdAt: 'desc' },
@@ -71,6 +92,7 @@ export default async function AdminPratichePage({
     include: {
       broker: { select: { ragioneSociale: true } },
       agenziaAssegnata: { select: { ragioneSociale: true } },
+      agenziaSede: { select: { nome: true, citta: true } },
       veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });
@@ -97,11 +119,11 @@ export default async function AdminPratichePage({
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
             {sorted.length} pratic{sorted.length === 1 ? 'a' : 'he'}
-            {q || sp.stato ? ' (filtri attivi)' : ' (più recenti, escalation in cima)'}
+            {q || sp.stato || sp.sede ? ' (filtri attivi)' : ' (più recenti, escalation in cima)'}
           </p>
         </header>
 
-        <AdminPraticheFilters q={q} stato={sp.stato} stati={STATI} />
+        <AdminPraticheFilters q={q} stato={sp.stato} sede={sp.sede} stati={STATI} sedi={sediSelect} />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           {sorted.length === 0 ? (
@@ -118,6 +140,7 @@ export default async function AdminPratichePage({
                   <div className="px-3 py-3">Targa</div>
                   <div className="hidden px-3 py-3 md:block">Broker</div>
                   <div className="hidden px-3 py-3 md:block">Agenzia</div>
+                  <div className="hidden px-3 py-3 lg:block">Sede</div>
                   <div className="px-3 py-3">Stato</div>
                   <div className="hidden px-3 py-3 lg:block">Fee</div>
                   <div className="py-3 pl-3 pr-5 text-right">Quando</div>
@@ -150,6 +173,9 @@ export default async function AdminPratichePage({
                       </div>
                       <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 md:block">
                         {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                      </div>
+                      <div className="hidden min-w-0 px-3 py-3 lg:block">
+                        <SedeCell sede={p.agenziaSede} />
                       </div>
                       <div className="min-w-0 px-3 py-3">
                         <span className="relative z-10 inline-flex flex-wrap items-center gap-2">

@@ -12,6 +12,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
 import type { WalletPreview } from './payout-confirm-modal';
+import { labelTipoTx } from './movimenti';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { WALLET } from '@/lib/wallet/config';
 import { getWalletBreakdown } from '@/lib/wallet/breakdown';
@@ -569,14 +570,3 @@ function motivoMovimento(t: {
   return null;
 }
 
-function labelTipoTx(t: string): string {
-  if (t === 'CREDITO_PRATICA') return 'Credito pratica firmata';
-  if (t === 'CREDITO_AFFILIAZIONE') return 'Commissione affiliazione';
-  if (t === 'CREDITO_PROMO') return 'Bonus promozionale';
-  if (t === 'PAYOUT_AUTOMATICO') return 'Payout automatico';
-  if (t === 'PAYOUT_MANUALE') return 'Payout manuale';
-  if (t === 'RETTIFICA_ADMIN') return 'Rettifica admin';
-  if (t === 'STORNO') return 'Storno';
-  if (t === 'PENALE_BROKER') return 'Penale segnalazione';
-  return t;
-}

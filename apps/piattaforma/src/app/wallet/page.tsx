@@ -109,7 +109,7 @@ export default async function WalletPage({
         w.transazioni.map((t) => ({
           id: t.id,
           createdAt: t.createdAt,
-          tipo: t.tipo as string,
+          tipo: labelTipoTx(t.tipo),
           importoCent: t.importoCent,
           // `w.sedeId` è sempre valorizzato qui: la query filtra
           // `sedeId: { in: sedeIds }`. Narrowing esplicito invece di `!`.
@@ -119,7 +119,7 @@ export default async function WalletPage({
       ...(walletMadreAgg?.transazioni ?? []).map((t) => ({
         id: t.id,
         createdAt: t.createdAt,
-        tipo: t.tipo as string,
+        tipo: labelTipoTx(t.tipo),
         importoCent: t.importoCent,
         origine: null,
       })),

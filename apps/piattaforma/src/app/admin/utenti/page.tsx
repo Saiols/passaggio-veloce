@@ -5,7 +5,16 @@ import { formatDate } from '@/lib/format';
 import { TextSearchFilter } from '@/components/text-search-filter';
 import { SuspendButton } from '../suspend-button';
 
-type SearchParams = { q?: string };
+type SearchParams = { q?: string; tipo?: string };
+
+// `tipo` filtra sul CompanyType dell'azienda dell'utente: nel dominio il broker
+// è il DEALER. Gli admin piattaforma non hanno azienda, quindi il filtro attivo
+// li esclude — ed è corretto: non sono né broker né agenzia.
+const TIPO_OPTIONS = [
+  { value: '', label: 'Tutti i tipi' },
+  { value: 'DEALER', label: 'Broker' },
+  { value: 'AGENZIA', label: 'Agenzia' },
+];
 
 export default async function AdminUtentiPage({
   searchParams,
@@ -15,6 +24,8 @@ export default async function AdminUtentiPage({
   const session = await auth();
   const sp = await searchParams;
   const q = sp.q?.trim();
+  const tipoRaw = sp.tipo?.trim().toUpperCase();
+  const tipo = tipoRaw === 'DEALER' || tipoRaw === 'AGENZIA' ? tipoRaw : undefined;
 
   const where: Prisma.UserWhereInput = { deletedAt: null };
   if (q) {
@@ -23,12 +34,18 @@ export default async function AdminUtentiPage({
       { cognome: { contains: q, mode: 'insensitive' } },
       { email: { contains: q, mode: 'insensitive' } },
       { company: { ragioneSociale: { contains: q, mode: 'insensitive' } } },
+      // L'utente non ha un telefono proprio: quello mostrato (e cercato) è
+      // il telefono della sua azienda.
+      { company: { telefono: { contains: q } } },
     ];
   }
+  if (tipo) where.company = { type: tipo };
 
   const users = await prisma.user.findMany({
     where,
-    include: { company: { select: { ragioneSociale: true, type: true } } },
+    include: {
+      company: { select: { ragioneSociale: true, type: true, telefono: true } },
+    },
     orderBy: { createdAt: 'desc' },
     take: 100,
   });
@@ -45,14 +62,20 @@ export default async function AdminUtentiPage({
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
             {users.length} utent{users.length === 1 ? 'e' : 'i'}
-            {q ? ' (filtro attivo)' : ' nel sistema'}.
+            {q || tipo ? ' (filtro attivo)' : ' nel sistema'}.
           </p>
         </header>
 
         <TextSearchFilter
           action="/admin/utenti"
           q={q}
-          placeholder="Cerca per nome, email o azienda…"
+          placeholder="Cerca per nome, email, telefono o azienda…"
+          select={{
+            name: 'tipo',
+            value: tipo ?? '',
+            ariaLabel: 'Filtra per tipo di azienda',
+            options: TIPO_OPTIONS,
+          }}
         />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
@@ -61,6 +84,7 @@ export default async function AdminUtentiPage({
               <tr>
                 <th className="px-5 py-3">Nome</th>
                 <th className="px-5 py-3 hidden sm:table-cell">Email</th>
+                <th className="px-5 py-3 hidden lg:table-cell">Telefono</th>
                 <th className="px-5 py-3 hidden md:table-cell">Azienda</th>
                 <th className="px-5 py-3">Ruolo</th>
                 <th className="px-5 py-3">Stato</th>
@@ -76,6 +100,9 @@ export default async function AdminUtentiPage({
                   </td>
                   <td className="px-5 py-3 hidden text-pv-slate-700 sm:table-cell">
                     {u.email}
+                  </td>
+                  <td className="px-5 py-3 hidden text-pv-slate-700 lg:table-cell">
+                    {u.company?.telefono ?? '—'}
                   </td>
                   <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
                     {u.company?.ragioneSociale ?? '—'}

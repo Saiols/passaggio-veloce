@@ -43,15 +43,20 @@ export async function opzioniSedeAgenziaTutte(): Promise<OpzioneSede[]> {
 }
 
 /**
- * Etichetta `Ragione sociale · Nome sede`: chi vede sedi di agenzie diverse ha
- * bisogno del nome dell'agenzia per distinguerle.
+ * Etichetta `Ragione sociale · Nome sede (Città)`: chi vede sedi di agenzie
+ * diverse ha bisogno del nome dell'agenzia per distinguerle, e della città
+ * perché anche all'interno della stessa agenzia due sedi possono avere lo
+ * stesso nome (es. due "Sede centrale").
  */
 async function conEtichettaAgenzia(where: Prisma.SedeWhereInput): Promise<OpzioneSede[]> {
   const sedi = await prisma.sede.findMany({
     where,
-    select: { id: true, nome: true, company: { select: { ragioneSociale: true } } },
+    select: { id: true, nome: true, citta: true, company: { select: { ragioneSociale: true } } },
     orderBy: [{ company: { ragioneSociale: 'asc' } }, { nome: 'asc' }],
   });
 
-  return sedi.map((s) => ({ value: s.id, label: `${s.company.ragioneSociale} · ${s.nome}` }));
+  return sedi.map((s) => ({
+    value: s.id,
+    label: `${s.company.ragioneSociale} · ${s.nome} (${s.citta})`,
+  }));
 }

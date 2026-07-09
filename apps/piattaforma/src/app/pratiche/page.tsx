@@ -98,7 +98,7 @@ export default async function PratichePage({
   // (ALL, proprietario). `scopeIds` vuoto ⇒ nessuna pratica visibile.
   const ctx = await getSessionContext();
   const scopeIds = ctx?.scopeIds ?? [];
-  if (companyType === 'AGENZIA') {
+  if (isAgenzia) {
     where.agenziaSedeId = { in: scopeIds };
   } else {
     where.brokerSedeId = { in: scopeIds };

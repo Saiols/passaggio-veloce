@@ -1,5 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { mostraColonnaSede, filtroSede, SEDE_NON_ASSEGNATA } from './colonna-sede';
+import {
+  mostraColonnaSede,
+  filtroSede,
+  nomeSedeDistintivo,
+  SEDE_NON_ASSEGNATA,
+} from './colonna-sede';
+
+describe('nomeSedeDistintivo', () => {
+  // Alla registrazione la sede eredita il nome dell'azienda: ripeterlo accanto
+  // alla colonna Agenzia (che mostra la stessa stringa) non aggiunge nulla.
+  it('nome uguale alla ragione sociale → null, non c\'è nulla da distinguere', () => {
+    expect(nomeSedeDistintivo('ROSSI SRL', 'ROSSI SRL')).toBeNull();
+  });
+
+  it('ignora spazi e maiuscole nel confronto', () => {
+    expect(nomeSedeDistintivo('  rossi srl ', 'ROSSI SRL')).toBeNull();
+  });
+
+  it('nome proprio della filiale → si mostra', () => {
+    expect(nomeSedeDistintivo('Filiale Nord', 'ROSSI SRL')).toBe('Filiale Nord');
+  });
+
+  it('restituisce il nome originale, non quello normalizzato', () => {
+    expect(nomeSedeDistintivo('  Filiale Nord  ', 'ROSSI SRL')).toBe('  Filiale Nord  ');
+  });
+
+  it('ragione sociale assente → il nome resta distintivo', () => {
+    expect(nomeSedeDistintivo('Filiale Nord', null)).toBe('Filiale Nord');
+    expect(nomeSedeDistintivo('Filiale Nord', undefined)).toBe('Filiale Nord');
+  });
+});
 
 describe('mostraColonnaSede', () => {
   it('broker: sempre — le sedi agenzia variano riga per riga', () => {

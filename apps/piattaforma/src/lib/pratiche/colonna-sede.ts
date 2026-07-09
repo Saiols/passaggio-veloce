@@ -25,6 +25,25 @@ export function mostraColonnaSede(args: {
   return true;
 }
 
+/**
+ * Il nome della sede, ma solo se aggiunge informazione rispetto alla ragione
+ * sociale dell'agenzia; `null` quando coincidono.
+ *
+ * Alla registrazione la sede eredita il nome dell'azienda, quindi per la
+ * stragrande maggioranza delle agenzie (una sola filiale) `nome` è identico a
+ * `ragioneSociale`: mostrarlo nella colonna Sede lo ripeterebbe uguale accanto
+ * alla colonna Agenzia. Quando l'agenzia darà un nome proprio alle filiali
+ * ("Filiale Nord") il nome torna a distinguere, e ricompare da solo.
+ */
+export function nomeSedeDistintivo(
+  nome: string,
+  ragioneSociale: string | null | undefined,
+): string | null {
+  if (!ragioneSociale) return nome;
+  const normalizza = (s: string): string => s.trim().toLowerCase();
+  return normalizza(nome) === normalizza(ragioneSociale) ? null : nome;
+}
+
 export type FiltroSede =
   | { tipo: 'nessuno' }
   | { tipo: 'sede'; sedeIds: string[] }

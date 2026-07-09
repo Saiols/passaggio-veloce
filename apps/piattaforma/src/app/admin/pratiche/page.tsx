@@ -175,7 +175,7 @@ export default async function AdminPratichePage({
                         {p.agenziaAssegnata?.ragioneSociale ?? '—'}
                       </div>
                       <div className="hidden min-w-0 px-3 py-3 lg:block">
-                        <SedeCell sede={p.agenziaSede} />
+                        <SedeCell sede={p.agenziaSede} agenzia={p.agenziaAssegnata?.ragioneSociale} />
                       </div>
                       <div className="min-w-0 px-3 py-3">
                         <span className="relative z-10 inline-flex flex-wrap items-center gap-2">

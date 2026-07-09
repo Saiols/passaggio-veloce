@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma, Prisma } from '@pv/db';
+import { nomeSedeDistintivo } from './colonna-sede';
 
 export type OpzioneSede = { value: string; label: string };
 
@@ -47,6 +48,11 @@ export async function opzioniSedeAgenziaTutte(): Promise<OpzioneSede[]> {
  * diverse ha bisogno del nome dell'agenzia per distinguerle, e della città
  * perché anche all'interno della stessa agenzia due sedi possono avere lo
  * stesso nome (es. due "Sede centrale").
+ *
+ * Quando il nome sede coincide con la ragione sociale — il caso normale, la
+ * sede creata alla registrazione eredita il nome dell'azienda — l'etichetta
+ * collassa a `Ragione sociale (Città)` invece di ripetere due volte la stessa
+ * stringa.
  */
 async function conEtichettaAgenzia(where: Prisma.SedeWhereInput): Promise<OpzioneSede[]> {
   const sedi = await prisma.sede.findMany({
@@ -55,8 +61,9 @@ async function conEtichettaAgenzia(where: Prisma.SedeWhereInput): Promise<Opzion
     orderBy: [{ company: { ragioneSociale: 'asc' } }, { nome: 'asc' }],
   });
 
-  return sedi.map((s) => ({
-    value: s.id,
-    label: `${s.company.ragioneSociale} · ${s.nome} (${s.citta})`,
-  }));
+  return sedi.map((s) => {
+    const nome = nomeSedeDistintivo(s.nome, s.company.ragioneSociale);
+    const testa = nome ? `${s.company.ragioneSociale} · ${nome}` : s.company.ragioneSociale;
+    return { value: s.id, label: `${testa} (${s.citta})` };
+  });
 }

@@ -284,7 +284,10 @@ export default async function PratichePage({
                         </div>
                         {mostraSede && (
                           <div className="hidden min-w-0 px-3 py-3 lg:block">
-                            <SedeCell sede={p.agenziaSede} />
+                            <SedeCell
+                              sede={p.agenziaSede}
+                              agenzia={p.agenziaAssegnata?.ragioneSociale}
+                            />
                           </div>
                         )}
                         <div className="min-w-0 px-3 py-3">

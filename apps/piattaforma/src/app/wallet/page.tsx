@@ -12,7 +12,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
 import type { WalletPreview } from './payout-confirm-modal';
-import { labelTipoTx } from './movimenti';
+import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { WALLET } from '@/lib/wallet/config';
 import { getWalletBreakdown } from '@/lib/wallet/breakdown';
@@ -110,7 +110,7 @@ export default async function WalletPage({
         w.transazioni.map((t) => ({
           id: t.id,
           createdAt: t.createdAt,
-          tipo: labelTipoTx(t.tipo),
+          tipo: t.tipo,
           importoCent: t.importoCent,
           // `w.sedeId` è sempre valorizzato qui: la query filtra
           // `sedeId: { in: sedeIds }`. Narrowing esplicito invece di `!`.
@@ -120,7 +120,7 @@ export default async function WalletPage({
       ...(walletMadreAgg?.transazioni ?? []).map((t) => ({
         id: t.id,
         createdAt: t.createdAt,
-        tipo: labelTipoTx(t.tipo),
+        tipo: t.tipo,
         importoCent: t.importoCent,
         origine: null,
       })),
@@ -464,7 +464,12 @@ export default async function WalletPage({
               {movimenti.map((t) => {
                 const motivo = motivoMovimento(t);
                 return (
-                <li key={t.id} className="flex items-center justify-between py-3">
+                <li
+                  key={t.id}
+                  className={`flex items-center justify-between py-3 ${
+                    isPenale(t.tipo) ? CLASSI_RIGA_PENALE : ''
+                  }`}
+                >
                   <div className="min-w-0">
                     <p className="font-semibold text-pv-navy-800">
                       {labelTipoTx(t.tipo)}

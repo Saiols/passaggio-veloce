@@ -1,10 +1,12 @@
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { Card, StatCard } from '@/components/ui';
+import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
 
 export type RigaSede = { sedeId: string; nome: string; saldoCent: number };
 export type MovimentoAggregato = {
   id: string;
   createdAt: Date;
+  /** Tipo grezzo (`TransazioneWalletTipo`): l'etichetta la applica questo componente. */
   tipo: string;
   importoCent: number;
   /** Nome della sede, oppure `null` per il wallet madre (affiliazione). */
@@ -65,9 +67,16 @@ export function WalletAggregato({
             <p className="py-6 text-center text-sm text-pv-slate-500">Nessun movimento.</p>
           ) : (
             movimenti.map((m) => (
-              <div key={m.id} className="flex items-center justify-between gap-3 py-3">
+              <div
+                key={m.id}
+                className={`flex items-center justify-between gap-3 py-3 ${
+                  isPenale(m.tipo) ? CLASSI_RIGA_PENALE : ''
+                }`}
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-pv-slate-700">{m.tipo}</p>
+                  <p className="truncate text-sm font-medium text-pv-slate-700">
+                    {labelTipoTx(m.tipo)}
+                  </p>
                   <p className="text-[12px] text-pv-slate-500">
                     {formatDateTime(m.createdAt)}
                     {m.origine ? ` · ${m.origine}` : ' · Affiliazione'}

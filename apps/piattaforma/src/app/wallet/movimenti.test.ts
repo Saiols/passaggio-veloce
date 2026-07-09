@@ -50,8 +50,8 @@ describe('labelTipoTx', () => {
 
 describe('CLASSI_RIGA_PENALE', () => {
   it('usa i token del design system, non colori hardcoded', () => {
-    expect(CLASSI_RIGA_PENALE).toContain('border-pv-red-500');
     expect(CLASSI_RIGA_PENALE).toContain('bg-pv-red-50');
+    expect(CLASSI_RIGA_PENALE).toContain('--color-pv-red-500');
     expect(CLASSI_RIGA_PENALE).not.toMatch(/#[0-9a-fA-F]{3,6}/);
   });
 });

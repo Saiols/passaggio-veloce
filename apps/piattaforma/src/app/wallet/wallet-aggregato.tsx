@@ -1,13 +1,20 @@
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { Card, StatCard } from '@/components/ui';
 import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
+import type { TransazioneWalletTipo } from '@pv/db';
 
 export type RigaSede = { sedeId: string; nome: string; saldoCent: number };
 export type MovimentoAggregato = {
   id: string;
   createdAt: Date;
-  /** Tipo grezzo (`TransazioneWalletTipo`): l'etichetta la applica questo componente. */
-  tipo: string;
+  /**
+   * Tipo grezzo dell'enum Prisma: l'etichetta la applica questo componente.
+   * Tipizzato con l'enum e non con `string` apposta: se il chiamante passasse
+   * già un'etichetta (es. `labelTipoTx(t.tipo)`), `isPenale` fallirebbe sempre
+   * in silenzio — con `string` compilerebbe comunque. Un enum è assegnabile a
+   * `string`, quindi qui non si perde nulla.
+   */
+  tipo: TransazioneWalletTipo;
   importoCent: number;
   /** Nome della sede, oppure `null` per il wallet madre (affiliazione). */
   origine: string | null;

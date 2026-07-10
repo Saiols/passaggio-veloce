@@ -2540,15 +2540,15 @@ export const MAPPA_ENFORCEMENT: Record<string, Record<string, Permesso | null>> 
     segnaTrasmessoSdiAction: null, // gated ADMIN_PIATTAFORMA, non è un'azione azienda
   },
   'src/app/blocco-pagamento/actions.ts': {
-    ritentaAddebitoAction: 'pagamenti.ritenta',
-    aggiornaIbanERitentaAction: 'pagamenti.iban',
+    ritentaAddebitoAction: null, // D4: aperta a tutta l'agenzia, non tocca IBAN né importi
+    aggiornaIbanERitentaAction: null, // D1: owner-only, l'IBAN è del solo titolare
   },
   'src/app/orari/actions.ts': {
     updateOrariAction: 'orari.edit',
   },
   'src/app/sedi/actions.ts': {
     createSedeAction: null, // owner-only: struttura dell'azienda
-    updateSedeAction: 'sede.edit', // + sede.iban se l'IBAN cambia
+    updateSedeAction: 'sede.edit', // iban e payoutThresholdCent OMESSI dai data se non owner (D1/D2)
     suspendSedeAction: null, // owner-only
     reactivateSedeAction: null, // owner-only
   },

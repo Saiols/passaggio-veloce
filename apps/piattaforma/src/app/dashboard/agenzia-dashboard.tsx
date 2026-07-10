@@ -3,8 +3,18 @@ import { prisma } from '@pv/db';
 import { Alert, Card, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
 import { formatRelative, formatCurrencyCent } from '@/lib/format';
 import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
+import { hasPermesso } from '@/lib/auth/permessi/guard';
 
 export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
+  // Autenticazione → permesso → scope: ogni sezione che linka a una pagina
+  // protetta, o mostra un importo, è condizionata al permesso della destinazione.
+  const [canInboxView, canPraticheView, canAddebitiView, canFeedbackView] = await Promise.all([
+    hasPermesso('inbox.view'),
+    hasPermesso('pratiche.view'),
+    hasPermesso('addebiti.view'),
+    hasPermesso('feedback.view'),
+  ]);
+
   const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, prossimiAddebiti] = await Promise.all([
     prisma.praticaAssegnazione.count({
       where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
@@ -24,31 +34,40 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
       _avg: { stelle: true },
       _count: { _all: true },
     }),
-    prisma.praticaAssegnazione.findMany({
-      where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
-      orderBy: { invioAt: 'desc' },
-      take: 5,
-      include: {
-        pratica: {
+    // "Pratiche in arrivo" collega a /inbox e /inbox/[id]: senza inbox.view
+    // quei link farebbero solo rimbalzare l'utente, quindi non si interroga
+    // nemmeno il DB per una lista che non verrà mostrata.
+    canInboxView
+      ? prisma.praticaAssegnazione.findMany({
+          where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
+          orderBy: { invioAt: 'desc' },
+          take: 5,
           include: {
-            broker: { select: { ragioneSociale: true, citta: true } },
-            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
+            pratica: {
+              include: {
+                broker: { select: { ragioneSociale: true, citta: true } },
+                veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
+              },
+            },
           },
-        },
-      },
-    }),
+        })
+      : Promise.resolve([]),
     // LISTINI DISABILITATI (feature nascosta 2026-06-12) — riattivare insieme a /profilo/listino:
     // A1: presenza listino per banner "Pubblica il tuo listino"
     // prisma.listino.findFirst({
     //   where: { sedeId: { in: scopeIds } },
     //   select: { id: true, formato: true },
     // }),
-    prisma.feeAddebito.findMany({
-      where: { agenziaSedeId: { in: scopeIds }, stato: 'SCHEDULED', scheduledAt: { not: null } },
-      orderBy: { scheduledAt: 'asc' },
-      take: 3,
-      include: { pratica: { select: { id: true, codicePratica: true } } },
-    }),
+    // "Prossimi addebiti" mostra importi e collega a /addebiti: entrambi
+    // richiedono addebiti.view, quindi niente query se manca il permesso.
+    canAddebitiView
+      ? prisma.feeAddebito.findMany({
+          where: { agenziaSedeId: { in: scopeIds }, stato: 'SCHEDULED', scheduledAt: { not: null } },
+          orderBy: { scheduledAt: 'asc' },
+          take: 3,
+          include: { pratica: { select: { id: true, codicePratica: true } } },
+        })
+      : Promise.resolve([]),
   ]);
 
   // Multi-sede: breakdown pratiche per sede nella vista aggregata (owner, >1 sede).
@@ -109,19 +128,19 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
         </Card>
       )}
 
-      {(inArrivo > 0 || inCorso > 0) && (
+      {((inArrivo > 0 && canInboxView) || (inCorso > 0 && canPraticheView)) && (
         <div className="mb-6">
-          <Alert variant={inArrivo > 0 ? 'warning' : 'info'} title="Cosa fare ora">
-            {inArrivo > 0 && (
+          <Alert variant={inArrivo > 0 && canInboxView ? 'warning' : 'info'} title="Cosa fare ora">
+            {inArrivo > 0 && canInboxView && (
               <>
                 <strong>{inArrivo}</strong> in attesa di risposta —{' '}
                 <Link href="/inbox" className="font-semibold underline">
                   vai all&apos;inbox →
                 </Link>
-                {inCorso > 0 ? ' · ' : ''}
+                {inCorso > 0 && canPraticheView ? ' · ' : ''}
               </>
             )}
-            {inCorso > 0 && (
+            {inCorso > 0 && canPraticheView && (
               <>
                 <strong>{inCorso}</strong> accettate da completare —{' '}
                 <Link href="/pratiche" className="font-semibold underline">
@@ -165,10 +184,17 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
         <StatCard label="In arrivo" value={inArrivo} hint="Da accettare/rifiutare" icon={<InboxIcon />} accent="orange" />
         <StatCard label="Accettate" value={inCorso} hint="In corso di completamento" icon={<PlayIcon />} accent="navy" />
         <StatCard label="Firmate / mese" value={firmateMese} icon={<CheckIcon />} accent="green" />
-        <StatCard label="Rating" value={ratingValue} hint={ratingHint} icon={<StarIcon />} accent="navy" href="/feedback" />
+        <StatCard
+          label="Rating"
+          value={ratingValue}
+          hint={ratingHint}
+          icon={<StarIcon />}
+          accent="navy"
+          href={canFeedbackView ? '/feedback' : undefined}
+        />
       </div>
 
-      {prossimiAddebiti.length > 0 && (
+      {canAddebitiView && prossimiAddebiti.length > 0 && (
         <section className="mb-6 rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
             <h2 className="text-[15px] font-bold text-pv-navy-800">Prossimi addebiti</h2>
@@ -203,63 +229,65 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
         </section>
       )}
 
-      <section className="rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
-        <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
-          <h2 className="text-[15px] font-bold text-pv-navy-800">Pratiche in arrivo</h2>
-          <Link
-            href="/inbox"
-            className="text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
-          >
-            Vai all&apos;Inbox →
-          </Link>
-        </header>
-        {assegnazioniRecenti.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <p className="text-[14px] text-pv-slate-500">Nessuna pratica in arrivo al momento.</p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-pv-slate-200">
-            {assegnazioniRecenti.map((a) => (
-              <li key={a.id}>
-                <Link
-                  href={`/inbox/${a.praticaId}`}
-                  className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-pv-slate-50"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
-                        {a.pratica.codicePratica ?? '—'}
-                      </span>
-                      <StatusChip
-                        stato={a.pratica.stato as PraticaStato}
-                        viewerRole="AGENZIA"
-                      />
-                    </div>
-                    <p className="mt-1 truncate text-[13px] text-pv-slate-700">
-                      {a.pratica.veicoli[0]?.targa && (
-                        <span className="font-semibold">
-                          {a.pratica.veicoli[0].targa}
-                          {a.pratica.veicoli.length > 1 ? ` +${a.pratica.veicoli.length - 1}` : ''}
+      {canInboxView && (
+        <section className="rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
+          <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
+            <h2 className="text-[15px] font-bold text-pv-navy-800">Pratiche in arrivo</h2>
+            <Link
+              href="/inbox"
+              className="text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
+            >
+              Vai all&apos;Inbox →
+            </Link>
+          </header>
+          {assegnazioniRecenti.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-[14px] text-pv-slate-500">Nessuna pratica in arrivo al momento.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-pv-slate-200">
+              {assegnazioniRecenti.map((a) => (
+                <li key={a.id}>
+                  <Link
+                    href={`/inbox/${a.praticaId}`}
+                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-pv-slate-50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
+                          {a.pratica.codicePratica ?? '—'}
                         </span>
-                      )}
-                      {a.pratica.veicoli[0]?.targa && ' · '}
-                      {a.pratica.veicoli[0]?.proprietarioAttuale ?? '—'}
-                      {' · '}
-                      <span className="text-pv-slate-500">da {a.pratica.broker.ragioneSociale}</span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[12px] text-pv-slate-500">{formatRelative(a.invioAt)}</p>
-                    <p className="text-[12px] font-semibold text-pv-slate-700">
-                      {a.pratica.comune ?? '—'}
-                    </p>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                        <StatusChip
+                          stato={a.pratica.stato as PraticaStato}
+                          viewerRole="AGENZIA"
+                        />
+                      </div>
+                      <p className="mt-1 truncate text-[13px] text-pv-slate-700">
+                        {a.pratica.veicoli[0]?.targa && (
+                          <span className="font-semibold">
+                            {a.pratica.veicoli[0].targa}
+                            {a.pratica.veicoli.length > 1 ? ` +${a.pratica.veicoli.length - 1}` : ''}
+                          </span>
+                        )}
+                        {a.pratica.veicoli[0]?.targa && ' · '}
+                        {a.pratica.veicoli[0]?.proprietarioAttuale ?? '—'}
+                        {' · '}
+                        <span className="text-pv-slate-500">da {a.pratica.broker.ragioneSociale}</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[12px] text-pv-slate-500">{formatRelative(a.invioAt)}</p>
+                      <p className="text-[12px] font-semibold text-pv-slate-700">
+                        {a.pratica.comune ?? '—'}
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

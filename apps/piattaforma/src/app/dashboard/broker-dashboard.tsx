@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { Button, Card, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
+import { Button, Card, StatCard, StatusChip, cn, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
+import { hasPermesso } from '@/lib/auth/permessi/guard';
 
 export async function BrokerDashboard({
   scopeIds,
@@ -10,42 +11,62 @@ export async function BrokerDashboard({
   scopeIds: string[];
   userName?: string;
 }) {
+  // Autenticazione → permesso → scope: la dashboard non è un'eccezione.
+  // Ogni riquadro economico e ogni link verso una pagina protetta è condizionato
+  // al permesso della destinazione, non solo la sidebar.
+  const [canPraticheView, canPraticheCreate, canPraticheValuta, canWalletView] = await Promise.all([
+    hasPermesso('pratiche.view'),
+    hasPermesso('pratiche.create'),
+    hasPermesso('pratiche.valuta'),
+    hasPermesso('wallet.view'),
+  ]);
+
   const [byStato, ultime, walletAgg, daValutare] = await Promise.all([
     prisma.pratica.groupBy({
       by: ['stato'],
       where: { brokerSedeId: { in: scopeIds }, deletedAt: null },
       _count: { _all: true },
     }),
-    prisma.pratica.findMany({
-      where: { brokerSedeId: { in: scopeIds }, deletedAt: null },
-      orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      take: 5,
-      include: {
-        agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
-        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
-      },
-    }),
+    canPraticheView
+      ? prisma.pratica.findMany({
+          where: { brokerSedeId: { in: scopeIds }, deletedAt: null },
+          orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+          take: 5,
+          include: {
+            agenziaAssegnata: { select: { ragioneSociale: true, citta: true } },
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, proprietarioAttuale: true } },
+          },
+        })
+      : Promise.resolve([]),
     // Multi-sede: saldo operativo = somma dei wallet delle sedi in scope.
-    prisma.wallet.aggregate({ _sum: { saldoCent: true }, where: { sedeId: { in: scopeIds } } }),
+    // Niente saldo senza wallet.view: sarebbe inutile togliere il wallet dalla
+    // sidebar e lasciarlo comunque leggibile in home.
+    canWalletView
+      ? prisma.wallet.aggregate({ _sum: { saldoCent: true }, where: { sedeId: { in: scopeIds } } })
+      : Promise.resolve(null),
     // A7 banner valuta post-firma: pratiche FIRMATA del broker per cui
     // non esiste ancora una Valutazione, ordinate dalla più recente.
-    prisma.pratica.findMany({
-      where: {
-        brokerSedeId: { in: scopeIds },
-        deletedAt: null,
-        stato: 'FIRMATA',
-        valutazione: null,
-      },
-      orderBy: { firmaAvvenutaAt: 'desc' },
-      take: 5,
-      select: {
-        id: true,
-        codicePratica: true,
-        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
-        firmaAvvenutaAt: true,
-        agenziaAssegnata: { select: { ragioneSociale: true } },
-      },
-    }),
+    // Gated su pratiche.valuta (che dipende da pratiche.view nel catalogo):
+    // senza il permesso di valutare, il nudge "Valuta ora" non avrebbe senso.
+    canPraticheValuta
+      ? prisma.pratica.findMany({
+          where: {
+            brokerSedeId: { in: scopeIds },
+            deletedAt: null,
+            stato: 'FIRMATA',
+            valutazione: null,
+          },
+          orderBy: { firmaAvvenutaAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            codicePratica: true,
+            veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+            firmaAvvenutaAt: true,
+            agenziaAssegnata: { select: { ragioneSociale: true } },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   // Multi-sede: breakdown pratiche per sede nella vista aggregata (owner, >1 sede).
@@ -101,11 +122,13 @@ export async function BrokerDashboard({
             Bentornato{userName ? `, ${userName.split(' ')[0]}` : ''}
           </h1>
         </div>
-        <Link href="/pratiche/nuova">
-          <Button size="md" leadingIcon={<PlusIcon />}>
-            Nuova pratica
-          </Button>
-        </Link>
+        {canPraticheCreate && (
+          <Link href="/pratiche/nuova">
+            <Button size="md" leadingIcon={<PlusIcon />}>
+              Nuova pratica
+            </Button>
+          </Link>
+        )}
       </header>
 
       {sedeBreakdown.length > 0 && (
@@ -125,7 +148,7 @@ export async function BrokerDashboard({
         </Card>
       )}
 
-      {daValutare.length > 0 && (
+      {canPraticheValuta && daValutare.length > 0 && (
         <div className="mb-6 rounded-[16px] border-[1.5px] border-pv-orange-500/40 bg-pv-orange-50/40 p-5 shadow-[var(--pv-shadow-card)]">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
@@ -175,7 +198,12 @@ export async function BrokerDashboard({
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div
+        className={cn(
+          'mb-6 grid grid-cols-2 gap-4',
+          canWalletView ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
+        )}
+      >
         <StatCard label="Pratiche totali" value={totale} icon={<DocsIcon />} accent="navy" />
         <StatCard
           label="In attesa"
@@ -191,80 +219,86 @@ export async function BrokerDashboard({
           icon={<CheckIcon />}
           accent="green"
         />
-        <StatCard
-          label="Wallet"
-          value={formatCurrencyCent(walletAgg._sum.saldoCent ?? 0)}
-          hint="Saldo disponibile"
-          icon={<WalletIcon />}
-          accent="navy"
-        />
+        {canWalletView && (
+          <StatCard
+            label="Wallet"
+            value={formatCurrencyCent(walletAgg?._sum.saldoCent ?? 0)}
+            hint="Saldo disponibile"
+            icon={<WalletIcon />}
+            accent="navy"
+          />
+        )}
       </div>
 
-      <section className="rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
-        <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
-          <h2 className="text-[15px] font-bold text-pv-navy-800">Ultime pratiche</h2>
-          <Link
-            href="/pratiche"
-            className="text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
-          >
-            Vedi tutte →
-          </Link>
-        </header>
-        {ultime.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <p className="text-[14px] text-pv-slate-500">Non hai ancora caricato nessuna pratica.</p>
-            <Link href="/pratiche/nuova" className="mt-3 inline-block">
-              <Button size="sm">Crea la prima</Button>
+      {canPraticheView && (
+        <section className="rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
+          <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
+            <h2 className="text-[15px] font-bold text-pv-navy-800">Ultime pratiche</h2>
+            <Link
+              href="/pratiche"
+              className="text-[13px] font-semibold text-pv-navy-600 hover:underline underline-offset-4"
+            >
+              Vedi tutte →
             </Link>
-          </div>
-        ) : (
-          <ul className="divide-y divide-pv-slate-200">
-            {ultime.map((p) => (
-              <li key={p.id}>
-                <Link
-                  href={`/pratiche/${p.id}`}
-                  className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-pv-slate-50"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
-                        {p.codicePratica ?? 'BOZZA'}
-                      </span>
-                      <StatusChip stato={p.stato as PraticaStato} viewerRole="BROKER" />
-                    </div>
-                    <p className="mt-1 truncate text-[13px] text-pv-slate-700">
-                      {p.veicoli[0]?.targa && (
-                        <span className="font-semibold">
-                          {p.veicoli[0].targa}
-                          {p.veicoli.length > 1 ? ` +${p.veicoli.length - 1}` : ''}
-                        </span>
-                      )}
-                      {p.veicoli[0]?.targa && ' · '}
-                      {p.veicoli[0]?.proprietarioAttuale ?? '—'}
-                      {p.agenziaAssegnata && (
-                        <>
-                          {' · '}
-                          <span className="text-pv-slate-500">
-                            {p.agenziaAssegnata.ragioneSociale}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[12px] text-pv-slate-500">
-                      {formatRelative(p.submittedAt ?? p.createdAt)}
-                    </p>
-                    <p className="text-[12px] font-semibold text-pv-slate-700">
-                      {p.comune ?? '—'}
-                    </p>
-                  </div>
+          </header>
+          {ultime.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-[14px] text-pv-slate-500">Non hai ancora caricato nessuna pratica.</p>
+              {canPraticheCreate && (
+                <Link href="/pratiche/nuova" className="mt-3 inline-block">
+                  <Button size="sm">Crea la prima</Button>
                 </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              )}
+            </div>
+          ) : (
+            <ul className="divide-y divide-pv-slate-200">
+              {ultime.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/pratiche/${p.id}`}
+                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-pv-slate-50"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-[13px] font-semibold text-pv-navy-800">
+                          {p.codicePratica ?? 'BOZZA'}
+                        </span>
+                        <StatusChip stato={p.stato as PraticaStato} viewerRole="BROKER" />
+                      </div>
+                      <p className="mt-1 truncate text-[13px] text-pv-slate-700">
+                        {p.veicoli[0]?.targa && (
+                          <span className="font-semibold">
+                            {p.veicoli[0].targa}
+                            {p.veicoli.length > 1 ? ` +${p.veicoli.length - 1}` : ''}
+                          </span>
+                        )}
+                        {p.veicoli[0]?.targa && ' · '}
+                        {p.veicoli[0]?.proprietarioAttuale ?? '—'}
+                        {p.agenziaAssegnata && (
+                          <>
+                            {' · '}
+                            <span className="text-pv-slate-500">
+                              {p.agenziaAssegnata.ragioneSociale}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[12px] text-pv-slate-500">
+                        {formatRelative(p.submittedAt ?? p.createdAt)}
+                      </p>
+                      <p className="text-[12px] font-semibold text-pv-slate-700">
+                        {p.comune ?? '—'}
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }

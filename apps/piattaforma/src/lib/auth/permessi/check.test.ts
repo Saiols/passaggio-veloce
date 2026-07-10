@@ -87,6 +87,24 @@ describe('validaPermessi — anti-escalation', () => {
     if (!res.ok) expect(res.error).toContain('tuoi permessi');
   });
 
+  // Rilievo 2: la guardia è `targetUserId !== undefined && targetUserId === ctx.userId`,
+  // non `targetUserId && ...`. Con la vecchia scrittura una stringa vuota è
+  // falsy e la guardia non scatterebbe anche a parità di id (bug latente,
+  // impatto nullo in pratica perché gli id reali sono uuid, ma qui lo
+  // dimostriamo esplicitamente).
+  it("rifiuta anche quando l'id è la stringa vuota (guardia per disuguaglianza, non per truthiness)", () => {
+    const ctx: PermessiCtx = { userId: '', isOwner: false, permessi: new Set(['team.view', 'team.permessi', 'fatture.view']) };
+    const res = validaPermessi({
+      ctx,
+      companyType: 'AGENZIA',
+      targetUserId: '',
+      targetRole: 'UTENTE_AZIENDA',
+      richiesti: ['fatture.view'],
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('tuoi permessi');
+  });
+
   it("rifiuta la modifica dei permessi dell'owner", () => {
     const res = validaPermessi({ ...base, ctx: owner, targetRole: 'ADMIN_AZIENDA', richiesti: [] });
     expect(res.ok).toBe(false);

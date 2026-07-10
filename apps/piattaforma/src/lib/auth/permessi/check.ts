@@ -27,31 +27,31 @@ export function assignablePermessi(ctx: PermessiCtx, t: CompanyTypeP): Permesso[
 
 export type ValidaResult = { ok: true; permessi: Permesso[] } | { ok: false; error: string };
 
+/** Creazione: non c'è ancora un utente target, niente ruolo da proteggere. */
+type SenzaTarget = { targetUserId?: undefined; targetRole?: undefined };
+/**
+ * Modifica di un utente ESISTENTE: il ruolo del target è obbligatorio a
+ * livello di tipo, non solo di commento. Senza `targetRole` la protezione
+ * dell'owner non potrebbe scattare — un chiamante che passa `targetUserId` e
+ * dimentica `targetRole` non compila più, non ottiene silenziosamente
+ * `{ok: true}`. Il chiamante lo ricava dalla riga del DB (campo `role`
+ * dell'utente target), non da input dell'utente.
+ */
+type ConTarget = { targetUserId: string; targetRole: Role };
+
 /**
  * Le quattro regole anti-escalation. Rifiuta con errore, non filtra in silenzio:
  * una chiave non assegnabile è un tentativo di escalation, non un refuso.
  */
-export function validaPermessi(args: {
-  ctx: PermessiCtx;
-  companyType: CompanyTypeP;
-  richiesti: string[];
-  targetUserId?: string;
-  /**
-   * Ruolo del target, tipizzato: niente più stringhe libere che bypassano il
-   * confronto con `'ADMIN_AZIENDA'` (minuscolo, spazi, ecc. non compilano più).
-   * Resta possibile ometterlo — quando si crea un utente nuovo il target non
-   * esiste ancora, quindi non ha un ruolo da proteggere. Ma chi modifica un
-   * utente ESISTENTE DEVE passarlo: il chiamante lo ricava dalla riga del DB
-   * (campo `role` dell'utente target), non da input dell'utente.
-   */
-  targetRole?: Role;
-}): ValidaResult {
+export function validaPermessi(
+  args: { ctx: PermessiCtx; companyType: CompanyTypeP; richiesti: string[] } & (SenzaTarget | ConTarget),
+): ValidaResult {
   const { ctx, companyType, richiesti, targetUserId, targetRole } = args;
 
   if (targetRole === 'ADMIN_AZIENDA') {
     return { ok: false, error: 'Non puoi modificare i permessi del titolare' };
   }
-  if (targetUserId && targetUserId === ctx.userId) {
+  if (targetUserId !== undefined && targetUserId === ctx.userId) {
     return { ok: false, error: 'Non puoi modificare i tuoi permessi' };
   }
   if (!can(ctx, 'team.permessi')) {

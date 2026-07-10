@@ -2217,11 +2217,14 @@ git commit -m "fix(permessi): chiude il buco IBAN agenzia e mette i gate sui dow
 - Modify: `apps/piattaforma/src/components/agenzia/agenzia-shell.tsx`
 
 **Interfaces:**
-- Consumes: `SessionContext.permessi`, `SessionContext.isOwner`; `type Permesso` da `@/lib/auth/permessi/catalogo`.
+- Consumes: `SessionContext.permessi`, `SessionContext.isOwner`; `getManageableSedi()` da `@/lib/auth/session-context`; `type Permesso` da `@/lib/auth/permessi/catalogo`.
 - Produces:
   - `type NavCtx = { isOwner: boolean; permessi: readonly Permesso[] }`
   - `vede(ctx: NavCtx, p?: Permesso): boolean` — senza permesso richiesto è sempre `true`
   - `filtraGruppi<T extends { permesso?: Permesso }>(gruppi: { label: string; items: T[] }[], ctx: NavCtx): { label: string; items: T[] }[]` — scarta le voci negate e i gruppi rimasti vuoti
+  - le shell accettano `puoGestireTeam: boolean` oltre a `isOwner` e `permessi`
+
+**Decisione presa in corso d'opera (2026-07-10).** `team.*` ha effetto solo per owner e `ADMIN_SEDE`: `manageableSedi()` filtra sul ruolo di sede, e per un `OPERATORE` ritorna sempre `[]`. Il permesso da solo non basta. Quindi la voce **Team compare solo se `can('team.view')` E ci sono sedi gestibili**: altrimenti un operatore con `team.view` vedrebbe la voce e verrebbe rimbalzato alla dashboard. `puoGestireTeam` viene da `(await getManageableSedi()).length > 0`, che `app-shell.tsx` già calcola oggi come `canManageTeam`.
 
 Il repo non ha component test e `vitest.config.ts` raccoglie solo `src/**/*.test.ts` con `environment: 'node'`: la logica del filtro vive in un modulo puro, le shell restano JSX dichiarativo. `filtraGruppi` è generico sulla forma della voce, così si testa senza icone né React.
 
@@ -2415,7 +2418,12 @@ export function BrokerShell({
                 },
               ]
             : []),
-          { href: '/team', label: 'Team', icon: IconUtenti, permesso: 'team.view' as const },
+          // Team: serve il permesso E una sede gestibile. `manageableSedi()` filtra sul
+          // ruolo di sede, quindi per un OPERATORE è vuoto: mostrargli la voce
+          // significherebbe rimbalzarlo alla dashboard al primo click.
+          ...(puoGestireTeam
+            ? [{ href: '/team', label: 'Team', icon: IconUtenti, permesso: 'team.view' as const }]
+            : []),
         ],
       },
     ],
@@ -2423,6 +2431,8 @@ export function BrokerShell({
   );
   // ...il resto invariato
 ```
+
+`puoGestireTeam` è un prop booleano, accanto a `isOwner` e `permessi`.
 
 - [ ] **Step 6: Fare lo stesso su `agenzia-shell.tsx`**
 
@@ -2672,10 +2682,16 @@ git commit -m "test(permessi): guardia anti-drift sulle server action azienda"
 **Interfaces:**
 - Consumes: `catalogoPerTipo`, `conDipendenze`, `figliDi`, `type CompanyTypeP`, `type Permesso` da `@/lib/auth/permessi/catalogo`; `preset`, `riconoscePreset`, `PRESET_ETICHETTE`, `PRESET_IDS` da `@/lib/auth/permessi/preset`.
 - Produces:
-  - in `matrice-logic.ts` (puro): `toggle(value, chiave, puoi): Permesso[]`, `toggleCategoria(value, categoriaId, companyType, puoi): Permesso[]`, `applicaPreset(id, companyType, puoi): Permesso[]`
-  - in `matrice-permessi.tsx`: `<MatricePermessi companyType value onChange assegnabili />` — componente controllato, `value: Permesso[]`, `onChange(v: Permesso[])`
+  - in `matrice-logic.ts` (puro): `toggle(value, chiave, puoi): Permesso[]`, `toggleCategoria(value, categoriaId, companyType, puoi): Permesso[]`, `applicaPreset(id, companyType, puoi): Permesso[]`, `permessiConcedibili(assegnabili, ruoloSede): Set<Permesso>`
+  - in `matrice-permessi.tsx`: `<MatricePermessi companyType ruoloSede value onChange assegnabili />` — componente controllato, `value: Permesso[]`, `onChange(v: Permesso[])`
 
 La cascata delle dipendenze è la parte che può rompersi, ed è pura: sta in `matrice-logic.ts` e si testa senza DOM. Il `.tsx` resta un guscio che disegna caselle e inoltra i click.
+
+**Decisione presa in corso d'opera (2026-07-10): `team.*` non ha effetto su un operatore.** `manageableSedi()` filtra sul ruolo di sede e per un `OPERATORE` ritorna `[]`, quindi le action di team lo bloccano sullo scope anche se ha il permesso. Spuntare «Crea utenti» per un operatore sarebbe una promessa non mantenuta.
+
+Quindi `permessiConcedibili(assegnabili, ruoloSede)` toglie dai concedibili tutte le chiavi `team.*` quando `ruoloSede === 'OPERATORE'`. Il componente usa quel `Set` come `puoi`: le caselle Team appaiono **disabilitate**, e `applicaPreset` non le accende mai. Sopra la categoria compare la riga: «I permessi Team richiedono il ruolo Admin di sede».
+
+Cambiando il ruolo nella select, il set dei concedibili si ricalcola e i `team.*` eventualmente accesi spariscono. È il motivo per cui `permessiConcedibili` è una funzione pura testabile e non un `if` sepolto nel JSX.
 
 - [ ] **Step 1: Scrivere il test che fallisce**
 
@@ -2683,7 +2699,7 @@ File `apps/piattaforma/src/components/permessi/matrice-logic.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { toggle, toggleCategoria, applicaPreset } from './matrice-logic';
+import { toggle, toggleCategoria, applicaPreset, permessiConcedibili } from './matrice-logic';
 import { permessiPerTipo, type Permesso } from '@/lib/auth/permessi/catalogo';
 import { preset } from '@/lib/auth/permessi/preset';
 
@@ -2767,6 +2783,30 @@ describe('applicaPreset', () => {
     expect(applicaPreset('OPERATORE_BASE', 'AGENZIA', puoi)).not.toContain('inbox.gestisci');
   });
 });
+
+describe('permessiConcedibili', () => {
+  it("a un OPERATORE non si possono concedere permessi team: manageableSedi() lo blocca comunque", () => {
+    const out = permessiConcedibili([...tutti], 'OPERATORE');
+    expect([...out].filter((p) => p.startsWith('team.'))).toEqual([]);
+    expect(out.has('pratiche.view')).toBe(true);
+  });
+
+  it('a un ADMIN_SEDE i permessi team restano concedibili', () => {
+    const out = permessiConcedibili([...tutti], 'ADMIN_SEDE');
+    expect(out.has('team.crea')).toBe(true);
+    expect(out.has('team.permessi')).toBe(true);
+  });
+
+  it('non aggiunge nulla che il chiamante non avesse già', () => {
+    const parziale: Permesso[] = ['pratiche.view', 'team.view'];
+    expect([...permessiConcedibili(parziale, 'ADMIN_SEDE')].sort()).toEqual(parziale.sort());
+  });
+
+  it('applicaPreset ADMIN_SEDE su un operatore non accende i team.*', () => {
+    const puoi = permessiConcedibili([...tutti], 'OPERATORE');
+    expect(applicaPreset('ADMIN_SEDE', 'AGENZIA', puoi).filter((p) => p.startsWith('team.'))).toEqual([]);
+  });
+});
 ```
 
 - [ ] **Step 2: Lanciare il test e verificare che fallisca**
@@ -2845,12 +2885,31 @@ export function applicaPreset(
     .filter((p) => puoi.has(p))
     .sort();
 }
+
+/**
+ * I permessi realmente concedibili a un utente con questo ruolo di sede.
+ *
+ * `team.*` non ha effetto su un OPERATORE: `manageableSedi()` (lib/sedi/scope.ts)
+ * filtra sul ruolo di sede e per lui ritorna sempre `[]`, quindi le action di team
+ * lo bloccano sullo scope anche col permesso in mano. Spuntare quelle caselle
+ * sarebbe una promessa non mantenuta.
+ */
+export function permessiConcedibili(
+  assegnabili: readonly Permesso[],
+  ruoloSede: 'ADMIN_SEDE' | 'OPERATORE',
+): Set<Permesso> {
+  const out = new Set(assegnabili);
+  if (ruoloSede === 'OPERATORE') {
+    for (const p of out) if (p.startsWith('team.')) out.delete(p);
+  }
+  return out;
+}
 ```
 
 - [ ] **Step 4: Lanciare il test e verificare che passi**
 
 Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/matrice-logic.test.ts`
-Expected: PASS, 13 test.
+Expected: PASS, 17 test.
 
 - [ ] **Step 5: Scrivere il componente**
 
@@ -2862,7 +2921,7 @@ File `apps/piattaforma/src/components/permessi/matrice-permessi.tsx`:
 import { useState } from 'react';
 import { catalogoPerTipo, type CompanyTypeP, type Permesso } from '@/lib/auth/permessi/catalogo';
 import { riconoscePreset, PRESET_ETICHETTE, PRESET_IDS } from '@/lib/auth/permessi/preset';
-import { applicaPreset, toggle, toggleCategoria } from './matrice-logic';
+import { applicaPreset, permessiConcedibili, toggle, toggleCategoria } from './matrice-logic';
 
 /**
  * Matrice a accordion: una categoria per riga, contatore visibile da chiusa.
@@ -2871,11 +2930,14 @@ import { applicaPreset, toggle, toggleCategoria } from './matrice-logic';
  */
 export function MatricePermessi({
   companyType,
+  ruoloSede,
   value,
   onChange,
   assegnabili,
 }: {
   companyType: CompanyTypeP;
+  /** Un OPERATORE non può gestire il team: le caselle `team.*` restano disabilitate. */
+  ruoloSede: 'ADMIN_SEDE' | 'OPERATORE';
   value: Permesso[];
   onChange: (v: Permesso[]) => void;
   /** Ciò che il chiamante può concedere: il resto appare disabilitato. */
@@ -2884,8 +2946,9 @@ export function MatricePermessi({
   const categorie = catalogoPerTipo(companyType);
   const [aperte, setAperte] = useState<Set<string>>(new Set());
   const attivo = new Set(value);
-  const puoi = new Set(assegnabili);
+  const puoi = permessiConcedibili(assegnabili, ruoloSede);
   const presetCorrente = riconoscePreset(value, companyType);
+  const teamBloccato = ruoloSede === 'OPERATORE';
 
   return (
     <fieldset className="rounded-xl border border-pv-slate-200 p-4">
@@ -2950,6 +3013,11 @@ export function MatricePermessi({
 
               {aperta && (
                 <div className="space-y-2 border-t border-pv-slate-200 px-3 py-2 pl-9">
+                  {cat.id === 'team' && teamBloccato && (
+                    <p className="text-xs text-pv-slate-500">
+                      I permessi Team richiedono il ruolo «Admin di sede».
+                    </p>
+                  )}
                   {cat.permessi.map((p) => (
                     <label key={p.chiave} className="flex items-start gap-2 text-sm">
                       <input
@@ -3035,15 +3103,31 @@ e nel JSX, prima del bottone di submit:
       )}
 ```
 
-Quando si sceglie `ruoloSede = 'ADMIN_SEDE'` nella select, applicare il preset corrispondente:
+Il ruolo di sede deve stare **nello stato React**, non solo nella `FormData`: la matrice ne ha bisogno per disabilitare la categoria Team.
 
 ```tsx
+  const [ruoloSede, setRuoloSede] = useState<'ADMIN_SEDE' | 'OPERATORE'>('OPERATORE');
+  const puoi = permessiConcedibili(assegnabili, ruoloSede);
+
   function onRuoloChange(r: 'ADMIN_SEDE' | 'OPERATORE') {
-    setPermessi(applicaPreset(r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE', companyType, puoi));
+    setRuoloSede(r);
+    // Il set concedibile cambia col ruolo: ricalcolare il preset con i NUOVI concedibili,
+    // altrimenti passando ad «Operatore» resterebbero accesi dei team.* inerti.
+    setPermessi(
+      applicaPreset(
+        r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE',
+        companyType,
+        permessiConcedibili(assegnabili, r),
+      ),
+    );
   }
 ```
 
-Import necessari: `applicaPreset` da `@/components/permessi/matrice-logic`, `MatricePermessi` da `@/components/permessi/matrice-permessi`, `type CompanyTypeP` e `type Permesso` da `@/lib/auth/permessi/catalogo`.
+La `select` del ruolo chiama `onRuoloChange`, e resta `name="ruoloSede"` per la `FormData`. La matrice riceve `ruoloSede={ruoloSede}`.
+
+Import necessari: `applicaPreset` e `permessiConcedibili` da `@/components/permessi/matrice-logic`, `MatricePermessi` da `@/components/permessi/matrice-permessi`, `type CompanyTypeP` e `type Permesso` da `@/lib/auth/permessi/catalogo`.
+
+Lo stesso vale per `invite-form.tsx` e per `edit-form.tsx`: entrambi hanno la select del ruolo e devono passarlo alla matrice. In `edit-form.tsx` il valore iniziale è il ruolo attuale dell'utente, letto dal DB.
 
 - [ ] **Step 7: Passare i props da `team/page.tsx`**
 

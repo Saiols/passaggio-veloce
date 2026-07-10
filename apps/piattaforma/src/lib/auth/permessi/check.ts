@@ -1,5 +1,6 @@
 import { dipendenzaDi, isPermesso, permessiPerTipo, type CompanyTypeP, type Permesso } from './catalogo';
 import { preset } from './preset';
+import type { Role } from '@/lib/auth/permissions';
 
 export type PermessiCtx = {
   userId: string;
@@ -35,7 +36,15 @@ export function validaPermessi(args: {
   companyType: CompanyTypeP;
   richiesti: string[];
   targetUserId?: string;
-  targetRole?: string;
+  /**
+   * Ruolo del target, tipizzato: niente più stringhe libere che bypassano il
+   * confronto con `'ADMIN_AZIENDA'` (minuscolo, spazi, ecc. non compilano più).
+   * Resta possibile ometterlo — quando si crea un utente nuovo il target non
+   * esiste ancora, quindi non ha un ruolo da proteggere. Ma chi modifica un
+   * utente ESISTENTE DEVE passarlo: il chiamante lo ricava dalla riga del DB
+   * (campo `role` dell'utente target), non da input dell'utente.
+   */
+  targetRole?: Role;
 }): ValidaResult {
   const { ctx, companyType, richiesti, targetUserId, targetRole } = args;
 
@@ -73,9 +82,36 @@ export function validaPermessi(args: {
 }
 
 /**
+ * Rimuove dal set i permessi la cui dipendenza è saltata via, iterando finché
+ * un giro non cambia più nulla: togliere un padre può orfanare un nipote
+ * (`sede.view` → `sede.edit` → `sede.iban`), quindi un solo passaggio non basta.
+ */
+function potaOrfani(permessi: Permesso[]): Permesso[] {
+  const set = new Set(permessi);
+  let cambiato = true;
+  while (cambiato) {
+    cambiato = false;
+    for (const p of set) {
+      const dip = dipendenzaDi(p);
+      if (dip && !set.has(dip)) {
+        set.delete(p);
+        cambiato = true;
+      }
+    }
+  }
+  return [...set];
+}
+
+/**
  * Permessi da assegnare a un utente in creazione.
  * Chi non ha `team.permessi` non sceglie: riceve il preset base intersecato
  * ai permessi del chiamante (non si concede ciò che non si ha).
+ *
+ * Il chiamante può avere già un set incoerente (es. `pratiche.download` senza
+ * `pratiche.view`, riga vecchia del DB): l'intersezione da sola può lasciare
+ * nel risultato un figlio senza il suo padre. Qui si pota in silenzio — non è
+ * una richiesta esplicita da rifiutare, è un calcolo automatico che deve
+ * comunque restare un set valido per `validaPermessi`.
  */
 export function permessiPerNuovoUtente(
   ctx: PermessiCtx,
@@ -84,7 +120,7 @@ export function permessiPerNuovoUtente(
 ): ValidaResult {
   if (!can(ctx, 'team.permessi') || richiesti === undefined) {
     const assegnabili = new Set(assignablePermessi(ctx, companyType));
-    const base = preset('OPERATORE_BASE', companyType).filter((p) => assegnabili.has(p));
+    const base = potaOrfani(preset('OPERATORE_BASE', companyType).filter((p) => assegnabili.has(p)));
     return { ok: true, permessi: base.sort() };
   }
   return validaPermessi({ ctx, companyType, richiesti });

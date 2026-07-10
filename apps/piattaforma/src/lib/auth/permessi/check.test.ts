@@ -43,10 +43,17 @@ describe('assignablePermessi', () => {
       ['fatture.view', 'team.permessi', 'team.view', 'wallet.view'].sort(),
     );
   });
+
+  it('un permesso solo-agenzia del chiamante non è assegnabile per un target DEALER', () => {
+    const ctx = adminSede(['pratiche.view', 'pratiche.firma', 'fatture.view']);
+    const assegnabili = assignablePermessi(ctx, 'DEALER');
+    expect(assegnabili).not.toContain('pratiche.firma');
+    expect(assegnabili.sort()).toEqual(['fatture.view', 'pratiche.view'].sort());
+  });
 });
 
 describe('validaPermessi — anti-escalation', () => {
-  const base = { companyType: 'AGENZIA' as const, targetUserId: 'target1', targetRole: 'UTENTE_AZIENDA' };
+  const base = { companyType: 'AGENZIA', targetUserId: 'target1', targetRole: 'UTENTE_AZIENDA' } as const;
 
   it('rifiuta un permesso che il chiamante non possiede', () => {
     const ctx = adminSede(['team.view', 'team.permessi', 'fatture.view']);
@@ -122,5 +129,11 @@ describe('permessiPerNuovoUtente', () => {
   it("l'owner senza richiesta esplicita crea con il preset base completo", () => {
     const res = permessiPerNuovoUtente(owner, 'DEALER');
     expect(res).toEqual({ ok: true, permessi: preset('OPERATORE_BASE', 'DEALER').sort() });
+  });
+
+  it('poda i figli orfani se il set del creatore è già incoerente (ha pratiche.download ma non pratiche.view)', () => {
+    const ctx = adminSede(['pratiche.download', 'notifiche.view']);
+    const res = permessiPerNuovoUtente(ctx, 'AGENZIA');
+    expect(res).toEqual({ ok: true, permessi: ['notifiche.view'] });
   });
 });

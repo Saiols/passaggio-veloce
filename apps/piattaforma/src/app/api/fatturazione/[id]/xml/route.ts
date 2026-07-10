@@ -9,6 +9,8 @@ import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 import { canViewDocumentoFiscale, docSedeFields } from '@/lib/fatturazione/access';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { hasPermesso } from '@/lib/auth/permessi/guard';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,6 +66,13 @@ export async function GET(
     scope: ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE,
   });
   if (!allowed) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  // Il permesso non sostituisce `canViewDocumentoFiscale` (scope): decide SE
+  // l'utente può scaricare l'XML. Bypass esplicito per lo staff di piattaforma
+  // (companyId null → nessun permesso azienda).
+  if (!isAdminOrAssistente(session.user.role) && !(await hasPermesso('fatture.xml'))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

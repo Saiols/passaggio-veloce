@@ -7,6 +7,8 @@ import { appendToFilename } from '@/lib/documenti/filename';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
+import { hasPermesso } from '@/lib/auth/permessi/guard';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -59,6 +61,13 @@ export async function GET(
   });
 
   if (!allowed) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  // Il permesso non sostituisce `canAccessPratica` (scope): decide SE l'utente
+  // può scaricare. Bypass esplicito per lo staff di piattaforma (companyId
+  // null → nessun permesso azienda).
+  if (!isAdminOrAssistente(session.user.role) && !(await hasPermesso('pratiche.download'))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

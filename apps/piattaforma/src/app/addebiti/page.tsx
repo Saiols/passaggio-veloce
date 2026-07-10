@@ -8,6 +8,7 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { groupFeeByMonth, type FeeRow } from '@/lib/fee/recap';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, whereFeeAddebito } from '@/lib/sedi/scope-filters';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,10 @@ type StoricoRow = FeeRow & {
 export default async function AddebitiPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('addebiti.view');
+
   if (session.user.companyType !== 'AGENZIA') {
     return (
       <AppShell session={session} activePath="/addebiti">

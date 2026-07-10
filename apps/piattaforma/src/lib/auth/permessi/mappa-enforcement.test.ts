@@ -1,12 +1,71 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { dirname, resolve, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MAPPA_ENFORCEMENT } from './mappa-enforcement';
 
 // `__dirname` non esiste sotto vitest (ESM). Stesso pattern di
 // src/lib/notifiche/pratica-schema.test.ts e degli altri test che leggono file.
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..'); // apps/piattaforma
+
+/**
+ * Perimetro ESCLUSO dall'enumerazione filesystem sotto: aree con un dominio di
+ * autorizzazione diverso da quello azienda (il catalogo `Permesso` qui in
+ * ./catalogo riguarda SOLO utenti azienda dealer/agenzia), o senza sessione.
+ * Stesso perimetro (e stessa motivazione) di mappa-pagine.ts:
+ *  - `src/app/admin/**`   staff piattaforma: gate a ruolo
+ *    (ADMIN_PIATTAFORMA/ASSISTENTE via isAdminPiattaforma/isAdminOrAssistente),
+ *    non il catalogo permessi azienda.
+ *  - `src/app/(auth)/**`  route group pre-sessione: login, registrazione,
+ *    reset password. Non c'è ancora un utente da gatare.
+ */
+const PREFISSI_ESCLUSI_ENFORCEMENT = ['src/app/admin/', 'src/app/(auth)/'];
+
+/** Barre sempre `/`: `path.relative` su Windows ritorna `\`. */
+function toPosix(p: string): string {
+  return p.split('\\').join('/');
+}
+
+function isFuoriPerimetroEnforcement(rel: string): boolean {
+  return PREFISSI_ESCLUSI_ENFORCEMENT.some((p) => rel.startsWith(p));
+}
+
+/**
+ * Un file è un "modulo di server action" quando `'use server'` è la PRIMA
+ * istruzione non vuota del file — la direttiva file-level che rende server
+ * action ogni funzione esportata (convenzione Next.js usata da tutti gli
+ * `actions.ts` del progetto). Non basta che la stringa `'use server'` compaia
+ * da qualche parte: due `page.tsx` (`orari/page.tsx`, `sedi/[id]/page.tsx`)
+ * la usano come direttiva PER-FUNZIONE dentro una closure inline che delega
+ * a un'action già mappata altrove — un pattern diverso, coperto da
+ * mappa-pagine.test.ts (il gate della pagina) e da questa stessa mappa (il
+ * gate dell'action delegata). Trattarli come "nuovo file azioni" darebbe un
+ * falso positivo permanente senza aggiungere protezione reale.
+ */
+function isFileAzioni(src: string): boolean {
+  const primaRiga = src
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
+  return primaRiga === "'use server';" || primaRiga === '"use server";';
+}
+
+/** Tutti i file `.ts`/`.tsx` con `'use server'` file-level sotto `dir`. */
+function tuttiIFileAzioni(dir: string): string[] {
+  const out: string[] = [];
+  function walk(d: string): void {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const full = join(d, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx'))) {
+        if (isFileAzioni(readFileSync(full, 'utf8'))) out.push(full);
+      }
+    }
+  }
+  walk(dir);
+  return out;
+}
 
 /** Nomi delle server action esportate: `export async function nome(`. */
 function actionEsportate(rel: string): string[] {
@@ -78,6 +137,24 @@ describe('mappa-enforcement', () => {
     for (const rel of Object.keys(MAPPA_ENFORCEMENT)) {
       expect(existsSync(resolve(ROOT, rel)), `manca ${rel}`).toBe(true);
     }
+  });
+
+  it("nessun modulo di server action sfugge alla mappa (blindspot: file interamente nuovo)", () => {
+    const trovati = [
+      ...tuttiIFileAzioni(resolve(ROOT, 'src/app')),
+      ...tuttiIFileAzioni(resolve(ROOT, 'src/lib')),
+    ]
+      .map((abs) => toPosix(relative(ROOT, abs)))
+      .filter((rel) => !isFuoriPerimetroEnforcement(rel));
+
+    const nonMappati = trovati.filter((rel) => !(rel in MAPPA_ENFORCEMENT));
+    expect(
+      nonMappati,
+      `File con 'use server' (direttiva file-level) fuori da mappa-enforcement.ts. Prima di questo test, un file ` +
+        `actions.ts INTERAMENTE NUOVO sfuggiva alla guardia: nessuno lo aggiungeva alla mappa, nessun test diventava ` +
+        `rosso — questo è il buco che il test chiude. Aggiungi il file a MAPPA_ENFORCEMENT con le sue server action ` +
+        `classificate (permesso o null con la ragione):\n  ${nonMappati.join('\n  ')}`,
+    ).toEqual([]);
   });
 
   it('ogni server action esportata è classificata nella mappa', () => {

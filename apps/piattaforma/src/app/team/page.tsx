@@ -4,6 +4,9 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
+import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
+import { isPermesso } from '@/lib/auth/permessi/catalogo';
+import { riconoscePreset, PRESET_ETICHETTE } from '@/lib/auth/permessi/preset';
 import { RevokeButton } from './revoke-button';
 import { DisableTeamUserButton } from './disable-button';
 import { TeamPageClient } from './team-page-client';
@@ -14,10 +17,15 @@ export default async function TeamPage() {
   if (!session?.user) redirect('/login');
   const ctx = await getSessionContext();
   if (!ctx?.companyId) redirect('/dashboard');
+  if (!ctx.companyType) redirect('/dashboard'); // azienda senza tipo: il catalogo non si applica
   const manageable = await getManageableSedi();
   if (manageable.length === 0) redirect('/dashboard'); // né owner né admin di sede
   const companyId = ctx.companyId;
+  const companyType = ctx.companyType;
   const manageableIds = manageable.map((s) => s.id);
+  const permessiCtx: PermessiCtx = { userId: ctx.user.id, isOwner: ctx.isOwner, permessi: ctx.permessi };
+  const assegnabili = assignablePermessi(permessiCtx, companyType);
+  const puoScegliere = can(permessiCtx, 'team.permessi');
 
   // Owner: vede tutti gli utenti della madre. Admin di sede: solo gli utenti
   // con membership nelle sedi che amministra.
@@ -38,7 +46,7 @@ export default async function TeamPage() {
       orderBy: { createdAt: 'asc' },
       select: {
         id: true, email: true, nome: true, cognome: true,
-        role: true, status: true, lastLoginAt: true,
+        role: true, status: true, lastLoginAt: true, permessi: true,
       },
     }),
     prisma.invitation.findMany({
@@ -48,6 +56,19 @@ export default async function TeamPage() {
     }),
   ]);
   const sedi = manageable.map((s) => ({ id: s.id, nome: s.nome }));
+
+  /**
+   * Badge permessi: nome del preset se il set coincide esattamente, altrimenti
+   * `Personalizzato · N`. Il proprietario (ADMIN_AZIENDA) ha tutti i poteri per
+   * ruolo implicito e non ha un set di permessi significativo in DB: nessun
+   * badge per lui.
+   */
+  function permessiBadge(u: { role: string; permessi: string[] }): string | null {
+    if (u.role === 'ADMIN_AZIENDA') return null;
+    const puliti = u.permessi.filter(isPermesso);
+    const presetId = riconoscePreset(puliti, companyType);
+    return presetId ? PRESET_ETICHETTE[presetId] : `Personalizzato · ${puliti.length} permessi`;
+  }
 
   return (
     <AppShell session={session} activePath="/team">
@@ -64,7 +85,12 @@ export default async function TeamPage() {
               Gestisci gli utenti che possono operare per conto della tua azienda.
             </p>
           </div>
-          <TeamPageClient sedi={sedi} />
+          <TeamPageClient
+            sedi={sedi}
+            companyType={companyType}
+            assegnabili={assegnabili}
+            puoScegliere={puoScegliere}
+          />
         </header>
 
         <section className="rounded-2xl border border-pv-slate-200 bg-white p-6 mb-6">
@@ -72,7 +98,9 @@ export default async function TeamPage() {
             Utenti attivi ({users.length})
           </h2>
           <ul className="mt-3 divide-y divide-pv-slate-100">
-            {users.map((u) => (
+            {users.map((u) => {
+              const badge = permessiBadge(u);
+              return (
               <li
                 key={u.id}
                 className="flex items-center justify-between gap-3 py-3 text-sm"
@@ -83,6 +111,14 @@ export default async function TeamPage() {
                   </p>
                   <p className="truncate text-xs text-pv-slate-500">
                     {u.email} · {u.role === 'ADMIN_AZIENDA' ? 'Admin' : 'Utente'}
+                    {badge && (
+                      <>
+                        {' · '}
+                        <span className="inline-block rounded-full bg-pv-slate-100 px-2 py-0.5 text-[11px] font-medium text-pv-slate-700">
+                          {badge}
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <span className="text-xs text-pv-slate-500 hidden sm:inline">
@@ -106,7 +142,8 @@ export default async function TeamPage() {
                   </div>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
 

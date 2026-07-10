@@ -4,6 +4,8 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
+import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
+import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { TeamEditForm } from './edit-form';
@@ -19,16 +21,22 @@ export default async function TeamUserEditPage({
   if (!session?.user) redirect('/login');
   const ctx = await getSessionContext();
   if (!ctx?.companyId) redirect('/dashboard');
+  if (!ctx.companyType) redirect('/dashboard'); // azienda senza tipo: il catalogo non si applica
   const manageable = await getManageableSedi();
   if (manageable.length === 0) redirect('/dashboard');
   const companyId = ctx.companyId;
+  const companyType = ctx.companyType;
   const manageableIds = manageable.map((s) => s.id);
+  const permessiCtx: PermessiCtx = { userId: ctx.user.id, isOwner: ctx.isOwner, permessi: ctx.permessi };
+  const assegnabili = assignablePermessi(permessiCtx, companyType);
+  const puoScegliere = can(permessiCtx, 'team.permessi');
 
   const target = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true, email: true, nome: true, cognome: true,
       role: true, status: true, companyId: true, lastLoginAt: true, createdAt: true,
+      permessi: true,
     },
   });
   if (!target || target.companyId !== companyId) notFound();
@@ -94,6 +102,11 @@ export default async function TeamUserEditPage({
               sedi={sedi}
               defaultSedeId={membership?.sedeId ?? ''}
               defaultRuolo={membership?.ruolo ?? 'OPERATORE'}
+              companyType={companyType}
+              assegnabili={assegnabili}
+              puoScegliere={puoScegliere}
+              permessiIniziali={target.permessi.filter(isPermesso)}
+              currentUserId={ctx.user.id}
             />
           </div>
         </Card>

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert } from '@/components/ui';
+import { Alert, TipoPraticaChip } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { AssignForm } from './assign-form';
 
@@ -98,12 +98,15 @@ export default async function AdminEscalationPage() {
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <Link
-                      href={`/pratiche/${p.id}`}
-                      className="font-mono text-[14px] font-bold text-pv-navy-800 hover:underline"
-                    >
-                      {p.codicePratica ?? '—'}
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/pratiche/${p.id}`}
+                        className="font-mono text-[14px] font-bold text-pv-navy-800 hover:underline"
+                      >
+                        {p.codicePratica ?? '—'}
+                      </Link>
+                      <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} />
+                    </div>
                     <p className="mt-1 text-[14px] font-semibold text-pv-navy-800">
                       {p.veicoli[0]?.targa
                         ? p.veicoli.length > 1

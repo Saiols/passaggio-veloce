@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { StatusChip, type PraticaStato } from '@/components/ui';
+import { StatusChip, TipoPraticaChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { AdminPraticheFilters } from './filters';
 import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
@@ -158,8 +158,11 @@ export default async function AdminPratichePage({
                         aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
                         className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
                       />
-                      <div className="min-w-0 truncate py-3 pl-5 pr-3 font-mono font-semibold text-pv-navy-800">
-                        {p.codicePratica ?? 'BOZZA'}
+                      <div className="min-w-0 py-3 pl-5 pr-3">
+                        <div className="truncate font-mono font-semibold text-pv-navy-800">
+                          {p.codicePratica ?? 'BOZZA'}
+                        </div>
+                        <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} className="mt-1 relative z-10" />
                       </div>
                       <div className="min-w-0 truncate px-3 py-3">
                         {p.veicoli[0]?.targa

@@ -162,7 +162,7 @@ export default async function AdminPratichePage({
                         <div className="truncate font-mono font-semibold text-pv-navy-800">
                           {p.codicePratica ?? 'BOZZA'}
                         </div>
-                        <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} className="mt-1 relative z-10" />
+                        <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} className="mt-1" />
                       </div>
                       <div className="min-w-0 truncate px-3 py-3">
                         {p.veicoli[0]?.targa

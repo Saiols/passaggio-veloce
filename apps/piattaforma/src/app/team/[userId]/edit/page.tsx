@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
 import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
@@ -22,6 +23,8 @@ export default async function TeamUserEditPage({
   const ctx = await getSessionContext();
   if (!ctx?.companyId) redirect('/dashboard');
   if (!ctx.companyType) redirect('/dashboard'); // azienda senza tipo: il catalogo non si applica
+  // Autenticazione → permesso → scope, come in /team.
+  await assertPermesso('team.view');
   const manageable = await getManageableSedi();
   if (manageable.length === 0) redirect('/dashboard');
   const companyId = ctx.companyId;

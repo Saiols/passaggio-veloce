@@ -38,8 +38,10 @@ export const MAPPA_PAGINE: Record<string, Permesso | null> = {
   'src/app/blocco-pagamento/page.tsx': null, // D4: aperta a chiunque in agenzia quando la sede è bloccata, non è una capability delegabile
   'src/app/sedi/page.tsx': null, // owner-only: redirect a /dashboard se role !== 'ADMIN_AZIENDA', non un permesso del catalogo
   'src/app/sedi/[id]/page.tsx': null, // owner-only, stesso motivo di src/app/sedi/page.tsx
-  'src/app/team/page.tsx': null, // gate reale = getManageableSedi() (owner o ADMIN_SEDE per ruolo sede), non team.view — quel permesso esiste solo per il filtro sidebar (vedi components/permessi/nav-voci.ts)
-  'src/app/team/[userId]/edit/page.tsx': null, // idem, stesso gate di src/app/team/page.tsx
+  // Doppio gate: `team.view` (capability) e `getManageableSedi()` (scope, owner o ADMIN_SEDE).
+  // Senza il permesso la voce sparisce dalla sidebar: senza anche il redirect, bastava l'URL.
+  'src/app/team/page.tsx': 'team.view',
+  'src/app/team/[userId]/edit/page.tsx': 'team.view',
   'src/app/wallet/page.tsx': 'wallet.view',
   'src/app/addebiti/page.tsx': 'addebiti.view',
   'src/app/orari/page.tsx': 'orari.view',

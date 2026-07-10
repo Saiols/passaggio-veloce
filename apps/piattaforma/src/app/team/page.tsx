@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
 import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { riconoscePreset, PRESET_ETICHETTE } from '@/lib/auth/permessi/preset';
 import { RevokeButton } from './revoke-button';
@@ -18,6 +19,9 @@ export default async function TeamPage() {
   const ctx = await getSessionContext();
   if (!ctx?.companyId) redirect('/dashboard');
   if (!ctx.companyType) redirect('/dashboard'); // azienda senza tipo: il catalogo non si applica
+  // Autenticazione → permesso → scope. Senza `team.view` la voce sparisce dalla sidebar:
+  // se la pagina non facesse anche il redirect, basterebbe digitare l'URL per entrare.
+  await assertPermesso('team.view');
   const manageable = await getManageableSedi();
   if (manageable.length === 0) redirect('/dashboard'); // né owner né admin di sede
   const companyId = ctx.companyId;

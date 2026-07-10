@@ -1,21 +1,24 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
 import { Alert, Card, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
-import { formatRelative, formatCurrencyCent } from '@/lib/format';
-import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
+// PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 — `formatCurrencyCent` serviva solo alla card:
+import { formatRelative } from '@/lib/format';
+// PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 — riattivare insieme alla card "Prossimi addebiti":
+// import { computeGiorniResidui, countdownLevel } from '@/lib/pratiche/countdown';
 import { hasPermesso } from '@/lib/auth/permessi/guard';
 
 export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
   // Autenticazione → permesso → scope: ogni sezione che linka a una pagina
   // protetta, o mostra un importo, è condizionata al permesso della destinazione.
-  const [canInboxView, canPraticheView, canAddebitiView, canFeedbackView] = await Promise.all([
+  const [canInboxView, canPraticheView, canFeedbackView] = await Promise.all([
     hasPermesso('inbox.view'),
     hasPermesso('pratiche.view'),
-    hasPermesso('addebiti.view'),
+    // PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 — `addebiti.view` serviva solo alla card:
+    // hasPermesso('addebiti.view'),
     hasPermesso('feedback.view'),
   ]);
 
-  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti, prossimiAddebiti] = await Promise.all([
+  const [inArrivo, inCorso, firmateMese, rating, assegnazioniRecenti] = await Promise.all([
     prisma.praticaAssegnazione.count({
       where: { sedeId: { in: scopeIds }, esito: 'PENDING' },
     }),
@@ -58,16 +61,16 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
     //   where: { sedeId: { in: scopeIds } },
     //   select: { id: true, formato: true },
     // }),
-    // "Prossimi addebiti" mostra importi e collega a /addebiti: entrambi
-    // richiedono addebiti.view, quindi niente query se manca il permesso.
-    canAddebitiView
-      ? prisma.feeAddebito.findMany({
-          where: { agenziaSedeId: { in: scopeIds }, stato: 'SCHEDULED', scheduledAt: { not: null } },
-          orderBy: { scheduledAt: 'asc' },
-          take: 3,
-          include: { pratica: { select: { id: true, codicePratica: true } } },
-        })
-      : Promise.resolve([]),
+    // PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 (tutto istantaneo) — riattivare la query,
+    // il nome destrutturato `prossimiAddebiti`, `canAddebitiView`, gli import countdown/format e la card:
+    // canAddebitiView
+    //   ? prisma.feeAddebito.findMany({
+    //       where: { agenziaSedeId: { in: scopeIds }, stato: 'SCHEDULED', scheduledAt: { not: null } },
+    //       orderBy: { scheduledAt: 'asc' },
+    //       take: 3,
+    //       include: { pratica: { select: { id: true, codicePratica: true } } },
+    //     })
+    //   : Promise.resolve([]),
   ]);
 
   // Multi-sede: breakdown pratiche per sede nella vista aggregata (owner, >1 sede).
@@ -194,6 +197,7 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
         />
       </div>
 
+      {/* PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 (tutto istantaneo) — riattivare la card:
       {canAddebitiView && prossimiAddebiti.length > 0 && (
         <section className="mb-6 rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           <header className="flex items-center justify-between border-b border-pv-slate-200 px-5 py-4">
@@ -228,6 +232,7 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
           </ul>
         </section>
       )}
+      */}
 
       {canInboxView && (
         <section className="rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">

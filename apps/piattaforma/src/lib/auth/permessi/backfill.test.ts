@@ -8,12 +8,6 @@ describe('permessiBackfill', () => {
     expect(permessiBackfill('DEALER', 'ADMIN_SEDE').sort()).toEqual(permessiPerTipo('DEALER').sort());
   });
 
-  it("un operatore d'agenzia NON riceve pagamenti.iban né pagamenti.ritenta", () => {
-    const p = permessiBackfill('AGENZIA', 'OPERATORE');
-    expect(p).not.toContain('pagamenti.iban');
-    expect(p).not.toContain('pagamenti.ritenta');
-  });
-
   it("un operatore d'agenzia mantiene ciò che poteva fare: firma, segnala, inbox, xml", () => {
     const p = permessiBackfill('AGENZIA', 'OPERATORE');
     for (const k of [

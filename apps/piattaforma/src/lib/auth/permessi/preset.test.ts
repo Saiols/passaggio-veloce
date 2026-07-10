@@ -43,11 +43,10 @@ describe('preset', () => {
     expect(base).not.toContain('pratiche.firma');
   });
 
-  it('OPERATORE_COMPLETO agenzia firma e segnala, ma non tocca IBAN né team', () => {
+  it('OPERATORE_COMPLETO agenzia firma e segnala, ma non tocca team', () => {
     const c = preset('OPERATORE_COMPLETO', 'AGENZIA');
     expect(c).toContain('pratiche.firma');
     expect(c).toContain('pratiche.segnala');
-    expect(c).not.toContain('pagamenti.iban');
     expect(c).not.toContain('team.view');
   });
 

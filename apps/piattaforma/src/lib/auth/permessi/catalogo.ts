@@ -10,7 +10,7 @@
 export type CompanyTypeP = 'DEALER' | 'AGENZIA';
 
 /**
- * Le 30 chiavi valide. `Permesso` deriva da qui, non dal CATALOGO: le voci senza
+ * Le 31 chiavi valide. `Permesso` deriva da qui, non dal CATALOGO: le voci senza
  * `soloPer` non hanno la proprietà sotto `as const`, e ogni accesso diventerebbe
  * un `'soloPer' in p`. Il test «PERMESSI e CATALOGO non divergono» tiene allineate
  * le due liste.
@@ -33,8 +33,6 @@ export const PERMESSI = [
   'fatture.download',
   'fatture.xml',
   'addebiti.view',
-  'pagamenti.ritenta',
-  'pagamenti.iban',
   'affiliazione.view',
   'feedback.view',
   'sede.view',
@@ -140,15 +138,11 @@ export const CATALOGO: CategoriaDef[] = [
     etichetta: 'Addebiti e pagamenti',
     soloPer: 'AGENZIA',
     permessi: [
+      // Niente `pagamenti.ritenta`/`pagamenti.iban`: il retry dell'addebito è
+      // aperto a tutta l'agenzia (D4) e l'IBAN è owner-only (D1) — nessuno dei
+      // due è una capability delegabile, quindi non è una casella spuntabile.
+      // Vedi docs/superpowers/specs/2026-07-10-iban-solo-super-admin-design.md.
       { chiave: 'addebiti.view', etichetta: 'Vede lo storico degli addebiti' },
-      { chiave: 'pagamenti.ritenta', etichetta: 'Ritenta un addebito fallito' },
-      {
-        chiave: 'pagamenti.iban',
-        etichetta: "Cambia l'IBAN e ricrea il mandato SEPA",
-        nota: 'cambia il conto addebitato',
-        sensibile: true,
-        richiede: 'pagamenti.ritenta',
-      },
     ],
   },
   {

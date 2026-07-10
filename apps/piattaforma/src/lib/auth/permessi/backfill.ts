@@ -40,10 +40,11 @@ export function decidiMembership(membership: readonly { ruolo: string }[]): Deci
 
 /**
  * Permessi da assegnare agli utenti che esistevano prima dell'introduzione del
- * sistema: fotografano ciò che potevano fare, con UNA restrizione voluta —
- * `pagamenti.iban` e `pagamenti.ritenta` non vanno agli operatori. Prima il gate
- * era il solo `companyType === 'AGENZIA'` (blocco-pagamento/actions.ts), quindi
- * qualunque operatore poteva cambiare l'IBAN dell'azienda.
+ * sistema: fotografano ciò che potevano fare. Niente `pagamenti.*` qui: non
+ * sono capability delegabili né oggi né mai (D1/D4 di
+ * docs/superpowers/specs/2026-07-10-iban-solo-super-admin-design.md) — l'IBAN
+ * resta owner-only via `isOwner`, il retry dell'addebito resta aperto a tutti
+ * senza gate, quindi nessuno dei due compare più nel catalogo.
  */
 const OPERATORE: Record<CompanyTypeP, Permesso[]> = {
   DEALER: [

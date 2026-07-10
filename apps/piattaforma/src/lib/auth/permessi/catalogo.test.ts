@@ -10,9 +10,9 @@ import {
 } from './catalogo';
 
 describe('catalogo permessi', () => {
-  it('un dealer ha 22 permessi, un agenzia 30', () => {
+  it('un dealer ha 22 permessi, un agenzia 28', () => {
     expect(permessiPerTipo('DEALER')).toHaveLength(22);
-    expect(permessiPerTipo('AGENZIA')).toHaveLength(30);
+    expect(permessiPerTipo('AGENZIA')).toHaveLength(28);
   });
 
   it('le categorie solo-agenzia non compaiono per un dealer', () => {
@@ -66,14 +66,13 @@ describe('catalogo permessi', () => {
     );
   });
 
-  it('le cinque azioni sensibili sono marcate', () => {
+  it('le quattro azioni sensibili sono marcate', () => {
     const sensibili = CATALOGO.flatMap((c) => c.permessi)
       .filter((p) => p.sensibile)
       .map((p) => p.chiave)
       .sort();
     expect(sensibili).toEqual(
       [
-        'pagamenti.iban',
         'pratiche.firma',
         'pratiche.segnala',
         'team.permessi',

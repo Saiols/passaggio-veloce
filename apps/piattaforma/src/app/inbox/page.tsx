@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
@@ -13,6 +14,10 @@ import { STORICO_ESITI, storicoCutoff, labelEsito } from './storico';
 export default async function InboxPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('inbox.view');
+
   await redirectSeAgenziaBloccata();
 
   if (session.user.companyType !== 'AGENZIA') {
@@ -24,6 +29,9 @@ export default async function InboxPage() {
       </AppShell>
     );
   }
+
+  // Quick-action: i pulsanti Accetta/Rifiuta compaiono solo con inbox.gestisci.
+  const canGestisci = await hasPermesso('inbox.gestisci');
 
   // Multi-sede: inbox scoped alle sedi accessibili (sede corrente o tutte, owner).
   const ctx = await getSessionContext();
@@ -128,18 +136,20 @@ export default async function InboxPage() {
                         {a.pratica.provincia ? ` (${a.pratica.provincia})` : ''}
                       </p>
                     </Link>
-                    <div className="flex gap-2 sm:shrink-0">
-                      <form action={acceptBound}>
-                        <SubmitButton size="sm" loadingLabel="Conferma…">
-                          Accetta
-                        </SubmitButton>
-                      </form>
-                      <form action={rejectBound}>
-                        <SubmitButton size="sm" variant="secondary" loadingLabel="Rifiuto…">
-                          Rifiuta
-                        </SubmitButton>
-                      </form>
-                    </div>
+                    {canGestisci && (
+                      <div className="flex gap-2 sm:shrink-0">
+                        <form action={acceptBound}>
+                          <SubmitButton size="sm" loadingLabel="Conferma…">
+                            Accetta
+                          </SubmitButton>
+                        </form>
+                        <form action={rejectBound}>
+                          <SubmitButton size="sm" variant="secondary" loadingLabel="Rifiuto…">
+                            Rifiuta
+                          </SubmitButton>
+                        </form>
+                      </div>
+                    )}
                   </li>
                 );
               })}

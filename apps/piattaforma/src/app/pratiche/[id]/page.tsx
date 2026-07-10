@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma, type Prisma, type PraticaTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
@@ -43,6 +44,13 @@ export default async function PraticaDetailPage({
   // type uuid") → 500 sul dettaglio per gli admin (companyId null).
   const isStaff =
     session.user.role === 'ADMIN_PIATTAFORMA' || session.user.role === 'ASSISTENTE';
+
+  // Autenticazione → permesso → scope. Lo staff piattaforma non ha un contesto
+  // sede/permessi azienda (companyId null): questa pagina resta condivisa
+  // (linkata da /admin/pratiche), quindi il gate vale solo per gli utenti azienda.
+  if (!isStaff) {
+    await assertPermesso('pratiche.view');
+  }
 
   // Multi-sede: l'accesso non-staff è scoped alle sedi (broker o agenzia).
   const ctx = await getSessionContext();
@@ -157,17 +165,33 @@ export default async function PraticaDetailPage({
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
+  // Quick-action nel dettaglio: renderizzate solo se l'utente ha la capability
+  // corrispondente. Lo staff non ha permessi azienda (bypassato sopra), quindi
+  // per lui questi restano sempre false — coerente: lo staff non lavora la
+  // pratica al posto di broker/agenzia.
+  const canProcessataPermesso = await hasPermesso('pratiche.processa');
+  const canFirmaPermesso = await hasPermesso('pratiche.firma');
+  const canAnnullaPermesso = await hasPermesso('pratiche.annulla');
+  const canValutarePermesso = await hasPermesso('pratiche.valuta');
+  const canSegnalarePermesso = await hasPermesso('pratiche.segnala');
+  // Lo staff piattaforma non ha permessi azienda (companyId null) ma deve
+  // continuare a scaricare i documenti dal dettaglio linkato da /admin/pratiche.
+  const canDownload = isStaff || (await hasPermesso('pratiche.download'));
+
   const canProcessata =
+    canProcessataPermesso &&
     companyType === 'AGENZIA' &&
     inScope(pratica.agenziaSedeId) &&
     pratica.stato === 'ACCETTATA';
 
   const canFirma =
+    canFirmaPermesso &&
     companyType === 'AGENZIA' &&
     inScope(pratica.agenziaSedeId) &&
     pratica.stato === 'PROCESSATA';
 
   const canAnnulla =
+    canAnnullaPermesso &&
     companyType === 'DEALER' &&
     inScope(pratica.brokerSedeId) &&
     pratica.stato !== 'FIRMATA' &&
@@ -178,6 +202,7 @@ export default async function PraticaDetailPage({
   const processataBound = markPraticaProcessataAction.bind(null, pratica.id);
 
   const canValutare =
+    canValutarePermesso &&
     companyType === 'DEALER' &&
     inScope(pratica.brokerSedeId) &&
     pratica.stato === 'FIRMATA' &&
@@ -188,6 +213,7 @@ export default async function PraticaDetailPage({
   // problema solo prima della firma (ACCETTATA o PROCESSATA) e una sola
   // volta per pratica.
   const canSegnalare =
+    canSegnalarePermesso &&
     companyType === 'AGENZIA' &&
     inScope(pratica.agenziaSedeId) &&
     (pratica.stato === 'ACCETTATA' || pratica.stato === 'PROCESSATA') &&
@@ -266,7 +292,7 @@ export default async function PraticaDetailPage({
           <div className="flex flex-wrap items-center gap-y-2">
             {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
             {canAnnulla && <AnnullaPraticaButton praticaId={pratica.id} />}
-            {pratica.documenti.length > 0 && (
+            {pratica.documenti.length > 0 && canDownload && (
               <DownloadDocumentiButton
                 href={`/api/pratiche/${pratica.id}/zip`}
                 className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
@@ -530,12 +556,14 @@ export default async function PraticaDetailPage({
                           </div>
                           <div className="ml-3 flex shrink-0 items-center gap-2">
                             <GatingBadge stato={d.gatingStato} />
-                            <a
-                              href={`/api/documenti/${d.id}`}
-                              className="rounded-lg border border-pv-slate-300 px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-                            >
-                              Scarica
-                            </a>
+                            {canDownload && (
+                              <a
+                                href={`/api/documenti/${d.id}`}
+                                className="rounded-lg border border-pv-slate-300 px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                              >
+                                Scarica
+                              </a>
+                            )}
                           </div>
                         </div>
                         {failed && d.gatingError && (

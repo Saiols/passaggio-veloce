@@ -65,20 +65,28 @@ const pratica = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** Contesto di sessione con i permessi indicati (per i test di capability). */
+function ctxConPermessi(permessi: string[], overrides: Record<string, unknown> = {}) {
+  return {
+    user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
+    companyId: AGENZIA,
+    companyType: 'AGENZIA' as const,
+    isOwner: false,
+    accessibleSedi: [{ id: SEDE_MIA, nome: 'Mia', type: 'AGENZIA' }],
+    currentSede: { kind: 'ONE', sede: { id: SEDE_MIA, nome: 'Mia', type: 'AGENZIA' } },
+    scopeIds: [SEDE_MIA],
+    membershipRuoli: { [SEDE_MIA]: 'OPERATORE' },
+    permessi: new Set(permessi),
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({
     user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
   });
-  getSessionContextMock.mockResolvedValue({
-    user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
-    companyId: AGENZIA,
-    isOwner: false,
-    accessibleSedi: [{ id: SEDE_MIA, nome: 'Mia', type: 'AGENZIA' }],
-    currentSede: { kind: 'ONE', sede: { id: SEDE_MIA, nome: 'Mia', type: 'AGENZIA' } },
-    scopeIds: [SEDE_MIA],
-    membershipRuoli: {},
-  });
+  getSessionContextMock.mockResolvedValue(ctxConPermessi(['pratiche.view', 'pratiche.segnala']));
 });
 
 describe('segnalaPraticaAction — scoping sede', () => {
@@ -115,5 +123,31 @@ describe('segnalaPraticaAction — scoping sede', () => {
       ok: false,
       error: 'Le segnalazioni sono possibili solo prima della firma',
     });
+  });
+});
+
+/**
+ * Gate di CAPABILITY (permesso): precede lo scoping sede (autenticazione →
+ * permesso → scope). Segnalare apre una penale di €25 al broker, quindi non è
+ * un'azione neutra da lasciare a chiunque abbia solo `pratiche.view`.
+ */
+describe('segnalaPraticaAction — capability', () => {
+  it('un operatore senza pratiche.segnala non apre la segnalazione', async () => {
+    getSessionContextMock.mockResolvedValue(ctxConPermessi(['pratiche.view']));
+
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+
+    expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+    expect(prismaMock.pratica.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('con pratiche.segnala: supera il gate (arriva al controllo di company/sede)', async () => {
+    getSessionContextMock.mockResolvedValue(ctxConPermessi(['pratiche.view', 'pratiche.segnala']));
+    prismaMock.pratica.findUnique.mockResolvedValue(pratica());
+
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+
+    expect(res).toEqual({ ok: false, error: 'Pratica non assegnata alla tua sede' });
   });
 });

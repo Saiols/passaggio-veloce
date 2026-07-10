@@ -29,6 +29,7 @@ import {
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE, type SedeScope } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
+import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { env } from '@/env';
 
 /** Esito delle quick-action usate dalla lista pratiche (nessuna navigazione). */
@@ -131,6 +132,12 @@ async function notifyAffiliationPostFirma(
 async function processaPraticaCore(praticaId: string): Promise<QuickActionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope. Copre entrambi i wrapper (dettaglio e
+  // lista): il gate sta nel core, non va duplicato nei due export sotto.
+  const gate = await requirePermesso('pratiche.processa');
+  if (!gate.ok) return gate;
+
   if (session.user.companyType !== 'AGENZIA') {
     redirect('/dashboard');
   }
@@ -257,6 +264,12 @@ export async function processaPraticaFromListaAction(
 async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope. Copre entrambi i wrapper (dettaglio e
+  // lista). Sensibile: la firma accredita il wallet broker e genera fattura.
+  const gate = await requirePermesso('pratiche.firma');
+  if (!gate.ok) return gate;
+
   if (session.user.companyType !== 'AGENZIA') {
     redirect('/dashboard');
   }
@@ -607,6 +620,13 @@ export async function firmaFromListaAction(
 export async function annullaPraticaAction(praticaId: string): Promise<void> {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  const gate = await requirePermesso('pratiche.annulla');
+  if (!gate.ok) {
+    redirect(`/pratiche/${praticaId}?error=${encodeURIComponent(gate.error)}`);
+  }
+
   if (session.user.companyType !== 'DEALER') {
     redirect('/dashboard');
   }
@@ -695,6 +715,11 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 export async function submitValutazioneAction(formData: FormData): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+
+  // Autenticazione → permesso → scope.
+  const gate = await requirePermesso('pratiche.valuta');
+  if (!gate.ok) return gate;
+
   if (session.user.companyType !== 'DEALER') {
     return { ok: false, error: 'Solo i broker possono valutare le agenzie' };
   }

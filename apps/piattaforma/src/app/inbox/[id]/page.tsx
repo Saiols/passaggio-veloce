@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
@@ -20,9 +21,15 @@ export default async function InboxDetailPage({
   const session = await auth();
   if (!session?.user) redirect('/login');
 
+  // Autenticazione → permesso → scope.
+  await assertPermesso('inbox.view');
+
   if (session.user.companyType !== 'AGENZIA') {
     redirect('/dashboard');
   }
+
+  // Quick-action: il form Accetta/Rifiuta compare solo con inbox.gestisci.
+  const canGestisci = await hasPermesso('inbox.gestisci');
 
   const agenziaId = session.user.companyId!;
 
@@ -94,7 +101,7 @@ export default async function InboxDetailPage({
           </div>
         )}
 
-        {canDecide && (
+        {canDecide && canGestisci && (
           <Card className="mb-6 border-pv-orange-500/40 bg-[color-mix(in_srgb,#ff7a00_8%,white)]">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -130,6 +137,13 @@ export default async function InboxDetailPage({
               </div>
             </div>
           </Card>
+        )}
+
+        {canDecide && !canGestisci && (
+          <Alert variant="info" className="mb-5">
+            Questa pratica è in attesa di una decisione, ma non hai il permesso di
+            accettare o rifiutare le assegnazioni.
+          </Alert>
         )}
 
         {!canDecide && (

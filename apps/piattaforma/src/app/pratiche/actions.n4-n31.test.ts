@@ -132,11 +132,13 @@ function sessione(): void {
   getSessionContextMock.mockResolvedValue({
     user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
     companyId: AGENZIA,
+    companyType: 'AGENZIA',
     isOwner: false,
     accessibleSedi: [{ id: SEDE_MIA, nome: 'Mia', type: 'AGENZIA' }],
     currentSede: { kind: 'ONE', sede: { id: SEDE_MIA, nome: 'Mia', type: 'AGENZIA' } },
     scopeIds: [SEDE_MIA],
     membershipRuoli: {},
+    permessi: new Set(['pratiche.view', 'pratiche.firma']),
   });
 }
 

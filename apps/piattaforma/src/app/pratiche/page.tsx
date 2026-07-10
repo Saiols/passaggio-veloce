@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Button, StatusChip, type PraticaStato } from '@/components/ui';
@@ -70,12 +71,24 @@ export default async function PratichePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('pratiche.view');
+
   await redirectSeAgenziaBloccata();
 
   const sp = await searchParams;
   const companyType = session.user.companyType;
   const companyId = session.user.companyId;
   const isAgenzia = companyType === 'AGENZIA';
+
+  // Quick-action e download: renderizzati solo se l'utente ha la capability
+  // corrispondente. Un bottone nascosto non è una difesa (i gate reali stanno
+  // nelle server action), ma evita di mostrare un'azione che fallirebbe.
+  const canCreare = await hasPermesso('pratiche.create');
+  const canScaricare = await hasPermesso('pratiche.download');
+  const canProcessaQuick = await hasPermesso('pratiche.processa');
+  const canFirmaQuick = await hasPermesso('pratiche.firma');
 
   if (!companyId) {
     return (
@@ -193,10 +206,12 @@ export default async function PratichePage({
             <div className="flex flex-wrap items-center gap-2">
               {/* Bundle ZIP di tutti i documenti delle pratiche del broker,
                   una cartella per codice pratica (+ toast al click). */}
-              <DownloadDocumentiButton />
-              <Link href="/pratiche/nuova">
-                <Button size="md">+ Nuova pratica</Button>
-              </Link>
+              {canScaricare && <DownloadDocumentiButton />}
+              {canCreare && (
+                <Link href="/pratiche/nuova">
+                  <Button size="md">+ Nuova pratica</Button>
+                </Link>
+              )}
             </div>
           )}
         </header>
@@ -215,7 +230,7 @@ export default async function PratichePage({
           {items.length === 0 ? (
             <div className="px-5 py-16 text-center">
               <p className="text-[14px] text-pv-slate-500">Nessuna pratica trovata.</p>
-              {!isAgenzia && (
+              {!isAgenzia && canCreare && (
                 <Link href="/pratiche/nuova" className="mt-3 inline-block">
                   <Button size="sm">Crea la prima</Button>
                 </Link>
@@ -303,11 +318,13 @@ export default async function PratichePage({
                             />
                             <StatoExtraInfo extra={extra} />
                             {isAgenzia &&
+                              canProcessaQuick &&
                               p.agenziaAssegnataId === companyId &&
                               p.stato === 'ACCETTATA' && (
                                 <QuickActionButton praticaId={p.id} action="processata" />
                               )}
                             {isAgenzia &&
+                              canFirmaQuick &&
                               p.agenziaAssegnataId === companyId &&
                               p.stato === 'PROCESSATA' && (
                                 <QuickActionButton praticaId={p.id} action="firma" />

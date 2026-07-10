@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { tickPratica } from '@/lib/distribuzione';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
@@ -17,6 +18,12 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 export async function acceptPratica(praticaId: string): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+
+  // Autenticazione → permesso → scope. Copre anche `acceptAndRedirect`, che
+  // chiama questa funzione e ne propaga l'esito senza duplicare la logica.
+  const gate = await requirePermesso('inbox.gestisci');
+  if (!gate.ok) return gate;
+
   if (session.user.companyType !== 'AGENZIA') {
     return { ok: false, error: 'Solo le agenzie possono accettare pratiche' };
   }
@@ -193,6 +200,11 @@ export async function rejectPratica(
 ): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+
+  // Autenticazione → permesso → scope. Copre anche `rejectAndRedirect`.
+  const gate = await requirePermesso('inbox.gestisci');
+  if (!gate.ok) return gate;
+
   if (session.user.companyType !== 'AGENZIA') {
     return { ok: false, error: 'Solo le agenzie possono rifiutare pratiche' };
   }

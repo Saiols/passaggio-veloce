@@ -1,6 +1,44 @@
 import { conDipendenze, permessiPerTipo, type CompanyTypeP, type Permesso } from './catalogo';
 
 /**
+ * Esito della validazione di una membership di sede per il backfill.
+ * La decisione pura racchiude il ramo di sicurezza che era inline nello script.
+ */
+export type DecisioneMembership =
+  | { azione: 'scrivi'; ruolo: 'ADMIN_SEDE' | 'OPERATORE' }
+  | { azione: 'salta'; motivo: string };
+
+/**
+ * Un utente non-owner deve avere esattamente una membership di sede.
+ * L'invariante è imposta dal codice applicativo, non dal DB: `@@unique([userId, sedeId])`
+ * vincola la coppia, non `userId` da solo. Se il dato la viola, non indoviniamo:
+ * saltiamo e lo diciamo. Scrivere i permessi della riga sbagliata sarebbe
+ * un'escalation silenziosa.
+ */
+export function decidiMembership(membership: readonly { ruolo: string }[]): DecisioneMembership {
+  if (membership.length === 0) {
+    return { azione: 'salta', motivo: 'nessuna membership di sede' };
+  }
+
+  if (membership.length > 1) {
+    return {
+      azione: 'salta',
+      motivo: `${membership.length} membership di sede (atteso 1)`,
+    };
+  }
+
+  const ruolo = membership[0].ruolo;
+  if (ruolo === 'ADMIN_SEDE' || ruolo === 'OPERATORE') {
+    return { azione: 'scrivi', ruolo };
+  }
+
+  return {
+    azione: 'salta',
+    motivo: `ruolo di sede sconosciuto: ${ruolo}`,
+  };
+}
+
+/**
  * Permessi da assegnare agli utenti che esistevano prima dell'introduzione del
  * sistema: fotografano ciò che potevano fare, con UNA restrizione voluta —
  * `pagamenti.iban` e `pagamenti.ritenta` non vanno agli operatori. Prima il gate

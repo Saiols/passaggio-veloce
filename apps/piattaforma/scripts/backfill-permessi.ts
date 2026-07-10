@@ -7,7 +7,7 @@
  *   pnpm --filter piattaforma exec tsx scripts/backfill-permessi.ts
  */
 import { prisma } from '@pv/db';
-import { permessiBackfill } from '../src/lib/auth/permessi/backfill';
+import { permessiBackfill, decidiMembership } from '../src/lib/auth/permessi/backfill';
 import type { CompanyTypeP } from '../src/lib/auth/permessi/catalogo';
 
 const dryRun = process.argv.includes('--dry-run');
@@ -39,20 +39,17 @@ async function main() {
       saltati++;
       continue;
     }
-    if (u.sediMembership.length === 0) {
-      console.warn(`SALTATO ${u.email}: nessuna membership di sede`);
-      saltati++;
-      continue;
-    }
-    if (u.sediMembership.length > 1) {
-      console.warn(
-        `SALTATO ${u.email}: ${u.sediMembership.length} membership di sede (atteso 1) — risolvere a mano prima del deploy dei gate`,
-      );
+    const decisione = decidiMembership(u.sediMembership);
+    if (decisione.azione === 'salta') {
+      const messaggio = decisione.motivo.includes('membership di sede (atteso')
+        ? `${decisione.motivo} — risolvere a mano prima del deploy dei gate`
+        : decisione.motivo;
+      console.warn(`SALTATO ${u.email}: ${messaggio}`);
       saltati++;
       continue;
     }
     const membership = u.sediMembership[0];
-    const permessi = permessiBackfill(tipo, membership.ruolo as 'ADMIN_SEDE' | 'OPERATORE');
+    const permessi = permessiBackfill(tipo, decisione.ruolo);
     console.log(`${u.email} [${tipo}/${membership.ruolo}] → ${permessi.length} permessi`);
     if (!dryRun) {
       await prisma.user.update({ where: { id: u.id }, data: { permessi } });

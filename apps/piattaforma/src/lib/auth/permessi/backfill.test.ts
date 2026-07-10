@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { permessiBackfill } from './backfill';
+import { permessiBackfill, decidiMembership } from './backfill';
 import { permessiPerTipo, dipendenzaDi } from './catalogo';
 
 describe('permessiBackfill', () => {
@@ -79,5 +79,46 @@ describe('permessiBackfill', () => {
         }
       }
     }
+  });
+});
+
+describe('decidiMembership', () => {
+  it('zero membership → salta con motivo "nessuna membership di sede"', () => {
+    const result = decidiMembership([]);
+    expect(result.azione).toBe('salta');
+    expect(result.motivo).toBe('nessuna membership di sede');
+  });
+
+  it('esattamente una con ruolo ADMIN_SEDE → scrivi ADMIN_SEDE', () => {
+    const result = decidiMembership([{ ruolo: 'ADMIN_SEDE' }]);
+    expect(result.azione).toBe('scrivi');
+    if (result.azione === 'scrivi') {
+      expect(result.ruolo).toBe('ADMIN_SEDE');
+    }
+  });
+
+  it('esattamente una con ruolo OPERATORE → scrivi OPERATORE', () => {
+    const result = decidiMembership([{ ruolo: 'OPERATORE' }]);
+    expect(result.azione).toBe('scrivi');
+    if (result.azione === 'scrivi') {
+      expect(result.ruolo).toBe('OPERATORE');
+    }
+  });
+
+  it('esattamente una con ruolo sconosciuto → salta con motivo "ruolo di sede sconosciuto: ..."', () => {
+    const result = decidiMembership([{ ruolo: 'GUEST' }]);
+    expect(result.azione).toBe('salta');
+    expect(result.motivo).toMatch(/^ruolo di sede sconosciuto:/);
+    expect(result.motivo).toContain('GUEST');
+  });
+
+  it('più di una membership → salta con motivo "<n> membership di sede (atteso 1)"', () => {
+    const result = decidiMembership([
+      { ruolo: 'ADMIN_SEDE' },
+      { ruolo: 'OPERATORE' },
+      { ruolo: 'ADMIN_SEDE' },
+    ]);
+    expect(result.azione).toBe('salta');
+    expect(result.motivo).toMatch(/^3 membership di sede \(atteso 1\)/);
   });
 });

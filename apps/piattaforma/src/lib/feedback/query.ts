@@ -1,5 +1,6 @@
 import type { Prisma } from '@pv/db';
 import { whereValutazione, type SedeScope } from '@/lib/sedi/scope-filters';
+import { resolveDayRange } from '@/lib/date/rome-day';
 
 export type FeedbackFilterParams = { da?: string; a?: string; sede?: string };
 
@@ -14,70 +15,6 @@ export type ResolvedFeedbackFilters = {
   /** Almeno un filtro attivo (per testo header / empty-state). */
   attivi: boolean;
 };
-
-const RE_YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
-const ROME_TZ = 'Europe/Rome';
-
-/** Valida che la stringa sia una data di calendario reale in formato YYYY-MM-DD. */
-function parseYmd(value: string | undefined): [number, number, number] | null {
-  if (!value) return null;
-  const m = RE_YMD.exec(value);
-  if (!m) return null;
-  const y = Number(m[1]);
-  const mo = Number(m[2]);
-  const d = Number(m[3]);
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  // Round-trip: scarta le date impossibili (es. 2026-02-30 → marzo).
-  const probe = new Date(Date.UTC(y, mo - 1, d));
-  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) {
-    return null;
-  }
-  return [y, mo, d];
-}
-
-/** Offset (ms) di Europe/Rome per un dato istante UTC (positivo a est di UTC). */
-function romeOffsetMs(instant: number): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: ROME_TZ,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  const g: Record<string, number> = {};
-  for (const p of dtf.formatToParts(new Date(instant))) {
-    if (p.type !== 'literal') g[p.type] = Number(p.value);
-  }
-  const asUtc = Date.UTC(g.year, g.month - 1, g.day, g.hour, g.minute, g.second);
-  return asUtc - instant;
-}
-
-/** Istante UTC corrispondente all'ora di parete indicata nel fuso di Roma. */
-function romeWallClockToUtc(
-  y: number,
-  mo: number,
-  d: number,
-  h: number,
-  mi: number,
-  s: number,
-  ms: number,
-): Date {
-  const naive = Date.UTC(y, mo - 1, d, h, mi, s, 0); // No milliseconds for offset calc
-  // Doppio passaggio: stabilizza il caso raro di transizione DST.
-  const utc = naive - romeOffsetMs(naive - romeOffsetMs(naive));
-  return new Date(utc + ms); // Add milliseconds after offset calculation
-}
-
-function romeStartOfDay([y, mo, d]: [number, number, number]): Date {
-  return romeWallClockToUtc(y, mo, d, 0, 0, 0, 0);
-}
-
-function romeEndOfDay([y, mo, d]: [number, number, number]): Date {
-  return romeWallClockToUtc(y, mo, d, 23, 59, 59, 999);
-}
 
 /**
  * Compone il `where` dei feedback per la pagina `/feedback`.
@@ -107,18 +44,11 @@ export function resolveFeedbackFilters(args: {
   }
 
   // Range date (tutti). Bound malformato → ignorato.
-  const daYmd = parseYmd(params.da);
-  const aYmd = parseYmd(params.a);
+  const range = resolveDayRange(params.da, params.a);
   const createdAt: { gte?: Date; lte?: Date } = {};
-  if (daYmd) createdAt.gte = romeStartOfDay(daYmd);
-  if (aYmd) createdAt.lte = romeEndOfDay(aYmd);
-  if (createdAt.gte || createdAt.lte) where.createdAt = createdAt;
+  if (range.gte) createdAt.gte = range.gte;
+  if (range.lte) createdAt.lte = range.lte;
+  if (range.gte || range.lte) where.createdAt = createdAt;
 
-  return {
-    where,
-    sede,
-    da: daYmd ? params.da! : '',
-    a: aYmd ? params.a! : '',
-    attivi: Boolean(sede || daYmd || aYmd),
-  };
+  return { where, sede, da: range.da, a: range.a, attivi: Boolean(sede) || range.active };
 }

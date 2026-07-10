@@ -3,9 +3,16 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
-import { prisma, type Prisma, type PraticaTipo } from '@pv/db';
+import { prisma, type Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
+import {
+  Alert,
+  Card,
+  StatusChip,
+  SubmitButton,
+  TipoPraticaChip,
+  type PraticaStato,
+} from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
 import {
   markFirmaAvvenutaAction,
@@ -285,7 +292,7 @@ export default async function PraticaDetailPage({
               <StatoExtraInfo extra={statoInfo} />
             </h1>
             <p className="mt-1 text-[14px] text-pv-slate-500">
-              {labelTipo(pratica.tipo, pratica.numeroVeicoli)} · {pratica.comune ?? '—'}
+              <TipoPraticaChip tipo={pratica.tipo} numeroVeicoli={pratica.numeroVeicoli} /> · {pratica.comune ?? '—'}
               {pratica.provincia ? ` (${pratica.provincia})` : ''}
             </p>
           </div>
@@ -738,11 +745,6 @@ function Flag({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   );
-}
-
-function labelTipo(tipo: PraticaTipo, numeroVeicoli: number): string {
-  const base = tipo === 'SEMPLICE' ? 'Passaggio di proprietà semplice' : 'Minivoltura';
-  return numeroVeicoli > 1 ? `${base} (multiplo, ${numeroVeicoli} veicoli)` : base;
 }
 
 function labelDocumento(t: string): string {

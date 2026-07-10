@@ -5,7 +5,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Button, StatusChip, type PraticaStato } from '@/components/ui';
+import { Button, StatusChip, TipoPraticaChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { PraticheFilters } from './filters';
 import { QuickActionButton } from './quick-action-button';
@@ -279,8 +279,11 @@ export default async function PratichePage({
                           aria-label={`Apri pratica ${p.codicePratica ?? 'in bozza'}`}
                           className="absolute inset-0 z-0 focus-visible:outline-none focus-visible:shadow-[var(--pv-ring-focus)]"
                         />
-                        <div className="min-w-0 truncate py-3 pl-5 pr-3 font-mono font-semibold text-pv-navy-800">
-                          {p.codicePratica ?? 'BOZZA'}
+                        <div className="min-w-0 py-3 pl-5 pr-3">
+                          <div className="truncate font-mono font-semibold text-pv-navy-800">
+                            {p.codicePratica ?? 'BOZZA'}
+                          </div>
+                          <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} className="mt-1" />
                         </div>
                         <div className="min-w-0 truncate px-3 py-3 font-semibold text-pv-slate-900">
                           {p.veicoli[0]?.targa

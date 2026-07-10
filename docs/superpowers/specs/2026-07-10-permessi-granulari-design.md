@@ -260,7 +260,7 @@ Accordion per macro-categoria con selettore di preset in testa. La tabella a due
 
 ### Le azioni sensibili si dichiarano
 
-Cinque caselle portano un'etichetta che ne spiega la conseguenza.
+Sei caselle portano un'etichetta che ne spiega la conseguenza.
 
 | Permesso | Etichetta |
 |---|---|
@@ -268,6 +268,7 @@ Cinque caselle portano un'etichetta che ne spiega la conseguenza.
 | `pratiche.segnala` | apre una penale di €25 al broker |
 | `wallet.payout` | preleva denaro reale dal wallet |
 | `sede.iban` | cambia il conto su cui arrivano i payout |
+| `pagamenti.iban` | cambia il conto addebitato |
 | `team.permessi` | permette di assegnare permessi ad altri |
 
 ### Dettagli

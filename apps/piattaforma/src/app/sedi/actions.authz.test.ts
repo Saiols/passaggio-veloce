@@ -63,7 +63,7 @@ function lastUpdateData(): Record<string, unknown> {
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.sede.findUnique.mockResolvedValue({ iban: IBAN_ATTUALE });
-  getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit', 'sede.iban']));
+  getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
 });
 
 describe('updateSedeAction — capability (sede.edit)', () => {
@@ -104,13 +104,16 @@ describe('updateSedeAction — scope (sedeId esterno)', () => {
 });
 
 /**
- * Doppio gate sull'IBAN: `sede.iban` scatta SOLO se il valore cambia
- * davvero, con confronto normalizzato su spazi e maiuscole. La soglia payout
- * ora è coperta da `sede.edit` (non più owner-only), quindi passa sempre
- * insieme all'anagrafica.
+ * Gate sull'IBAN: non è più una capability delegabile (`sede.iban` è uscita
+ * dal catalogo). L'IBAN della sede è owner-only, come quello dell'azienda —
+ * il form lo mostra solo al proprietario (`canEditPaymentSettings`), qui si
+ * verifica che sia vero anche per una richiesta costruita a mano. Scatta
+ * SOLO se il valore cambia davvero, con confronto normalizzato su spazi e
+ * maiuscole. La soglia payout resta coperta da `sede.edit` (non owner-only),
+ * quindi passa sempre insieme all'anagrafica.
  */
-describe('updateSedeAction — doppio gate IBAN', () => {
-  it('con sede.edit ma senza sede.iban: salva se l’IBAN non cambia (a meno di spazi/maiuscole)', async () => {
+describe('updateSedeAction — gate IBAN (owner-only)', () => {
+  it('un non-proprietario con sede.edit: salva se l’IBAN non cambia (a meno di spazi/maiuscole)', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
     const fd = validFormData('it60 x054 2811 1010 0000 0123 456');
 
@@ -121,7 +124,7 @@ describe('updateSedeAction — doppio gate IBAN', () => {
     expect(lastUpdateData().iban).toBe(IBAN_ATTUALE);
   });
 
-  it('con sede.edit ma senza sede.iban: rifiuta se l’IBAN cambia davvero', async () => {
+  it('un non-proprietario non può cambiare l’IBAN', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
     const fd = validFormData('IT99Z0000000000000000000000');
 
@@ -132,10 +135,8 @@ describe('updateSedeAction — doppio gate IBAN', () => {
     expect(prismaMock.sede.update).not.toHaveBeenCalled();
   });
 
-  it('con sede.edit E sede.iban: l’IBAN cambiato viene scritto', async () => {
-    getSessionContextMock.mockResolvedValue(
-      ctxConPermessi(['sede.view', 'sede.edit', 'sede.iban']),
-    );
+  it('il proprietario può cambiare l’IBAN', async () => {
+    getSessionContextMock.mockResolvedValue(ctxConPermessi([], { isOwner: true }));
     const fd = validFormData('IT99Z0000000000000000000000');
 
     const res = await updateSedeAction('s1', fd);
@@ -144,7 +145,7 @@ describe('updateSedeAction — doppio gate IBAN', () => {
     expect(lastUpdateData().iban).toBe('IT99Z0000000000000000000000');
   });
 
-  it('con sede.edit ma senza sede.iban: la soglia payout passa comunque (è sotto sede.edit)', async () => {
+  it('un non-proprietario con sede.edit: la soglia payout passa comunque (l’IBAN non cambia)', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
     const fd = validFormData(IBAN_ATTUALE); // IBAN invariato
 

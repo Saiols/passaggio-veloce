@@ -10,9 +10,9 @@ import {
 } from './catalogo';
 
 describe('catalogo permessi', () => {
-  it('un dealer ha 23 permessi, un agenzia 31', () => {
-    expect(permessiPerTipo('DEALER')).toHaveLength(23);
-    expect(permessiPerTipo('AGENZIA')).toHaveLength(31);
+  it('un dealer ha 22 permessi, un agenzia 30', () => {
+    expect(permessiPerTipo('DEALER')).toHaveLength(22);
+    expect(permessiPerTipo('AGENZIA')).toHaveLength(30);
   });
 
   it('le categorie solo-agenzia non compaiono per un dealer', () => {
@@ -56,9 +56,9 @@ describe('catalogo permessi', () => {
   });
 
   it('conDipendenze risale la catena fino alla radice', () => {
-    // sede.iban → sede.edit → sede.view
-    expect(conDipendenze(['sede.iban']).sort()).toEqual(
-      ['sede.edit', 'sede.iban', 'sede.view'].sort(),
+    // sede.edit → sede.view
+    expect(conDipendenze(['sede.edit']).sort()).toEqual(
+      ['sede.edit', 'sede.view'].sort(),
     );
     // fatture.download → fatture.view
     expect(conDipendenze(['fatture.download']).sort()).toEqual(
@@ -66,7 +66,7 @@ describe('catalogo permessi', () => {
     );
   });
 
-  it('le sei azioni sensibili sono marcate', () => {
+  it('le cinque azioni sensibili sono marcate', () => {
     const sensibili = CATALOGO.flatMap((c) => c.permessi)
       .filter((p) => p.sensibile)
       .map((p) => p.chiave)
@@ -76,7 +76,6 @@ describe('catalogo permessi', () => {
         'pagamenti.iban',
         'pratiche.firma',
         'pratiche.segnala',
-        'sede.iban',
         'team.permessi',
         'wallet.payout',
       ].sort(),

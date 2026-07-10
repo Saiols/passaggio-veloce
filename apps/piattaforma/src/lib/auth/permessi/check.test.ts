@@ -16,7 +16,7 @@ const OBSOLETO = 'pratiche.tuttofare' as Permesso;
 describe('can', () => {
   it("l'owner può tutto anche con il set vuoto", () => {
     expect(can(owner, 'wallet.payout')).toBe(true);
-    expect(can(owner, 'sede.iban')).toBe(true);
+    expect(can(owner, 'sede.edit')).toBe(true);
   });
 
   it('un non-owner può solo ciò che ha nel set', () => {

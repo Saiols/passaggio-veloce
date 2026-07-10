@@ -39,7 +39,6 @@ export const PERMESSI = [
   'feedback.view',
   'sede.view',
   'sede.edit',
-  'sede.iban',
   'orari.view',
   'orari.edit',
   'team.view',
@@ -166,13 +165,6 @@ export const CATALOGO: CategoriaDef[] = [
     permessi: [
       { chiave: 'sede.view', etichetta: 'Vede le impostazioni della sede' },
       { chiave: 'sede.edit', etichetta: 'Modifica anagrafica e soglia payout', richiede: 'sede.view' },
-      {
-        chiave: 'sede.iban',
-        etichetta: "Modifica l'IBAN della sede",
-        nota: 'cambia il conto su cui arrivano i payout',
-        sensibile: true,
-        richiede: 'sede.edit',
-      },
       { chiave: 'orari.view', etichetta: 'Vede gli orari di apertura', soloPer: 'AGENZIA' },
       { chiave: 'orari.edit', etichetta: 'Modifica gli orari di apertura', richiede: 'orari.view', soloPer: 'AGENZIA' },
     ],
@@ -232,7 +224,7 @@ export function permessiPerTipo(t: CompanyTypeP): Permesso[] {
   return catalogoPerTipo(t).flatMap((c) => c.permessi.map((p) => p.chiave));
 }
 
-/** Chiude il set risalendo la catena dei padri: `sede.iban` → `sede.edit` → `sede.view`. */
+/** Chiude il set risalendo la catena dei padri: `sede.edit` → `sede.view`. */
 export function conDipendenze(permessi: Permesso[]): Permesso[] {
   const out = new Set<Permesso>();
   for (const p of permessi) {

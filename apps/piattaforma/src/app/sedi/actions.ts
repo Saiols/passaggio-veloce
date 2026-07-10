@@ -85,10 +85,12 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
 /**
  * Aggiorna i dati anagrafici, la soglia payout e l'IBAN di una sede.
  *
- * Doppio gate: `sede.edit` copre anagrafica e soglia payout; `sede.iban`
- * scatta SOLO se l'IBAN cambia davvero (confronto normalizzato su spazi e
- * maiuscole), altrimenti chi ha solo `sede.edit` non potrebbe salvare il
- * form lasciando l'IBAN intatto.
+ * Doppio gate: `sede.edit` copre anagrafica e soglia payout; l'IBAN — il
+ * conto su cui arrivano i payout — non è delegabile e resta owner-only,
+ * proprio come per l'azienda. Il gate su `isOwner` scatta SOLO se l'IBAN
+ * cambia davvero (confronto normalizzato su spazi e maiuscole), altrimenti
+ * chi ha solo `sede.edit` non potrebbe salvare il form lasciando l'IBAN
+ * intatto.
  */
 export async function updateSedeAction(
   sedeId: string,
@@ -124,9 +126,11 @@ export async function updateSedeAction(
   const ibanNormalizzato = (f.iban ?? '').toUpperCase();
   const ibanAttuale = (sedeCorrente?.iban ?? '').replace(/\s/g, '').toUpperCase();
   if (ibanNormalizzato !== ibanAttuale) {
-    const gateIban = await requirePermesso('sede.iban');
-    if (!gateIban.ok) {
-      return { ok: false, error: "Non hai i permessi per modificare l'IBAN" };
+    // L'IBAN della sede è il conto su cui arrivano i payout: non è delegabile.
+    // Il form lo mostra solo al proprietario (canEditPaymentSettings), questo è
+    // il gate che lo rende vero anche per una richiesta costruita a mano.
+    if (!ctx.isOwner) {
+      return { ok: false, error: "Solo il titolare può modificare l'IBAN della sede" };
     }
   }
 

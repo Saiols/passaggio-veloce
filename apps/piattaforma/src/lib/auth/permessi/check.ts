@@ -83,8 +83,11 @@ export function validaPermessi(
 
 /**
  * Rimuove dal set i permessi la cui dipendenza è saltata via, iterando finché
- * un giro non cambia più nulla: togliere un padre può orfanare un nipote
- * (`sede.view` → `sede.edit` → `sede.iban`), quindi un solo passaggio non basta.
+ * un giro non cambia più nulla: in una catena a più livelli togliere un
+ * padre può orfanare un nipote due passi sotto, quindi un solo passaggio non
+ * basta. (Il catalogo attuale non ha più nessuna catena a tre livelli — l'unica,
+ * `sede.view` → `sede.edit` → `sede.iban`, è sparita con la rimozione di
+ * `sede.iban` — ma la funzione resta generale.)
  */
 function potaOrfani(permessi: Permesso[]): Permesso[] {
   const set = new Set(permessi);

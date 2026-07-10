@@ -48,7 +48,6 @@ describe('preset', () => {
     expect(c).toContain('pratiche.firma');
     expect(c).toContain('pratiche.segnala');
     expect(c).not.toContain('pagamenti.iban');
-    expect(c).not.toContain('sede.iban');
     expect(c).not.toContain('team.view');
   });
 

@@ -62,7 +62,7 @@ describe('permessiBackfill', () => {
   it('nessun operatore riceve poteri gia oggi riservati: payout, soglia, sede, team, orari.edit', () => {
     for (const t of ['DEALER', 'AGENZIA'] as const) {
       const p = permessiBackfill(t, 'OPERATORE');
-      for (const k of ['wallet.payout', 'wallet.soglia', 'sede.view', 'sede.edit', 'sede.iban', 'team.view']) {
+      for (const k of ['wallet.payout', 'wallet.soglia', 'sede.view', 'sede.edit', 'team.view']) {
         expect(p).not.toContain(k);
       }
     }

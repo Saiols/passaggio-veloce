@@ -59,6 +59,30 @@ describe('resolveFeedbackFilters — range date (Europe/Rome)', () => {
     expect(c.gte.toISOString()).toBe('2026-01-14T23:00:00.000Z');
   });
 
+  // Blinda il ramo a doppio-passaggio nei giorni di cambio ora: inizio e fine
+  // giornata cadono su offset diversi (uno prima, uno dopo la transizione).
+  it('giorno di spring-forward (29/03/2026): inizio CET(+1), fine CEST(+2)', () => {
+    const r = resolveFeedbackFilters({
+      ...base,
+      isOwner: true,
+      params: { da: '2026-03-29', a: '2026-03-29' },
+    });
+    const c = r.where.createdAt as { gte: Date; lte: Date };
+    expect(c.gte.toISOString()).toBe('2026-03-28T23:00:00.000Z');
+    expect(c.lte.toISOString()).toBe('2026-03-29T21:59:59.999Z');
+  });
+
+  it('giorno di fall-back (25/10/2026): inizio CEST(+2), fine CET(+1)', () => {
+    const r = resolveFeedbackFilters({
+      ...base,
+      isOwner: true,
+      params: { da: '2026-10-25', a: '2026-10-25' },
+    });
+    const c = r.where.createdAt as { gte: Date; lte: Date };
+    expect(c.gte.toISOString()).toBe('2026-10-24T22:00:00.000Z');
+    expect(c.lte.toISOString()).toBe('2026-10-25T22:59:59.999Z');
+  });
+
   it('solo "a": nessun gte', () => {
     const r = resolveFeedbackFilters({ ...base, isOwner: true, params: { a: '2026-07-20' } });
     const c = r.where.createdAt as { gte?: Date; lte: Date };

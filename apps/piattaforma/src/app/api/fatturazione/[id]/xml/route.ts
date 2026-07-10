@@ -40,7 +40,7 @@ export async function GET(
   const doc = await prisma.documentoFiscale.findUnique({
     where: { id },
     include: {
-      pratica: { select: { codicePratica: true, agenziaSedeId: true, brokerSedeId: true } },
+      pratica: { select: { codicePratica: true, numeroVeicoli: true, agenziaSedeId: true, brokerSedeId: true } },
       payout: {
         select: {
           eseguitoAt: true,

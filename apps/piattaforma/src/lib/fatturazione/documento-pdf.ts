@@ -18,6 +18,7 @@ export const documentoPdfInclude = {
   pratica: {
     select: {
       codicePratica: true,
+      numeroVeicoli: true,
       agenziaSedeId: true,
       brokerSedeId: true,
       agenziaSede: sedeSelect,

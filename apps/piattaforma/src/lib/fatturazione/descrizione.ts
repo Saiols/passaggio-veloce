@@ -5,7 +5,7 @@ import { labelTipoDocumento } from './format';
 /** Forma minima del documento necessaria a comporre descrizione e riferimento. */
 export type DescrizioneDoc = {
   tipo: DocumentoFiscaleTipo;
-  pratica: { codicePratica: string | null } | null;
+  pratica: { codicePratica: string | null; numeroVeicoli?: number } | null;
   payout: {
     eseguitoAt: Date | null;
     transazioni: { pratica: { codicePratica: string | null } | null }[];
@@ -22,11 +22,14 @@ export function descrizioneDocumento(doc: DescrizioneDoc): {
   riferimento: string | null;
 } {
   switch (doc.tipo) {
-    case 'FATTURA_PV':
+    case 'FATTURA_PV': {
+      const nVeicoli = doc.pratica?.numeroVeicoli ?? 1;
+      const base = 'Servizio di intermediazione per passaggio di proprietà';
       return {
-        descrizione: 'Servizio di intermediazione per passaggio di proprietà',
+        descrizione: nVeicoli > 1 ? `${base} multiplo (${nVeicoli} veicoli)` : base,
         riferimento: doc.pratica?.codicePratica ? `Pratica ${doc.pratica.codicePratica}` : null,
       };
+    }
     case 'DOC_BROKER': {
       const codici = (doc.payout?.transazioni ?? [])
         .map((t) => t.pratica?.codicePratica)

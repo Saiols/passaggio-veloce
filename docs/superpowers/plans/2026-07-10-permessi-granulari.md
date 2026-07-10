@@ -2710,13 +2710,16 @@ describe('toggle', () => {
     expect(toggle([], 'fatture.download', tutti)).toEqual(['fatture.download', 'fatture.view']);
   });
 
-  it('accendendo un nipote si accende tutta la catena', () => {
-    // sede.iban → sede.edit → sede.view
-    expect(toggle([], 'sede.iban', tutti)).toEqual(['sede.edit', 'sede.iban', 'sede.view']);
+  it('accendendo un figlio si accende il padre anche in altre categorie', () => {
+    expect(toggle([], 'sede.edit', tutti)).toEqual(['sede.edit', 'sede.view']);
   });
 
-  it('spegnendo il padre si spengono i figli, ricorsivamente', () => {
-    expect(toggle(['sede.view', 'sede.edit', 'sede.iban'], 'sede.view', tutti)).toEqual([]);
+  it('spegnendo il padre si spengono i figli', () => {
+    // `sede.iban` è uscito dai delegabili (2026-07-10): nel catalogo non esistono
+    // più catene a tre livelli. La cascata resta ricorsiva, ma qui la si esercita
+    // su due livelli, gli unici che il catalogo offre.
+    expect(toggle(['sede.view', 'sede.edit'], 'sede.view', tutti)).toEqual([]);
+    expect(toggle(['orari.view', 'orari.edit'], 'orari.view', tutti)).toEqual([]);
   });
 
   it('spegnendo un figlio non tocca il padre', () => {
@@ -2910,6 +2913,8 @@ export function permessiConcedibili(
 
 Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/matrice-logic.test.ts`
 Expected: PASS, 17 test.
+
+Il catalogo non ha più catene a tre livelli da quando `sede.iban` è uscito dai delegabili: la cascata di `toggle` resta ricorsiva, ma i test la esercitano su due livelli, gli unici che il catalogo offre.
 
 - [ ] **Step 5: Scrivere il componente**
 

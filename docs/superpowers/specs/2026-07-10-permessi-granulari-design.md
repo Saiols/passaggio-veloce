@@ -51,8 +51,7 @@ Chiavi stringa `area.azione`, definite in codice come unica fonte di verità e f
 | `affiliazione.view` | link, QR e statistiche della sede |
 | `notifiche.view` | storico notifiche dell'azienda |
 | `sede.view` | vede le impostazioni della propria sede |
-| `sede.edit` | modifica anagrafica e soglia payout della sede |
-| `sede.iban` | **cambia il conto su cui arrivano i payout** |
+| `sede.edit` | modifica l'anagrafica della sede |
 | `team.view` | vede la sezione team |
 | `team.invita` | invia inviti via email |
 | `team.crea` | crea utenti con password impostata |
@@ -85,7 +84,9 @@ Chiavi stringa `area.azione`, definite in codice come unica fonte di verità e f
 | `orari.edit` | modifica gli orari di apertura |
 | `feedback.view` | valutazioni ricevute |
 
-Totale: 23 permessi per un dealer, 31 per un'agenzia.
+Totale: 22 permessi per un dealer, 30 per un'agenzia, 33 chiavi distinte.
+
+**Revisione del 2026-07-10.** `sede.iban` è uscito dai delegabili. Il form della sede mostra IBAN e soglia solo al proprietario (`canEditPaymentSettings`, preesistente), quindi il permesso sarebbe stato una casella spuntabile e inerte. L'IBAN della sede è ora un potere del titolare, come l'IBAN dell'azienda: `updateSedeAction` lo protegge con un controllo esplicito su `isOwner`.
 
 `inbox.gestisci` copre sia accetta sia rifiuta: sono le due facce della stessa decisione e un operatore che può solo accettare non è una configurazione sensata.
 
@@ -98,8 +99,10 @@ Un permesso figlio implica il padre. La UI le risolve da sola, il server rifiuta
 - `wallet.payout`, `wallet.soglia` → `wallet.view`
 - `inbox.gestisci` → `inbox.view`
 - `orari.edit` → `orari.view`
-- `sede.edit` → `sede.view` · `sede.iban` → `sede.edit`
+- `sede.edit` → `sede.view`
 - ogni `team.*` → `team.view`
+
+Dopo la rimozione di `sede.iban` non esiste più alcuna catena a tre livelli: `conDipendenze` resta transitiva, ma nessun dato del catalogo la esercita.
 
 `pagamenti.ritenta` e `pagamenti.iban` non hanno dipendenze: la pagina `/blocco-pagamento` è raggiungibile da chiunque quando l'agenzia è bloccata. Chi non ha i permessi la vede in sola lettura, con l'invito a contattare il titolare.
 
@@ -113,6 +116,7 @@ Riguardano l'entità legale, non l'operatività. Non compaiono nella matrice.
 | Firmare il mandato di fatturazione (OTP) | `wallet/mandato-actions.ts:29,53` |
 | Scaricare il rendiconto della madre | `api/wallet/rendiconto` |
 | Modificare l'anagrafica azienda (P.IVA, IBAN azienda) | `profilo/azienda/actions.ts:32` |
+| **Modificare l'IBAN e la soglia di una sede** | `sedi/actions.ts` (`isOwner`), `canEditPaymentSettings` |
 | Vedere wallet affiliazione e classifica sedi | `wallet/page.tsx`, `affiliazione/page.tsx` |
 
 ### Mai un permesso
@@ -129,13 +133,13 @@ Definiti in codice, dipendono da `companyType`. Sono un punto di partenza: appen
 
 - `OPERATORE_BASE`: `pratiche.view`, `pratiche.create`, `pratiche.download`, `notifiche.view`
 - `OPERATORE_COMPLETO`: base + `pratiche.annulla`, `pratiche.valuta`, `fatture.view`, `fatture.download`, `wallet.view`, `affiliazione.view`
-- `ADMIN_SEDE`: tutti e 23
+- `ADMIN_SEDE`: tutti e 22
 
 **Agenzia**
 
 - `OPERATORE_BASE`: `pratiche.view`, `pratiche.processa`, `pratiche.download`, `inbox.view`, `inbox.gestisci`, `notifiche.view`
 - `OPERATORE_COMPLETO`: base + `pratiche.firma`, `pratiche.segnala`, `fatture.view`, `fatture.download`, `wallet.view`, `addebiti.view`, `affiliazione.view`, `feedback.view`, `orari.view`
-- `ADMIN_SEDE`: tutti e 31
+- `ADMIN_SEDE`: tutti e 30
 
 ## Modello dati
 
@@ -260,16 +264,17 @@ Accordion per macro-categoria con selettore di preset in testa. La tabella a due
 
 ### Le azioni sensibili si dichiarano
 
-Sei caselle portano un'etichetta che ne spiega la conseguenza.
+Cinque caselle portano un'etichetta che ne spiega la conseguenza.
 
 | Permesso | Etichetta |
 |---|---|
 | `pratiche.firma` | accredita il wallet e genera la fattura |
 | `pratiche.segnala` | apre una penale di €25 al broker |
 | `wallet.payout` | preleva denaro reale dal wallet |
-| `sede.iban` | cambia il conto su cui arrivano i payout |
 | `pagamenti.iban` | cambia il conto addebitato |
 | `team.permessi` | permette di assegnare permessi ad altri |
+
+I permessi `team.*` sono **disabilitati** quando il ruolo di sede scelto è Operatore: `manageableSedi()` filtra sul ruolo, quindi concederli non produrrebbe alcun effetto. Sopra la categoria compare «I permessi Team richiedono il ruolo Admin di sede».
 
 ### Dettagli
 

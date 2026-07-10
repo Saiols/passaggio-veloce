@@ -21,4 +21,5 @@ export { Modal, type ModalProps, type ModalSize } from './modal';
 export { StatCard } from './stat-card';
 export { StatusChip } from './status-chip';
 export type { PraticaStato } from './status-chip';
+export { TipoPraticaChip } from './tipo-pratica-chip';
 export { cn } from './cn';

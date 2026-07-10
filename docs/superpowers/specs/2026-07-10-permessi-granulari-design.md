@@ -96,9 +96,9 @@ Il principio è lo stesso applicato a `team.*` per gli operatori: **un permesso 
 
 Totale: 22 permessi per un dealer, 28 per un'agenzia, 31 chiavi distinte.
 
-**Revisione del 2026-07-10.** `sede.iban` è uscito dai delegabili. Il form della sede mostra IBAN e soglia solo al proprietario (`canEditPaymentSettings`, preesistente), quindi il permesso sarebbe stato una casella spuntabile e inerte. L'IBAN della sede è ora un potere del titolare, come l'IBAN dell'azienda: `updateSedeAction` lo protegge con un controllo esplicito su `isOwner`.
+`updateSedeAction` non *rifiuta* un IBAN diverso: **omette** `iban` e `payoutThresholdCent` dall'oggetto `data` quando chi salva non è il proprietario. È il meccanismo scelto dalla spec IBAN al §3.2, e chiude due falle con una mossa sola: chi forgia la POST non scrive nulla, e chi salva la sola anagrafica non azzera l'IBAN (`parseSedeFields` mappa `'' → null`).
 
-La **soglia di auto-payout** resta invece delegabile, ma da un'altra strada: il form della sede non la mostra a un delegato, mentre la pagina Wallet sì, a chi ha `wallet.soglia`. È il comportamento di oggi, conservato. La soglia decide *quando* scatta il payout, non *dove* finiscono i soldi.
+La **soglia di auto-payout** resta raggiungibile dalla pagina Wallet a chi ha `wallet.soglia` — come già oggi, dove `canEditSedeSettings` la concedeva anche all'admin di sede. La soglia decide *quando* scatta il payout, non *dove* finiscono i soldi.
 
 `inbox.gestisci` copre sia accetta sia rifiuta: sono le due facce della stessa decisione e un operatore che può solo accettare non è una configurazione sensata.
 

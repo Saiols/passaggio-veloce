@@ -6,7 +6,7 @@ import {
   getSessionContext,
 } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
-import { prisma } from '@pv/db';
+import { prisma, type Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
@@ -20,6 +20,12 @@ import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
 import { RendicontoCard } from './rendiconto-card';
 import { WalletAggregato } from './wallet-aggregato';
+import {
+  FILTRO_MOVIMENTI_AZIENDA,
+  costruisciRigheSaldo,
+  filtraMovimentiPerSede,
+  normalizzaFiltroSede,
+} from './wallet-aggregato-data';
 import { isOwner } from '@/lib/auth/permissions';
 import {
   motivoPenaleSegnalazione,
@@ -38,7 +44,7 @@ const PERIOD_OPTIONS: { value: RendimentoPeriod; label: string }[] = [
 export default async function WalletPage({
   searchParams,
 }: {
-  searchParams: Promise<{ rendimento?: string }>;
+  searchParams: Promise<{ rendimento?: string; sede?: string }>;
 }) {
   const sp = await searchParams;
   const session = await auth();
@@ -82,53 +88,113 @@ export default async function WalletPage({
 
     const sedeIds = ctx.accessibleSedi.map((s) => s.id);
     const nomeSede = new Map(ctx.accessibleSedi.map((s) => [s.id, s.nome]));
+    const filtroSede = normalizzaFiltroSede(sp.sede, sedeIds);
 
-    const [walletsSede, walletMadreAgg] = await Promise.all([
+    const movimentiInclude = {
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: {
+        commissioneAffiliazione: { select: { referenteSedeId: true } },
+        pratica: { select: { brokerSedeId: true } },
+      },
+    } as const;
+    const whereMovimentiMadre: Prisma.TransazioneWalletWhereInput | undefined = !filtroSede
+      ? undefined
+      : filtroSede === FILTRO_MOVIMENTI_AZIENDA
+        ? {
+            // Un movimento è aziendale quando né la commissione né la pratica
+            // permettono di ricondurlo a una delle sedi accessibili.
+            NOT: {
+              OR: [
+                {
+                  commissioneAffiliazione: {
+                    is: { referenteSedeId: { in: sedeIds } },
+                  },
+                },
+                { pratica: { is: { brokerSedeId: { in: sedeIds } } } },
+              ],
+            },
+          }
+        : {
+            OR: [
+              { commissioneAffiliazione: { is: { referenteSedeId: filtroSede } } },
+              { pratica: { is: { brokerSedeId: filtroSede } } },
+            ],
+          };
+    const movimentiMadreInclude = {
+      ...movimentiInclude,
+      ...(whereMovimentiMadre ? { where: whereMovimentiMadre } : {}),
+    };
+
+    const [walletsSede, walletMadreAgg, affiliazioniPerSede] = await Promise.all([
       prisma.wallet.findMany({
         where: { sedeId: { in: sedeIds } },
-        include: { transazioni: { orderBy: { createdAt: 'desc' }, take: 20 } },
+        include: { transazioni: movimentiInclude },
       }),
       ctx.companyId
         ? prisma.wallet.findUnique({
             where: { companyId: ctx.companyId },
-            include: { transazioni: { orderBy: { createdAt: 'desc' }, take: 20 } },
+            include: { transazioni: movimentiMadreInclude },
           })
         : null,
+      ctx.companyId
+        ? prisma.commissioneAffiliazione.groupBy({
+            by: ['referenteSedeId'],
+            where: {
+              referenteId: ctx.companyId,
+              stato: 'ACCREDITATA',
+              transazioneWalletId: { not: null },
+              // Solo crediti ancora disponibili: al payout le transazioni che
+              // compongono il saldo vengono collegate al payout stesso.
+              transazioneWallet: { is: { payoutId: null } },
+            },
+            _sum: { importoNettoCent: true },
+          })
+        : [],
     ]);
 
     const saldoAffiliazioneCent = walletMadreAgg?.saldoCent ?? 0;
     const totaleCent =
       walletsSede.reduce((acc, w) => acc + w.saldoCent, 0) + saldoAffiliazioneCent;
 
-    // Una riga per OGNI sede accessibile, anche senza wallet: saldo 0.
-    const righe = ctx.accessibleSedi.map((s) => ({
-      sedeId: s.id,
-      nome: s.nome,
-      saldoCent: walletsSede.find((w) => w.sedeId === s.id)?.saldoCent ?? 0,
-    }));
+    const righe = costruisciRigheSaldo({
+      sedi: ctx.accessibleSedi,
+      wallets: walletsSede,
+      affiliazioni: affiliazioniPerSede.map((row) => ({
+        referenteSedeId: row.referenteSedeId,
+        saldoCent: row._sum.importoNettoCent ?? 0,
+      })),
+      saldoAziendaleCent: saldoAffiliazioneCent,
+    });
 
-    const movimenti = [
+    const movimentiTutteLeSedi = [
       ...walletsSede.flatMap((w) =>
         w.transazioni.map((t) => ({
           id: t.id,
           createdAt: t.createdAt,
           tipo: t.tipo,
           importoCent: t.importoCent,
-          // `w.sedeId` è sempre valorizzato qui: la query filtra
-          // `sedeId: { in: sedeIds }`. Narrowing esplicito invece di `!`.
-          origine: w.sedeId ? (nomeSede.get(w.sedeId) ?? null) : null,
+          sedeId: w.sedeId,
+          sedeNome: w.sedeId ? (nomeSede.get(w.sedeId) ?? 'Sede') : 'Aziendale',
         })),
       ),
-      ...(walletMadreAgg?.transazioni ?? []).map((t) => ({
-        id: t.id,
-        createdAt: t.createdAt,
-        tipo: t.tipo,
-        importoCent: t.importoCent,
-        origine: null,
-      })),
-    ]
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, 20);
+      ...(walletMadreAgg?.transazioni ?? []).map((t) => {
+        // I crediti affiliazione portano la sede referente; per eventuali
+        // movimenti operativi legacy usiamo la sede broker della pratica.
+        const candidata =
+          t.commissioneAffiliazione?.referenteSedeId ?? t.pratica?.brokerSedeId ?? null;
+        const sedeId = candidata && nomeSede.has(candidata) ? candidata : null;
+        return {
+          id: t.id,
+          createdAt: t.createdAt,
+          tipo: t.tipo,
+          importoCent: t.importoCent,
+          sedeId,
+          sedeNome: sedeId ? nomeSede.get(sedeId)! : 'Aziendale / senza sede',
+        };
+      }),
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const movimenti = filtraMovimentiPerSede(movimentiTutteLeSedi, filtroSede).slice(0, 20);
 
     // Rendimento aggregato: `getRendimento` accetta già una lista di walletId,
     // quindi aggregare i wallet di tutte le sedi costa una riga.
@@ -161,6 +227,8 @@ export default async function WalletPage({
             saldoAffiliazioneCent={saldoAffiliazioneCent}
             righe={righe}
             movimenti={movimenti}
+            sedi={ctx.accessibleSedi}
+            filtroSede={filtroSede}
           />
 
           <Card className="mt-6">
@@ -578,4 +646,3 @@ function motivoMovimento(t: {
   }
   return null;
 }
-

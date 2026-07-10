@@ -77,4 +77,23 @@ describe('getSessionContext', () => {
     expect(ctx!.currentSede).toEqual({ kind: 'ONE', sede: sedeB });
     expect(ctx!.scopeIds).toEqual(['b']);
   });
+
+  it('non-owner: filtra chiavi permessi obsolete (not in catalogo)', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u2', role: 'UTENTE_AZIENDA', companyId: 'c1' } });
+    userSedeFindMany.mockResolvedValue([{ sedeId: 'a' }] as never);
+    // Simula un utente che ha in DB sia permessi validi che chiavi rimaste da un refactor precedente.
+    userFindUnique.mockResolvedValue({ permessi: ['pratiche.view', 'chiave.obsoleta'] } as never);
+    const ctx = await getSessionContext();
+    // Il set deve contenere solo 'pratiche.view'; 'chiave.obsoleta' deve essere filtrata via.
+    expect([...ctx!.permessi].sort()).toEqual(['pratiche.view']);
+  });
+
+  it('owner (ADMIN_AZIENDA): non legge permessi dal DB', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u1', role: 'ADMIN_AZIENDA', companyId: 'c1' } });
+    const ctx = await getSessionContext();
+    // L'owner non deve leggere il campo permessi dal DB.
+    expect(userFindUnique).not.toHaveBeenCalled();
+    // Il set deve essere vuoto (l'owner ha poteri impliciti, gestiti altrove).
+    expect([...ctx!.permessi].sort()).toEqual([]);
+  });
 });

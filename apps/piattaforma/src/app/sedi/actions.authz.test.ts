@@ -104,65 +104,50 @@ describe('updateSedeAction — scope (sedeId esterno)', () => {
 });
 
 /**
- * Gate sull'IBAN: non è più una capability delegabile (`sede.iban` è uscita
- * dal catalogo). L'IBAN della sede è owner-only, come quello dell'azienda —
- * il form lo mostra solo al proprietario (`canEditPaymentSettings`), qui si
- * verifica che sia vero anche per una richiesta costruita a mano. Scatta
- * SOLO se il valore cambia davvero, con confronto normalizzato su spazi e
- * maiuscole. La soglia payout resta coperta da `sede.edit` (non owner-only),
- * quindi passa sempre insieme all'anagrafica.
+ * Impostazioni di incasso (IBAN + soglia payout): owner-only in scrittura,
+ * D1/D2 di docs/superpowers/specs/2026-07-10-iban-solo-super-admin-design.md.
+ * Non sono più una capability delegabile (`sede.iban` è uscita dal catalogo,
+ * e `sede.edit` non basta più). Il meccanismo è l'omissione dall'oggetto
+ * `data`, non un rifiuto condizionato al cambio di valore (§3.2 della spec):
+ * un non-proprietario che forgia la POST con un IBAN diverso ottiene
+ * `{ok: true}` — l'anagrafica si salva — ma `sede.update` viene chiamato con
+ * `data` privo delle chiavi `iban` e `payoutThresholdCent`, quindi il valore
+ * a DB non cambia. Questo chiude anche il wipe: `iban=""` non azzera nulla,
+ * perché la chiave non entra mai in `data` per chi non è owner.
  */
-describe('updateSedeAction — gate IBAN (owner-only)', () => {
-  it('un non-proprietario con sede.edit: salva se l’IBAN non cambia (a meno di spazi/maiuscole)', async () => {
-    getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
-    const fd = validFormData('it60 x054 2811 1010 0000 0123 456');
-
-    const res = await updateSedeAction('s1', fd);
-
-    expect(res.ok).toBe(true);
-    expect(prismaMock.sede.update).toHaveBeenCalledTimes(1);
-    expect(lastUpdateData().iban).toBe(IBAN_ATTUALE);
-  });
-
-  it('un non-proprietario non può cambiare l’IBAN', async () => {
+describe('updateSedeAction — impostazioni di incasso (owner-only, D1/D2)', () => {
+  it('un non-proprietario con sede.edit: salva, ma "data" non contiene iban né payoutThresholdCent', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
     const fd = validFormData('IT99Z0000000000000000000000');
 
     const res = await updateSedeAction('s1', fd);
 
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain('IBAN');
-    expect(prismaMock.sede.update).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    expect(prismaMock.sede.update).toHaveBeenCalledTimes(1);
+    const data = lastUpdateData();
+    expect(data).not.toHaveProperty('iban');
+    expect(data).not.toHaveProperty('payoutThresholdCent');
   });
 
-  it('un non-proprietario con sede.edit non può svuotare l’IBAN (iban="" è una cancellazione, non un campo non inviato)', async () => {
+  it('un non-proprietario con sede.edit e iban="" (tentativo di azzerare): "data" resta priva di iban', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
     const fd = validFormData(''); // la sede ha IBAN_ATTUALE valorizzato, il form arriva con iban vuoto
 
     const res = await updateSedeAction('s1', fd);
 
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain('IBAN');
-    expect(prismaMock.sede.update).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    expect(lastUpdateData()).not.toHaveProperty('iban');
   });
 
-  it('il proprietario può cambiare l’IBAN', async () => {
+  it('il proprietario: "data" contiene iban e payoutThresholdCent col valore inviato', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi([], { isOwner: true }));
     const fd = validFormData('IT99Z0000000000000000000000');
 
     const res = await updateSedeAction('s1', fd);
 
     expect(res.ok).toBe(true);
-    expect(lastUpdateData().iban).toBe('IT99Z0000000000000000000000');
-  });
-
-  it('un non-proprietario con sede.edit: la soglia payout passa comunque (l’IBAN non cambia)', async () => {
-    getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
-    const fd = validFormData(IBAN_ATTUALE); // IBAN invariato
-
-    const res = await updateSedeAction('s1', fd);
-
-    expect(res.ok).toBe(true);
-    expect(lastUpdateData().payoutThresholdCent).toBe(120_000);
+    const data = lastUpdateData();
+    expect(data).toHaveProperty('iban', 'IT99Z0000000000000000000000');
+    expect(data).toHaveProperty('payoutThresholdCent', 120_000);
   });
 });

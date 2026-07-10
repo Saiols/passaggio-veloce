@@ -85,12 +85,17 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
 /**
  * Aggiorna i dati anagrafici, la soglia payout e l'IBAN di una sede.
  *
- * Doppio gate: `sede.edit` copre anagrafica e soglia payout; l'IBAN — il
- * conto su cui arrivano i payout — non è delegabile e resta owner-only,
- * proprio come per l'azienda. Il gate su `isOwner` scatta SOLO se l'IBAN
- * cambia davvero (confronto normalizzato su spazi e maiuscole), altrimenti
- * chi ha solo `sede.edit` non potrebbe salvare il form lasciando l'IBAN
- * intatto.
+ * Doppio gate: `sede.edit` (capability) copre anagrafica e soglia payout;
+ * `ctx.isOwner` (scope, non delegabile) copre le impostazioni di incasso —
+ * IBAN e soglia payout — che sono owner-only per decisione D1/D2 di
+ * `docs/superpowers/specs/2026-07-10-iban-solo-super-admin-design.md`.
+ *
+ * I campi di incasso si OMETTONO dall'oggetto `data` se chi salva non è
+ * owner, non si validano-e-rifiutano: l'omissione chiude due falle con un
+ * solo meccanismo (§3.2 della spec) — (1) un ADMIN_SEDE che forgia la POST
+ * con un IBAN diverso non scrive nulla; (2) un ADMIN_SEDE che salva la sola
+ * anagrafica non azzera l'IBAN esistente, perché `parseSedeFields` mappa
+ * `'' → null` e quel `null` va scartato insieme al resto, non applicato.
  */
 export async function updateSedeAction(
   sedeId: string,
@@ -111,28 +116,13 @@ export async function updateSedeAction(
 
   // Normalizza l'IBAN (spazi + maiuscole) PRIMA del parsing: un IBAN
   // incollato a blocchi ("IT60 X054 ...") è lo stesso IBAN di uno senza
-  // spazi, sia per la validazione di formato sia per il confronto sotto.
+  // spazi.
   const raw = sedeFormRaw(formData);
   raw.iban = raw.iban.replace(/\s/g, '').toUpperCase();
 
   const parsed = parseSedeFields(raw);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
-
-  const sedeCorrente = await prisma.sede.findUnique({
-    where: { id: sedeId },
-    select: { iban: true },
-  });
-  const ibanNormalizzato = (f.iban ?? '').toUpperCase();
-  const ibanAttuale = (sedeCorrente?.iban ?? '').replace(/\s/g, '').toUpperCase();
-  if (ibanNormalizzato !== ibanAttuale) {
-    // L'IBAN della sede è il conto su cui arrivano i payout: non è delegabile.
-    // Il form lo mostra solo al proprietario (canEditPaymentSettings), questo è
-    // il gate che lo rende vero anche per una richiesta costruita a mano.
-    if (!ctx.isOwner) {
-      return { ok: false, error: "Solo il titolare può modificare l'IBAN della sede" };
-    }
-  }
 
   await prisma.sede.update({
     where: { id: sedeId },
@@ -146,8 +136,10 @@ export async function updateSedeAction(
       telefono: f.telefono,
       email: f.email,
       codiceInterno: f.codiceInterno,
-      iban: f.iban,
-      payoutThresholdCent: f.payoutThresholdCent,
+      // Impostazioni di incasso: solo il proprietario della madre (D1, D2).
+      // Si OMETTONO, non si validano: chi forgia la POST non scrive nulla, e chi
+      // salva la sola anagrafica non azzera l'IBAN (parseSedeFields mappa '' → null).
+      ...(ctx.isOwner ? { iban: f.iban, payoutThresholdCent: f.payoutThresholdCent } : {}),
     },
   });
 

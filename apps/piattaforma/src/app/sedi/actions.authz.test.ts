@@ -135,6 +135,17 @@ describe('updateSedeAction — gate IBAN (owner-only)', () => {
     expect(prismaMock.sede.update).not.toHaveBeenCalled();
   });
 
+  it('un non-proprietario con sede.edit non può svuotare l’IBAN (iban="" è una cancellazione, non un campo non inviato)', async () => {
+    getSessionContextMock.mockResolvedValue(ctxConPermessi(['sede.view', 'sede.edit']));
+    const fd = validFormData(''); // la sede ha IBAN_ATTUALE valorizzato, il form arriva con iban vuoto
+
+    const res = await updateSedeAction('s1', fd);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain('IBAN');
+    expect(prismaMock.sede.update).not.toHaveBeenCalled();
+  });
+
   it('il proprietario può cambiare l’IBAN', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi([], { isOwner: true }));
     const fd = validFormData('IT99Z0000000000000000000000');

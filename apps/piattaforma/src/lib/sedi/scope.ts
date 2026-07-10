@@ -158,10 +158,12 @@ export function canManageSedeTeam(role: SedeRole): boolean {
 
 /**
  * Impostazioni di incasso della sede (IBAN, soglia payout) nella vista
- * `impostazioni-sede`: solo il proprietario della madre vede i campi in
- * chiaro/editabili. Il gate reale che decide chi può scrivere è nei permessi
- * granulari (`sede.edit` / `sede.iban`, vedi `lib/auth/permessi`), non qui:
- * questo predicato resta per la UI di sola visualizzazione.
+ * `impostazioni-sede`: governa SOLO il rendering dei campi nel form — solo
+ * il proprietario della madre li vede in chiaro/editabili. Non è il gate che
+ * protegge la scrittura: quello, per l'IBAN, è il controllo esplicito su
+ * `isOwner` dentro `updateSedeAction` (sedi/actions.ts), scattato solo se il
+ * valore cambia davvero. La soglia payout resta invece dietro il permesso
+ * delegabile `sede.edit`.
  */
 export function canEditPaymentSettings(role: SedeRole): boolean {
   return role === 'OWNER';

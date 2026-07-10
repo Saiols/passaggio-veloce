@@ -427,24 +427,25 @@ export default async function WalletPage({
               🎯 Il payout viene erogato subito alla richiesta.
             </p>
           )}
-          {canSoglia && (
-            <div className="mt-5 border-t border-pv-slate-200 pt-4">
-              <h3 className="text-[13px] font-bold text-pv-navy-800">
-                Soglia payout automatico
-              </h3>
-              <p className="mt-1 text-[12px] text-pv-slate-500">
-                Configurabile tra {formatCurrencyCent(WALLET.AUTO_PAYOUT_MIN_CENT)} e{' '}
-                {formatCurrencyCent(WALLET.AUTO_PAYOUT_MAX_CENT)}.
-              </p>
-              <div className="mt-3">
-                <PayoutThresholdForm
-                  defaultValueCent={thresholdAutoCent}
-                  minCent={WALLET.AUTO_PAYOUT_MIN_CENT}
-                  maxCent={WALLET.AUTO_PAYOUT_MAX_CENT}
-                />
-              </div>
-            </div>
-          )}
+        </div>
+        )}
+
+        {canSoglia && (
+        <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
+          <h3 className="text-[13px] font-bold text-pv-navy-800">
+            Soglia payout automatico
+          </h3>
+          <p className="mt-1 text-[12px] text-pv-slate-500">
+            Configurabile tra {formatCurrencyCent(WALLET.AUTO_PAYOUT_MIN_CENT)} e{' '}
+            {formatCurrencyCent(WALLET.AUTO_PAYOUT_MAX_CENT)}.
+          </p>
+          <div className="mt-3">
+            <PayoutThresholdForm
+              defaultValueCent={thresholdAutoCent}
+              minCent={WALLET.AUTO_PAYOUT_MIN_CENT}
+              maxCent={WALLET.AUTO_PAYOUT_MAX_CENT}
+            />
+          </div>
         </div>
         )}
 

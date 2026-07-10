@@ -5,7 +5,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Card, StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
+import { Alert, Card, StatusChip, SubmitButton, TipoPraticaChip, type PraticaStato } from '@/components/ui';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from '../actions';
 
@@ -90,7 +90,7 @@ export default async function InboxDetailPage({
             <StatusChip stato={pratica.stato as PraticaStato} />
           </h1>
           <p className="mt-1 text-[14px] text-pv-slate-500">
-            {labelTipo(pratica.tipo)} · {pratica.comune ?? '—'}
+            <TipoPraticaChip tipo={pratica.tipo} numeroVeicoli={pratica.numeroVeicoli} /> · {pratica.comune ?? '—'}
             {pratica.provincia ? ` (${pratica.provincia})` : ''}
           </p>
         </header>
@@ -306,12 +306,6 @@ function InfoRow({
       </dd>
     </div>
   );
-}
-
-function labelTipo(t: string): string {
-  if (t === 'SEMPLICE') return 'Passaggio di proprietà semplice';
-  if (t === 'MINIVOLTURA') return 'Minivoltura';
-  return t;
 }
 
 function ContattiParte({

@@ -5,7 +5,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { StatusChip, SubmitButton, type PraticaStato } from '@/components/ui';
+import { StatusChip, SubmitButton, TipoPraticaChip, type PraticaStato } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from './actions';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
@@ -117,6 +117,7 @@ export default async function InboxPage() {
                           stato={a.pratica.stato as PraticaStato}
                           viewerRole="AGENZIA"
                         />
+                        <TipoPraticaChip tipo={a.pratica.tipo} numeroVeicoli={a.pratica.numeroVeicoli} />
                         <span className="text-[11px] text-pv-slate-500">
                           {formatRelative(a.invioAt)}
                         </span>
@@ -171,6 +172,7 @@ export default async function InboxPage() {
                   className="flex items-center justify-between px-5 py-3 text-pv-slate-700"
                 >
                   <div className="min-w-0">
+                    <TipoPraticaChip tipo={a.pratica.tipo} numeroVeicoli={a.pratica.numeroVeicoli} className="mb-1" />
                     <p className="truncate font-semibold text-pv-navy-800">
                       {a.pratica.codicePratica ?? '—'} ·{' '}
                       {a.pratica.veicoli[0]?.targa

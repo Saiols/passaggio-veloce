@@ -155,6 +155,42 @@ describe('updateTeamUserAction — permessi', () => {
     const dati = prismaMock.user.update.mock.calls[0]?.[0]?.data ?? {};
     expect(dati).not.toHaveProperty('permessi');
   });
+
+  it('passare un array vuoto svuota i permessi (non equivale a ometterli)', async () => {
+    // Regressione: `permessi: []` deve azzerare il set, non essere trattato
+    // come "invariato". Una guardia tipo `if (permessi && permessi.length > 0)`
+    // farebbe collassare `[]` in "non toccare" — questo test lo impedisce.
+    getSessionContextMock.mockResolvedValue(
+      ctxAdminSede(['team.view', 'team.modifica', 'team.permessi', 'pratiche.view']),
+    );
+    const res = await updateTeamUserAction('target1', 'a@y.it', 'Ann', 'Bee', 's1', 'OPERATORE', []);
+    expect(res.ok).toBe(true);
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ permessi: [] }) }),
+    );
+  });
+});
+
+describe('ordine dei gate — permesso prima dello scope (Rilievo 1/3)', () => {
+  it('chi non ha team.modifica riceve l’errore di permesso, non quello di scope, anche puntando fuori dal suo scope', async () => {
+    // Chiamante ADMIN_SEDE di s1 SENZA team.modifica. Se lo scope venisse
+    // risolto prima del permesso, un target fuori sede darebbe "Utente non
+    // nella tua sede"; con l'ordine corretto deve fermarsi al permesso, prima
+    // ancora di interrogare il DB per il target.
+    getSessionContextMock.mockResolvedValue(ctxAdminSede(['team.view']));
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'target-fuori-scope', companyId: 'c1', role: 'UTENTE_AZIENDA', email: 'x@y.it',
+    });
+    prismaMock.userSede.findFirst.mockResolvedValue(null); // nessuna membership in sedi gestite
+
+    const res = await updateTeamUserAction(
+      'target-fuori-scope', 'x@y.it', 'Ann', 'Bee', undefined, undefined, undefined,
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toBe('Non hai i permessi per modificare utenti');
+    // Prova che lo scope non è stato nemmeno risolto: niente query sul target.
+    expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 describe('createUserDirectAction — escalation con solo team.crea (senza team.permessi)', () => {

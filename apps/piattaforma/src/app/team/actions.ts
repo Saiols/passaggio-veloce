@@ -57,6 +57,25 @@ function toPermessiCtx(ctx: { user: { id: string }; isOwner: boolean; permessi: 
 }
 
 /**
+ * Gate di capability: SOLO autenticazione + permesso, prima di qualunque
+ * risoluzione di scope (sede, target). Regola del progetto: autenticazione →
+ * permesso → scope — non far lavorare il DB (e non rivelare nulla sullo scope,
+ * es. l'esistenza di un utente in un'altra sede) per un chiamante che comunque
+ * non è autorizzato. `getSessionContext()` è `cache()`-ato per richiesta
+ * (session-context.ts): richiamarlo qui e poi dentro `authorizeTeamCreate` /
+ * `authorizeTeamTargetUser` non costa una seconda query.
+ */
+async function gateCapability(
+  p: Permesso,
+  errorMessage: string,
+): Promise<{ ok: false; error: string } | null> {
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
+  if (!can(toPermessiCtx(ctx), p)) return { ok: false, error: errorMessage };
+  return null;
+}
+
+/**
  * Autorizza la CREAZIONE di un utente su una sede: risolve la sede destinataria
  * tra quelle gestibili dall'utente e valida il ruolo richiesto.
  */
@@ -167,11 +186,10 @@ export async function createInvitationAction(
   ruoloSede?: RuoloSedeInput,
   permessi?: string[],
 ): Promise<InviteResult> {
+  const gate = await gateCapability('team.invita', 'Non hai i permessi per invitare utenti');
+  if (gate) return gate;
   const authz = await authorizeTeamCreate(sedeId, ruoloSede);
   if (!authz.ok) return { ok: false, error: authz.error };
-  if (!can(authz.permessiCtx, 'team.invita')) {
-    return { ok: false, error: 'Non hai i permessi per invitare utenti' };
-  }
   const perm = permessiPerNuovoUtente(authz.permessiCtx, authz.companyType, permessi);
   if (!perm.ok) return { ok: false, error: perm.error };
   const companyId = authz.companyId;
@@ -335,11 +353,10 @@ export async function createUserDirectAction(
   ruoloSede?: RuoloSedeInput,
   permessi?: string[],
 ): Promise<CreateUserResult> {
+  const gate = await gateCapability('team.crea', 'Non hai i permessi per creare utenti');
+  if (gate) return gate;
   const authz = await authorizeTeamCreate(sedeId, ruoloSede);
   if (!authz.ok) return { ok: false, error: authz.error };
-  if (!can(authz.permessiCtx, 'team.crea')) {
-    return { ok: false, error: 'Non hai i permessi per creare utenti' };
-  }
   const perm = permessiPerNuovoUtente(authz.permessiCtx, authz.companyType, permessi);
   if (!perm.ok) return { ok: false, error: perm.error };
   const { companyId } = authz;
@@ -431,11 +448,10 @@ export async function updateTeamUserAction(
   ruoloSede?: RuoloSedeInput,
   permessi?: string[],
 ): Promise<UpdateTeamUserResult> {
+  const gate = await gateCapability('team.modifica', 'Non hai i permessi per modificare utenti');
+  if (gate) return gate;
   const authz = await authorizeTeamTargetUser(userId);
   if (!authz.ok) return { ok: false, error: authz.error };
-  if (!can(authz.permessiCtx, 'team.modifica')) {
-    return { ok: false, error: 'Non hai i permessi per modificare utenti' };
-  }
   const { companyId } = authz;
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
@@ -539,11 +555,10 @@ export type ResetTeamUserPasswordResult =
 export async function resetTeamUserPasswordAction(
   userId: string,
 ): Promise<ResetTeamUserPasswordResult> {
+  const gate = await gateCapability('team.reset_password', 'Non hai i permessi per resettare la password');
+  if (gate) return gate;
   const authz = await authorizeTeamTargetUser(userId);
   if (!authz.ok) return { ok: false, error: authz.error };
-  if (!can(authz.permessiCtx, 'team.reset_password')) {
-    return { ok: false, error: 'Non hai i permessi per resettare la password' };
-  }
   const { companyId } = authz;
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
@@ -575,15 +590,17 @@ export type DisableTeamUserResult = { ok: true } | { ok: false; error: string };
 export async function disableTeamUserAction(
   userId: string,
 ): Promise<DisableTeamUserResult> {
+  const gate = await gateCapability('team.disabilita', 'Non hai i permessi per disabilitare utenti');
+  if (gate) return gate;
+
+  // Il controllo capability precede questo: chi non ha team.disabilita deve
+  // sentirsi dire che non ha il permesso, non che non può auto-eliminarsi.
   const ctx = await getSessionContext();
   if (ctx?.user?.id === userId) {
     return { ok: false, error: 'Non puoi eliminare il tuo stesso account' };
   }
   const authz = await authorizeTeamTargetUser(userId);
   if (!authz.ok) return { ok: false, error: authz.error };
-  if (!can(authz.permessiCtx, 'team.disabilita')) {
-    return { ok: false, error: 'Non hai i permessi per disabilitare utenti' };
-  }
 
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target || target.companyId !== authz.companyId) {

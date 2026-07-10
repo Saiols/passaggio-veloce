@@ -810,6 +810,18 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ### A · Fattibile ORA — nessuna dipendenza esterna
 
+**A0. ✅ DONE (2026-07-10) — Permessi granulari per le utenze azienda**
+- Terzo asse di autorizzazione accanto a `UserRole` e `RuoloSede`: **22 permessi** per un dealer, **28** per un'agenzia (31 chiavi distinte, 4 azioni sensibili). `RuoloSede` + `SedeScope` restano «su quali record», i permessi sono «quali azioni».
+- `User.permessi` / `Invitation.permessi` (`String[]`), snapshot esplicito senza eredità. Il ruolo di sede è solo un **preset** che pre-spunta le caselle.
+- Risolti nel `SessionContext`, **non nel JWT**: revocare un permesso ha effetto alla richiesta successiva, non al re-login (verificato: 403 → 200 → 403 senza rilogin).
+- Matrice a accordion in creazione, invito e modifica utenza. Anti-escalation: non concedi ciò che non hai, serve `team.permessi` per scegliere, non modifichi te stesso né il titolare — la chiamata sbagliata **non compila** (union discriminata).
+- Fail-closed su 5 livelli: sidebar, pagina, server action, route API (`403`), componente.
+- Due guardie anti-drift: `mappa-enforcement.ts` (51 server action classificate) e `mappa-pagine.ts` (26 pagine). Aggiungere un'action o una pagina senza classificarla fa fallire i test.
+- Chiude tre buchi trovati **guidando l'app viva**: la dashboard mostrava il saldo wallet a chi non aveva `wallet.view`; `/affiliazione`, `/feedback`, `/notifiche` erano raggiungibili via URL; `/team` non verificava `team.view`.
+- Coerente con la spec `2026-07-10-iban-solo-super-admin-design.md`: `sede.iban`, `pagamenti.iban` e `pagamenti.ritenta` sono **ritirati** dal catalogo perché sarebbero caselle inerti.
+- Spec: `docs/superpowers/specs/2026-07-10-permessi-granulari-design.md` · Piano: `docs/superpowers/plans/2026-07-10-permessi-granulari.md`
+- ⚠️ **Rilascio in tre passi ordinati**: migration → backfill → deploy dei gate. Vedi la checklist nella spec.
+
 **A1. ✅ DONE — Listini & Osservatorio Prezzi (FASE 8 intera)** — ⚠️ **SOSPESA (giugno 2026): modulo disattivato e nascosto dall'app, route rese 404, codice commentato. Da NON proporre come funzione disponibile.**
 - `/profilo/listino` con toggle Form strutturato / Upload PDF (toggle button)
   - Form: prezzoBaseTrapasso, prezzoMinivoltura, maggiorazione pre-2015, sconto lotto massivo, province coperte (sigle CSV)

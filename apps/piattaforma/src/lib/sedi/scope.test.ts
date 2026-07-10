@@ -9,7 +9,6 @@ import {
   resolveSubmittedSede,
   resolveSedeRole,
   canManageSedeTeam,
-  canEditSedeSettings,
   canEditPaymentSettings,
   assignableSedeRoles,
   manageableSedi,
@@ -276,30 +275,27 @@ describe('resolveSedeRole', () => {
   });
 });
 
-describe('canManageSedeTeam / canEditSedeSettings / assignableSedeRoles', () => {
-  it('OWNER e ADMIN_SEDE possono gestire team e impostazioni', () => {
+describe('canManageSedeTeam / assignableSedeRoles', () => {
+  it('OWNER e ADMIN_SEDE possono gestire il team', () => {
     for (const r of ['OWNER', 'ADMIN_SEDE'] as const) {
       expect(canManageSedeTeam(r)).toBe(true);
-      expect(canEditSedeSettings(r)).toBe(true);
       expect(assignableSedeRoles(r)).toEqual(['ADMIN_SEDE', 'OPERATORE']);
     }
   });
   it('OPERATORE e null non possono', () => {
     for (const r of ['OPERATORE', null] as const) {
       expect(canManageSedeTeam(r)).toBe(false);
-      expect(canEditSedeSettings(r)).toBe(false);
       expect(assignableSedeRoles(r)).toEqual([]);
     }
   });
 });
 
 describe('canEditPaymentSettings', () => {
-  it('solo il proprietario della madre modifica IBAN e soglia payout', () => {
+  it('solo il proprietario della madre vede IBAN e soglia payout in chiaro', () => {
     expect(canEditPaymentSettings('OWNER')).toBe(true);
   });
 
-  it("l'ADMIN_SEDE gestisce la sede ma NON le impostazioni di incasso", () => {
-    expect(canEditSedeSettings('ADMIN_SEDE')).toBe(true);
+  it("l'ADMIN_SEDE NON vede le impostazioni di incasso in questa vista", () => {
     expect(canEditPaymentSettings('ADMIN_SEDE')).toBe(false);
   });
 

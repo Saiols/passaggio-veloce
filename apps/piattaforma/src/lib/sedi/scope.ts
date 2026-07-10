@@ -156,14 +156,12 @@ export function canManageSedeTeam(role: SedeRole): boolean {
   return role === 'OWNER' || role === 'ADMIN_SEDE';
 }
 
-export function canEditSedeSettings(role: SedeRole): boolean {
-  return role === 'OWNER' || role === 'ADMIN_SEDE';
-}
-
 /**
- * Impostazioni di incasso della sede (IBAN, soglia payout): solo il
- * proprietario della madre. L'ADMIN_SEDE resta autonomo su anagrafica, team e
- * orari (`canEditSedeSettings`), ma non decide dove finiscono i soldi.
+ * Impostazioni di incasso della sede (IBAN, soglia payout) nella vista
+ * `impostazioni-sede`: solo il proprietario della madre vede i campi in
+ * chiaro/editabili. Il gate reale che decide chi può scrivere è nei permessi
+ * granulari (`sede.edit` / `sede.iban`, vedi `lib/auth/permessi`), non qui:
+ * questo predicato resta per la UI di sola visualizzazione.
  */
 export function canEditPaymentSettings(role: SedeRole): boolean {
   return role === 'OWNER';

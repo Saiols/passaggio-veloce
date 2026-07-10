@@ -4,9 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { isOwner } from '@/lib/auth/permissions';
-import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
+import { getOperatingSede } from '@/lib/auth/session-context';
+import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
-import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { WALLET, validatePayoutThresholdCent } from '@/lib/wallet/config';
 import { eseguiPayoutImmediato } from '@/lib/wallet/payout-exec';
 
@@ -21,6 +21,13 @@ export type PayoutResult = { ok: true } | { ok: false; error: string } | { ok: f
 export async function richiediPayoutAction(): Promise<PayoutResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope: il gate di capability precede
+  // qualunque risoluzione di sede, così un chiamante senza `wallet.payout`
+  // non fa lavorare il DB (né sa se esiste una sede operativa).
+  const gate = await requirePermesso('wallet.payout');
+  if (!gate.ok) return gate;
+
   // D-05: stesse soglie e stesso flusso payout per broker e agenzie.
   if (
     session.user.companyType !== 'DEALER' &&
@@ -35,13 +42,6 @@ export async function richiediPayoutAction(): Promise<PayoutResult> {
   const sede = await getOperatingSede();
   if (!sede) {
     return { ok: false, error: 'Seleziona una sede per richiedere il payout' };
-  }
-  // Il payout è un'operazione finanziaria della sede: la chiede il titolare o
-  // l'admin di quella sede, non un operatore. Stesso predicato usato per la
-  // soglia payout (updatePayoutThresholdAction, poco più sotto).
-  const role = await getSedeRole(sede.id);
-  if (!canEditSedeSettings(role)) {
-    return { ok: false, error: 'Non hai i permessi per richiedere il payout di questa sede' };
   }
 
   const includeAffiliazione = isOwner(session.user.role);
@@ -99,18 +99,17 @@ export type UpdatePayoutThresholdResult =
   | { ok: false; error: string };
 
 /**
- * Aggiorna la soglia auto-payout per la propria company. Consentito al
- * proprietario (ADMIN_AZIENDA) e all'admin della sede operativa (ADMIN_SEDE).
+ * Aggiorna la soglia auto-payout per la sede operativa. Capability governata
+ * dal permesso `wallet.soglia` (owner sempre, altrimenti chi lo ha ricevuto).
  */
 export async function updatePayoutThresholdAction(
   thresholdCent: number,
 ): Promise<UpdatePayoutThresholdResult> {
+  const gate = await requirePermesso('wallet.soglia');
+  if (!gate.ok) return gate;
+
   const sede = await getOperatingSede();
   if (!sede) return { ok: false, error: 'Seleziona una sede per modificarne la soglia' };
-  const role = await getSedeRole(sede.id);
-  if (!canEditSedeSettings(role)) {
-    return { ok: false, error: 'Non hai i permessi per modificare la soglia di questa sede' };
-  }
   const valid = validatePayoutThresholdCent(thresholdCent);
   if (valid === null) {
     return {

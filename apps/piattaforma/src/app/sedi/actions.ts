@@ -3,10 +3,10 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { getSedeRole } from '@/lib/auth/session-context';
+import { getSessionContext } from '@/lib/auth/session-context';
+import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { parseSedeFields } from '@/lib/sedi/form';
-import { canEditSedeSettings, canEditPaymentSettings } from '@/lib/sedi/scope';
 
 export type SedeActionResult = { ok: true } | { ok: false; error: string };
 
@@ -83,25 +83,53 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
 }
 
 /**
- * Aggiorna i dati anagrafici/pagamenti di una sede.
- * Anagrafica: proprietario o ADMIN_SEDE della sede.
- * IBAN e soglia payout: solo il proprietario della madre.
+ * Aggiorna i dati anagrafici, la soglia payout e l'IBAN di una sede.
+ *
+ * Doppio gate: `sede.edit` copre anagrafica e soglia payout; `sede.iban`
+ * scatta SOLO se l'IBAN cambia davvero (confronto normalizzato su spazi e
+ * maiuscole), altrimenti chi ha solo `sede.edit` non potrebbe salvare il
+ * form lasciando l'IBAN intatto.
  */
 export async function updateSedeAction(
   sedeId: string,
   formData: FormData,
 ): Promise<SedeActionResult> {
-  const role = await getSedeRole(sedeId);
-  if (!canEditSedeSettings(role)) {
-    return { ok: false, error: 'Non hai i permessi per modificare questa sede' };
+  // Autenticazione → permesso → scope.
+  const gate = await requirePermesso('sede.edit');
+  if (!gate.ok) return gate;
+
+  // Scope: `sedeId` è un parametro esterno. Il permesso da solo non basta —
+  // senza questo controllo un utente con `sede.edit` potrebbe scrivere su
+  // una sede che non è la sua (non serve rivelare altro: stesso messaggio
+  // usato per una sede inesistente).
+  const ctx = await getSessionContext();
+  if (!ctx || !ctx.accessibleSedi.some((s) => s.id === sedeId)) {
+    return { ok: false, error: 'Sede non trovata' };
   }
 
-  const parsed = parseSedeFields(sedeFormRaw(formData));
+  // Normalizza l'IBAN (spazi + maiuscole) PRIMA del parsing: un IBAN
+  // incollato a blocchi ("IT60 X054 ...") è lo stesso IBAN di uno senza
+  // spazi, sia per la validazione di formato sia per il confronto sotto.
+  const raw = sedeFormRaw(formData);
+  raw.iban = raw.iban.replace(/\s/g, '').toUpperCase();
+
+  const parsed = parseSedeFields(raw);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
 
-  // I campi di incasso vengono OMESSI, non azzerati: `parseSedeFields` mappa
-  // "campo assente" → `iban: null`, che a DB cancellerebbe l'IBAN della sede.
+  const sedeCorrente = await prisma.sede.findUnique({
+    where: { id: sedeId },
+    select: { iban: true },
+  });
+  const ibanNormalizzato = (f.iban ?? '').toUpperCase();
+  const ibanAttuale = (sedeCorrente?.iban ?? '').replace(/\s/g, '').toUpperCase();
+  if (ibanNormalizzato !== ibanAttuale) {
+    const gateIban = await requirePermesso('sede.iban');
+    if (!gateIban.ok) {
+      return { ok: false, error: "Non hai i permessi per modificare l'IBAN" };
+    }
+  }
+
   await prisma.sede.update({
     where: { id: sedeId },
     data: {
@@ -114,9 +142,8 @@ export async function updateSedeAction(
       telefono: f.telefono,
       email: f.email,
       codiceInterno: f.codiceInterno,
-      ...(canEditPaymentSettings(role)
-        ? { iban: f.iban, payoutThresholdCent: f.payoutThresholdCent }
-        : {}),
+      iban: f.iban,
+      payoutThresholdCent: f.payoutThresholdCent,
     },
   });
 

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { authMock, getOperatingSedeMock, getSedeRoleMock, prismaMock, eseguiPayoutMock } = vi.hoisted(() => ({
+const { authMock, getOperatingSedeMock, getSessionContextMock, prismaMock, eseguiPayoutMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   getOperatingSedeMock: vi.fn(),
-  getSedeRoleMock: vi.fn(),
+  getSessionContextMock: vi.fn(),
   prismaMock: {
     wallet: { findUnique: vi.fn() },
     mandatoFatturazione: { findUnique: vi.fn() },
@@ -15,7 +15,7 @@ const { authMock, getOperatingSedeMock, getSedeRoleMock, prismaMock, eseguiPayou
 vi.mock('@/auth', () => ({ auth: authMock }));
 vi.mock('@/lib/auth/session-context', () => ({
   getOperatingSede: getOperatingSedeMock,
-  getSedeRole: getSedeRoleMock,
+  getSessionContext: getSessionContextMock,
 }));
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/lib/wallet/payout-exec', () => ({ eseguiPayoutImmediato: eseguiPayoutMock }));
@@ -28,11 +28,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { companyType: 'DEALER', companyId: 'c1' } });
   getOperatingSedeMock.mockResolvedValue({ id: 's1' });
-  // Default: titolare della sede. I test su richiediPayoutAction in questo file
-  // coprono mandato/esecuzione/R5, non il gate di ruolo (coperto in
-  // actions.authz.test.ts) — i test su updatePayoutThresholdAction più sotto
-  // sovrascrivono questo mock per-caso.
-  getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
+  // Default: permesso concesso. I test su richiediPayoutAction/
+  // updatePayoutThresholdAction in questo file coprono mandato/esecuzione/R5/
+  // validazione soglia, non il gate di capability (coperto in
+  // actions.authz.test.ts).
+  getSessionContextMock.mockResolvedValue({
+    user: { id: 'u1' },
+    isOwner: false,
+    permessi: new Set(['wallet.view', 'wallet.payout', 'wallet.soglia']),
+  });
   // Wallet di sede eleggibile; nessun wallet madre (broker senza affiliazione).
   prismaMock.wallet.findUnique.mockImplementation(({ where }: { where: { sedeId?: string; companyId?: string } }) =>
     Promise.resolve(where.sedeId ? { id: 'w1', saldoCent: 80_000 } : null),
@@ -103,31 +107,25 @@ describe('richiediPayoutAction — wallet madre riservato al proprietario (R5)',
   });
 });
 
-describe('updatePayoutThresholdAction — gate autorizzazione impostazioni sede', () => {
-  // thresholdCent valido (dentro AUTO_PAYOUT_MIN/MAX_CENT), riusato anche nei
-  // casi DENY: se il gate `canEditSedeSettings` venisse rimosso, il valore
-  // supererebbe la validazione e arriverebbe a `prisma.sede.update`, quindi
-  // i test DENY restano una guardia reale sul gate.
+// Il gate di capability (permesso `wallet.soglia`) è coperto in
+// actions.authz.test.ts. Qui restano solo i casi di validazione/scope, che
+// non dipendono dal permesso (il beforeEach concede sempre `wallet.soglia`).
+describe('updatePayoutThresholdAction — validazione e scope', () => {
   const validThresholdCent = 150_000;
 
-  it('OPERATORE → negato, sede.update NON chiamato', async () => {
-    getSedeRoleMock.mockResolvedValue('OPERATORE');
+  it('nessuna sede operativa → negato, sede.update NON chiamato', async () => {
+    getOperatingSedeMock.mockResolvedValue(null);
     const res = await updatePayoutThresholdAction(validThresholdCent);
     expect(res.ok).toBe(false);
     expect(prismaMock.sede.update).not.toHaveBeenCalled();
   });
 
-  it('sede non accessibile (ruolo null) → negato, sede.update NON chiamato', async () => {
-    getSedeRoleMock.mockResolvedValue(null);
-    const res = await updatePayoutThresholdAction(validThresholdCent);
-    expect(res.ok).toBe(false);
-    expect(prismaMock.sede.update).not.toHaveBeenCalled();
-  });
-
-  it('ADMIN_SEDE → consentito, sede.update chiamato', async () => {
-    getSedeRoleMock.mockResolvedValue('ADMIN_SEDE');
+  it('valore valido → consentito, sede.update chiamato sulla sede operativa', async () => {
     const res = await updatePayoutThresholdAction(validThresholdCent);
     expect(res.ok).toBe(true);
     expect(prismaMock.sede.update).toHaveBeenCalledTimes(1);
+    expect(prismaMock.sede.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 's1' } }),
+    );
   });
 });

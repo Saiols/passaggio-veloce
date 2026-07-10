@@ -101,10 +101,14 @@ export function SedeEdit({
       fd.set('telefono', f.telefono);
       fd.set('email', f.email);
       fd.set('codiceInterno', f.codiceInterno);
-      if (canEditPagamenti) {
-        fd.set('iban', f.iban);
-        fd.set('payoutThresholdEuro', f.payoutEuro);
-      }
+      // IBAN e soglia payout vanno sempre inviati, anche quando i campi non
+      // sono editabili in questa vista: `f.iban`/`f.payoutEuro` restano il
+      // valore caricato (non renderizzando l'input non vengono mai toccati),
+      // quindi il round-trip è un no-op lato server. Ometterli farebbe
+      // leggere all'action un IBAN "cambiato" (vuoto) e una soglia tornata al
+      // default, anche se l'utente non ha toccato nulla.
+      fd.set('iban', f.iban);
+      fd.set('payoutThresholdEuro', f.payoutEuro);
       const res = await updateSedeAction(sedeId, fd);
       if (res.ok) {
         setEditing(false);

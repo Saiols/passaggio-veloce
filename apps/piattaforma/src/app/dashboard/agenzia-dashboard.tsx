@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { Alert, Card, StatCard, StatusChip, type PraticaStato } from '@/components/ui';
+import { Alert, Card, StatCard, StatusChip, TipoPraticaChip, type PraticaStato } from '@/components/ui';
 // PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 — `formatCurrencyCent` serviva solo alla card:
 import { formatRelative } from '@/lib/format';
 // PROSSIMI-ADDEBITI DISABILITATO 2026-07-10 — riattivare insieme alla card "Prossimi addebiti":
@@ -266,6 +266,7 @@ export async function AgenziaDashboard({ scopeIds }: { scopeIds: string[] }) {
                           stato={a.pratica.stato as PraticaStato}
                           viewerRole="AGENZIA"
                         />
+                        <TipoPraticaChip tipo={a.pratica.tipo} numeroVeicoli={a.pratica.numeroVeicoli} />
                       </div>
                       <p className="mt-1 truncate text-[13px] text-pv-slate-700">
                         {a.pratica.veicoli[0]?.targa && (

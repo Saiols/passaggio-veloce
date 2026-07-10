@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { prisma } from '@pv/db';
-import { Button, Card, StatCard, StatusChip, cn, type PraticaStato } from '@/components/ui';
+import { Button, Card, StatCard, StatusChip, TipoPraticaChip, cn, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { hasPermesso } from '@/lib/auth/permessi/guard';
 
@@ -61,6 +61,8 @@ export async function BrokerDashboard({
           select: {
             id: true,
             codicePratica: true,
+            tipo: true,
+            numeroVeicoli: true,
             veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
             firmaAvvenutaAt: true,
             agenziaAssegnata: { select: { ragioneSociale: true } },
@@ -180,6 +182,7 @@ export async function BrokerDashboard({
                         {p.veicoli.length > 1 ? ` +${p.veicoli.length - 1}` : ''})
                       </span>
                     )}
+                    <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} className="ml-2" />
                   </p>
                   <p className="text-[11.5px] text-pv-slate-500">
                     Agenzia: {p.agenziaAssegnata?.ragioneSociale ?? '—'}
@@ -264,6 +267,7 @@ export async function BrokerDashboard({
                           {p.codicePratica ?? 'BOZZA'}
                         </span>
                         <StatusChip stato={p.stato as PraticaStato} viewerRole="BROKER" />
+                        <TipoPraticaChip tipo={p.tipo} numeroVeicoli={p.numeroVeicoli} />
                       </div>
                       <p className="mt-1 truncate text-[13px] text-pv-slate-700">
                         {p.veicoli[0]?.targa && (

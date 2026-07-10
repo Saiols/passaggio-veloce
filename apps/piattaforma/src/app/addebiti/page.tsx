@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/auth';
-import { prisma, Prisma } from '@pv/db';
+import { prisma, type Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 // ADDEBITI RIEPILOGO DISABILITATO 2026-07-10 — riattivare `StatCard` insieme alle 3 card e ai subtotali:
 import { Alert, Card } from '@/components/ui';
@@ -62,6 +62,9 @@ export default async function AddebitiPage({
   const companyId = ctx.companyId;
 
   // Filtro range date sullo storico (su refDate = scheduledAt ?? createdAt).
+  // NB: il filtro limita i giorni in Europe/Rome, mentre groupFeeByMonth raggruppa per mese
+  // UTC (recap.ts condiviso, fuori scope): a cavallo di fine mese un addebito può comparire
+  // sotto l'intestazione del mese adiacente. Accettato.
   const sp = await searchParams;
   const range = resolveDayRange(sp.da, sp.a);
   const dateWhere = feeRefDateWhere(range);

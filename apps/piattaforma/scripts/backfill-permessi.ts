@@ -20,7 +20,7 @@ async function main() {
       email: true,
       role: true,
       company: { select: { type: true } },
-      sediMembership: { select: { ruolo: true } },
+      sediMembership: { select: { ruolo: true }, orderBy: { sedeId: 'asc' } },
     },
   });
 
@@ -39,12 +39,19 @@ async function main() {
       saltati++;
       continue;
     }
-    const membership = u.sediMembership[0];
-    if (!membership) {
+    if (u.sediMembership.length === 0) {
       console.warn(`SALTATO ${u.email}: nessuna membership di sede`);
       saltati++;
       continue;
     }
+    if (u.sediMembership.length > 1) {
+      console.warn(
+        `SALTATO ${u.email}: ${u.sediMembership.length} membership di sede (atteso 1) — risolvere a mano prima del deploy dei gate`,
+      );
+      saltati++;
+      continue;
+    }
+    const membership = u.sediMembership[0];
     const permessi = permessiBackfill(tipo, membership.ruolo as 'ADMIN_SEDE' | 'OPERATORE');
     console.log(`${u.email} [${tipo}/${membership.ruolo}] → ${permessi.length} permessi`);
     if (!dryRun) {
@@ -56,6 +63,19 @@ async function main() {
   console.log(
     `\n${dryRun ? '[DRY RUN] ' : ''}owner ignorati: ${owner} · aggiornati: ${aggiornati} · saltati: ${saltati}`,
   );
+
+  if (saltati > 0) {
+    console.error(
+      '\n' +
+        '═'.repeat(80) +
+        '\n' +
+        '⚠️  ATTENZIONE: Alcuni utenti sono stati saltati.\n' +
+        `\nQuesti ${saltati} utenti avranno permessi = [] dopo il deploy dei gate\n` +
+        'e nessun accesso alla piattaforma. Risolvere prima di procedere.\n' +
+        '═'.repeat(80),
+    );
+    process.exitCode = 1;
+  }
 }
 
 main()

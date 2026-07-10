@@ -88,6 +88,8 @@ Totale: 22 permessi per un dealer, 30 per un'agenzia, 33 chiavi distinte.
 
 **Revisione del 2026-07-10.** `sede.iban` è uscito dai delegabili. Il form della sede mostra IBAN e soglia solo al proprietario (`canEditPaymentSettings`, preesistente), quindi il permesso sarebbe stato una casella spuntabile e inerte. L'IBAN della sede è ora un potere del titolare, come l'IBAN dell'azienda: `updateSedeAction` lo protegge con un controllo esplicito su `isOwner`.
 
+La **soglia di auto-payout** resta invece delegabile, ma da un'altra strada: il form della sede non la mostra a un delegato, mentre la pagina Wallet sì, a chi ha `wallet.soglia`. È il comportamento di oggi, conservato. La soglia decide *quando* scatta il payout, non *dove* finiscono i soldi.
+
 `inbox.gestisci` copre sia accetta sia rifiuta: sono le due facce della stessa decisione e un operatore che può solo accettare non è una configurazione sensata.
 
 ### Dipendenze
@@ -116,7 +118,7 @@ Riguardano l'entità legale, non l'operatività. Non compaiono nella matrice.
 | Firmare il mandato di fatturazione (OTP) | `wallet/mandato-actions.ts:29,53` |
 | Scaricare il rendiconto della madre | `api/wallet/rendiconto` |
 | Modificare l'anagrafica azienda (P.IVA, IBAN azienda) | `profilo/azienda/actions.ts:32` |
-| **Modificare l'IBAN e la soglia di una sede** | `sedi/actions.ts` (`isOwner`), `canEditPaymentSettings` |
+| **Modificare l'IBAN di una sede** | `sedi/actions.ts` (`isOwner`) |
 | Vedere wallet affiliazione e classifica sedi | `wallet/page.tsx`, `affiliazione/page.tsx` |
 
 ### Mai un permesso

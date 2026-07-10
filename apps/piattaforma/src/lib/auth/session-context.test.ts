@@ -11,6 +11,8 @@ vi.mock('@pv/db', () => ({
   prisma: {
     sede: { findMany: vi.fn() },
     userSede: { findMany: vi.fn() },
+    user: { findUnique: vi.fn() },
+    company: { findUnique: vi.fn() },
   },
 }));
 
@@ -19,6 +21,8 @@ import { getSessionContext, SEDE_COOKIE } from './session-context';
 
 const sedeFindMany = vi.mocked(prisma.sede.findMany);
 const userSedeFindMany = vi.mocked(prisma.userSede.findMany);
+const userFindUnique = vi.mocked(prisma.user.findUnique);
+const companyFindUnique = vi.mocked(prisma.company.findUnique);
 
 const sedeA = { id: 'a', nome: 'Sede A', type: 'AGENZIA' as const };
 const sedeB = { id: 'b', nome: 'Sede B', type: 'AGENZIA' as const };
@@ -34,6 +38,8 @@ beforeEach(() => {
   setCookie(null);
   sedeFindMany.mockResolvedValue([sedeA, sedeB] as never);
   userSedeFindMany.mockResolvedValue([] as never);
+  userFindUnique.mockResolvedValue({ permessi: [] } as never);
+  companyFindUnique.mockResolvedValue({ type: 'AGENZIA' } as never);
 });
 
 describe('getSessionContext', () => {

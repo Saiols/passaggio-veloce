@@ -8,7 +8,15 @@ export function vede(ctx: NavCtx, p?: Permesso): boolean {
   return ctx.isOwner || ctx.permessi.includes(p);
 }
 
-/** Scarta le voci negate, poi i gruppi rimasti vuoti. Non muta l'input. */
+/**
+ * Scarta le voci negate, poi i gruppi rimasti vuoti. Non muta l'input.
+ *
+ * Se i gruppi hanno voci eterogenee (alcune senza `permesso`, altre con
+ * `permesso` diversi tra un gruppo e l'altro — il caso normale di una
+ * sidebar), passa `T` esplicitamente: `filtraGruppi<MioNavItem>([...], ctx)`.
+ * Senza, `tsc` non riesce a inferire un `T` unico su tutto l'argomento e va in
+ * errore (limite di inferenza, non un bug della funzione).
+ */
 export function filtraGruppi<T extends { permesso?: Permesso }>(
   gruppi: { label: string; items: T[] }[],
   ctx: NavCtx,

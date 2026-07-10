@@ -13,7 +13,7 @@ Oggi un utente azienda può fare o non fare una cosa in base a due soli assi:
 
 Non esiste modo di dire «questo operatore vede le fatture ma non le scarica». Ogni capability è hardcodata nei gate (`canEditSedeSettings`, `canManageSedeTeam`, controlli su `companyType`), quindi due operatori della stessa sede hanno per forza gli stessi poteri.
 
-Da questa rigidità discende anche un buco reale: in `app/blocco-pagamento/actions.ts:53` l'unico controllo è `companyType === 'AGENZIA'`, perciò **qualunque** utente di un'agenzia può cambiare l'IBAN aziendale e ricreare il mandato SEPA.
+> **Rettifica del 2026-07-10.** La prima stesura di questa spec affermava che «qualunque utente di un'agenzia può cambiare l'IBAN aziendale». Era vero al momento dell'esplorazione del codice, ma è stato **corretto poche ore prima** dalla spec `2026-07-10-iban-solo-super-admin-design.md` (commit `57ded18`, `55a496a`, `346f282`), che riserva l'IBAN al solo proprietario. Questa feature **non** deve riaprire quel buco: vedi «Rapporto con la spec IBAN» più sotto.
 
 ## Obiettivo
 
@@ -68,7 +68,7 @@ Chiavi stringa `area.azione`, definite in codice come unica fonte di verità e f
 | `pratiche.annulla` | annulla una pratica non ancora firmata |
 | `pratiche.valuta` | valuta l'agenzia a pratica firmata |
 
-### Solo agenzia (11)
+### Solo agenzia (9)
 
 | Chiave | Significato |
 |---|---|
@@ -78,13 +78,23 @@ Chiavi stringa `area.azione`, definite in codice come unica fonte di verità e f
 | `inbox.view` | vede le assegnazioni in arrivo |
 | `inbox.gestisci` | accetta o rifiuta un'assegnazione |
 | `addebiti.view` | storico delle fee addebitate |
-| `pagamenti.ritenta` | ritenta un addebito fallito |
-| `pagamenti.iban` | **cambia IBAN e ricrea il mandato SEPA** |
 | `orari.view` | vede gli orari di apertura |
 | `orari.edit` | modifica gli orari di apertura |
 | `feedback.view` | valutazioni ricevute |
 
-Totale: 22 permessi per un dealer, 30 per un'agenzia, 33 chiavi distinte.
+### Rapporto con la spec IBAN (`2026-07-10-iban-solo-super-admin-design.md`)
+
+Quella spec è **approvata e prevale**. Le sue decisioni tolgono tre chiavi da questo catalogo, perché sarebbero state caselle spuntabili e inerti:
+
+| Chiave ritirata | Perché |
+|---|---|
+| `sede.iban` | D1/D2: IBAN e soglia della sede sono owner-only; `updateSedeAction` li **omette** dai `data` per i non-proprietari |
+| `pagamenti.iban` | D1/D4: su `/blocco-pagamento` l'IBAN è del solo titolare (`isOwner`) |
+| `pagamenti.ritenta` | D4: «Riprova l'addebito» **resta a tutti** — non tocca IBAN né importi |
+
+Il principio è lo stesso applicato a `team.*` per gli operatori: **un permesso che l'utente non può esercitare è peggio di un permesso assente.**
+
+Totale: 22 permessi per un dealer, 28 per un'agenzia, 31 chiavi distinte.
 
 **Revisione del 2026-07-10.** `sede.iban` è uscito dai delegabili. Il form della sede mostra IBAN e soglia solo al proprietario (`canEditPaymentSettings`, preesistente), quindi il permesso sarebbe stato una casella spuntabile e inerte. L'IBAN della sede è ora un potere del titolare, come l'IBAN dell'azienda: `updateSedeAction` lo protegge con un controllo esplicito su `isOwner`.
 
@@ -106,7 +116,7 @@ Un permesso figlio implica il padre. La UI le risolve da sola, il server rifiuta
 
 Dopo la rimozione di `sede.iban` non esiste più alcuna catena a tre livelli: `conDipendenze` resta transitiva, ma nessun dato del catalogo la esercita.
 
-`pagamenti.ritenta` e `pagamenti.iban` non hanno dipendenze: la pagina `/blocco-pagamento` è raggiungibile da chiunque quando l'agenzia è bloccata. Chi non ha i permessi la vede in sola lettura, con l'invito a contattare il titolare.
+`/blocco-pagamento` non ha permessi propri: la pagina è raggiungibile da chiunque quando l'agenzia è bloccata, il bottone «Riprova l'addebito» è di tutti, e il form IBAN compare al solo titolare. È la decisione D4 della spec IBAN.
 
 ### Poteri owner-only, non delegabili
 
@@ -118,7 +128,8 @@ Riguardano l'entità legale, non l'operatività. Non compaiono nella matrice.
 | Firmare il mandato di fatturazione (OTP) | `wallet/mandato-actions.ts:29,53` |
 | Scaricare il rendiconto della madre | `api/wallet/rendiconto` |
 | Modificare l'anagrafica azienda (P.IVA, IBAN azienda) | `profilo/azienda/actions.ts:32` |
-| **Modificare l'IBAN di una sede** | `sedi/actions.ts` (`isOwner`) |
+| **Modificare l'IBAN e la soglia di una sede** | `sedi/actions.ts` (omissione dai `data` se non owner) |
+| **Modificare l'IBAN dell'agenzia da `/blocco-pagamento`** | `blocco-pagamento/actions.ts` (`isOwner`) |
 | Vedere wallet affiliazione e classifica sedi | `wallet/page.tsx`, `affiliazione/page.tsx` |
 
 ### Mai un permesso
@@ -141,7 +152,7 @@ Definiti in codice, dipendono da `companyType`. Sono un punto di partenza: appen
 
 - `OPERATORE_BASE`: `pratiche.view`, `pratiche.processa`, `pratiche.download`, `inbox.view`, `inbox.gestisci`, `notifiche.view`
 - `OPERATORE_COMPLETO`: base + `pratiche.firma`, `pratiche.segnala`, `fatture.view`, `fatture.download`, `wallet.view`, `addebiti.view`, `affiliazione.view`, `feedback.view`, `orari.view`
-- `ADMIN_SEDE`: tutti e 30
+- `ADMIN_SEDE`: tutti e 28
 
 ## Modello dati
 
@@ -266,14 +277,13 @@ Accordion per macro-categoria con selettore di preset in testa. La tabella a due
 
 ### Le azioni sensibili si dichiarano
 
-Cinque caselle portano un'etichetta che ne spiega la conseguenza.
+Quattro caselle portano un'etichetta che ne spiega la conseguenza.
 
 | Permesso | Etichetta |
 |---|---|
 | `pratiche.firma` | accredita il wallet e genera la fattura |
 | `pratiche.segnala` | apre una penale di €25 al broker |
 | `wallet.payout` | preleva denaro reale dal wallet |
-| `pagamenti.iban` | cambia il conto addebitato |
 | `team.permessi` | permette di assegnare permessi ad altri |
 
 I permessi `team.*` sono **disabilitati** quando il ruolo di sede scelto è Operatore: `manageableSedi()` filtra sul ruolo, quindi concederli non produrrebbe alcun effetto. Sopra la categoria compare «I permessi Team richiedono il ruolo Admin di sede».

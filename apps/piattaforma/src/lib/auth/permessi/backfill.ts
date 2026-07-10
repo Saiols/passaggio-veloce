@@ -87,3 +87,34 @@ export function permessiBackfill(
   if (ruoloSede === 'ADMIN_SEDE') return permessiPerTipo(t);
   return conDipendenze(OPERATORE[t]);
 }
+
+/**
+ * Esito della validazione di un invito PENDING per il backfill.
+ *
+ * Non riusa `decidiMembership`: per un `User` già creato il ruolo si legge da
+ * una membership `UserSede` (una riga per utente, l'invariante che
+ * `decidiMembership` verifica); per un `Invitation` non c'è alcuna membership
+ * — sede e ruolo sono due CAMPI dell'invito stesso (`sedeId`, `ruoloSede`),
+ * valorizzati al momento dell'invio (`createInvitationAction`). Sono forme
+ * diverse dello stesso invariante ("un ruolo di sede valido prima di
+ * calcolare i permessi"), quindi la decisione resta separata.
+ *
+ * `sedeId` nullo è l'invito legacy "a livello madre" (pre multi-sede, o
+ * un'infarinatura di dati) — non si indovina la sede, si salta. `ruoloSede`
+ * è tipizzato non-null nello schema con default `OPERATORE`, quindi in pratica
+ * non manca mai; il controllo resta per difesa in profondità (stesso principio
+ * di `decidiMembership` col "ruolo di sede sconosciuto") e per accettare
+ * l'input come query pura, senza legarlo alla riga esatta del DB.
+ */
+export function decidiInvito(inv: {
+  sedeId: string | null;
+  ruoloSede: string | null | undefined;
+}): DecisioneMembership {
+  if (!inv.sedeId) {
+    return { azione: 'salta', motivo: 'invito legacy senza sedeId' };
+  }
+  if (inv.ruoloSede === 'ADMIN_SEDE' || inv.ruoloSede === 'OPERATORE') {
+    return { azione: 'scrivi', ruolo: inv.ruoloSede };
+  }
+  return { azione: 'salta', motivo: `ruoloSede mancante o sconosciuto: ${inv.ruoloSede}` };
+}

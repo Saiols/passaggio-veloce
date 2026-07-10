@@ -305,10 +305,19 @@ Additiva, in tre passi ordinati, senza downtime.
    - **owner** → array vuoto (non viene mai letto);
    - **admin di sede** → tutti i permessi del suo `companyType`;
    - **operatore** → ciò che può fare oggi (sotto), **meno** `pagamenti.iban` e `pagamenti.ritenta`;
-   - **utenti PV** (`companyId = null`) → array vuoto.
+   - **utenti PV** (`companyId = null`) → array vuoto;
+   - **inviti `PENDING` non scaduti** creati prima di questo backfill (`permessi = []`, il default dello
+     schema) → stesso calcolo dell'operatore/admin di sede, usando `sedeId`/`ruoloSede` **dell'invito**
+     (non c'è una membership da leggere: l'utente non esiste ancora). Senza questo passo, un invito già
+     `PENDING` al momento della migration viene copiato fedelmente da `acceptInvitationAction` e l'utente
+     nasce con **zero permessi**: fail-safe (sotto-privilegio, non escalation), ma è una persona che non
+     riesce a lavorare e nessuno capisce perché. Un invito con `sedeId` nullo o `ruoloSede` non
+     riconosciuto (invito legacy) si salta, come per un utente senza membership di sede valida. Un invito
+     già con `permessi` non vuoti (creato dal codice nuovo, con `permessiPerNuovoUtente`) non viene
+     toccato — il backfill è idempotente rispetto a chi arriva dopo il deploy del codice.
 3. Deploy del codice con i gate attivi.
 
-Invertire 2 e 3 lascerebbe ogni operatore senza poteri per la durata del deploy. Sul flusso Vercel del progetto i due passi vanno coordinati a mano.
+Invertire 2 e 3 lascerebbe ogni operatore (e ogni invito pendente accettato nel frattempo) senza poteri per la durata del deploy. Sul flusso Vercel del progetto i due passi vanno coordinati a mano.
 
 **Backfill operatore dealer:** `pratiche.view`, `pratiche.create`, `pratiche.annulla`, `pratiche.valuta`, `pratiche.download`, `fatture.view`, `fatture.download`, `fatture.xml`, `wallet.view`, `affiliazione.view`, `notifiche.view`.
 
@@ -325,8 +334,8 @@ Ogni permesso introdotto in futuro nascerà spento per tutti tranne l'owner. È 
 - `check.test.ts` — puro: `can()`, le quattro regole anti-escalation, fail-closed su chiave ignota.
 - `catalogo.test.ts` — ogni preset contiene solo chiavi valide per il suo `companyType`; ogni dipendenza punta a una chiave esistente.
 - Estensione degli `*.authz.test.ts` esistenti (`team`, `sedi`, `orari`, `wallet`, `pratiche`) con il caso «utente senza permesso → rifiuto».
-- `backfill.test.ts` — un operatore agenzia esistente riceve esattamente il set atteso, senza `pagamenti.iban`.
-- **Guardia anti-drift**: un test confronta gli export reali degli `actions.ts` delle aree azienda con `mappa-enforcement.ts`. Se qualcuno aggiunge una server action e non la classifica, il test è rosso. Serve a rendere rumorosa l'unica omissione che in un sistema di permessi non ti accorgi di aver fatto.
+- `backfill.test.ts` — un operatore agenzia esistente riceve esattamente il set atteso, senza `pagamenti.iban`; `decidiInvito` (puro, come `decidiMembership` ma sui campi diretti dell'`Invitation`) copre invito valido → set atteso, `sedeId` nullo → salta, `ruoloSede` mancante/sconosciuto → salta.
+- **Guardia anti-drift**: un test enumera dal filesystem (non dalle chiavi già note) ogni modulo `'use server'` sotto `src/app`/`src/lib` (perimetro azienda, escluso `admin/**` e `(auth)/**`) e lo confronta con `mappa-enforcement.ts` — un `actions.ts` interamente nuovo lo fa rosso, non solo una action mancante in un file già mappato. Gemella `mappa-api.ts`/`mappa-api.test.ts` per le 33 `route.ts` sotto `src/app/api`.
 - Verifica manuale end-to-end: operatore con solo `fatture.view` → nessun bottone di download, e `GET /api/fatturazione/<id>/pdf` risponde `403`.
 
 ## Fuori scope

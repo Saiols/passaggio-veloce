@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { permessiBackfill, decidiMembership } from './backfill';
+import { permessiBackfill, decidiMembership, decidiInvito } from './backfill';
 import { permessiPerTipo, dipendenzaDi } from './catalogo';
 
 describe('permessiBackfill', () => {
@@ -104,5 +104,40 @@ describe('decidiMembership', () => {
       { ruolo: 'ADMIN_SEDE' },
     ]);
     expect(result).toEqual({ azione: 'salta', motivo: '3 membership di sede (atteso 1)' });
+  });
+});
+
+describe('decidiInvito', () => {
+  it('sedeId + ruoloSede validi → scrivi, e il permessiBackfill risultante è quello atteso (0 permessi in ingresso)', () => {
+    const decisione = decidiInvito({ sedeId: 'sede-1', ruoloSede: 'OPERATORE' });
+    expect(decisione).toEqual({ azione: 'scrivi', ruolo: 'OPERATORE' });
+    if (decisione.azione !== 'scrivi') throw new Error('unreachable');
+    // Un invito PENDING pre-migrazione arriva con `permessi: []` (default dello
+    // schema): il backfill lo sostituisce esattamente con questo set, lo
+    // stesso già validato per gli utenti in permessiBackfill (sopra).
+    const permessi = permessiBackfill('AGENZIA', decisione.ruolo);
+    expect(permessi.sort()).toEqual(permessiBackfill('AGENZIA', 'OPERATORE').sort());
+  });
+
+  it('sedeId + ruoloSede ADMIN_SEDE → scrivi con tutti i permessi del companyType', () => {
+    const decisione = decidiInvito({ sedeId: 'sede-1', ruoloSede: 'ADMIN_SEDE' });
+    expect(decisione).toEqual({ azione: 'scrivi', ruolo: 'ADMIN_SEDE' });
+    if (decisione.azione !== 'scrivi') throw new Error('unreachable');
+    expect(permessiBackfill('DEALER', decisione.ruolo).sort()).toEqual(permessiPerTipo('DEALER').sort());
+  });
+
+  it('sedeId nullo (invito legacy) → salta con motivo "invito legacy senza sedeId"', () => {
+    const result = decidiInvito({ sedeId: null, ruoloSede: 'OPERATORE' });
+    expect(result).toEqual({ azione: 'salta', motivo: 'invito legacy senza sedeId' });
+  });
+
+  it('ruoloSede assente (undefined) → salta, ramo di difesa in profondità', () => {
+    const result = decidiInvito({ sedeId: 'sede-1', ruoloSede: undefined });
+    expect(result).toEqual({ azione: 'salta', motivo: 'ruoloSede mancante o sconosciuto: undefined' });
+  });
+
+  it('ruoloSede sconosciuto → salta con motivo esplicito', () => {
+    const result = decidiInvito({ sedeId: 'sede-1', ruoloSede: 'GUEST' });
+    expect(result).toEqual({ azione: 'salta', motivo: 'ruoloSede mancante o sconosciuto: GUEST' });
   });
 });

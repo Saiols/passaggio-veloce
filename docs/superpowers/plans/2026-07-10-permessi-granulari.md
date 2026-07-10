@@ -16,6 +16,9 @@
 
 - **Node 22.15.0.** Dopo un riavvio la shell torna a Node 16: lanciare `nvm use 22.15.0` prima di qualunque comando pnpm.
 - **Test:** `pnpm --filter piattaforma exec vitest run <path>` per un singolo file, `pnpm --filter piattaforma test` per tutta la suite.
+- **`vitest.config.ts` raccoglie solo `src/**/*.test.ts` con `environment: 'node'`.** Un file `.test.tsx` verrebbe ignorato in silenzio. Niente component test: la logica sta in moduli puri. Non toccare la config.
+- **`__dirname` non esiste** nei test (ESM): usare `path.dirname(fileURLToPath(import.meta.url))`.
+- **`Permesso` è una union letterale**, non `string`. Un refuso in un gate non deve compilare.
 - **Typecheck:** `pnpm typecheck` funziona solo a cache calda (con `tsbuildinfo`). A cache fredda `tsc` va in stack overflow e produce falsi errori Prisma: non fidarsi di un typecheck lanciato da zero.
 - **DB locale:** container `postgres:17-alpine` (`pnpm db:up`), è una copia di prod. Le password del seed **non** valgono.
 - **Migration:** `pnpm --filter @pv/db db:migrate` in locale; in prod `db:deploy` a mano.
@@ -36,7 +39,9 @@
 | `apps/piattaforma/src/lib/auth/permessi/check.ts` | `can()`, `assignablePermessi()`, `validaPermessi()` |
 | `apps/piattaforma/src/lib/auth/permessi/guard.ts` | `requirePermesso()`, `assertPermesso()` (`server-only`) |
 | `apps/piattaforma/src/lib/auth/permessi/mappa-enforcement.ts` | ogni server action azienda → permesso che la protegge |
-| `apps/piattaforma/src/components/permessi/matrice-permessi.tsx` | la matrice a accordion, client component |
+| `apps/piattaforma/src/components/permessi/nav-filter.ts` | filtro puro delle voci di sidebar |
+| `apps/piattaforma/src/components/permessi/matrice-logic.ts` | cascata delle dipendenze della matrice, pura |
+| `apps/piattaforma/src/components/permessi/matrice-permessi.tsx` | la matrice a accordion, guscio client |
 | `apps/piattaforma/scripts/backfill-permessi.ts` | script one-shot di popolamento |
 
 **Modificati**
@@ -73,6 +78,7 @@ File `apps/piattaforma/src/lib/auth/permessi/catalogo.test.ts`:
 import { describe, it, expect } from 'vitest';
 import {
   CATALOGO,
+  PERMESSI,
   catalogoPerTipo,
   permessiPerTipo,
   isPermesso,
@@ -102,6 +108,13 @@ describe('catalogo permessi', () => {
   it('ogni chiave del catalogo è unica', () => {
     const chiavi = CATALOGO.flatMap((c) => c.permessi.map((p) => p.chiave));
     expect(new Set(chiavi).size).toBe(chiavi.length);
+  });
+
+  it('PERMESSI e CATALOGO non divergono', () => {
+    // `Permesso` deriva dalla tupla PERMESSI; il CATALOGO è la sua descrizione.
+    // Se le due liste si separano, il tipo mente. Questo test lo impedisce.
+    const chiavi = CATALOGO.flatMap((c) => c.permessi.map((p) => p.chiave));
+    expect([...chiavi].sort()).toEqual([...PERMESSI].sort());
   });
 
   it('ogni dipendenza punta a una chiave esistente e dello stesso companyType', () => {
@@ -170,14 +183,60 @@ File `apps/piattaforma/src/lib/auth/permessi/catalogo.ts`. Nessun `server-only`:
 
 export type CompanyTypeP = 'DEALER' | 'AGENZIA';
 
+/**
+ * Le 30 chiavi valide. `Permesso` deriva da qui, non dal CATALOGO: le voci senza
+ * `soloPer` non hanno la proprietà sotto `as const`, e ogni accesso diventerebbe
+ * un `'soloPer' in p`. Il test «PERMESSI e CATALOGO non divergono» tiene allineate
+ * le due liste.
+ */
+export const PERMESSI = [
+  'pratiche.view',
+  'pratiche.download',
+  'pratiche.create',
+  'pratiche.annulla',
+  'pratiche.valuta',
+  'pratiche.processa',
+  'pratiche.firma',
+  'pratiche.segnala',
+  'inbox.view',
+  'inbox.gestisci',
+  'wallet.view',
+  'wallet.payout',
+  'wallet.soglia',
+  'fatture.view',
+  'fatture.download',
+  'fatture.xml',
+  'addebiti.view',
+  'pagamenti.ritenta',
+  'pagamenti.iban',
+  'affiliazione.view',
+  'feedback.view',
+  'sede.view',
+  'sede.edit',
+  'sede.iban',
+  'orari.view',
+  'orari.edit',
+  'team.view',
+  'team.invita',
+  'team.crea',
+  'team.modifica',
+  'team.reset_password',
+  'team.disabilita',
+  'team.permessi',
+  'notifiche.view',
+] as const;
+
+/** Un refuso in un gate — `requirePermesso('wallet.payuot')` — non compila. */
+export type Permesso = (typeof PERMESSI)[number];
+
 export type PermessoDef = {
-  chiave: string;
+  chiave: Permesso;
   etichetta: string;
   /** Mostrata accanto alla casella: spiega la conseguenza di un'azione sensibile. */
   nota?: string;
   sensibile?: boolean;
-  /** Permesso padre: concederlo implica concedere il padre. */
-  richiede?: string;
+  /** Permesso padre: concederlo implica concedere il padre. Tipizzato: niente refusi. */
+  richiede?: Permesso;
   /** Se assente, il permesso vale per entrambi i companyType. */
   soloPer?: CompanyTypeP;
 };
@@ -322,12 +381,10 @@ const TUTTE_LE_DEF: PermessoDef[] = CATALOGO.flatMap((c) =>
   c.permessi.map((p) => ({ ...p, soloPer: p.soloPer ?? c.soloPer })),
 );
 
-/** Le chiavi valide. Volutamente `string`: vivono anche nel DB. Vedi la nota finale del piano. */
-export type Permesso = string;
+const BY_CHIAVE = new Map<string, PermessoDef>(TUTTE_LE_DEF.map((p) => [p.chiave, p]));
 
-const BY_CHIAVE = new Map(TUTTE_LE_DEF.map((p) => [p.chiave, p]));
-
-export function isPermesso(x: string): boolean {
+/** Narrowing al confine: righe del DB e campi dei form arrivano come `string`. */
+export function isPermesso(x: string): x is Permesso {
   return BY_CHIAVE.has(x);
 }
 
@@ -371,7 +428,7 @@ export function figliDi(p: Permesso): Permesso[] {
 - [ ] **Step 4: Lanciare il test e verificare che passi**
 
 Run: `pnpm --filter piattaforma exec vitest run src/lib/auth/permessi/catalogo.test.ts`
-Expected: PASS, 8 test.
+Expected: PASS, 9 test.
 
 Se il conteggio 23/31 fallisce, contare: dealer = pratiche 5 + wallet 3 + fatture 3 + crescita 1 + sede 3 + team 7 + notifiche 1. Agenzia = pratiche 5 + inbox 2 + wallet 3 + fatture 3 + pagamenti 3 + crescita 2 + sede 5 + team 7 + notifiche 1.
 
@@ -582,15 +639,18 @@ File `apps/piattaforma/src/lib/auth/permessi/check.test.ts`:
 ```ts
 import { describe, it, expect } from 'vitest';
 import { can, assignablePermessi, validaPermessi, permessiPerNuovoUtente, type PermessiCtx } from './check';
-import { permessiPerTipo } from './catalogo';
+import { permessiPerTipo, type Permesso } from './catalogo';
 import { preset } from './preset';
 
 const owner: PermessiCtx = { userId: 'owner1', isOwner: true, permessi: new Set() };
-const adminSede = (permessi: string[]): PermessiCtx => ({
+const adminSede = (permessi: Permesso[]): PermessiCtx => ({
   userId: 'admin1',
   isOwner: false,
   permessi: new Set(permessi),
 });
+
+/** Una chiave rimossa dal catalogo ma ancora presente su una riga vecchia del DB. */
+const OBSOLETO = 'pratiche.tuttofare' as Permesso;
 
 describe('can', () => {
   it("l'owner può tutto anche con il set vuoto", () => {
@@ -604,8 +664,10 @@ describe('can', () => {
     expect(can(ctx, 'fatture.download')).toBe(false);
   });
 
-  it('una chiave sconosciuta è sempre negata (fail-closed)', () => {
-    expect(can(adminSede(['pratiche.tuttofare']), 'pratiche.tuttofare')).toBe(false);
+  it('una chiave non più nel catalogo è negata anche se il DB la contiene (fail-closed)', () => {
+    // Un refuso scritto a mano non compila più: `can(ctx, 'wallet.payuot')` è un
+    // errore di tipo. Resta il caso runtime: una riga vecchia del DB.
+    expect(can(adminSede([OBSOLETO]), OBSOLETO)).toBe(false);
   });
 });
 
@@ -717,10 +779,14 @@ import { preset } from './preset';
 export type PermessiCtx = {
   userId: string;
   isOwner: boolean;
-  permessi: Set<string>;
+  permessi: Set<Permesso>;
 };
 
-/** Owner: sempre vero. Altrimenti la chiave dev'essere nel set. Fail-closed. */
+/**
+ * Owner: sempre vero. Altrimenti la chiave dev'essere nel set E nel catalogo.
+ * Il secondo controllo non è ridondante: difende dalle righe vecchie del DB, in
+ * cui può essere rimasta una chiave che il catalogo non conosce più.
+ */
 export function can(ctx: PermessiCtx, p: Permesso): boolean {
   if (ctx.isOwner) return true;
   return isPermesso(p) && ctx.permessi.has(p);
@@ -758,24 +824,27 @@ export function validaPermessi(args: {
     return { ok: false, error: 'Non hai il permesso di assegnare permessi ad altri' };
   }
 
-  const validi = new Set(permessiPerTipo(companyType));
-  const assegnabili = new Set(assignablePermessi(ctx, companyType));
+  const validi = new Set<Permesso>(permessiPerTipo(companyType));
+  const assegnabili = new Set<Permesso>(assignablePermessi(ctx, companyType));
   const set = [...new Set(richiesti)].sort();
 
+  // `richiesti` arriva da un form: è `string[]`. `isPermesso` lo restringe.
+  const puliti: Permesso[] = [];
   for (const p of set) {
     if (!isPermesso(p)) return { ok: false, error: `Permesso sconosciuto: ${p}` };
     if (!validi.has(p)) return { ok: false, error: `Permesso non valido per questa azienda: ${p}` };
     if (!assegnabili.has(p)) {
       return { ok: false, error: `Non puoi concedere un permesso che non hai: ${p}` };
     }
+    puliti.push(p);
   }
-  for (const p of set) {
+  for (const p of puliti) {
     const dip = dipendenzaDi(p);
-    if (dip && !set.includes(dip)) {
+    if (dip && !puliti.includes(dip)) {
       return { ok: false, error: `Il permesso ${p} richiede ${dip}` };
     }
   }
-  return { ok: true, permessi: set };
+  return { ok: true, permessi: puliti };
 }
 
 /**
@@ -1095,8 +1164,10 @@ Expected: una riga per utente non-owner, con conteggio 11 per gli operatori deal
 
 ```bash
 pnpm --filter piattaforma exec tsx scripts/backfill-permessi.ts
-docker compose exec -T db psql -U postgres -d passaggio_veloce -c "SELECT role, cardinality(permessi) AS n, count(*) FROM \"User\" GROUP BY 1,2 ORDER BY 1,2;"
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c "SELECT role, cardinality(permessi) AS n, count(*) FROM \"User\" GROUP BY 1,2 ORDER BY 1,2;"
 ```
+
+Il servizio si chiama `postgres` e l'utente è `pv` (vedi `docker-compose.yml`).
 
 Expected: gli `ADMIN_AZIENDA` hanno `n = 0`, gli `UTENTE_AZIENDA` hanno `n` in {11, 16, 23, 31}.
 
@@ -1225,7 +1296,7 @@ In `apps/piattaforma/src/lib/auth/session-context.ts`.
 Aggiungere all'import di riga 4-6:
 
 ```ts
-import type { CompanyTypeP } from '@/lib/auth/permessi/catalogo';
+import { isPermesso, type CompanyTypeP, type Permesso } from '@/lib/auth/permessi/catalogo';
 ```
 
 Estendere il type (dopo `membershipRuoli`, riga 40):
@@ -1234,20 +1305,20 @@ Estendere il type (dopo `membershipRuoli`, riga 40):
   /** Tipo azienda: filtra il catalogo dei permessi. */
   companyType: CompanyTypeP | undefined;
   /** Capability granulari. Vuoto per l'owner: `can()` gli dà tutto comunque. */
-  permessi: Set<string>;
+  permessi: Set<Permesso>;
 ```
 
 Nel ramo `!companyId` (righe 56-66), aggiungere ai campi di ritorno:
 
 ```ts
       companyType: undefined,
-      permessi: new Set<string>(),
+      permessi: new Set<Permesso>(),
 ```
 
-Sostituire il `Promise.all` di riga 68 con:
+Sostituire il `Promise.all` di riga 68 con — quattro query in parallelo, non tre più una in coda:
 
 ```ts
-  const [companySedi, memberships, dbUser] = await Promise.all([
+  const [companySedi, memberships, dbUser, company] = await Promise.all([
     prisma.sede.findMany({
       where: { companyId, deletedAt: null },
       select: { id: true, nome: true, type: true },
@@ -1261,12 +1332,8 @@ Sostituire il `Promise.all` di riga 68 con:
     isOwner
       ? Promise.resolve(null)
       : prisma.user.findUnique({ where: { id: user.id }, select: { permessi: true } }),
+    prisma.company.findUnique({ where: { id: companyId }, select: { type: true } }),
   ]);
-
-  const company = await prisma.company.findUnique({
-    where: { id: companyId },
-    select: { type: true },
-  });
 ```
 
 Nel `return` finale (riga 93):
@@ -1281,7 +1348,8 @@ Nel `return` finale (riga 93):
     scopeIds,
     membershipRuoli,
     companyType: (company?.type ?? undefined) as CompanyTypeP | undefined,
-    permessi: new Set(dbUser?.permessi ?? []),
+    // Il confine col DB: una chiave rimossa dal catalogo non entra nel set.
+    permessi: new Set((dbUser?.permessi ?? []).filter(isPermesso)),
   };
 ```
 
@@ -2142,63 +2210,128 @@ git commit -m "fix(permessi): chiude il buco IBAN agenzia e mette i gate sui dow
 ### Task 10: Sidebar e navigazione
 
 **Files:**
+- Create: `apps/piattaforma/src/components/permessi/nav-filter.ts`
+- Test: `apps/piattaforma/src/components/permessi/nav-filter.test.ts`
 - Modify: `apps/piattaforma/src/components/app-shell.tsx`
 - Modify: `apps/piattaforma/src/components/broker/broker-shell.tsx`
 - Modify: `apps/piattaforma/src/components/agenzia/agenzia-shell.tsx`
-- Test: `apps/piattaforma/src/components/broker/broker-shell.test.tsx`
 
 **Interfaces:**
-- Consumes: `SessionContext.permessi`, `SessionContext.isOwner`.
-- Produces: le shell accettano `permessi: string[]` e `isOwner: boolean` al posto di `canManageTeam`.
+- Consumes: `SessionContext.permessi`, `SessionContext.isOwner`; `type Permesso` da `@/lib/auth/permessi/catalogo`.
+- Produces:
+  - `type NavCtx = { isOwner: boolean; permessi: readonly Permesso[] }`
+  - `vede(ctx: NavCtx, p?: Permesso): boolean` — senza permesso richiesto è sempre `true`
+  - `filtraGruppi<T extends { permesso?: Permesso }>(gruppi: { label: string; items: T[] }[], ctx: NavCtx): { label: string; items: T[] }[]` — scarta le voci negate e i gruppi rimasti vuoti
 
-`permessi` viaggia come `string[]` e non come `Set`: attraversa il boundary server→client, e un array è il formato che il resto del codebase già usa per i props.
+Il repo non ha component test e `vitest.config.ts` raccoglie solo `src/**/*.test.ts` con `environment: 'node'`: la logica del filtro vive in un modulo puro, le shell restano JSX dichiarativo. `filtraGruppi` è generico sulla forma della voce, così si testa senza icone né React.
+
+`permessi` viaggia come array e non come `Set`: attraversa il boundary server→client, e un array è il formato che il resto del codebase già usa per i props.
 
 - [ ] **Step 1: Scrivere il test che fallisce**
 
-File `apps/piattaforma/src/components/broker/broker-shell.test.tsx`:
+File `apps/piattaforma/src/components/permessi/nav-filter.test.ts`:
 
-```tsx
+```ts
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { BrokerShell } from './broker-shell';
+import { vede, filtraGruppi, type NavCtx } from './nav-filter';
 
-const session = { user: { name: 'Ann', email: 'a@y.it', role: 'UTENTE_AZIENDA', companyType: 'DEALER' } };
+const operatore: NavCtx = { isOwner: false, permessi: ['pratiche.view', 'fatture.view'] };
+const owner: NavCtx = { isOwner: true, permessi: [] };
 
-describe('BrokerShell — voci filtrate per permesso', () => {
-  it('senza wallet.view la voce Wallet non compare', () => {
-    render(
-      <BrokerShell session={session} isOwner={false} permessi={['pratiche.view']}>
-        <div />
-      </BrokerShell>,
-    );
-    expect(screen.getByText('Pratiche')).toBeTruthy();
-    expect(screen.queryByText('Wallet')).toBeNull();
-    expect(screen.queryByText('Fatture')).toBeNull();
+describe('vede', () => {
+  it('una voce senza permesso richiesto è sempre visibile', () => {
+    expect(vede(operatore, undefined)).toBe(true);
   });
 
-  it("l'owner vede tutto, anche col set vuoto", () => {
-    render(
-      <BrokerShell session={{ user: { ...session.user, role: 'ADMIN_AZIENDA' } }} isOwner permessi={[]}>
-        <div />
-      </BrokerShell>,
-    );
-    for (const v of ['Wallet', 'Fatture', 'Sedi', 'Team']) expect(screen.getByText(v)).toBeTruthy();
+  it('una voce col permesso posseduto è visibile', () => {
+    expect(vede(operatore, 'pratiche.view')).toBe(true);
+  });
+
+  it('una voce col permesso mancante è nascosta', () => {
+    expect(vede(operatore, 'wallet.view')).toBe(false);
+  });
+
+  it("l'owner vede tutto, anche con l'elenco vuoto", () => {
+    expect(vede(owner, 'wallet.payout')).toBe(true);
+  });
+});
+
+describe('filtraGruppi', () => {
+  const gruppi = [
+    { label: 'Panoramica', items: [{ href: '/dashboard' }] },
+    {
+      label: 'Finanze',
+      items: [
+        { href: '/wallet', permesso: 'wallet.view' as const },
+        { href: '/fatturazione', permesso: 'fatture.view' as const },
+      ],
+    },
+    { label: 'Crescita', items: [{ href: '/affiliazione', permesso: 'affiliazione.view' as const }] },
+  ];
+
+  it('scarta le voci negate e conserva le altre', () => {
+    const out = filtraGruppi(gruppi, operatore);
+    expect(out.find((g) => g.label === 'Finanze')?.items.map((i) => i.href)).toEqual(['/fatturazione']);
+  });
+
+  it('elimina i gruppi rimasti senza voci', () => {
+    // «Crescita» conteneva solo affiliazione.view, che l'operatore non ha:
+    // una label senza voci sotto sarebbe un buco nella sidebar.
+    expect(filtraGruppi(gruppi, operatore).map((g) => g.label)).toEqual(['Panoramica', 'Finanze']);
+  });
+
+  it("all'owner non toglie nulla", () => {
+    expect(filtraGruppi(gruppi, owner)).toEqual(gruppi);
+  });
+
+  it('non muta i gruppi in ingresso', () => {
+    const prima = JSON.stringify(gruppi);
+    filtraGruppi(gruppi, operatore);
+    expect(JSON.stringify(gruppi)).toBe(prima);
   });
 });
 ```
 
-Se `@testing-library/react` non è tra le devDependencies, installarlo:
-`pnpm --filter piattaforma add -D @testing-library/react @testing-library/dom`
-L'ambiente `happy-dom` è già configurato.
-
 - [ ] **Step 2: Lanciare il test e verificare che fallisca**
 
-Run: `pnpm --filter piattaforma exec vitest run src/components/broker/broker-shell.test.tsx`
-Expected: FAIL — `BrokerShell` non accetta `permessi`.
+Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/nav-filter.test.ts`
+Expected: FAIL — `Failed to resolve import "./nav-filter"`.
 
-- [ ] **Step 3: Riscrivere le voci di `broker-shell.tsx`**
+- [ ] **Step 3: Scrivere `nav-filter.ts`**
+
+```ts
+import type { Permesso } from '@/lib/auth/permessi/catalogo';
+
+export type NavCtx = { isOwner: boolean; permessi: readonly Permesso[] };
+
+/** Voce senza `permesso`: visibile a tutti (Dashboard, Profilo). */
+export function vede(ctx: NavCtx, p?: Permesso): boolean {
+  if (p === undefined) return true;
+  return ctx.isOwner || ctx.permessi.includes(p);
+}
+
+/** Scarta le voci negate, poi i gruppi rimasti vuoti. Non muta l'input. */
+export function filtraGruppi<T extends { permesso?: Permesso }>(
+  gruppi: { label: string; items: T[] }[],
+  ctx: NavCtx,
+): { label: string; items: T[] }[] {
+  return gruppi
+    .map((g) => ({ ...g, items: g.items.filter((i) => vede(ctx, i.permesso)) }))
+    .filter((g) => g.items.length > 0);
+}
+```
+
+- [ ] **Step 4: Lanciare il test e verificare che passi**
+
+Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/nav-filter.test.ts`
+Expected: PASS, 8 test.
+
+- [ ] **Step 5: Riscrivere le voci di `broker-shell.tsx`**
 
 ```tsx
+import { filtraGruppi } from '@/components/permessi/nav-filter';
+import type { Permesso } from '@/lib/auth/permessi/catalogo';
+
 export function BrokerShell({
   session,
   activePath,
@@ -2212,65 +2345,103 @@ export function BrokerShell({
   activePath?: string;
   buildSha?: string;
   isOwner?: boolean;
-  permessi?: string[];
+  permessi?: Permesso[];
   demoBanner?: ReactNode;
   children: ReactNode;
 }) {
-  const has = (p: string) => isOwner || permessi.includes(p);
-
-  const groups: SidebarNavGroup[] = [
-    { label: 'Panoramica', items: [{ href: '/dashboard', label: 'Dashboard', icon: IconDashboard }] },
-    {
-      label: 'Operatività',
-      items: has('pratiche.view')
-        ? [{ href: '/pratiche', label: 'Pratiche', icon: IconPratiche, badge: <NavBadge keyName="praticheAttive" /> }]
-        : [],
-    },
-    {
-      label: 'Finanze',
-      items: [
-        ...(has('wallet.view') ? [{ href: '/wallet', label: 'Wallet', icon: IconWallet }] : []),
-        ...(has('fatture.view') ? [{ href: '/fatturazione', label: 'Fatture', icon: IconFattura }] : []),
-      ],
-    },
-    {
-      label: 'Crescita',
-      items: has('affiliazione.view')
-        ? [{ href: '/affiliazione', label: 'Affiliazione', icon: IconAffiliazioni }]
-        : [],
-    },
-    {
-      label: 'Impostazioni',
-      items: [
-        ...(has('notifiche.view') ? [{ href: '/notifiche', label: 'Notifiche', icon: IconNotifiche }] : []),
-        { href: '/profilo', label: 'Profilo', icon: IconProfilo },
-        ...(isOwner ? [{ href: '/sedi', label: 'Sedi', icon: IconAgenzie }] : []),
-        ...(!isOwner && has('sede.view')
-          ? [{ href: '/impostazioni-sede', label: 'Impostazioni sede', icon: IconAgenzie }]
-          : []),
-        ...(has('team.view') ? [{ href: '/team', label: 'Team', icon: IconUtenti }] : []),
-      ],
-    },
-  ].filter((g) => g.items.length > 0);
+  // Ogni voce dichiara il permesso che la rende visibile; `filtraGruppi` scarta
+  // le voci negate e i gruppi rimasti senza voci. Dashboard e Profilo non hanno
+  // permesso: ce li hanno tutti.
+  const groups: SidebarNavGroup[] = filtraGruppi(
+    [
+      {
+        label: 'Panoramica',
+        items: [{ href: '/dashboard', label: 'Dashboard', icon: IconDashboard }],
+      },
+      {
+        label: 'Operatività',
+        items: [
+          {
+            href: '/pratiche',
+            label: 'Pratiche',
+            icon: IconPratiche,
+            badge: <NavBadge keyName="praticheAttive" />,
+            permesso: 'pratiche.view' as const,
+          },
+        ],
+      },
+      {
+        label: 'Finanze',
+        items: [
+          { href: '/wallet', label: 'Wallet', icon: IconWallet, permesso: 'wallet.view' as const },
+          {
+            href: '/fatturazione',
+            label: 'Fatture',
+            icon: IconFattura,
+            permesso: 'fatture.view' as const,
+          },
+        ],
+      },
+      {
+        label: 'Crescita',
+        items: [
+          {
+            href: '/affiliazione',
+            label: 'Affiliazione',
+            icon: IconAffiliazioni,
+            permesso: 'affiliazione.view' as const,
+          },
+        ],
+      },
+      {
+        label: 'Impostazioni',
+        items: [
+          {
+            href: '/notifiche',
+            label: 'Notifiche',
+            icon: IconNotifiche,
+            permesso: 'notifiche.view' as const,
+          },
+          { href: '/profilo', label: 'Profilo', icon: IconProfilo },
+          // Sedi: owner-only e non delegabile, quindi non è un permesso del catalogo.
+          ...(isOwner ? [{ href: '/sedi', label: 'Sedi', icon: IconAgenzie }] : []),
+          ...(!isOwner
+            ? [
+                {
+                  href: '/impostazioni-sede',
+                  label: 'Impostazioni sede',
+                  icon: IconAgenzie,
+                  permesso: 'sede.view' as const,
+                },
+              ]
+            : []),
+          { href: '/team', label: 'Team', icon: IconUtenti, permesso: 'team.view' as const },
+        ],
+      },
+    ],
+    { isOwner, permessi },
+  );
   // ...il resto invariato
 ```
 
-`Dashboard` e `Profilo` non hanno permesso: ce li hanno tutti. Il `.filter` finale evita i gruppi vuoti (una label «Finanze» senza voci sotto).
+- [ ] **Step 6: Fare lo stesso su `agenzia-shell.tsx`**
 
-- [ ] **Step 4: Fare lo stesso su `agenzia-shell.tsx`**
-
-Stessa struttura, con in più:
+Stessa meccanica — voci dichiarative dentro `filtraGruppi` — con in più queste quattro voci, da inserire nei rispettivi gruppi:
 
 ```tsx
-        ...(has('inbox.view') ? [{ href: '/inbox', label: 'Inbox', icon: IconInbox, badge: <NavBadge keyName="inbox" /> }] : []),
-        ...(has('addebiti.view') ? [{ href: '/addebiti', label: 'Addebiti', icon: IconFattura }] : []),
-        ...(has('feedback.view') ? [{ href: '/feedback', label: 'Feedback', icon: IconFeedback }] : []),
-        ...(has('orari.view') ? [{ href: '/orari', label: 'Orari', icon: IconOrari }] : []),
+  // gruppo Operatività, prima di Pratiche
+  { href: '/inbox', label: 'Inbox', icon: IconInbox, badge: <NavBadge keyName="inbox" />, permesso: 'inbox.view' as const },
+  // gruppo Finanze, dopo Fatture
+  { href: '/addebiti', label: 'Addebiti', icon: IconFattura, permesso: 'addebiti.view' as const },
+  // gruppo Crescita, dopo Affiliazione
+  { href: '/feedback', label: 'Feedback', icon: IconFeedback, permesso: 'feedback.view' as const },
+  // gruppo Impostazioni, prima di Notifiche
+  { href: '/orari', label: 'Orari', icon: IconOrari, permesso: 'orari.view' as const },
 ```
 
 Mantenere i nomi delle icone già importati nel file.
 
-- [ ] **Step 5: Aggiornare `app-shell.tsx`**
+- [ ] **Step 7: Aggiornare `app-shell.tsx`**
 
 Sostituire il calcolo di `canManageTeam` con la lettura del context, e passare i nuovi props:
 
@@ -2284,12 +2455,12 @@ Sostituire il calcolo di `canManageTeam` con la lettura del context, e passare i
 
 Rimuovere l'import di `getManageableSedi` se non serve più altrove nel file.
 
-- [ ] **Step 6: Lanciare i test**
+- [ ] **Step 8: Lanciare i test**
 
 Run: `pnpm --filter piattaforma exec vitest run src/components/`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/piattaforma/src/components/
@@ -2305,8 +2476,8 @@ git commit -m "feat(permessi): sidebar filtrata per permesso, gruppi vuoti nasco
 - Test: `apps/piattaforma/src/lib/auth/permessi/mappa-enforcement.test.ts`
 
 **Interfaces:**
-- Consumes: `isPermesso` da `./catalogo`.
-- Produces: `MAPPA_ENFORCEMENT: Record<string, Record<string, string | null>>` — file → action → permesso (o `null` motivato).
+- Consumes: `type Permesso` da `./catalogo`.
+- Produces: `MAPPA_ENFORCEMENT: Record<string, Record<string, Permesso | null>>` — file → action → permesso (o `null` motivato).
 
 Il rischio di questo sistema non è oggi: è fra sei mesi, quando qualcuno aggiunge una server action e dimentica il `requirePermesso`. Nessun test fallisce, il buco resta. Questa mappa rende rumorosa l'omissione.
 
@@ -2321,7 +2492,9 @@ Il rischio di questo sistema non è oggi: è fra sei mesi, quando qualcuno aggiu
  * `mappa-enforcement.test.ts` fallisce finché non la classifichi qui.
  * Non è burocrazia: è l'unico modo di accorgersi di un gate mancante.
  */
-export const MAPPA_ENFORCEMENT: Record<string, Record<string, string | null>> = {
+import type { Permesso } from './catalogo';
+
+export const MAPPA_ENFORCEMENT: Record<string, Record<string, Permesso | null>> = {
   'src/app/pratiche/actions.ts': {
     processaPraticaFromListaAction: 'pratiche.processa',
     markPraticaProcessataAction: 'pratiche.processa',
@@ -2400,8 +2573,18 @@ export const MAPPA_ENFORCEMENT: Record<string, Record<string, string | null>> = 
   'src/lib/sedi/actions.ts': {
     setCurrentSedeAction: null, // cambio sede corrente: gated da canSelectSede
   },
+  'src/lib/penali/segnalazione.ts': {
+    segnalaPraticaAction: 'pratiche.segnala',
+    respingiSegnalazioneAction: null, // gated ADMIN_PIATTAFORMA
+  },
+  'src/lib/segnalazioni/creazione.ts': {
+    inviaSegnalazioneCreazioneAction: 'pratiche.create',
+    gestisciSegnalazioneCreazioneAction: null, // gated ADMIN_PIATTAFORMA
+  },
 };
 ```
+
+Tipizzare i valori come `Permesso | null` invece di `string | null` sposta al compilatore la verifica «il permesso citato esiste»: un refuso nella mappa non compila. Per questo il test qui sotto non lo ricontrolla a runtime.
 
 - [ ] **Step 2: Scrivere il test anti-drift**
 
@@ -2410,11 +2593,13 @@ File `apps/piattaforma/src/lib/auth/permessi/mappa-enforcement.test.ts`:
 ```ts
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MAPPA_ENFORCEMENT } from './mappa-enforcement';
-import { isPermesso } from './catalogo';
 
-const ROOT = resolve(__dirname, '../../../..'); // apps/piattaforma
+// `__dirname` non esiste sotto vitest (ESM). Stesso pattern di
+// src/lib/notifiche/pratica-schema.test.ts e degli altri test che leggono file.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..'); // apps/piattaforma
 
 /** Nomi delle server action esportate: `export async function nome(`. */
 function actionEsportate(rel: string): string[] {
@@ -2426,16 +2611,6 @@ describe('mappa-enforcement', () => {
   it('ogni file mappato esiste', () => {
     for (const rel of Object.keys(MAPPA_ENFORCEMENT)) {
       expect(existsSync(resolve(ROOT, rel)), `manca ${rel}`).toBe(true);
-    }
-  });
-
-  it('ogni permesso citato è una chiave valida del catalogo', () => {
-    for (const [rel, actions] of Object.entries(MAPPA_ENFORCEMENT)) {
-      for (const [nome, permesso] of Object.entries(actions)) {
-        if (permesso !== null) {
-          expect(isPermesso(permesso), `${rel}:${nome} → ${permesso}`).toBe(true);
-        }
-      }
     }
   });
 
@@ -2472,7 +2647,7 @@ Il quarto test è volutamente grossolano: cerca la stringa del permesso nel file
 - [ ] **Step 3: Lanciare il test**
 
 Run: `pnpm --filter piattaforma exec vitest run src/lib/auth/permessi/mappa-enforcement.test.ts`
-Expected: PASS. Se il terzo test elenca action mancanti, aggiungerle alla mappa (probabile: `lib/penali/segnalazione.ts` e `lib/segnalazioni/creazione.ts` non sono in `src/app`, vanno aggiunti alla mappa con i loro permessi `pratiche.segnala` e `pratiche.create`).
+Expected: PASS, 3 test. Se il secondo test elenca action mancanti, sono server action aggiunte al repo dopo la stesura di questo piano: classificarle nella mappa, col permesso che le protegge o con `null` e la ragione.
 
 - [ ] **Step 4: Commit**
 
@@ -2486,88 +2661,198 @@ git commit -m "test(permessi): guardia anti-drift sulle server action azienda"
 ### Task 12: La matrice permessi nella UI
 
 **Files:**
+- Create: `apps/piattaforma/src/components/permessi/matrice-logic.ts`
+- Test: `apps/piattaforma/src/components/permessi/matrice-logic.test.ts`
 - Create: `apps/piattaforma/src/components/permessi/matrice-permessi.tsx`
-- Test: `apps/piattaforma/src/components/permessi/matrice-permessi.test.tsx`
 - Modify: `apps/piattaforma/src/app/team/create-user-form.tsx`
 - Modify: `apps/piattaforma/src/app/team/invite-form.tsx`
 - Modify: `apps/piattaforma/src/app/team/[userId]/edit/edit-form.tsx`
 - Modify: `apps/piattaforma/src/app/team/page.tsx` (badge preset), `team/team-page-client.tsx`
 
 **Interfaces:**
-- Consumes: `catalogoPerTipo`, `conDipendenze`, `figliDi`, `type CompanyTypeP` da `@/lib/auth/permessi/catalogo`; `preset`, `riconoscePreset`, `PRESET_ETICHETTE`, `PRESET_IDS` da `@/lib/auth/permessi/preset`.
-- Produces: `<MatricePermessi companyType value onChange assegnabili />` — componente controllato, `value: string[]`, `onChange(v: string[])`.
+- Consumes: `catalogoPerTipo`, `conDipendenze`, `figliDi`, `type CompanyTypeP`, `type Permesso` da `@/lib/auth/permessi/catalogo`; `preset`, `riconoscePreset`, `PRESET_ETICHETTE`, `PRESET_IDS` da `@/lib/auth/permessi/preset`.
+- Produces:
+  - in `matrice-logic.ts` (puro): `toggle(value, chiave, puoi): Permesso[]`, `toggleCategoria(value, categoriaId, companyType, puoi): Permesso[]`, `applicaPreset(id, companyType, puoi): Permesso[]`
+  - in `matrice-permessi.tsx`: `<MatricePermessi companyType value onChange assegnabili />` — componente controllato, `value: Permesso[]`, `onChange(v: Permesso[])`
+
+La cascata delle dipendenze è la parte che può rompersi, ed è pura: sta in `matrice-logic.ts` e si testa senza DOM. Il `.tsx` resta un guscio che disegna caselle e inoltra i click.
 
 - [ ] **Step 1: Scrivere il test che fallisce**
 
-File `apps/piattaforma/src/components/permessi/matrice-permessi.test.tsx`:
+File `apps/piattaforma/src/components/permessi/matrice-logic.test.ts`:
 
-```tsx
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { MatricePermessi } from './matrice-permessi';
-import { permessiPerTipo } from '@/lib/auth/permessi/catalogo';
+```ts
+import { describe, it, expect } from 'vitest';
+import { toggle, toggleCategoria, applicaPreset } from './matrice-logic';
+import { permessiPerTipo, type Permesso } from '@/lib/auth/permessi/catalogo';
+import { preset } from '@/lib/auth/permessi/preset';
 
-const tutti = permessiPerTipo('AGENZIA');
+const tutti = new Set<Permesso>(permessiPerTipo('AGENZIA'));
 
-describe('MatricePermessi', () => {
-  it('spuntando un figlio si accende il padre', () => {
-    const onChange = vi.fn();
-    render(<MatricePermessi companyType="AGENZIA" value={[]} onChange={onChange} assegnabili={tutti} />);
-    fireEvent.click(screen.getByLabelText('Scarica PDF e ZIP'));
-    expect(onChange).toHaveBeenCalledWith(expect.arrayContaining(['fatture.view', 'fatture.download']));
+describe('toggle', () => {
+  it('accendendo un figlio si accende il padre', () => {
+    expect(toggle([], 'fatture.download', tutti)).toEqual(['fatture.download', 'fatture.view']);
   });
 
-  it('togliendo il padre si spengono i figli', () => {
-    const onChange = vi.fn();
-    render(
-      <MatricePermessi
-        companyType="AGENZIA"
-        value={['fatture.view', 'fatture.download', 'fatture.xml']}
-        onChange={onChange}
-        assegnabili={tutti}
-      />,
+  it('accendendo un nipote si accende tutta la catena', () => {
+    // sede.iban → sede.edit → sede.view
+    expect(toggle([], 'sede.iban', tutti)).toEqual(['sede.edit', 'sede.iban', 'sede.view']);
+  });
+
+  it('spegnendo il padre si spengono i figli, ricorsivamente', () => {
+    expect(toggle(['sede.view', 'sede.edit', 'sede.iban'], 'sede.view', tutti)).toEqual([]);
+  });
+
+  it('spegnendo un figlio non tocca il padre', () => {
+    expect(toggle(['fatture.view', 'fatture.download'], 'fatture.download', tutti)).toEqual([
+      'fatture.view',
+    ]);
+  });
+
+  it('non concede un figlio se il padre non è assegnabile', () => {
+    // Chi non può dare `fatture.view` non può dare `fatture.download`: il set
+    // risultante sarebbe incoerente e il server lo rifiuterebbe comunque.
+    const puoi = new Set<Permesso>(permessiPerTipo('AGENZIA').filter((p) => p !== 'fatture.view'));
+    expect(toggle([], 'fatture.download', puoi)).toEqual([]);
+  });
+
+  it('non muta il valore in ingresso', () => {
+    const value: Permesso[] = ['fatture.view'];
+    toggle(value, 'fatture.download', tutti);
+    expect(value).toEqual(['fatture.view']);
+  });
+});
+
+describe('toggleCategoria', () => {
+  it('accende tutta la categoria coi suoi padri', () => {
+    const out = toggleCategoria([], 'fatture', 'AGENZIA', tutti);
+    expect(out).toEqual(['fatture.download', 'fatture.view', 'fatture.xml']);
+  });
+
+  it('se è già tutta accesa la spegne', () => {
+    const piena: Permesso[] = ['fatture.view', 'fatture.download', 'fatture.xml'];
+    expect(toggleCategoria(piena, 'fatture', 'AGENZIA', tutti)).toEqual([]);
+  });
+
+  it('da parziale accende il resto', () => {
+    expect(toggleCategoria(['fatture.view'], 'fatture', 'AGENZIA', tutti)).toEqual([
+      'fatture.download',
+      'fatture.view',
+      'fatture.xml',
+    ]);
+  });
+
+  it('salta i permessi non assegnabili', () => {
+    const puoi = new Set<Permesso>(permessiPerTipo('AGENZIA').filter((p) => p !== 'fatture.xml'));
+    expect(toggleCategoria([], 'fatture', 'AGENZIA', puoi)).toEqual([
+      'fatture.download',
+      'fatture.view',
+    ]);
+  });
+
+  it('una categoria inesistente lascia il valore intatto', () => {
+    expect(toggleCategoria(['fatture.view'], 'inbox', 'DEALER', tutti)).toEqual(['fatture.view']);
+  });
+});
+
+describe('applicaPreset', () => {
+  it('applica il preset intero quando tutto è assegnabile', () => {
+    expect(applicaPreset('OPERATORE_BASE', 'AGENZIA', tutti)).toEqual(
+      [...preset('OPERATORE_BASE', 'AGENZIA')].sort(),
     );
-    fireEvent.click(screen.getByLabelText('Vede la sezione fatture'));
-    expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('un permesso non assegnabile è disabilitato', () => {
-    render(
-      <MatricePermessi
-        companyType="AGENZIA"
-        value={[]}
-        onChange={vi.fn()}
-        assegnabili={tutti.filter((p) => p !== 'pratiche.firma')}
-      />,
-    );
-    expect((screen.getByLabelText('Segna una pratica firmata') as HTMLInputElement).disabled).toBe(true);
-  });
-
-  it('le categorie solo-dealer non compaiono per un agenzia', () => {
-    render(<MatricePermessi companyType="AGENZIA" value={[]} onChange={vi.fn()} assegnabili={tutti} />);
-    expect(screen.queryByLabelText('Crea e invia pratiche')).toBeNull();
-  });
-
-  it('scegliendo un preset si applica il suo set', () => {
-    const onChange = vi.fn();
-    render(<MatricePermessi companyType="AGENZIA" value={[]} onChange={onChange} assegnabili={tutti} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Operatore base' }));
-    expect(onChange).toHaveBeenCalledWith(expect.arrayContaining(['inbox.gestisci', 'pratiche.processa']));
-  });
-
-  it('le azioni sensibili mostrano la conseguenza', () => {
-    render(<MatricePermessi companyType="AGENZIA" value={[]} onChange={vi.fn()} assegnabili={tutti} />);
-    expect(screen.getByText('accredita il wallet e genera la fattura')).toBeTruthy();
+  it('scarta dal preset ciò che il chiamante non può concedere', () => {
+    const puoi = new Set<Permesso>(permessiPerTipo('AGENZIA').filter((p) => p !== 'inbox.gestisci'));
+    expect(applicaPreset('OPERATORE_BASE', 'AGENZIA', puoi)).not.toContain('inbox.gestisci');
   });
 });
 ```
 
 - [ ] **Step 2: Lanciare il test e verificare che fallisca**
 
-Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/matrice-permessi.test.tsx`
-Expected: FAIL — modulo inesistente.
+Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/matrice-logic.test.ts`
+Expected: FAIL — `Failed to resolve import "./matrice-logic"`.
 
-- [ ] **Step 3: Scrivere il componente**
+- [ ] **Step 3: Scrivere `matrice-logic.ts`**
+
+```ts
+import {
+  catalogoPerTipo,
+  conDipendenze,
+  figliDi,
+  type CompanyTypeP,
+  type Permesso,
+} from '@/lib/auth/permessi/catalogo';
+import { preset, type PresetId } from '@/lib/auth/permessi/preset';
+
+/**
+ * Le dipendenze si risolvono qui per comodità di chi compila il form; il server
+ * rifiuta comunque un set incoerente (`validaPermessi`). Questa è UI, non difesa.
+ */
+export function toggle(
+  value: readonly Permesso[],
+  chiave: Permesso,
+  puoi: ReadonlySet<Permesso>,
+): Permesso[] {
+  const next = new Set(value);
+  if (next.has(chiave)) {
+    next.delete(chiave);
+    const coda = [...figliDi(chiave)];
+    while (coda.length) {
+      const figlio = coda.pop()!;
+      if (next.delete(figlio)) coda.push(...figliDi(figlio));
+    }
+  } else {
+    const chiusura = conDipendenze([chiave]);
+    // Senza un padre concedibile il figlio non è concedibile: non fare nulla.
+    if (chiusura.some((p) => !puoi.has(p))) return [...value].sort();
+    for (const p of chiusura) next.add(p);
+  }
+  return [...next].sort();
+}
+
+export function toggleCategoria(
+  value: readonly Permesso[],
+  categoriaId: string,
+  companyType: CompanyTypeP,
+  puoi: ReadonlySet<Permesso>,
+): Permesso[] {
+  const cat = catalogoPerTipo(companyType).find((c) => c.id === categoriaId);
+  if (!cat) return [...value].sort();
+
+  const chiavi = cat.permessi.map((p) => p.chiave).filter((p) => puoi.has(p));
+  const tutteAttive = chiavi.length > 0 && chiavi.every((p) => value.includes(p));
+
+  if (tutteAttive) {
+    // Spegnere passando da `toggle` propaga la cascata anche ai figli fuori categoria.
+    let out: Permesso[] = [...value];
+    for (const p of chiavi) if (out.includes(p)) out = toggle(out, p, puoi);
+    return out;
+  }
+
+  const next = new Set(value);
+  for (const p of chiavi) for (const d of conDipendenze([p])) if (puoi.has(d)) next.add(d);
+  return [...next].sort();
+}
+
+export function applicaPreset(
+  id: PresetId,
+  companyType: CompanyTypeP,
+  puoi: ReadonlySet<Permesso>,
+): Permesso[] {
+  return preset(id, companyType)
+    .filter((p) => puoi.has(p))
+    .sort();
+}
+```
+
+- [ ] **Step 4: Lanciare il test e verificare che passi**
+
+Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/matrice-logic.test.ts`
+Expected: PASS, 13 test.
+
+- [ ] **Step 5: Scrivere il componente**
 
 File `apps/piattaforma/src/components/permessi/matrice-permessi.tsx`:
 
@@ -2575,18 +2860,14 @@ File `apps/piattaforma/src/components/permessi/matrice-permessi.tsx`:
 'use client';
 
 import { useState } from 'react';
-import {
-  catalogoPerTipo,
-  conDipendenze,
-  figliDi,
-  type CompanyTypeP,
-} from '@/lib/auth/permessi/catalogo';
-import { preset, riconoscePreset, PRESET_ETICHETTE, PRESET_IDS } from '@/lib/auth/permessi/preset';
+import { catalogoPerTipo, type CompanyTypeP, type Permesso } from '@/lib/auth/permessi/catalogo';
+import { riconoscePreset, PRESET_ETICHETTE, PRESET_IDS } from '@/lib/auth/permessi/preset';
+import { applicaPreset, toggle, toggleCategoria } from './matrice-logic';
 
 /**
  * Matrice a accordion: una categoria per riga, contatore visibile da chiusa.
- * Le dipendenze si risolvono qui per comodità dell'utente; il server rifiuta
- * comunque un set incoerente (check.ts). Questa è UI, non è la difesa.
+ * Nessuna logica qui dentro: la cascata delle dipendenze vive in `matrice-logic.ts`,
+ * dove si testa senza DOM.
  */
 export function MatricePermessi({
   companyType,
@@ -2595,46 +2876,16 @@ export function MatricePermessi({
   assegnabili,
 }: {
   companyType: CompanyTypeP;
-  value: string[];
-  onChange: (v: string[]) => void;
+  value: Permesso[];
+  onChange: (v: Permesso[]) => void;
   /** Ciò che il chiamante può concedere: il resto appare disabilitato. */
-  assegnabili: string[];
+  assegnabili: Permesso[];
 }) {
   const categorie = catalogoPerTipo(companyType);
   const [aperte, setAperte] = useState<Set<string>>(new Set());
   const attivo = new Set(value);
   const puoi = new Set(assegnabili);
   const presetCorrente = riconoscePreset(value, companyType);
-
-  function toggle(chiave: string) {
-    const next = new Set(attivo);
-    if (next.has(chiave)) {
-      next.delete(chiave);
-      // spegne a cascata i figli, e i figli dei figli
-      const coda = [...figliDi(chiave)];
-      while (coda.length) {
-        const f = coda.pop()!;
-        if (next.delete(f)) coda.push(...figliDi(f));
-      }
-    } else {
-      for (const p of conDipendenze([chiave])) if (puoi.has(p)) next.add(p);
-    }
-    onChange([...next].sort());
-  }
-
-  function toggleCategoria(id: string) {
-    const cat = categorie.find((c) => c.id === id);
-    if (!cat) return;
-    const chiavi = cat.permessi.map((p) => p.chiave).filter((p) => puoi.has(p));
-    const tutteAttive = chiavi.every((p) => attivo.has(p));
-    const next = new Set(attivo);
-    if (tutteAttive) {
-      for (const p of chiavi) next.delete(p);
-    } else {
-      for (const p of chiavi) for (const d of conDipendenze([p])) if (puoi.has(d)) next.add(d);
-    }
-    onChange([...next].sort());
-  }
 
   return (
     <fieldset className="rounded-xl border border-pv-slate-200 p-4">
@@ -2645,7 +2896,7 @@ export function MatricePermessi({
           <button
             key={id}
             type="button"
-            onClick={() => onChange(preset(id, companyType).filter((p) => puoi.has(p)).sort())}
+            onClick={() => onChange(applicaPreset(id, companyType, puoi))}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
               presetCorrente === id
                 ? 'border-pv-navy-700 bg-pv-navy-700 text-white'
@@ -2675,14 +2926,15 @@ export function MatricePermessi({
                   ref={(el) => {
                     if (el) el.indeterminate = n > 0 && n < chiavi.length;
                   }}
-                  onChange={() => toggleCategoria(cat.id)}
+                  onChange={() => onChange(toggleCategoria(value, cat.id, companyType, puoi))}
                 />
                 <button
                   type="button"
                   onClick={() =>
                     setAperte((s) => {
                       const next = new Set(s);
-                      next.has(cat.id) ? next.delete(cat.id) : next.add(cat.id);
+                      if (next.has(cat.id)) next.delete(cat.id);
+                      else next.add(cat.id);
                       return next;
                     })
                   }
@@ -2705,7 +2957,7 @@ export function MatricePermessi({
                         aria-label={p.etichetta}
                         checked={attivo.has(p.chiave)}
                         disabled={!puoi.has(p.chiave)}
-                        onChange={() => toggle(p.chiave)}
+                        onChange={() => onChange(toggle(value, p.chiave, puoi))}
                         className="mt-0.5"
                       />
                       <span className="flex-1">
@@ -2734,14 +2986,7 @@ export function MatricePermessi({
 
 Le classi di colore (`pv-navy-700`, `pv-slate-*`) sono quelle già usate da `create-user-form.tsx`: nessun colore hardcodato.
 
-- [ ] **Step 4: Lanciare il test e verificare che passi**
-
-Run: `pnpm --filter piattaforma exec vitest run src/components/permessi/`
-Expected: PASS, 6 test.
-
-Il test «spuntando un figlio si accende il padre» richiede che la categoria Fatture sia aperta: se fallisce con «Unable to find label», aprire la categoria nel test con `fireEvent.click(screen.getByText('Fatture'))` prima di cliccare la casella. Aggiungere quella riga, non cambiare il componente.
-
-- [ ] **Step 5: Integrare in `create-user-form.tsx`**
+- [ ] **Step 6: Integrare in `create-user-form.tsx`**
 
 Il form diventa controllato per il solo campo permessi:
 
@@ -2756,12 +3001,13 @@ export function CreateUserForm({
   onSuccess?: () => void;
   sedi?: { id: string; nome: string }[];
   companyType: CompanyTypeP;
-  assegnabili: string[];
+  assegnabili: Permesso[];
   /** Il chiamante ha `team.permessi`. Se no, la matrice non si mostra. */
   puoScegliere: boolean;
 }) {
-  const [permessi, setPermessi] = useState<string[]>(
-    preset('OPERATORE_BASE', companyType).filter((p) => assegnabili.includes(p)),
+  const puoi = new Set(assegnabili);
+  const [permessi, setPermessi] = useState<Permesso[]>(
+    applicaPreset('OPERATORE_BASE', companyType, puoi),
   );
   // ...
       const res = await createUserDirectAction(
@@ -2793,12 +3039,13 @@ Quando si sceglie `ruoloSede = 'ADMIN_SEDE'` nella select, applicare il preset c
 
 ```tsx
   function onRuoloChange(r: 'ADMIN_SEDE' | 'OPERATORE') {
-    setPermessi(preset(r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE', companyType)
-      .filter((p) => assegnabili.includes(p)));
+    setPermessi(applicaPreset(r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE', companyType, puoi));
   }
 ```
 
-- [ ] **Step 6: Passare i props da `team/page.tsx`**
+Import necessari: `applicaPreset` da `@/components/permessi/matrice-logic`, `MatricePermessi` da `@/components/permessi/matrice-permessi`, `type CompanyTypeP` e `type Permesso` da `@/lib/auth/permessi/catalogo`.
+
+- [ ] **Step 7: Passare i props da `team/page.tsx`**
 
 ```tsx
   const ctx = await getSessionContext();
@@ -2812,13 +3059,13 @@ e passarli a `TeamPageClient` → `CreateUserForm` / `InviteForm`.
 Nella lista utenti, il badge:
 
 ```tsx
-  const etichetta = riconoscePreset(u.permessi, companyType);
+  const etichetta = riconoscePreset(u.permessi.filter(isPermesso), companyType);
   // → PRESET_ETICHETTE[etichetta] oppure `Personalizzato · ${u.permessi.length} permessi`
 ```
 
 `team/page.tsx` deve selezionare `permessi: true` nella query degli utenti.
 
-- [ ] **Step 7: Integrare in `invite-form.tsx`**
+- [ ] **Step 8: Integrare in `invite-form.tsx`**
 
 Il form di invito riceve gli stessi tre props e li passa come settimo argomento:
 
@@ -2831,11 +3078,12 @@ export function InviteForm({
 }: {
   sedi?: { id: string; nome: string }[];
   companyType: CompanyTypeP;
-  assegnabili: string[];
+  assegnabili: Permesso[];
   puoScegliere: boolean;
 }) {
-  const [permessi, setPermessi] = useState<string[]>(
-    preset('OPERATORE_BASE', companyType).filter((p) => assegnabili.includes(p)),
+  const puoi = new Set(assegnabili);
+  const [permessi, setPermessi] = useState<Permesso[]>(
+    applicaPreset('OPERATORE_BASE', companyType, puoi),
   );
 
   function handleSubmit(formData: FormData) {
@@ -2854,7 +3102,7 @@ export function InviteForm({
 }
 ```
 
-- [ ] **Step 8: Integrare in `[userId]/edit/edit-form.tsx`**
+- [ ] **Step 9: Integrare in `[userId]/edit/edit-form.tsx`**
 
 Qui il valore iniziale sono i **permessi attuali dell'utente**, non un preset: aprire il form di modifica non deve resettare i poteri di chi già lavora.
 
@@ -2866,13 +3114,13 @@ export function EditForm({
   assegnabili,
   puoScegliere,
 }: {
-  utente: { id: string; email: string; nome: string; cognome: string; role: string; permessi: string[] };
+  utente: { id: string; email: string; nome: string; cognome: string; role: string; permessi: Permesso[] };
   sedi: { id: string; nome: string }[];
   companyType: CompanyTypeP;
-  assegnabili: string[];
+  assegnabili: Permesso[];
   puoScegliere: boolean;
 }) {
-  const [permessi, setPermessi] = useState<string[]>(utente.permessi);
+  const [permessi, setPermessi] = useState<Permesso[]>(utente.permessi);
   const { data: session } = useSession();
 
   // Il server rifiuterebbe comunque (validaPermessi): mostrare la matrice
@@ -2915,14 +3163,14 @@ Passare `undefined` quando `modificabile` è falso è ciò che fa scattare il ra
 
 Se `useSession` non è già usato in quel file, l'id dell'utente corrente si può passare come prop da `page.tsx` (che ha `getSessionContext()`): è più economico di montare il client provider.
 
-`team/[userId]/edit/page.tsx` deve selezionare `permessi: true` e `role: true` nella query dell'utente.
+`team/[userId]/edit/page.tsx` deve selezionare `permessi: true` e `role: true` nella query dell'utente, e restringere il campo prima di passarlo: `permessi: utente.permessi.filter(isPermesso)`. Il DB restituisce `string[]`, il componente vuole `Permesso[]`. È lo stesso confine che `session-context.ts` attraversa con lo stesso guard.
 
-- [ ] **Step 9: Lanciare tutta la suite**
+- [ ] **Step 10: Lanciare tutta la suite**
 
 Run: `pnpm --filter piattaforma test`
 Expected: PASS.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add apps/piattaforma/src/components/permessi apps/piattaforma/src/app/team
@@ -2982,10 +3230,12 @@ L'ultima riga è quella che conta: un bottone nascosto non è una difesa. Se ris
 Con un operatore di agenzia bloccata (`bloccoPagamentoAt` valorizzato a mano sul DB locale):
 
 ```bash
-docker compose exec -T db psql -U postgres -d passaggio_veloce -c "UPDATE \"Company\" SET \"bloccoPagamentoAt\" = now() WHERE type = 'AGENZIA' LIMIT 1;"
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c "UPDATE \"Company\" SET \"bloccoPagamentoAt\" = now() WHERE id = (SELECT id FROM \"Company\" WHERE type = 'AGENZIA' LIMIT 1);"
 ```
 
-Aprire `/blocco-pagamento` da operatore. Atteso: la pagina si vede, i form no, compare «Contatta il titolare dell'azienda». Ripristinare poi con `SET "bloccoPagamentoAt" = NULL`.
+(`UPDATE ... LIMIT` non esiste in Postgres: serve la sottoquery.)
+
+Aprire `/blocco-pagamento` da operatore. Atteso: la pagina si vede, i form no, compare «Contatta il titolare dell'azienda». Ripristinare poi con `UPDATE "Company" SET "bloccoPagamentoAt" = NULL;`.
 
 - [ ] **Step 6: Aggiornare la roadmap**
 
@@ -3024,4 +3274,6 @@ Invertire 3 e 4 lascia ogni operatore senza poteri finché il backfill non gira.
 
 **Se un test esistente si rompe perché `ctx.permessi` è `undefined`**, il mock di `getSessionContext` in quel file va aggiornato con `permessi: new Set([...])` e `companyType: 'AGENZIA' | 'DEALER'`. Non aggirare con `?? new Set()` nel codice di produzione: un context senza permessi è un bug, non un caso da tollerare.
 
-**Il campo `Permesso` è tipizzato `string` e non come union letterale.** Le chiavi vivono nel DB come stringhe e attraversano il boundary server→client: una union darebbe falsa sicurezza sul confine e costringerebbe a cast continui. La validazione a runtime (`isPermesso`, `validaPermessi`) è la difesa vera.
+**`Permesso` è una union letterale, derivata dalla tupla `PERMESSI`.** Un refuso in un gate — `requirePermesso('wallet.payuot')` — non compila. Senza union compilerebbe, negherebbe sempre, e nessun test diventerebbe rosso: il fail-closed nasconderebbe il bug. Le chiavi arrivano come `string` da due soli confini, il DB e i form: entrambi passano da `isPermesso`, che è un type guard. Non servono cast altrove.
+
+**La logica della UI sta in moduli puri** (`matrice-logic.ts`, `nav-filter.ts`), testati con vitest come tutto il resto. Il repo non ha component test e `vitest.config.ts` raccoglie solo `src/**/*.test.ts`: introdurre `@testing-library` per due file non vale il prezzo. Il JSX resta un guscio senza logica.

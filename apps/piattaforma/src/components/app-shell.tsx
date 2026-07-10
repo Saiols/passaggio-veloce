@@ -10,7 +10,7 @@ import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
 import { BrokerShell } from '@/components/broker/broker-shell';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
 import { SedeSwitcher } from '@/components/sede/sede-switcher';
-import { getManageableSedi } from '@/lib/auth/session-context';
+import { getManageableSedi, getSessionContext } from '@/lib/auth/session-context';
 
 export type AppShellSession = {
   user: {
@@ -130,7 +130,14 @@ export async function AppShell({
   // sede). Calcolato una volta qui e propagato a broker/agenzia (client shell) e
   // al fallback top-bar. NOTA: getManageableSedi() → getSessionContext() aggiunge
   // un round-trip DB a ogni render di pagina company; accettabile per la scala.
-  const canManageTeam = (await getManageableSedi()).length > 0;
+  const puoGestireTeam = (await getManageableSedi()).length > 0;
+
+  // isOwner e permessi vengono dal contesto sessione (già cache()-ato: la
+  // chiamata sopra a getManageableSedi() lo invoca già, questa dedupe).
+  // `permessi` attraversa il boundary server→client come array, non come Set.
+  const ctx = await getSessionContext();
+  const isOwner = ctx?.isOwner ?? false;
+  const permessi = ctx ? [...ctx.permessi] : [];
 
   // Le agenzie usano la stessa chrome a sidebar (troppe voci per la top-bar).
   if (session.user.companyType === 'AGENZIA') {
@@ -140,7 +147,9 @@ export async function AppShell({
         session={session}
         activePath={activePath}
         buildSha={buildSha}
-        canManageTeam={canManageTeam}
+        isOwner={isOwner}
+        permessi={permessi}
+        puoGestireTeam={puoGestireTeam}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} />
@@ -158,7 +167,9 @@ export async function AppShell({
         session={session}
         activePath={activePath}
         buildSha={buildSha}
-        canManageTeam={canManageTeam}
+        isOwner={isOwner}
+        permessi={permessi}
+        puoGestireTeam={puoGestireTeam}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} />
@@ -168,7 +179,7 @@ export async function AppShell({
   }
 
   // Fallback (utente senza companyType riconosciuto): top-bar storica.
-  const links = navForRole(session.user.role, session.user.companyType, canManageTeam);
+  const links = navForRole(session.user.role, session.user.companyType, puoGestireTeam);
 
   return (
     <div className="flex min-h-screen flex-col bg-pv-slate-50">

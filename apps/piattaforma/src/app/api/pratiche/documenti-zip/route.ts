@@ -5,6 +5,8 @@ import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
 import { buildPraticaZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, wherePraticaAttiva, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { hasPermesso } from '@/lib/auth/permessi/guard';
+import { isAdminOrAssistente } from '@/lib/auth/permissions';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,6 +38,13 @@ export async function GET() {
   const companyType = session.user.companyType;
   const companyId = session.user.companyId;
   if (!companyId || (companyType !== 'DEALER' && companyType !== 'AGENZIA')) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
+
+  // Il permesso non sostituisce il vincolo companyType sopra (scope): decide SE
+  // l'utente può scaricare. Bypass esplicito per lo staff di piattaforma, anche
+  // se questa route non è mai raggiungibile da loro (companyId sempre null).
+  if (!isAdminOrAssistente(session.user.role) && !(await hasPermesso('pratiche.download'))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 

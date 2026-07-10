@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma, type Prisma } from '@pv/db';
-import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { isAdminPiattaforma, isAdminOrAssistente } from '@/lib/auth/permissions';
+import { hasPermesso } from '@/lib/auth/permessi/guard';
 import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
 import { documentoPdfInclude, documentoPdfInput } from '@/lib/fatturazione/documento-pdf';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
@@ -39,6 +40,13 @@ export async function GET(req: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  // Il permesso non sostituisce lo scope sotto (che decide QUALI documenti
+  // sono visibili): decide SE l'utente può scaricarli. Bypass esplicito per
+  // lo staff di piattaforma (companyId null → nessun permesso azienda).
+  if (!isAdminOrAssistente(session.user.role) && !(await hasPermesso('fatture.download'))) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
   const url = new URL(req.url);

@@ -14,6 +14,9 @@ import {
   assignableSedeRoles,
   type SedeRole,
 } from '@/lib/sedi/scope';
+import { can, permessiPerNuovoUtente, validaPermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
+import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
+import type { Role } from '@/lib/auth/permissions';
 
 export type InviteResult =
   | { ok: true; demoLink?: string }
@@ -48,6 +51,30 @@ async function resolveTargetSede(
 
 type RuoloSedeInput = 'ADMIN_SEDE' | 'OPERATORE';
 
+/** Il contesto di permessi del chiamante, dal SessionContext. */
+function toPermessiCtx(ctx: { user: { id: string }; isOwner: boolean; permessi: Set<Permesso> }): PermessiCtx {
+  return { userId: ctx.user.id, isOwner: ctx.isOwner, permessi: ctx.permessi };
+}
+
+/**
+ * Gate di capability: SOLO autenticazione + permesso, prima di qualunque
+ * risoluzione di scope (sede, target). Regola del progetto: autenticazione →
+ * permesso → scope — non far lavorare il DB (e non rivelare nulla sullo scope,
+ * es. l'esistenza di un utente in un'altra sede) per un chiamante che comunque
+ * non è autorizzato. `getSessionContext()` è `cache()`-ato per richiesta
+ * (session-context.ts): richiamarlo qui e poi dentro `authorizeTeamCreate` /
+ * `authorizeTeamTargetUser` non costa una seconda query.
+ */
+async function gateCapability(
+  p: Permesso,
+  errorMessage: string,
+): Promise<{ ok: false; error: string } | null> {
+  const ctx = await getSessionContext();
+  if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
+  if (!can(toPermessiCtx(ctx), p)) return { ok: false, error: errorMessage };
+  return null;
+}
+
 /**
  * Autorizza la CREAZIONE di un utente su una sede: risolve la sede destinataria
  * tra quelle gestibili dall'utente e valida il ruolo richiesto.
@@ -56,7 +83,15 @@ async function authorizeTeamCreate(
   requestedSedeId: string | undefined,
   requestedRuolo: RuoloSedeInput | undefined,
 ): Promise<
-  | { ok: true; companyId: string; sedeId: string; ruolo: RuoloSedeInput; userId: string }
+  | {
+      ok: true;
+      companyId: string;
+      sedeId: string;
+      ruolo: RuoloSedeInput;
+      userId: string;
+      permessiCtx: PermessiCtx;
+      companyType: CompanyTypeP;
+    }
   | { ok: false; error: string }
 > {
   const ctx = await getSessionContext();
@@ -81,7 +116,16 @@ async function authorizeTeamCreate(
   if (!assignableSedeRoles(role).includes(ruolo)) {
     return { ok: false, error: 'Ruolo non assegnabile' };
   }
-  return { ok: true, companyId: ctx.companyId, sedeId: target.sedeId, ruolo, userId: ctx.user.id };
+  if (!ctx.companyType) return { ok: false, error: 'Azienda senza tipo' };
+  return {
+    ok: true,
+    companyId: ctx.companyId,
+    sedeId: target.sedeId,
+    ruolo,
+    userId: ctx.user.id,
+    permessiCtx: toPermessiCtx(ctx),
+    companyType: ctx.companyType,
+  };
 }
 
 /**
@@ -92,7 +136,15 @@ async function authorizeTeamCreate(
 async function authorizeTeamTargetUser(
   userId: string,
 ): Promise<
-  | { ok: true; companyId: string; isOwner: boolean; manageableIds: string[] }
+  | {
+      ok: true;
+      companyId: string;
+      isOwner: boolean;
+      manageableIds: string[];
+      permessiCtx: PermessiCtx;
+      companyType: CompanyTypeP | undefined;
+      targetRole: Role;
+    }
   | { ok: false; error: string }
 > {
   const ctx = await getSessionContext();
@@ -117,16 +169,29 @@ async function authorizeTeamTargetUser(
     });
     if (!membership) return { ok: false, error: 'Utente non nella tua sede' };
   }
-  return { ok: true, companyId: ctx.companyId, isOwner: ctx.isOwner, manageableIds };
+  return {
+    ok: true,
+    companyId: ctx.companyId,
+    isOwner: ctx.isOwner,
+    manageableIds,
+    permessiCtx: toPermessiCtx(ctx),
+    companyType: ctx.companyType,
+    targetRole: target.role,
+  };
 }
 
 export async function createInvitationAction(
   email: string,
   sedeId?: string,
   ruoloSede?: RuoloSedeInput,
+  permessi?: string[],
 ): Promise<InviteResult> {
+  const gate = await gateCapability('team.invita', 'Non hai i permessi per invitare utenti');
+  if (gate) return gate;
   const authz = await authorizeTeamCreate(sedeId, ruoloSede);
   if (!authz.ok) return { ok: false, error: authz.error };
+  const perm = permessiPerNuovoUtente(authz.permessiCtx, authz.companyType, permessi);
+  if (!perm.ok) return { ok: false, error: perm.error };
   const companyId = authz.companyId;
   const invitedById = authz.userId;
 
@@ -164,6 +229,7 @@ export async function createInvitationAction(
       companyId,
       sedeId: authz.sedeId,
       ruoloSede: authz.ruolo,
+      permessi: perm.permessi,
       invitedById,
       expiresAt: expiresIn(24 * 7),
     },
@@ -253,6 +319,7 @@ export async function acceptInvitationAction(
         status: 'ACTIVE',
         emailVerifiedAt: new Date(),
         companyId: invitation.companyId,
+        permessi: invitation.permessi,
       },
     });
     if (sedeId) {
@@ -284,9 +351,14 @@ export async function createUserDirectAction(
   password: string,
   sedeId?: string,
   ruoloSede?: RuoloSedeInput,
+  permessi?: string[],
 ): Promise<CreateUserResult> {
+  const gate = await gateCapability('team.crea', 'Non hai i permessi per creare utenti');
+  if (gate) return gate;
   const authz = await authorizeTeamCreate(sedeId, ruoloSede);
   if (!authz.ok) return { ok: false, error: authz.error };
+  const perm = permessiPerNuovoUtente(authz.permessiCtx, authz.companyType, permessi);
+  if (!perm.ok) return { ok: false, error: perm.error };
   const { companyId } = authz;
 
   const emailLower = email.toLowerCase().trim();
@@ -325,6 +397,7 @@ export async function createUserDirectAction(
         status: 'ACTIVE',
         emailVerifiedAt: new Date(),
         companyId,
+        permessi: perm.permessi,
       },
     });
     await tx.userSede.create({
@@ -373,7 +446,10 @@ export async function updateTeamUserAction(
   cognome: string,
   sedeId?: string,
   ruoloSede?: RuoloSedeInput,
+  permessi?: string[],
 ): Promise<UpdateTeamUserResult> {
+  const gate = await gateCapability('team.modifica', 'Non hai i permessi per modificare utenti');
+  if (gate) return gate;
   const authz = await authorizeTeamTargetUser(userId);
   if (!authz.ok) return { ok: false, error: authz.error };
   const { companyId } = authz;
@@ -389,6 +465,20 @@ export async function updateTeamUserAction(
   }
   if (!nome.trim() || !cognome.trim()) {
     return { ok: false, error: 'Nome e cognome obbligatori' };
+  }
+
+  let permessiData: { permessi: string[] } | Record<string, never> = {};
+  if (permessi !== undefined) {
+    if (!authz.companyType) return { ok: false, error: 'Azienda senza tipo' };
+    const val = validaPermessi({
+      ctx: authz.permessiCtx,
+      companyType: authz.companyType,
+      richiesti: permessi,
+      targetUserId: userId,
+      targetRole: authz.targetRole,
+    });
+    if (!val.ok) return { ok: false, error: val.error };
+    permessiData = { permessi: val.permessi };
   }
 
   if (emailLower !== target.email) {
@@ -431,7 +521,7 @@ export async function updateTeamUserAction(
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: userId },
-      data: { email: emailLower, nome: nome.trim(), cognome: cognome.trim() },
+      data: { email: emailLower, nome: nome.trim(), cognome: cognome.trim(), ...permessiData },
     });
     if (aggiornaMembership) {
       // Modello "una sede per utente": l'utente appartiene a una sola sede. Per
@@ -465,6 +555,8 @@ export type ResetTeamUserPasswordResult =
 export async function resetTeamUserPasswordAction(
   userId: string,
 ): Promise<ResetTeamUserPasswordResult> {
+  const gate = await gateCapability('team.reset_password', 'Non hai i permessi per resettare la password');
+  if (gate) return gate;
   const authz = await authorizeTeamTargetUser(userId);
   if (!authz.ok) return { ok: false, error: authz.error };
   const { companyId } = authz;
@@ -498,6 +590,11 @@ export type DisableTeamUserResult = { ok: true } | { ok: false; error: string };
 export async function disableTeamUserAction(
   userId: string,
 ): Promise<DisableTeamUserResult> {
+  const gate = await gateCapability('team.disabilita', 'Non hai i permessi per disabilitare utenti');
+  if (gate) return gate;
+
+  // Il controllo capability precede questo: chi non ha team.disabilita deve
+  // sentirsi dire che non ha il permesso, non che non può auto-eliminarsi.
   const ctx = await getSessionContext();
   if (ctx?.user?.id === userId) {
     return { ok: false, error: 'Non puoi eliminare il tuo stesso account' };
@@ -527,6 +624,9 @@ export type RevokeInviteResult = { ok: true } | { ok: false; error: string };
 export async function revokeInvitationAction(invitationId: string): Promise<RevokeInviteResult> {
   const ctx = await getSessionContext();
   if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
+  if (!can(toPermessiCtx(ctx), 'team.disabilita')) {
+    return { ok: false, error: 'Non hai i permessi per revocare inviti' };
+  }
   const manageable = manageableSedi({
     isOwner: ctx.isOwner,
     accessibleSedi: ctx.accessibleSedi,

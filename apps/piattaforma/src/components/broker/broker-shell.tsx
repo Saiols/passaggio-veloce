@@ -4,23 +4,20 @@ import { type ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui';
 import { NavBadge } from '@/components/nav-badge';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
+import { gruppiBroker } from '@/components/permessi/nav-voci';
+import { iconaComponente } from '@/components/permessi/nav-icone';
 import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
-import {
-  IconAffiliazioni,
-  IconAgenzie,
-  IconDashboard,
-  IconFattura,
-  IconNotifiche,
-  IconPratiche,
-  IconProfilo,
-  IconUtenti,
-  IconWallet,
-} from '@/components/admin/admin-icons';
+import type { Permesso } from '@/lib/auth/permessi/catalogo';
 
 /**
  * Chrome dell'area broker (dealer): stessa sidebar a colonna di admin e agenzia
  * (SidebarShell), con le voci raggruppate per sezione logica. Sostituisce la
  * vecchia top-bar a scorrimento per uniformare il backoffice ai tre ruoli.
+ *
+ * La costruzione dei gruppi (chi vede cosa, incluso il gate a doppia
+ * condizione di Team) vive in `nav-voci.ts` (modulo puro, condiviso con
+ * AgenziaShell): qui ci si limita a risolvere le chiavi icona in componenti
+ * React e ad attaccare i badge in base all'href.
  */
 
 type BrokerShellSession = {
@@ -33,65 +30,39 @@ type BrokerShellSession = {
   };
 };
 
+function badgePerHref(href: string): ReactNode | undefined {
+  if (href === '/pratiche') return <NavBadge keyName="praticheAttive" />;
+  return undefined;
+}
+
 export function BrokerShell({
   session,
   activePath,
   buildSha,
-  canManageTeam,
+  isOwner = false,
+  permessi = [],
+  puoGestireTeam = false,
   demoBanner,
   children,
 }: {
   session: BrokerShellSession;
   activePath?: string;
   buildSha?: string;
-  canManageTeam?: boolean;
+  isOwner?: boolean;
+  permessi?: Permesso[];
+  puoGestireTeam?: boolean;
   demoBanner?: ReactNode;
   children: ReactNode;
 }) {
-  const isAdminAzienda = session.user.role === 'ADMIN_AZIENDA';
-
-  const groups: SidebarNavGroup[] = [
-    {
-      label: 'Panoramica',
-      items: [{ href: '/dashboard', label: 'Dashboard', icon: IconDashboard }],
-    },
-    {
-      label: 'Operatività',
-      items: [
-        {
-          href: '/pratiche',
-          label: 'Pratiche',
-          icon: IconPratiche,
-          badge: <NavBadge keyName="praticheAttive" />,
-        },
-      ],
-    },
-    {
-      label: 'Finanze',
-      items: [
-        { href: '/wallet', label: 'Wallet', icon: IconWallet },
-        { href: '/fatturazione', label: 'Fatture', icon: IconFattura },
-      ],
-    },
-    {
-      label: 'Crescita',
-      items: [{ href: '/affiliazione', label: 'Affiliazione', icon: IconAffiliazioni }],
-    },
-    {
-      label: 'Impostazioni',
-      items: [
-        { href: '/notifiche', label: 'Notifiche', icon: IconNotifiche },
-        { href: '/profilo', label: 'Profilo', icon: IconProfilo },
-        ...(isAdminAzienda ? [{ href: '/sedi', label: 'Sedi', icon: IconAgenzie }] : []),
-        ...(!isAdminAzienda && canManageTeam
-          ? [{ href: '/impostazioni-sede', label: 'Impostazioni sede', icon: IconAgenzie }]
-          : []),
-        ...(isAdminAzienda || canManageTeam
-          ? [{ href: '/team', label: 'Team', icon: IconUtenti }]
-          : []),
-      ],
-    },
-  ];
+  const groups: SidebarNavGroup[] = gruppiBroker({ isOwner, permessi, puoGestireTeam }).map((g) => ({
+    label: g.label,
+    items: g.items.map((item) => ({
+      href: item.href,
+      label: item.label,
+      icon: iconaComponente(item.icona),
+      badge: badgePerHref(item.href),
+    })),
+  }));
 
   const name = session.user.name ?? session.user.email ?? 'Utente';
   const companyName = session.user.companyName?.trim();

@@ -37,10 +37,11 @@ function brokerSession(): void {
   authMock.mockResolvedValue({ user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'OPERATORE' } });
   getSessionContextMock.mockResolvedValue({
     user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'OPERATORE' },
-    companyId: BROKER, isOwner: false,
+    companyId: BROKER, companyType: 'DEALER', isOwner: false,
     accessibleSedi: [{ id: SEDE, nome: 'Mia', type: 'DEALER' }],
     currentSede: { kind: 'ONE', sede: { id: SEDE, nome: 'Mia', type: 'DEALER' } },
     scopeIds: [SEDE], membershipRuoli: {},
+    permessi: new Set(['pratiche.view', 'pratiche.create']),
   });
 }
 
@@ -101,9 +102,39 @@ describe('inviaSegnalazioneCreazioneAction', () => {
 
   it('rifiuta un non-broker (agenzia)', async () => {
     authMock.mockResolvedValue({ user: { id: 'u1', companyId: 'ag', companyType: 'AGENZIA', role: 'OPERATORE' } });
-    getSessionContextMock.mockResolvedValue({ companyId: 'ag', isOwner: false, accessibleSedi: [], currentSede: null, scopeIds: [], membershipRuoli: {}, user: {} });
+    getSessionContextMock.mockResolvedValue({
+      companyId: 'ag', companyType: 'AGENZIA', isOwner: false, accessibleSedi: [], currentSede: null,
+      scopeIds: [], membershipRuoli: {}, user: {},
+      // pratiche.create è un permesso DEALER-only: un'agenzia non lo ha comunque,
+      // ma qui verifichiamo che il rifiuto avvenga per companyType, non a caso.
+      permessi: new Set(['pratiche.view', 'pratiche.create']),
+    });
     const res = await inviaSegnalazioneCreazioneAction({ ...base, descrizione: 'x'.repeat(25) });
-    expect(res.ok).toBe(false);
+    expect(res).toEqual({ ok: false, error: 'Solo i broker possono inviare segnalazioni' });
+    expect(prismaMock.segnalazioneCreazione.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('inviaSegnalazioneCreazioneAction — capability', () => {
+  const base = { step: 1, tipo: 'LETTURA_DATI' as const, datiGrezzi: { tipo: 'SEMPLICE' }, blobRefs: REFS };
+
+  it('un broker senza pratiche.create non invia la segnalazione', async () => {
+    authMock.mockResolvedValue({ user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'OPERATORE' } });
+    getSessionContextMock.mockResolvedValue({
+      user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'OPERATORE' },
+      companyId: BROKER, companyType: 'DEALER', isOwner: false,
+      accessibleSedi: [{ id: SEDE, nome: 'Mia', type: 'DEALER' }],
+      currentSede: { kind: 'ONE', sede: { id: SEDE, nome: 'Mia', type: 'DEALER' } },
+      scopeIds: [SEDE], membershipRuoli: {},
+      permessi: new Set(['pratiche.view']),
+    });
+
+    const res = await inviaSegnalazioneCreazioneAction({
+      ...base,
+      descrizione: 'La targa del libretto è stata letta male dall OCR',
+    });
+
+    expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
     expect(prismaMock.segnalazioneCreazione.create).not.toHaveBeenCalled();
   });
 });

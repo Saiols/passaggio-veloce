@@ -8,6 +8,7 @@ import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
+import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariAgenzia } from '@/lib/notifiche/pratica';
 import { emitEventiPratica } from '@/lib/eventi/emit';
@@ -38,6 +39,12 @@ export async function segnalaPraticaAction(
 ): Promise<SegnalaPraticaResult> {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
+
+  // Autenticazione → permesso → scope: la segnalazione apre una penale di €25
+  // a carico del broker, il gate va prima del controllo di scope sotto.
+  const gate = await requirePermesso('pratiche.segnala');
+  if (!gate.ok) return gate;
+
   if (session.user.companyType !== 'AGENZIA') {
     return { ok: false, error: 'Solo le agenzie possono segnalare problemi' };
   }

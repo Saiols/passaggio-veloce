@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { formatDateTime } from '@/lib/format';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 
 const LABELS: Record<string, string> = {
   N1_BROKER_INVIO_PRATICA: 'Pratica inviata',
@@ -21,6 +22,7 @@ const LABELS: Record<string, string> = {
 export default async function NotifichePage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  await assertPermesso('notifiche.view');
 
   const userId = session.user.id!;
   const companyId = session.user.companyId;

@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { resolveSubmittedSede } from '@/lib/sedi/scope';
 import { prisma, Prisma } from '@pv/db';
 import { getOcr, type LibrettoCircolazioneData } from '@/lib/providers/ocr';
@@ -94,12 +95,26 @@ export type ExtractLibrettoResult =
   | { ok: true; data: LibrettoCircolazioneData }
   | { ok: false; error: string };
 
+/**
+ * Gate condiviso dalle sei action OCR: chi non crea pratiche non ha motivo di
+ * far girare l'OCR, e ogni chiamata costa un'estrazione Document AI a
+ * pagamento. Un solo punto invece di ripetere il gate sei volte.
+ */
+async function gateCreazione(): Promise<{ ok: false; error: string } | null> {
+  const gate = await requirePermesso('pratiche.create');
+  return gate.ok ? null : gate;
+}
+
 export async function extractLibrettoAction(
   fronte: FileRef,
   retro: FileRef,
 ): Promise<ExtractLibrettoResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+
+  // Autenticazione → permesso → scope.
+  const gate = await gateCreazione();
+  if (gate) return gate;
 
   for (const [ref, label] of [[fronte, 'fronte'], [retro, 'retro']] as const) {
     if (!ref?.key || ref.size === 0) {
@@ -185,6 +200,8 @@ export async function extractFoglioComplementareAction(
 ): Promise<ExtractLibrettoResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  const gate = await gateCreazione();
+  if (gate) return gate;
   if (!ref?.key || ref.size === 0) return { ok: false, error: 'File foglio complementare mancante' };
   if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
   if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
@@ -221,6 +238,9 @@ export async function extractIdentitaAction(
 ): Promise<ExtractIdentitaResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+
+  const gate = await gateCreazione();
+  if (gate) return gate;
 
   if (!ref?.key || ref.size === 0) {
     return { ok: false, error: 'File documento mancante' };
@@ -270,6 +290,8 @@ export type ExtractVisuraResult =
 export async function extractVisuraAction(ref: FileRef): Promise<ExtractVisuraResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  const gate = await gateCreazione();
+  if (gate) return gate;
   if (!ref?.key || ref.size === 0) return { ok: false, error: 'File visura mancante' };
   if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
   if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
@@ -306,6 +328,8 @@ export type ExtractPermessoResult =
 export async function extractPermessoAction(ref: FileRef): Promise<ExtractPermessoResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  const gate = await gateCreazione();
+  if (gate) return gate;
   if (!ref?.key || ref.size === 0) return { ok: false, error: 'File permesso mancante' };
   if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
   if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
@@ -332,6 +356,8 @@ export type ExtractCodiceFiscaleResult =
 export async function extractCodiceFiscaleAction(ref: FileRef): Promise<ExtractCodiceFiscaleResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: 'Non autenticato' };
+  const gate = await gateCreazione();
+  if (gate) return gate;
   if (!ref?.key || ref.size === 0) return { ok: false, error: 'File tessera sanitaria mancante' };
   if (ref.size > MAX_LIBRETTO_BYTES) return { ok: false, error: 'File troppo grande (max 10 MB)' };
   if (!ACCEPTED_MIME.includes(ref.type)) return { ok: false, error: 'Formato non supportato (PDF/JPG/PNG)' };
@@ -548,6 +574,13 @@ export async function submitNuovaPraticaAction(
 ): Promise<{ ok: true; id: string }> {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  const gate = await requirePermesso('pratiche.create');
+  if (!gate.ok) {
+    redirect(`/pratiche/nuova?error=${encodeURIComponent(gate.error)}`);
+  }
+
   if (session.user.companyType !== 'DEALER') {
     redirect('/dashboard');
   }

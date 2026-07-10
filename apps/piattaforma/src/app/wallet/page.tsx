@@ -3,11 +3,10 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import {
   getOperatingSede,
-  getSedeRole,
   getSessionContext,
 } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
-import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
@@ -44,6 +43,9 @@ export default async function WalletPage({
   const sp = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('wallet.view');
 
   if (
     session.user.companyType !== 'DEALER' &&
@@ -303,7 +305,8 @@ export default async function WalletPage({
     rendimentoPeriod,
     ['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE'],
   );
-  const sedeRole = await getSedeRole(sede.id);
+  const canPayoutCapability = await hasPermesso('wallet.payout');
+  const canSoglia = await hasPermesso('wallet.soglia');
 
   return (
     <AppShell session={session} activePath="/wallet">
@@ -396,7 +399,7 @@ export default async function WalletPage({
           <RendimentoChart buckets={rendimento.buckets} accent="navy" />
         </Card>
 
-        {canEditSedeSettings(sedeRole) && (
+        {canPayoutCapability && (
         <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
           <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
           <p className="mt-1 text-sm text-pv-slate-500">
@@ -424,24 +427,25 @@ export default async function WalletPage({
               🎯 Il payout viene erogato subito alla richiesta.
             </p>
           )}
-          {canEditSedeSettings(sedeRole) && (
-            <div className="mt-5 border-t border-pv-slate-200 pt-4">
-              <h3 className="text-[13px] font-bold text-pv-navy-800">
-                Soglia payout automatico
-              </h3>
-              <p className="mt-1 text-[12px] text-pv-slate-500">
-                Configurabile tra {formatCurrencyCent(WALLET.AUTO_PAYOUT_MIN_CENT)} e{' '}
-                {formatCurrencyCent(WALLET.AUTO_PAYOUT_MAX_CENT)}.
-              </p>
-              <div className="mt-3">
-                <PayoutThresholdForm
-                  defaultValueCent={thresholdAutoCent}
-                  minCent={WALLET.AUTO_PAYOUT_MIN_CENT}
-                  maxCent={WALLET.AUTO_PAYOUT_MAX_CENT}
-                />
-              </div>
-            </div>
-          )}
+        </div>
+        )}
+
+        {canSoglia && (
+        <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
+          <h3 className="text-[13px] font-bold text-pv-navy-800">
+            Soglia payout automatico
+          </h3>
+          <p className="mt-1 text-[12px] text-pv-slate-500">
+            Configurabile tra {formatCurrencyCent(WALLET.AUTO_PAYOUT_MIN_CENT)} e{' '}
+            {formatCurrencyCent(WALLET.AUTO_PAYOUT_MAX_CENT)}.
+          </p>
+          <div className="mt-3">
+            <PayoutThresholdForm
+              defaultValueCent={thresholdAutoCent}
+              minCent={WALLET.AUTO_PAYOUT_MIN_CENT}
+              maxCent={WALLET.AUTO_PAYOUT_MAX_CENT}
+            />
+          </div>
         </div>
         )}
 

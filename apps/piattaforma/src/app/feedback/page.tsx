@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, whereValutazione } from '@/lib/sedi/scope-filters';
 import { Stars } from './stars';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 export default async function FeedbackPage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  await assertPermesso('feedback.view');
 
   if (session.user.companyType !== 'AGENZIA') {
     return (

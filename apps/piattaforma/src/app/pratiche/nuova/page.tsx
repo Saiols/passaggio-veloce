@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { resolveOperatingSede } from '@/lib/sedi/scope';
 import { WizardNuovaPratica } from './wizard';
 
@@ -18,6 +19,10 @@ export default async function NuovaPraticaPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('pratiche.create');
+
   if (session.user.companyType !== 'DEALER') redirect('/dashboard');
 
   const sp = await searchParams;

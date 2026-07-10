@@ -3,15 +3,45 @@
 import { useState, useTransition } from 'react';
 import { InlineSpinner, PasswordInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { MatricePermessi } from '@/components/permessi/matrice-permessi';
+import { applicaPreset, permessiConcedibili } from '@/components/permessi/matrice-logic';
+import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
 import { createUserDirectAction } from './actions';
 
 export function CreateUserForm({
   onSuccess,
   sedi = [],
-}: { onSuccess?: () => void; sedi?: { id: string; nome: string }[] } = {}) {
+  companyType,
+  assegnabili,
+  puoScegliere,
+}: {
+  onSuccess?: () => void;
+  sedi?: { id: string; nome: string }[];
+  companyType: CompanyTypeP;
+  assegnabili: Permesso[];
+  /** Il chiamante ha `team.permessi`. Se no, la matrice non si mostra. */
+  puoScegliere: boolean;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [ruoloSede, setRuoloSede] = useState<'ADMIN_SEDE' | 'OPERATORE'>('OPERATORE');
+  const [permessi, setPermessi] = useState<Permesso[]>(
+    applicaPreset('OPERATORE_BASE', companyType, permessiConcedibili(assegnabili, 'OPERATORE')),
+  );
+
+  function onRuoloChange(r: 'ADMIN_SEDE' | 'OPERATORE') {
+    setRuoloSede(r);
+    // Il set concedibile cambia col ruolo: ricalcolare il preset con i NUOVI concedibili,
+    // altrimenti passando ad «Operatore» resterebbero accesi dei team.* inerti.
+    setPermessi(
+      applicaPreset(
+        r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE',
+        companyType,
+        permessiConcedibili(assegnabili, r),
+      ),
+    );
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -22,10 +52,15 @@ export function CreateUserForm({
       const cognome = String(formData.get('cognome') ?? '');
       const password = String(formData.get('password') ?? '');
       const sedeId = String(formData.get('sedeId') ?? '') || undefined;
-      const ruoloSede = String(formData.get('ruoloSede') ?? 'OPERATORE') as
-        | 'ADMIN_SEDE'
-        | 'OPERATORE';
-      const res = await createUserDirectAction(email, nome, cognome, password, sedeId, ruoloSede);
+      const res = await createUserDirectAction(
+        email,
+        nome,
+        cognome,
+        password,
+        sedeId,
+        ruoloSede,
+        puoScegliere ? permessi : undefined,
+      );
       if (!res.ok) {
         setError(res.error);
         return;
@@ -87,12 +122,28 @@ export function CreateUserForm({
       )}
       <select
         name="ruoloSede"
-        defaultValue="OPERATORE"
+        value={ruoloSede}
+        onChange={(e) => onRuoloChange(e.target.value as 'ADMIN_SEDE' | 'OPERATORE')}
         className={`rounded-lg border border-pv-slate-300 px-3 py-2 text-sm ${sedi.length > 1 ? '' : 'sm:col-span-2'}`}
       >
         <option value="OPERATORE">Operatore</option>
         <option value="ADMIN_SEDE">Admin di sede</option>
       </select>
+      {puoScegliere ? (
+        <div className="sm:col-span-2">
+          <MatricePermessi
+            companyType={companyType}
+            ruoloSede={ruoloSede}
+            value={permessi}
+            onChange={setPermessi}
+            assegnabili={assegnabili}
+          />
+        </div>
+      ) : (
+        <p className="text-sm text-pv-slate-500 sm:col-span-2">
+          L&apos;utente riceverà i permessi di base. Per personalizzarli, chiedi al titolare.
+        </p>
+      )}
       <button
         type="submit"
         disabled={pending}

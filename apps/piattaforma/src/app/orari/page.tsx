@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
+import { getOperatingSede } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
-import { canEditSedeSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Button, Card } from '@/components/ui';
 import { updateOrariAction } from './actions';
@@ -38,6 +38,9 @@ export default async function OrariPage({
   const session = await auth();
   if (!session?.user) redirect('/login');
 
+  // Autenticazione → permesso → scope.
+  await assertPermesso('orari.view');
+
   if (session.user.companyType !== 'AGENZIA') {
     return (
       <AppShell session={session} activePath="/orari">
@@ -69,8 +72,7 @@ export default async function OrariPage({
   const byGiorno = new Map<string, Fascia[]>();
   for (const o of orari) byGiorno.set(o.giorno, parseFasce(o.fasceOrarie));
 
-  const role = await getSedeRole(sede.id);
-  const canEdit = canEditSedeSettings(role);
+  const canEdit = await hasPermesso('orari.edit');
 
   return (
     <AppShell session={session} activePath="/orari">

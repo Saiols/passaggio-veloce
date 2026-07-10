@@ -3,26 +3,58 @@
 import { useState, useTransition } from 'react';
 import { InlineSpinner } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { MatricePermessi } from '@/components/permessi/matrice-permessi';
+import { applicaPreset, permessiConcedibili } from '@/components/permessi/matrice-logic';
+import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
 import { createInvitationAction } from './actions';
 
 export function InviteForm({
   onSuccess,
   sedi = [],
-}: { onSuccess?: () => void; sedi?: { id: string; nome: string }[] } = {}) {
+  companyType,
+  assegnabili,
+  puoScegliere,
+}: {
+  onSuccess?: () => void;
+  sedi?: { id: string; nome: string }[];
+  companyType: CompanyTypeP;
+  assegnabili: Permesso[];
+  /** Il chiamante ha `team.permessi`. Se no, la matrice non si mostra. */
+  puoScegliere: boolean;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [demoLink, setDemoLink] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [ruoloSede, setRuoloSede] = useState<'ADMIN_SEDE' | 'OPERATORE'>('OPERATORE');
+  const [permessi, setPermessi] = useState<Permesso[]>(
+    applicaPreset('OPERATORE_BASE', companyType, permessiConcedibili(assegnabili, 'OPERATORE')),
+  );
+
+  function onRuoloChange(r: 'ADMIN_SEDE' | 'OPERATORE') {
+    setRuoloSede(r);
+    // Il set concedibile cambia col ruolo: ricalcolare il preset con i NUOVI concedibili,
+    // altrimenti passando ad «Operatore» resterebbero accesi dei team.* inerti.
+    setPermessi(
+      applicaPreset(
+        r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE',
+        companyType,
+        permessiConcedibili(assegnabili, r),
+      ),
+    );
+  }
 
   function handleSubmit(formData: FormData) {
     setError(null); setSuccess(null); setDemoLink(null);
     startTransition(async () => {
       const email = String(formData.get('email') ?? '');
       const sedeId = String(formData.get('sedeId') ?? '') || undefined;
-      const ruoloSede = String(formData.get('ruoloSede') ?? 'OPERATORE') as
-        | 'ADMIN_SEDE'
-        | 'OPERATORE';
-      const res = await createInvitationAction(email, sedeId, ruoloSede);
+      const res = await createInvitationAction(
+        email,
+        sedeId,
+        ruoloSede,
+        puoScegliere ? permessi : undefined,
+      );
       if (!res.ok) { setError(res.error); return; }
       setSuccess(`Invito inviato a ${email}.`);
       if (res.demoLink) setDemoLink(res.demoLink);
@@ -58,12 +90,28 @@ export function InviteForm({
       )}
       <select
         name="ruoloSede"
-        defaultValue="OPERATORE"
+        value={ruoloSede}
+        onChange={(e) => onRuoloChange(e.target.value as 'ADMIN_SEDE' | 'OPERATORE')}
         className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
       >
         <option value="OPERATORE">Operatore</option>
         <option value="ADMIN_SEDE">Admin di sede</option>
       </select>
+      {puoScegliere ? (
+        <div className="basis-full">
+          <MatricePermessi
+            companyType={companyType}
+            ruoloSede={ruoloSede}
+            value={permessi}
+            onChange={setPermessi}
+            assegnabili={assegnabili}
+          />
+        </div>
+      ) : (
+        <p className="basis-full text-sm text-pv-slate-500">
+          L&apos;utente riceverà i permessi di base. Per personalizzarli, chiedi al titolare.
+        </p>
+      )}
       <button
         type="submit"
         disabled={pending}

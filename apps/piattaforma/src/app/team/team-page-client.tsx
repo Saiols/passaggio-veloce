@@ -1,9 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
 import { AddUserModal } from './add-user-modal';
 
-export function TeamPageClient({ sedi = [] }: { sedi?: { id: string; nome: string }[] }) {
+export function TeamPageClient({
+  sedi = [],
+  companyType,
+  assegnabili,
+  puoScegliere,
+}: {
+  sedi?: { id: string; nome: string }[];
+  companyType: CompanyTypeP;
+  assegnabili: Permesso[];
+  puoScegliere: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -14,7 +25,14 @@ export function TeamPageClient({ sedi = [] }: { sedi?: { id: string; nome: strin
       >
         + Aggiungi utente
       </button>
-      <AddUserModal open={open} onClose={() => setOpen(false)} sedi={sedi} />
+      <AddUserModal
+        open={open}
+        onClose={() => setOpen(false)}
+        sedi={sedi}
+        companyType={companyType}
+        assegnabili={assegnabili}
+        puoScegliere={puoScegliere}
+      />
     </>
   );
 }

@@ -73,6 +73,8 @@ import {
   firmaFromListaAction,
   annullaPraticaAction,
   submitValutazioneAction,
+  markPraticaProcessataAction,
+  markFirmaAvvenutaAction,
 } from './actions';
 
 // UUID valido: lo schema Zod di submitValutazioneAction esige un uuid.
@@ -98,17 +100,45 @@ const praticaAltraSede = (over: Record<string, unknown> = {}) => ({
 const praticaMiaSede = (over: Record<string, unknown> = {}) =>
   praticaAltraSede({ brokerSedeId: SEDE_MIA, agenziaSedeId: SEDE_MIA, ...over });
 
+// Permessi necessari perché i test di SCOPING superino il gate di capability
+// e arrivino davvero al controllo di sede/stato che vogliono esercitare.
+const PERMESSI_AGENZIA = ['pratiche.view', 'pratiche.processa', 'pratiche.firma', 'pratiche.segnala'];
+const PERMESSI_DEALER = ['pratiche.view', 'pratiche.create', 'pratiche.annulla', 'pratiche.valuta'];
+
 function sessione(companyType: 'AGENZIA' | 'DEALER', companyId: string): void {
   authMock.mockResolvedValue({ user: { id: 'u1', companyId, companyType, role: 'OPERATORE' } });
   getSessionContextMock.mockResolvedValue({
     user: { id: 'u1', companyId, companyType, role: 'OPERATORE' },
     companyId,
+    companyType,
     isOwner: false,
     accessibleSedi: [{ id: SEDE_MIA, nome: 'Mia', type: companyType }],
     currentSede: { kind: 'ONE', sede: { id: SEDE_MIA, nome: 'Mia', type: companyType } },
     scopeIds: [SEDE_MIA],
     membershipRuoli: {},
+    permessi: new Set(companyType === 'AGENZIA' ? PERMESSI_AGENZIA : PERMESSI_DEALER),
   });
+}
+
+/** Contesto di sessione con i permessi indicati (per i test di capability). */
+function ctxConPermessi(
+  companyType: 'AGENZIA' | 'DEALER',
+  companyId: string,
+  permessi: string[],
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    user: { id: 'u1', companyId, companyType, role: 'OPERATORE' },
+    companyId,
+    companyType,
+    isOwner: false,
+    accessibleSedi: [{ id: SEDE_MIA, nome: 'Mia', type: companyType }],
+    currentSede: { kind: 'ONE', sede: { id: SEDE_MIA, nome: 'Mia', type: companyType } },
+    scopeIds: [SEDE_MIA],
+    membershipRuoli: { [SEDE_MIA]: 'OPERATORE' },
+    permessi: new Set(permessi),
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -231,5 +261,143 @@ describe('submitValutazioneAction — scoping sede', () => {
     const res = await submitValutazioneAction(fd());
 
     expect(res).toEqual({ ok: false, error: 'Puoi valutare solo pratiche firmate' });
+  });
+});
+
+/**
+ * Gate di CAPABILITY (permesso) sulle stesse azioni: precede lo scoping sede
+ * (regola d'oro: autenticazione → permesso → scope). Il test più importante di
+ * questo task — un operatore con `pratiche.processa` ma senza `pratiche.firma`
+ * non deve poter firmare, perché la firma accredita denaro.
+ */
+describe('processaPraticaFromListaAction — capability', () => {
+  it('un operatore senza pratiche.processa non processa la pratica', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
+    });
+    getSessionContextMock.mockResolvedValue(ctxConPermessi('AGENZIA', AGENZIA, ['pratiche.view']));
+
+    const res = await processaPraticaFromListaAction(PID);
+
+    expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('il wrapper del dettaglio (markPraticaProcessataAction) è coperto dallo stesso gate', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
+    });
+    getSessionContextMock.mockResolvedValue(ctxConPermessi('AGENZIA', AGENZIA, ['pratiche.view']));
+
+    await expect(markPraticaProcessataAction(PID)).rejects.toThrow(/__REDIRECT__/);
+
+    const url = redirectMock.mock.calls.at(-1)?.[0] as string;
+    expect(decodeURIComponent(url)).toContain('Non hai i permessi per questa azione');
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('con pratiche.processa: supera il gate (arriva al controllo di stato)', async () => {
+    sessione('AGENZIA', AGENZIA);
+    prismaMock.pratica.findUnique.mockResolvedValue(praticaMiaSede({ stato: 'BOZZA' }));
+
+    const res = await processaPraticaFromListaAction(PID);
+
+    expect(res).toEqual({ ok: false, error: 'Pratica non nello stato ACCETTATA' });
+  });
+});
+
+describe('firmaFromListaAction — capability', () => {
+  it('un operatore con pratiche.processa ma senza pratiche.firma non firma', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
+    });
+    getSessionContextMock.mockResolvedValue(
+      ctxConPermessi('AGENZIA', AGENZIA, ['pratiche.view', 'pratiche.processa']),
+    );
+
+    const res = await firmaFromListaAction(PID);
+
+    expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('il wrapper del dettaglio (markFirmaAvvenutaAction) è coperto dallo stesso gate', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'OPERATORE' },
+    });
+    getSessionContextMock.mockResolvedValue(
+      ctxConPermessi('AGENZIA', AGENZIA, ['pratiche.view', 'pratiche.processa']),
+    );
+
+    await expect(markFirmaAvvenutaAction(PID)).rejects.toThrow(/__REDIRECT__/);
+
+    const url = redirectMock.mock.calls.at(-1)?.[0] as string;
+    expect(decodeURIComponent(url)).toContain('Non hai i permessi per questa azione');
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('con pratiche.firma: supera il gate (arriva al controllo di stato)', async () => {
+    sessione('AGENZIA', AGENZIA);
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaMiaSede({ stato: 'ACCETTATA', broker: {}, agenziaAssegnata: {} }),
+    );
+
+    const res = await firmaFromListaAction(PID);
+
+    expect(res).toEqual({ ok: false, error: 'La pratica deve essere prima processata' });
+  });
+
+  it('proprietario: ammesso anche senza permessi espliciti (isOwner bypassa il gate)', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: AGENZIA, companyType: 'AGENZIA', role: 'ADMIN_AZIENDA' },
+    });
+    getSessionContextMock.mockResolvedValue(
+      ctxConPermessi('AGENZIA', AGENZIA, [], { isOwner: true }),
+    );
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaMiaSede({ stato: 'ACCETTATA', broker: {}, agenziaAssegnata: {} }),
+    );
+
+    const res = await firmaFromListaAction(PID);
+
+    // Superato il gate: fallisce sullo stato, non sui permessi.
+    expect(res).toEqual({ ok: false, error: 'La pratica deve essere prima processata' });
+  });
+});
+
+describe('annullaPraticaAction — capability', () => {
+  it('un broker senza pratiche.annulla non annulla', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'OPERATORE' },
+    });
+    getSessionContextMock.mockResolvedValue(ctxConPermessi('DEALER', BROKER, ['pratiche.view']));
+
+    await expect(annullaPraticaAction(PID)).rejects.toThrow(/__REDIRECT__/);
+
+    const url = redirectMock.mock.calls.at(-1)?.[0] as string;
+    expect(decodeURIComponent(url)).toContain('Non hai i permessi per questa azione');
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('submitValutazioneAction — capability', () => {
+  const fd = (): FormData => {
+    const f = new FormData();
+    f.set('praticaId', PID);
+    f.set('stelle', '5');
+    f.set('note', '');
+    return f;
+  };
+
+  it('un broker senza pratiche.valuta non valuta', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u1', companyId: BROKER, companyType: 'DEALER', role: 'OPERATORE' },
+    });
+    getSessionContextMock.mockResolvedValue(ctxConPermessi('DEALER', BROKER, ['pratiche.view']));
+
+    const res = await submitValutazioneAction(fd());
+
+    expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
+    expect(prismaMock.valutazione.create).not.toHaveBeenCalled();
   });
 });

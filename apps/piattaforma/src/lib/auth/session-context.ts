@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
 import { isOwner as isOwnerRole } from '@/lib/auth/permissions';
+import { isPermesso, type CompanyTypeP, type Permesso } from '@/lib/auth/permessi/catalogo';
 import {
   resolveAccessibleSedi,
   resolveCurrentSede,
@@ -38,6 +39,10 @@ export type SessionContext = {
   scopeIds: string[];
   /** Ruolo per sede dell'utente (solo membership non-owner). */
   membershipRuoli: Record<string, SedeRuolo>;
+  /** Tipo azienda: filtra il catalogo dei permessi. */
+  companyType: CompanyTypeP | undefined;
+  /** Capability granulari. Vuoto per l'owner: `can()` gli dà tutto comunque. */
+  permessi: Set<Permesso>;
 };
 
 /**
@@ -62,10 +67,12 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
       currentSede: null,
       scopeIds: [],
       membershipRuoli: {},
+      companyType: undefined,
+      permessi: new Set<Permesso>(),
     };
   }
 
-  const [companySedi, memberships] = await Promise.all([
+  const [companySedi, memberships, dbUser, company] = await Promise.all([
     prisma.sede.findMany({
       where: { companyId, deletedAt: null },
       select: { id: true, nome: true, type: true },
@@ -75,6 +82,11 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
       where: { userId: user.id, sede: { companyId, deletedAt: null } },
       select: { sedeId: true, ruolo: true },
     }),
+    // L'owner ha pieni poteri impliciti: non serve leggere il campo.
+    isOwner
+      ? Promise.resolve(null)
+      : prisma.user.findUnique({ where: { id: user.id }, select: { permessi: true } }),
+    prisma.company.findUnique({ where: { id: companyId }, select: { type: true } }),
   ]);
 
   const accessibleSedi = resolveAccessibleSedi({
@@ -90,7 +102,18 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
   const membershipRuoli: Record<string, SedeRuolo> = {};
   for (const m of memberships) membershipRuoli[m.sedeId] = m.ruolo as SedeRuolo;
 
-  return { user, companyId, isOwner, accessibleSedi, currentSede, scopeIds, membershipRuoli };
+  return {
+    user,
+    companyId,
+    isOwner,
+    accessibleSedi,
+    currentSede,
+    scopeIds,
+    membershipRuoli,
+    companyType: (company?.type ?? undefined) as CompanyTypeP | undefined,
+    // Il confine col DB: una chiave rimossa dal catalogo non entra nel set.
+    permessi: new Set((dbUser?.permessi ?? []).filter(isPermesso)),
+  };
 });
 
 /**

@@ -9,6 +9,7 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 import { getSessionContext } from '@/lib/auth/session-context';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { toSedeScope, whereDocumentoFiscale, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import {
   TIPI_DOC,
@@ -89,6 +90,10 @@ export default async function FatturazionePage({
 }) {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('fatture.view');
+
   const companyId = session.user.companyId;
   const tipo = session.user.companyType;
 
@@ -125,6 +130,7 @@ export default async function FatturazionePage({
   // (i filtri utente cancellerebbero lo scope sede ⇒ leak). Combinare in AND.
   const where: Prisma.DocumentoFiscaleWhereInput = { AND: [scope, fatturaWhereFiltri(filtri)] };
   const exportQs = fatturaFiltriToQuery(filtri);
+  const canScaricare = await hasPermesso('fatture.download');
 
   return (
     <AppShell session={session} activePath="/fatturazione">
@@ -138,11 +144,13 @@ export default async function FatturazionePage({
               Fatture
             </h1>
           </div>
-          <DownloadDocumentiButton
-            href={`/api/fatturazione/zip${exportQs ? `?${exportQs}` : ''}`}
-            label="Scarica fatture (ZIP)"
-            className="shrink-0 rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
-          />
+          {canScaricare && (
+            <DownloadDocumentiButton
+              href={`/api/fatturazione/zip${exportQs ? `?${exportQs}` : ''}`}
+              label="Scarica fatture (ZIP)"
+              className="shrink-0 rounded-[10px] bg-pv-navy-700 px-4 py-2 text-[13px] font-bold text-white hover:brightness-110"
+            />
+          )}
         </header>
 
         <FiltriBar filtri={filtri} sedi={sedi} />

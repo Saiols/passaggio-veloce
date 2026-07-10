@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Modal } from '@/components/ui';
+import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
 import { CreateUserForm } from './create-user-form';
 import { InviteForm } from './invite-form';
 
@@ -11,10 +12,16 @@ export function AddUserModal({
   open,
   onClose,
   sedi = [],
+  companyType,
+  assegnabili,
+  puoScegliere,
 }: {
   open: boolean;
   onClose: () => void;
   sedi?: { id: string; nome: string }[];
+  companyType: CompanyTypeP;
+  assegnabili: Permesso[];
+  puoScegliere: boolean;
 }) {
   const [tab, setTab] = useState<Tab>('password');
 
@@ -52,9 +59,21 @@ export function AddUserModal({
       </div>
 
       {tab === 'password' ? (
-        <CreateUserForm onSuccess={onClose} sedi={sedi} />
+        <CreateUserForm
+          onSuccess={onClose}
+          sedi={sedi}
+          companyType={companyType}
+          assegnabili={assegnabili}
+          puoScegliere={puoScegliere}
+        />
       ) : (
-        <InviteForm onSuccess={onClose} sedi={sedi} />
+        <InviteForm
+          onSuccess={onClose}
+          sedi={sedi}
+          companyType={companyType}
+          assegnabili={assegnabili}
+          puoScegliere={puoScegliere}
+        />
       )}
     </Modal>
   );

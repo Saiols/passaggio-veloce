@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
-import { canEditSedeSettings, canEditPaymentSettings } from '@/lib/sedi/scope';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
+import { canEditPaymentSettings } from '@/lib/sedi/scope';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { SedeEdit } from '../sedi/[id]/sede-edit';
@@ -11,6 +12,9 @@ import { SedeEdit } from '../sedi/[id]/sede-edit';
 export default async function ImpostazioniSedePage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+
+  // Autenticazione → permesso → scope.
+  await assertPermesso('sede.view');
 
   const sede = await getOperatingSede();
   if (!sede) {
@@ -26,7 +30,6 @@ export default async function ImpostazioniSedePage() {
   }
 
   const role = await getSedeRole(sede.id);
-  if (!canEditSedeSettings(role)) redirect('/dashboard');
   const canEditPagamenti = canEditPaymentSettings(role);
 
   const row = await prisma.sede.findFirst({ where: { id: sede.id, deletedAt: null } });

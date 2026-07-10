@@ -525,6 +525,11 @@ model User {
   /// Token per unsubscribe one-click via link email (generato lazy al primo invio opzionale).
   unsubscribeToken String? @unique
 
+  /// Permessi granulari (chiavi del catalogo lib/auth/permessi/catalogo.ts).
+  /// Snapshot esplicito: nessuna eredita' dal ruolo. Ignorato per ADMIN_AZIENDA
+  /// (owner: pieni poteri impliciti). Vuoto per gli utenti PV (companyId null).
+  permessi String[] @default([])
+
   // Documenti caricati da questo utente
   documentiCaricati Documento[] @relation("DocumentiUploader")
 
@@ -682,6 +687,9 @@ model Invitation {
   // solo per ADMIN_AZIENDA) + ruolo dell'utente nella sede.
   sedeId    String?   @db.Uuid
   ruoloSede RuoloSede @default(OPERATORE)
+
+  /// Permessi che l'utente ricevera' accettando l'invito.
+  permessi String[] @default([])
 
   invitedById String @db.Uuid
 

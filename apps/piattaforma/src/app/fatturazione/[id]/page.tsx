@@ -11,6 +11,7 @@ import { resolveSedeRiferimento, type SedeRiferimento } from '@/lib/fatturazione
 import { canViewDocumentoFiscale, docSedeFields } from '@/lib/fatturazione/access';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
+import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
 import { SegnaTrasmessoButton } from './segna-trasmesso-button';
 import { BackButton } from '@/components/back-button';
 
@@ -50,6 +51,14 @@ export default async function DocumentoFiscaleDetailPage({
   if (!session?.user) redirect('/login');
   const { id } = await params;
 
+  // Autenticazione → permesso → scope. Lo staff piattaforma non ha permessi
+  // azienda (companyId null): questa pagina resta condivisa (linkata da
+  // /admin/fatturazione), quindi il gate vale solo per gli utenti azienda.
+  const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
+  if (!isAdmin) {
+    await assertPermesso('fatture.view');
+  }
+
   const doc = await prisma.documentoFiscale.findUnique({
     where: { id },
     include: {
@@ -85,7 +94,6 @@ export default async function DocumentoFiscaleDetailPage({
   });
   if (!doc) notFound();
 
-  const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
   const ctx = await getSessionContext();
   const allowed = canViewDocumentoFiscale(docSedeFields(doc), {
     companyId: session.user.companyId,
@@ -93,6 +101,11 @@ export default async function DocumentoFiscaleDetailPage({
     scope: ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE,
   });
   if (!allowed) notFound();
+
+  // I bottoni di download: lo staff piattaforma scarica sempre (bypass
+  // esplicito, coerente con le route API), altrimenti serve il permesso.
+  const canDownload = isAdmin || (await hasPermesso('fatture.download'));
+  const canXml = isAdmin || (await hasPermesso('fatture.xml'));
 
   const emittente = doc.datiEmittente as unknown as DatiFiscali;
   const destinatario = doc.datiDestinatario as unknown as DatiFiscali;
@@ -125,13 +138,15 @@ export default async function DocumentoFiscaleDetailPage({
             <p className="mt-1 text-[13px] text-pv-slate-500">Emesso il {formatDate(doc.emessoAt)}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <a
-              href={`/api/fatturazione/${doc.id}/pdf`}
-              className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-            >
-              Scarica PDF
-            </a>
-            {doc.fatturaPaTipo && (
+            {canDownload && (
+              <a
+                href={`/api/fatturazione/${doc.id}/pdf`}
+                className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+              >
+                Scarica PDF
+              </a>
+            )}
+            {doc.fatturaPaTipo && canXml && (
               <a
                 href={`/api/fatturazione/${doc.id}/xml`}
                 className="rounded-[10px] border border-pv-slate-300 bg-white px-4 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"

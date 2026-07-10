@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { auth } from '@/auth';
+import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { getSessionContext, getOperatingSede } from '@/lib/auth/session-context';
 import { toSedeScope } from '@/lib/sedi/scope-filters';
 import { prisma } from '@pv/db';
@@ -27,6 +28,7 @@ const COMMISSIONI_TABELLA = [
 export default async function AffiliazionePage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
+  await assertPermesso('affiliazione.view');
   if (
     session.user.companyType !== 'DEALER' &&
     session.user.companyType !== 'AGENZIA'

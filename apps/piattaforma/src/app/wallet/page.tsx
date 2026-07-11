@@ -471,8 +471,10 @@ export default async function WalletPage({
         <div className="mb-5 rounded-2xl border border-pv-slate-200 bg-white p-6">
           <h2 className="text-base font-bold text-pv-navy-900">Payout</h2>
           <p className="mt-1 text-sm text-pv-slate-500">
-            Erogazione immediata alla richiesta (saldo minimo{' '}
-            {formatCurrencyCent(WALLET.MIN_PAYOUT_CENT)}).
+            I compensi si accumulano e restano sempre tuoi: puoi richiedere il
+            prelievo al raggiungimento di {formatCurrencyCent(WALLET.MIN_PAYOUT_CENT)}.
+            Nulla va perduto sotto questa soglia — se chiudi l&apos;account ti
+            liquidiamo comunque l&apos;intero saldo residuo.
             {hasAffiliazione
               ? ' Incassa insieme i compensi pratiche e le commissioni di affiliazione.'
               : ''}

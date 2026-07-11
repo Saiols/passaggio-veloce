@@ -171,7 +171,8 @@ model DocumentoFiscale {
   /// Soggetto emittente reale (chi compare in CedentePrestatore nell'XML).
   /// FATTURA_PV → company di PV stessa (Settings o costante)
   /// DOC_BROKER → company del broker
-  /// PENALE_BROKER → TBD commercialista
+  /// PENALE_BROKER → mai valorizzato: la penale non genera DocumentoFiscale
+  /// (fuori campo IVA, clausola 10.4(b) dei Termini — vedi §6.4).
   emittenteCompanyId String?  @db.Uuid
   emittenteCompany   Company? @relation("DocumentiEmessi", fields: [emittenteCompanyId], references: [id])
 
@@ -182,7 +183,7 @@ model DocumentoFiscale {
   /// Tipo XML FatturaPA dinamico in base al regime fiscale dell'emittente.
   /// Per FATTURA_PV: sempre TD01.
   /// Per DOC_BROKER: TD01 (ordinario) / TD06 (forfettario) / nessun XML (privato).
-  /// Per PENALE_BROKER: TBD.
+  /// Per PENALE_BROKER: N/A — non genera mai un DocumentoFiscale (§6.4).
   fatturaPaTipo FatturaPaTipo?
 
   /// Numero progressivo nel registro dell'emittente, per anno fiscale.
@@ -237,7 +238,8 @@ model DocumentoFiscale {
 enum DocumentoFiscaleTipo {
   FATTURA_PV       // €50 (trapasso) o €15 (minivoltura) — emessa da PV
   DOC_BROKER       // €25 — emesso da PV per conto del broker
-  PENALE_BROKER    // TBD commercialista — formato e generazione TBD
+  PENALE_BROKER    // valore di riserva, MAI creato: la penale è fuori campo IVA
+                    // (clausola 10.4(b)) e resta solo movimento wallet — vedi §6.4
   NOTA_VARIAZIONE  // Storno / rettifica di altro DocumentoFiscale
 }
 
@@ -462,14 +464,13 @@ function splitMinivoltura(tipo: "STANDARD" | "MULTIPLA", numVeicoli = 1) {
 
 > **Invariante economica:** l'agenzia paga sempre lo stesso totale (€75 trapasso, €30/€20×N minivoltura) indipendentemente dal regime broker. Il regime broker ridistribuisce solo lo split interno tra PV e broker.
 
-### 6.4 Penale broker (rimanda a commercialista)
+### 6.4 Penale broker (chiuso: fuori campo IVA, nessun documento fiscale)
 
-`sistema-penali-broker.md` ha già implementato `TransazioneWallet.PENALE_BROKER` come addebito interno €100. **Aperto:** se la penale debba generare anche un `DocumentoFiscale.PENALE_BROKER` autonomo, oppure restare come rettifica contabile interna sulle somme di terzi del broker.
+`sistema-penali-broker.md` ha implementato `TransazioneWallet.PENALE_BROKER` come addebito interno di **€25 per ciascun veicolo effettivamente segnalato** (mai sui veicoli sani della stessa pratica; fallback a 1 veicolo per le segnalazioni legacy prive del flag `Veicolo.segnalato`). **Chiuso** (clausola 10.4(b) dei Termini): la penale è **fuori campo IVA** ai sensi dell'art. 15, co. 1, n. 1, D.P.R. 633/1972, costituendo somma dovuta a titolo di penalità — non genera alcun `DocumentoFiscale.PENALE_BROKER` autonomo, resta rettifica contabile interna sulle somme di terzi del broker.
 
-**Comportamento attuale (interim):**
-- KPI "Penali incassate mese" su `/admin/fatturazione` Tab 1 → calcolato da somma `TransazioneWallet` con tipo `PENALE_BROKER` (no documento fiscale)
-- Non viene generato `DocumentoFiscale` per penale finché commercialista non chiarisce
-- Se serve documento → migrazione separata + logica ad hoc post-decisione
+**Comportamento attuale (definitivo):**
+- KPI "Penali incassate mese" su `/admin/fatturazione` Tab 1 → calcolato da somma `TransazioneWallet` con tipo `PENALE_BROKER` (no documento fiscale, per costruzione, non per lacuna)
+- Nessun `DocumentoFiscale` viene generato per la penale: è fuori campo IVA, quindi non è un documento fiscale — non c'è nulla da chiarire con il commercialista su questo punto
 
 ### 6.5 Numerazione progressiva — implementazione effettiva
 
@@ -553,7 +554,7 @@ Sono i blocchi residui che impediscono il lancio in produzione. Da risolvere con
 2. **Tipo documento per regime forfettario:** TD06 (parcella) o TD01 con natura N2.2? Confermare per generazione XML.
 3. **Trattamento IVA per regime forfettario:** fuori campo IVA (art. 1 c. 54-89 L. 190/2014) — confermare codifica XSD
 4. **Broker privato:** split economico definitivo (proposta interim: 55+20 come forfettario), ricevuta non fiscale o documento alternativo, applicabilità ritenuta d'acconto 20% (incidenza su payout netto al broker)
-5. **Penale €100:** come va contabilizzata? Nota di addebito a sé, rettifica somme di terzi, o evento contabile interno PV? (vedi §6.4)
+5. ~~**Penale:** come va contabilizzata?~~ **Chiuso** (clausola 10.4(b) dei Termini, vedi §6.4): fuori campo IVA (art. 15, co. 1, n. 1, D.P.R. 633/1972) → nessun documento fiscale, resta evento contabile interno PV (movimento wallet + rettifica sulle somme di terzi del broker).
 6. **Somme di terzi nel bilancio PV:** conto patrimoniale dedicato, modalità di registrazione, riconciliazione con wallet
 7. **Numerazione progressiva** per broker emittente: deve essere unica per registro broker (non globale PV) — confermare conformità normativa
 8. **Validità clausola delega** nei T&C — sufficiente checkbox + log o serve firma digitale?
@@ -608,7 +609,7 @@ Sono i blocchi residui che impediscono il lancio in produzione. Da risolvere con
 ### Bundle FT-E — Note di variazione + casi speciali
 22. Workflow nota di credito / nota di debito (TD04/TD05)
 23. Pratica `ANNULLATA` post-emissione → genera automaticamente nota di credito
-24. Penale broker → eventuale documento separato (post-decisione commercialista)
+24. ~~Penale broker → eventuale documento separato~~ **Chiuso** (§6.4): nessun documento fiscale, resta movimento wallet fuori campo IVA
 
 ---
 

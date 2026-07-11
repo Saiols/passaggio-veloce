@@ -7,7 +7,7 @@
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
 > **Spec attive da implementare:**
-> - `docs/sistema-penali-broker.md` — popup pre-invio, segnalazione agenzia, penale €100, wallet negativo (3 bundle SP-A/B/C) ✅ in prod
+> - `docs/sistema-penali-broker.md` — popup pre-invio, segnalazione agenzia, penale €25 × veicolo segnalato, wallet negativo (3 bundle SP-A/B/C) ✅ in prod
 > - `docs/schema-documentale-v7.md` — engine documentale + wizard branching + revisione manuale (4 bundle SD-A/B/C/D, ultimo richiede AI/OCR account esterno) ✅ A/B/C in prod
 > - `docs/crm-spec-implementativa.md` — CRM interno team PV (Pipeline Lead, Sales Agents, Campagne, Chatbot, Dashboard, RBAC interno). 8 bundle CRM-A..H. Sostituisce il placeholder "FASE 14 differita".
 > - `docs/sistema-fatturazione.md` — modello fatturazione delegata + sezione UI admin/agenzia/broker (5 bundle FT-A/B/C/D/E). Sostituisce il vecchio "rendiconto + fattura broker" di FASE 5.2/5.3. Bloccato su B1 commercialista per parte XML/IVA, fondamenta UI fattibili.
@@ -368,7 +368,7 @@
 **Bundle FT-E — Note di variazione + casi speciali** _(bloccato B1)_
 - [~] Engine `createNotaCredito` (TD04, importi negativi, storna l'originale) presente; trigger/UI admin non cablati
 - [ ] Pratica `ANNULLATA` post-emissione → genera automaticamente nota di credito
-- [ ] Penale broker → eventuale documento separato (post-decisione commercialista — vedi `sistema-fatturazione.md` §6.4)
+- [x] ~~Penale broker → eventuale documento separato (post-decisione commercialista)~~ **Chiuso**: nessun documento fiscale, la penale è fuori campo IVA (clausola 10.4(b) dei Termini — vedi `sistema-fatturazione.md` §6.4), resta solo movimento wallet
 
 ---
 

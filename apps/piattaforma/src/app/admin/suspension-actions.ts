@@ -225,3 +225,27 @@ export async function deleteCompanyAction(
   revalidatePath('/admin/utenti');
   return { ok: true };
 }
+
+/**
+ * Revoca la sospensione anti-abuso di una SEDE (5 no-show consecutivi).
+ * È l'unico modo per riattivarla: `setSedeSuspended` la rifiuta al titolare.
+ * Cfr. clausola 11.2 dei Termini (revoca previa verifica di Passaggio Veloce).
+ */
+export async function reactivateSedeAntiAbusoAction(
+  sedeId: string,
+): Promise<SuspensionResult> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!isAdminOrAssistente(session.user.role)) {
+    return { ok: false, error: 'Operazione riservata ad admin/assistente' };
+  }
+
+  await prisma.sede.update({
+    where: { id: sedeId },
+    data: { suspendedAt: null, suspensionOrigin: null },
+  });
+
+  revalidatePath('/admin/agenzie');
+  revalidatePath('/sedi');
+  return { ok: true };
+}

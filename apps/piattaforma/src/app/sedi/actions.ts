@@ -158,15 +158,29 @@ async function setSedeSuspended(sedeId: string, suspended: boolean): Promise<Sed
 
   const sede = await prisma.sede.findUnique({
     where: { id: sedeId },
-    select: { companyId: true },
+    select: { companyId: true, suspensionOrigin: true },
   });
   if (!sede || sede.companyId !== companyId) {
     return { ok: false, error: 'Sede non trovata' };
   }
 
+  // Una sanzione non è revocabile dal sanzionato. La sede sospesa dal sistema
+  // anti-abuso (5 no-show consecutivi) può essere riattivata solo da Passaggio
+  // Veloce: altrimenti la misura non avrebbe alcun effetto — l'agenzia si
+  // riattiverebbe da sé, ogni volta.
+  if (!suspended && sede.suspensionOrigin === 'ANTI_ABUSO') {
+    return {
+      ok: false,
+      error:
+        'Questa sede è stata sospesa da Passaggio Veloce per mancate risposte reiterate. Scrivi ad assistenza@passaggioveloce.it per chiederne la riattivazione.',
+    };
+  }
+
   await prisma.sede.update({
     where: { id: sedeId },
-    data: { suspendedAt: suspended ? new Date() : null },
+    data: suspended
+      ? { suspendedAt: new Date(), suspensionOrigin: 'UTENTE' }
+      : { suspendedAt: null, suspensionOrigin: null },
   });
   revalidatePath('/sedi');
   return { ok: true };

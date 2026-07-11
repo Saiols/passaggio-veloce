@@ -6,6 +6,7 @@ import { Alert, StatCard } from '@/components/ui';
 import { RANKING } from '@/lib/distribuzione';
 import { TextSearchFilter } from '@/components/text-search-filter';
 import { SuspendButton } from '../suspend-button';
+import { ReactivateSedeButton } from '../reactivate-sede-button';
 
 type SearchParams = { q?: string };
 
@@ -30,6 +31,12 @@ export default async function AdminAgenziePage({
   const agenzie = await prisma.company.findMany({
     where,
     orderBy: { ragioneSociale: 'asc' },
+    include: {
+      sedi: {
+        where: { deletedAt: null },
+        select: { id: true, nome: true, suspendedAt: true, suspensionOrigin: true },
+      },
+    },
   });
 
   const ratings = await prisma.valutazione.groupBy({
@@ -161,6 +168,20 @@ export default async function AdminAgenziePage({
                     <p className="text-[11px] font-normal text-pv-slate-500">
                       {r.citta}
                     </p>
+                    {r.sedi
+                      .filter((s) => s.suspendedAt !== null && s.suspensionOrigin === 'ANTI_ABUSO')
+                      .map((s) => (
+                        <div
+                          key={s.id}
+                          className="mt-1.5 flex flex-wrap items-center gap-2"
+                        >
+                          <span className="inline-flex items-center rounded-full bg-pv-orange-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-orange-500">
+                            Sede sospesa · anti-abuso
+                          </span>
+                          <span className="text-[11px] text-pv-slate-500">{s.nome}</span>
+                          <ReactivateSedeButton sedeId={s.id} />
+                        </div>
+                      ))}
                   </td>
                   <td className="px-5 py-3 hidden text-pv-slate-700 sm:table-cell">
                     {r.provincia}

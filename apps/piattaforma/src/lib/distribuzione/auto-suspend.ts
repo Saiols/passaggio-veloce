@@ -44,7 +44,7 @@ export async function checkAutoSuspendForSedi(
 
     await tx.sede.update({
       where: { id },
-      data: { suspendedAt: new Date() },
+      data: { suspendedAt: new Date(), suspensionOrigin: 'ANTI_ABUSO' },
     });
     suspended.push(id);
   }

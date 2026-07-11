@@ -5,8 +5,8 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatDate } from '@/lib/format';
-import { suspendSedeAction, reactivateSedeAction } from '../actions';
 import { SedeEdit } from './sede-edit';
+import { SuspendToggle } from './suspend-toggle';
 
 export default async function SedeDetailPage({
   params,
@@ -54,20 +54,7 @@ export default async function SedeDetailPage({
                 Attiva
               </span>
             )}
-            <form
-              action={async () => {
-                'use server';
-                if (sede.suspendedAt) await reactivateSedeAction(sede.id);
-                else await suspendSedeAction(sede.id);
-              }}
-            >
-              <button
-                type="submit"
-                className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-              >
-                {sede.suspendedAt ? 'Riattiva' : 'Sospendi'}
-              </button>
-            </form>
+            <SuspendToggle sedeId={sede.id} suspended={Boolean(sede.suspendedAt)} />
           </div>
         </header>
 

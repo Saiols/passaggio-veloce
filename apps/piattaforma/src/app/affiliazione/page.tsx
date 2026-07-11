@@ -13,6 +13,7 @@ import { getTariffarioCorrente } from '@/lib/tariffario';
 import { CopyLinkButton } from './copy-link-button';
 import { getRendimento } from '@/app/wallet/rendimento';
 import { RendimentoChart } from '@/app/wallet/rendimento-chart';
+import { MovimentiReferral, type RigaMovimentoAffiliazione } from './movimenti-referral';
 
 // Righe della tabella commissioni affiliazione, una per tipo pratica gestito.
 // Gli importi sono DERIVATI da computeFees (lib/pricing) così restano allineati
@@ -116,10 +117,15 @@ export default async function AffiliazionePage() {
       // referral che la lista sopra non elenca più).
       prisma.commissioneAffiliazione.findMany({
         where: { referenteId: companyId, ...filtroSede },
+        orderBy: { createdAt: 'desc' },
         select: {
+          id: true,
+          createdAt: true,
           stato: true,
           importoNettoCent: true,
-          pratica: { select: { brokerId: true, agenziaAssegnataId: true } },
+          pratica: {
+            select: { id: true, codicePratica: true, brokerId: true, agenziaAssegnataId: true },
+          },
         },
       }),
     ]);
@@ -133,6 +139,9 @@ export default async function AffiliazionePage() {
   // company referral coinvolta/e (intersezione con i miei referral).
   const myReferralIds = new Set(referrals.map((r) => r.id));
   const commPerReferral = new Map<string, { tot: number; accr: number; accrNetCent: number }>();
+  // Movimenti (le singole commissioni) per referral: stessa attribuzione dei
+  // contatori sopra, mostrati sotto ogni referral nello stile card wallet.
+  const movimentiPerReferral = new Map<string, RigaMovimentoAffiliazione[]>();
   const bumpComm = (id: string | null, stato: string, netCent: number | null): void => {
     if (!id || !myReferralIds.has(id)) return;
     const e = commPerReferral.get(id) ?? { tot: 0, accr: 0, accrNetCent: 0 };
@@ -143,9 +152,24 @@ export default async function AffiliazionePage() {
     }
     commPerReferral.set(id, e);
   };
+  const pushMov = (id: string | null, c: (typeof mieCommissioni)[number]): void => {
+    if (!id || !myReferralIds.has(id)) return;
+    const arr = movimentiPerReferral.get(id) ?? [];
+    arr.push({
+      id: c.id,
+      createdAt: c.createdAt,
+      importoNettoCent: c.importoNettoCent,
+      stato: c.stato,
+      codicePratica: c.pratica?.codicePratica ?? null,
+      praticaId: c.pratica?.id ?? null,
+    });
+    movimentiPerReferral.set(id, arr);
+  };
   for (const c of mieCommissioni) {
     bumpComm(c.pratica?.brokerId ?? null, c.stato, c.importoNettoCent);
     bumpComm(c.pratica?.agenziaAssegnataId ?? null, c.stato, c.importoNettoCent);
+    pushMov(c.pratica?.brokerId ?? null, c);
+    pushMov(c.pratica?.agenziaAssegnataId ?? null, c);
   }
 
   const totaleAccreditatoCent = commissioni._sum.importoNettoCent ?? 0;
@@ -445,40 +469,50 @@ export default async function AffiliazionePage() {
                 const agg = commPerReferral.get(r.id);
                 const accr = agg?.accr ?? 0;
                 const inRevisione = (agg?.tot ?? 0) - accr;
+                const movimenti = movimentiPerReferral.get(r.id) ?? [];
                 return (
-                  <li
-                    key={r.id}
-                    className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-pv-navy-900">
-                        {r.ragioneSociale}
-                        {r.suspendedAt && (
-                          <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
-                            Sospeso
-                          </span>
+                  <li key={r.id} className="py-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-pv-navy-900">
+                          {r.ragioneSociale}
+                          {r.suspendedAt && (
+                            <span className="ml-2 inline-flex items-center rounded-full bg-pv-red-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500">
+                              Sospeso
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-[11px] text-pv-slate-500">
+                          {r.type === 'DEALER' ? 'Broker' : 'Agenzia'} · {r.citta} ({r.provincia})
+                          · iscritto {formatDate(r.createdAt)}
+                        </p>
+                      </div>
+                      <p className="text-[12px] text-pv-slate-500 sm:text-right">
+                        {accr > 0 ? (
+                          <>
+                            <span className="font-bold text-pv-navy-800">
+                              {formatCurrencyCent(agg?.accrNetCent ?? 0)}
+                            </span>{' '}
+                            · {accr} commission{accr === 1 ? 'e' : 'i'} accreditat
+                            {accr === 1 ? 'a' : 'e'}
+                          </>
+                        ) : (
+                          'Nessuna commissione ancora'
                         )}
-                      </p>
-                      <p className="text-[11px] text-pv-slate-500">
-                        {r.type === 'DEALER' ? 'Broker' : 'Agenzia'} · {r.citta} ({r.provincia})
-                        · iscritto {formatDate(r.createdAt)}
+                        {inRevisione > 0 ? ` · ${inRevisione} in revisione` : ''}
+                        {r.suspendedAt ? ` · sospeso ${formatRelative(r.suspendedAt)}` : ''}
                       </p>
                     </div>
-                    <p className="text-[12px] text-pv-slate-500 sm:text-right">
-                      {accr > 0 ? (
-                        <>
-                          <span className="font-bold text-pv-navy-800">
-                            {formatCurrencyCent(agg?.accrNetCent ?? 0)}
-                          </span>{' '}
-                          · {accr} commission{accr === 1 ? 'e' : 'i'} accreditat
-                          {accr === 1 ? 'a' : 'e'}
-                        </>
-                      ) : (
-                        'Nessuna commissione ancora'
-                      )}
-                      {inRevisione > 0 ? ` · ${inRevisione} in revisione` : ''}
-                      {r.suspendedAt ? ` · sospeso ${formatRelative(r.suspendedAt)}` : ''}
-                    </p>
+                    {movimenti.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer list-none text-[12px] font-semibold text-pv-navy-600 hover:underline">
+                          Vedi i movimenti ({movimenti.length})
+                        </summary>
+                        <div className="mt-2 rounded-[10px] border border-pv-slate-200 bg-pv-slate-50/40 px-3">
+                          <MovimentiReferral righe={movimenti} />
+                        </div>
+                      </details>
+                    )}
                   </li>
                 );
               })}

@@ -25,6 +25,7 @@ import {
   tplN40ClienteAvanzamento,
   tplN41AdminNuovaSegnalazione,
   tplN42BrokerSegnalazioneGestita,
+  tplN43AgenziaSegnalazioneRespinta,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -53,6 +54,7 @@ import {
   type N40ClienteAvanzamentoPayload,
   type N41AdminNuovaSegnalazionePayload,
   type N42BrokerSegnalazioneGestitaPayload,
+  type N43AgenziaSegnalazioneRespintaPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -170,6 +172,11 @@ type SendInput =
       tipo: 'N42_BROKER_SEGNALAZIONE_GESTITA';
       target: Target;
       payload: N42BrokerSegnalazioneGestitaPayload;
+    }
+  | {
+      tipo: 'N43_AGENZIA_SEGNALAZIONE_RESPINTA';
+      target: Target;
+      payload: N43AgenziaSegnalazioneRespintaPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -230,6 +237,8 @@ function render(input: SendInput): NotificaContent {
       return tplN41AdminNuovaSegnalazione(input.payload);
     case 'N42_BROKER_SEGNALAZIONE_GESTITA':
       return tplN42BrokerSegnalazioneGestita(input.payload);
+    case 'N43_AGENZIA_SEGNALAZIONE_RESPINTA':
+      return tplN43AgenziaSegnalazioneRespinta(input.payload);
   }
 }
 

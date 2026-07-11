@@ -460,19 +460,32 @@ export async function respingiSegnalazioneAction(
   const adminId = session.user.id;
   const motivoTrim = motivo.trim().slice(0, 500);
 
+  let payload: {
+    codicePratica: string;
+    targa: string | null;
+    tipoSegnalazione: SegnalazioneTipo;
+    agenziaCompanyId: string | null;
+    agenziaNome: string;
+  } | null = null;
+
   // Transazione: reset di `flagSegnalata` e reset dei veicoli segnalati devono
   // essere atomici. Se il secondo fallisse dopo che il primo è già passato, la
   // pratica risulterebbe "non segnalata" ma con i veicoli ancora marcati — la
   // segnalazione successiva sulla stessa pratica erediterebbe la penale su
   // veicoli che nessuno ha mai segnalato.
   try {
-    await prisma.$transaction(async (tx) => {
+    payload = await prisma.$transaction(async (tx) => {
       const pratica = await tx.pratica.findUnique({
         where: { id: praticaId },
         select: {
           flagSegnalata: true,
           segnalazioneStato: true,
           notaSegnalazione: true,
+          codicePratica: true,
+          tipoSegnalazione: true,
+          agenziaAssegnataId: true,
+          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+          agenziaAssegnata: { select: { ragioneSociale: true } },
         },
       });
       if (!pratica) throw new Error('Pratica non trovata');
@@ -500,9 +513,48 @@ export async function respingiSegnalazioneAction(
         where: { praticaId },
         data: { segnalato: false },
       });
+
+      return {
+        codicePratica: pratica.codicePratica ?? '—',
+        targa:
+          pratica.veicoli[0]?.targa
+            ? pratica.veicoli.length > 1
+              ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
+              : pratica.veicoli[0].targa
+            : null,
+        tipoSegnalazione: (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo,
+        agenziaCompanyId: pratica.agenziaAssegnataId,
+        agenziaNome: pratica.agenziaAssegnata?.ragioneSociale ?? '—',
+      };
     });
   } catch (err) {
     return { ok: false, error: (err as Error).message };
+  }
+
+  // Post-commit: notifica l'agenzia che aveva segnalato — best-effort. Clausola
+  // 10.3 dei Termini: l'esito (anche il respingimento) va comunicato a entrambe
+  // le parti; prima di questa notifica l'agenzia non veniva mai avvisata.
+  try {
+    const destinatariAg = await destinatariAgenzia(praticaId);
+    for (const d of destinatariAg) {
+      await sendNotification({
+        tipo: 'N43_AGENZIA_SEGNALAZIONE_RESPINTA',
+        target: {
+          email: d.email,
+          userId: d.userId,
+          companyId: payload.agenziaCompanyId,
+        },
+        payload: {
+          nomeAgenzia: payload.agenziaNome,
+          codicePratica: payload.codicePratica,
+          targa: payload.targa,
+          tipoSegnalazione: payload.tipoSegnalazione,
+          motivo: motivoTrim,
+        },
+      }, { praticaId }).catch(() => undefined);
+    }
+  } catch {
+    // best-effort
   }
 
   revalidatePath('/admin/segnalazioni');

@@ -161,6 +161,15 @@ export type N18AgenziaSegnalazioneConfermataPayload = {
   tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
 };
 
+export type N43AgenziaSegnalazioneRespintaPayload = {
+  nomeAgenzia: string;
+  codicePratica: string;
+  targa: string | null;
+  tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
+  /** Motivo del respingimento inserito dall'admin platform. */
+  motivo: string;
+};
+
 export type N19AdminNuovaSegnalazionePayload = {
   codicePratica: string;
   targa: string | null;
@@ -741,6 +750,38 @@ export function tplN18AgenziaSegnalazioneConfermata(
     <div style="background:#ecfdf5;border:1px solid #16a34a33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
       Grazie per il controllo: il tuo presidio ha tutelato l'integrità del marketplace.
     </div>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN43AgenziaSegnalazioneRespinta(
+  p: N43AgenziaSegnalazioneRespintaPayload,
+): NotificaContent {
+  const tipoLbl = labelTipoSegnalazione(p.tipoSegnalazione);
+  const subject = `Segnalazione respinta — pratica ${p.codicePratica} prosegue`;
+  const text =
+    `Ciao ${p.nomeAgenzia},\n` +
+    `la tua segnalazione di "${tipoLbl}" sulla pratica ${p.codicePratica}` +
+    `${p.targa ? ` (${p.targa})` : ''} e' stata verificata dal team Passaggio Veloce ` +
+    `ed e' stata respinta.\n` +
+    `Motivo: ${p.motivo}\n` +
+    `La pratica prosegue regolarmente: puoi continuare a lavorarla normalmente.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Segnalazione respinta</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la tua segnalazione di <strong>${tipoLbl}</strong> sulla pratica
+      <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
+      verificata dal nostro team ed è stata <strong>respinta</strong>.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      <strong>Motivo del respingimento</strong><br>
+      ${escapeHtml(p.motivo)}
+    </div>
+    <p style="margin:16px 0 0;color:#334155;font-size:14px">
+      La pratica <strong>prosegue regolarmente</strong>: puoi continuare a lavorarla
+      normalmente dalla tua dashboard, come prima della segnalazione.
+    </p>
   `);
   return { subject, html, text };
 }

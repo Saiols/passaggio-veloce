@@ -35,7 +35,10 @@ const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, send
     redirectMock: vi.fn((url: string) => {
       throw new Error(`__REDIRECT__:${url}`);
     }),
-    destinatariAgenziaMock: vi.fn(() => Promise.resolve([])),
+    destinatariAgenziaMock: vi.fn(
+      (): Promise<{ email: string; userId: string | null; nome: string }[]> =>
+        Promise.resolve([]),
+    ),
     sendNotificationMock: vi.fn(() => Promise.resolve()),
   };
 });
@@ -308,5 +311,32 @@ describe('respingiSegnalazioneAction — reset dei veicoli segnalati', () => {
       where: { praticaId: PID },
       data: { segnalato: false },
     });
+  });
+});
+
+describe('respingiSegnalazioneAction — notifica N43 all\'agenzia (clausola 10.3: l\'esito è comunicato a entrambe le parti)', () => {
+  it('invia N43_AGENZIA_SEGNALAZIONE_RESPINTA ai destinatari agenzia col motivo del respingimento', async () => {
+    txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
+    destinatariAgenziaMock.mockResolvedValue([
+      { email: 'referente@agenzia-srl.it', userId: 'u-ag-1', nome: 'Referente Agenzia' },
+    ]);
+
+    const res = await respingiSegnalazioneAction(PID, 'Fermo non riscontrato in PRA');
+
+    expect(res).toEqual({ ok: true });
+    expect(sendNotificationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: 'N43_AGENZIA_SEGNALAZIONE_RESPINTA',
+        target: expect.objectContaining({
+          email: 'referente@agenzia-srl.it',
+          userId: 'u-ag-1',
+          companyId: AGENZIA_ID,
+        }),
+        payload: expect.objectContaining({
+          motivo: 'Fermo non riscontrato in PRA',
+        }),
+      }),
+      { praticaId: PID },
+    );
   });
 });

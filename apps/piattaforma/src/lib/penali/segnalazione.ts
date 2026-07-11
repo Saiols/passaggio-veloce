@@ -339,7 +339,7 @@ export async function confermaAnnullamentoConPenaleAction(
           importoPenaleCent: PENALI.PENALE_BROKER_DEFAULT_CENT,
           saldoWalletCent: payload.saldoBroker,
         },
-      }).catch(() => undefined);
+      }, { praticaId }).catch(() => undefined);
     }
     // Destinatario: chi ha accettato la pratica, poi la sua sede, poi
     // l'admin azienda. Vedi lib/notifiche/pratica.ts.
@@ -358,7 +358,7 @@ export async function confermaAnnullamentoConPenaleAction(
           targa: payload.targa,
           tipoSegnalazione: payload.tipoSegnalazione,
         },
-      }).catch(() => undefined);
+      }, { praticaId }).catch(() => undefined);
     }
   } catch {
     // best-effort

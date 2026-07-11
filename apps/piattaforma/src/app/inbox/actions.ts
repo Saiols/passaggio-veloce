@@ -148,7 +148,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
             agenziaTelefono: agenzia.telefono,
             nomeBroker: d.nome,
           },
-        }).catch(() => undefined);
+        }, { praticaId }).catch(() => undefined);
       }
     }
   } catch {

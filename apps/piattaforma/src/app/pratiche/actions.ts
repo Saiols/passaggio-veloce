@@ -212,7 +212,7 @@ async function processaPraticaCore(praticaId: string): Promise<QuickActionResult
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
             nomeBroker: d.nome,
           },
-        }).catch(() => undefined);
+        }, { praticaId }).catch(() => undefined);
       }
     }
     if (full?.codicePratica) {
@@ -461,7 +461,7 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
             saldoCent: full.broker.wallet?.saldoCent ?? 0,
             nomeBroker,
           },
-        }).catch(() => undefined);
+        }, { praticaId }).catch(() => undefined);
       }
 
       // N31: recapito diverso da N4 -- chi lavora la pratica (creatore, sede,
@@ -482,7 +482,7 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
             nomeBroker: d.nome,
             praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${praticaId}`,
           },
-        }).catch(() => undefined);
+        }, { praticaId }).catch(() => undefined);
       }
 
       const agenziaUser = full.agenziaAssegnata?.users[0];
@@ -509,7 +509,7 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
               nomeAgenzia: full.agenziaAssegnata.ragioneSociale,
             },
           },
-          fatturaPdf ? { attachments: [fatturaPdf] } : undefined,
+          { praticaId, ...(fatturaPdf ? { attachments: [fatturaPdf] } : {}) },
         ).catch(() => undefined);
       }
       if (full.codicePratica) {
@@ -580,7 +580,7 @@ async function firmaPraticaCore(praticaId: string): Promise<QuickActionResult> {
           importoAccreditatoCent: c.importoNettoCent,
           saldoWalletCent: c.referente.wallet?.saldoCent ?? 0,
         },
-      }).catch(() => undefined);
+      }, { praticaId }).catch(() => undefined);
     }
   } catch {
     // best-effort

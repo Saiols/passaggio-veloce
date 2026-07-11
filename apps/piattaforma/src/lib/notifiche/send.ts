@@ -3,7 +3,7 @@ import { prisma, Prisma } from '@pv/db';
 import { env } from '@/env';
 import { getEmail, type EmailAttachment } from '@/lib/providers/email';
 import { isOptionalTipo, shouldSend } from './preferences';
-import { unsubscribeFooterLine } from './layout';
+import { unsubscribeFooterLine, sedeFirmaBlock } from './layout';
 import {
   tplN10AdminEscalation,
   tplN11BrokerEscalation,
@@ -240,7 +240,7 @@ function render(input: SendInput): NotificaContent {
  */
 export async function sendNotification(
   input: SendInput,
-  opts?: { attachments?: EmailAttachment[] },
+  opts?: { attachments?: EmailAttachment[]; praticaId?: string },
 ): Promise<void> {
   const content = render(input);
   const payload: Prisma.InputJsonValue = JSON.parse(JSON.stringify(input.payload));
@@ -287,6 +287,43 @@ export async function sendNotification(
   }
   // Rimuove il token segnaposto per le notifiche non-opzionali (o se già sostituito, è un no-op)
   html = html.replace('<!--PV_UNSUB-->', '');
+
+  // Blocco "Sede della firma": per le notifiche legate a una pratica GIÀ ACCETTATA
+  // da una sede, inietta a TUTTE le figure coinvolte l'indirizzo dove avverrà la
+  // firma (segnaposto <!--PV_SEDE--> nel layout). Caricamento solo se il call-site
+  // passa praticaId: le email non legate a pratiche non pagano la query. Gate:
+  // agenziaAssegnataId != null ⇔ accettata (valorizzato con agenziaSedeId
+  // all'accettazione). Preferisce la SEDE che ha accettato, fallback madre.
+  if (opts?.praticaId) {
+    const pr = await prisma.pratica.findUnique({
+      where: { id: opts.praticaId },
+      select: {
+        agenziaAssegnataId: true,
+        agenziaSede: {
+          select: { nome: true, indirizzo: true, civico: true, cap: true, citta: true, provincia: true },
+        },
+        agenziaAssegnata: {
+          select: { ragioneSociale: true, indirizzo: true, civico: true, cap: true, citta: true, provincia: true },
+        },
+      },
+    });
+    if (pr?.agenziaAssegnataId) {
+      const s = pr.agenziaSede;
+      const m = pr.agenziaAssegnata;
+      const sede = s
+        ? { nome: s.nome, indirizzo: s.indirizzo, civico: s.civico, cap: s.cap, citta: s.citta, provincia: s.provincia }
+        : m
+          ? { nome: m.ragioneSociale, indirizzo: m.indirizzo, civico: m.civico, cap: m.cap, citta: m.citta, provincia: m.provincia }
+          : null;
+      if (sede) {
+        const blocco = sedeFirmaBlock(sede);
+        html = html.replace('<!--PV_SEDE-->', blocco.html);
+        text = text + blocco.text;
+      }
+    }
+  }
+  // Rimuove il segnaposto sede se non sostituito (no-op se già sostituito).
+  html = html.replace('<!--PV_SEDE-->', '');
 
   const record = await prisma.notificaInviata.create({
     data: {

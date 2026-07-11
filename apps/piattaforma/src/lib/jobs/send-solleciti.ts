@@ -95,7 +95,7 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
             nomeBroker: d.nome,
             giorniTrascorsi,
           },
-        }).catch(() => undefined);
+        }, { praticaId: p.id }).catch(() => undefined);
       }
       // n3Sent conta le pratiche sollecitate, non le email inviate: un solo
       // incremento anche quando la pratica ha più destinatari (sede + admin).
@@ -130,7 +130,7 @@ export async function sendSolleciti(): Promise<SollecitiResult> {
               feeCent: p.feeAgenziaCent,
               firmaEntroAt,
             },
-          }).catch(() => undefined);
+          }, { praticaId: p.id }).catch(() => undefined);
         }
         // n7Sent conta le pratiche sollecitate, non le email inviate: stesso
         // criterio di n3Sent qui sopra.

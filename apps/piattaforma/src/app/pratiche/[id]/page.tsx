@@ -247,7 +247,10 @@ export default async function PraticaDetailPage({
     inScope(pratica.brokerSedeId) &&
     pratica.stato !== 'FIRMATA' &&
     pratica.stato !== 'ANNULLATA' &&
-    pratica.stato !== 'SCADUTA';
+    pratica.stato !== 'SCADUTA' &&
+    // Sistema Penali Broker: una segnalazione IN VERIFICA blocca l'annullamento
+    // (il guard server in `annullaPraticaAction` resta comunque la difesa vera).
+    !(pratica.flagSegnalata && pratica.segnalazioneStato === 'RICEVUTA');
 
   const firmaBound = markFirmaAvvenutaAction.bind(null, pratica.id);
   const processataBound = markPraticaProcessataAction.bind(null, pratica.id);

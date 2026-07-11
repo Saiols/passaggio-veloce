@@ -649,6 +649,18 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
       if (pratica.stato === 'ANNULLATA') {
         throw new Error('Pratica già annullata');
       }
+      // Sistema Penali Broker: una segnalazione IN VERIFICA (RICEVUTA) blocca
+      // l'annullamento. Altrimenti il broker annulla la pratica e schiva la
+      // penale — quando l'admin la conferma, `segnalazione.ts` trova la pratica
+      // ANNULLATA e lancia 'Pratica non più gestibile': la penale non viene mai
+      // addebitata e la segnalazione resta appesa per sempre nella coda admin.
+      // Non blocca invece se la segnalazione è già stata RESPINTA (resetta
+      // flagSegnalata) o se non c'è mai stata.
+      if (pratica.flagSegnalata && pratica.segnalazioneStato === 'RICEVUTA') {
+        throw new Error(
+          'Pratica con segnalazione in verifica: non puoi annullarla finché il team non ha deciso.',
+        );
+      }
 
       eraBozza = pratica.stato === 'BOZZA';
 

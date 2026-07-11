@@ -67,6 +67,16 @@ describe('documentiRichiestiParte', () => {
   it('azienda rep passaporto → CF richiesto', () => {
     expect(documentiRichiestiParte({ ...AZIENDA, documentoIdentita: 'PASSAPORTO' }).codiceFiscale).toBe(true);
   });
+  it('azienda rep CI CARTACEA → CF richiesto (tessera sanitaria del rappresentante)', () => {
+    expect(
+      documentiRichiestiParte({ ...AZIENDA, documentoIdentita: 'CI', ciTipo: 'CARTACEA' }).codiceFiscale,
+    ).toBe(true);
+  });
+  it('straniero + CI ELETTRONICA esplicita → niente CF', () => {
+    expect(
+      documentiRichiestiParte({ ...STRANIERO, documentoIdentita: 'CI', ciTipo: 'ELETTRONICA' }).codiceFiscale,
+    ).toBe(false);
+  });
 });
 
 describe('verificaIdentita', () => {
@@ -368,6 +378,42 @@ describe('validaParte — tessera sanitaria / CF fail-closed', () => {
       {
         identita: { nome: 'Mario', cognome: 'Rossi' },
         visura: { partitaIva: '12345678901', denominazione: 'Auto Veloci SRL', dataEmissione: '2026-05-01' },
+        // codiceFiscale intenzionalmente assente
+      },
+      NOW,
+    );
+    expect(r.ok).toBe(false);
+    expect(r.problemi.join(' ')).toMatch(/Tessera sanitaria/);
+  });
+  it('azienda rep CI CARTACEA: CF del rappresentante presente e coerente → ok', () => {
+    const r = validaParte(
+      { ...AZIENDA, documentoIdentita: 'CI', ciTipo: 'CARTACEA' },
+      {
+        identita: { nome: 'Mario', cognome: 'Rossi', codiceFiscale: 'RSSMRA80A01F205Z' },
+        visura: {
+          partitaIva: '12345678901',
+          denominazione: 'Auto Veloci SRL',
+          dataEmissione: '2026-05-01',
+          amministratore: { nome: 'Mario', cognome: 'Rossi', codiceFiscale: 'RSSMRA80A01F205Z' },
+        },
+        codiceFiscale: { codiceFiscale: 'RSSMRA80A01F205Z' },
+      },
+      NOW,
+    );
+    expect(r.ok).toBe(true);
+    expect(r.problemi).toEqual([]);
+  });
+  it('azienda rep CI CARTACEA: CF mancante → blocco', () => {
+    const r = validaParte(
+      { ...AZIENDA, documentoIdentita: 'CI', ciTipo: 'CARTACEA' },
+      {
+        identita: { nome: 'Mario', cognome: 'Rossi', codiceFiscale: 'RSSMRA80A01F205Z' },
+        visura: {
+          partitaIva: '12345678901',
+          denominazione: 'Auto Veloci SRL',
+          dataEmissione: '2026-05-01',
+          amministratore: { nome: 'Mario', cognome: 'Rossi', codiceFiscale: 'RSSMRA80A01F205Z' },
+        },
         // codiceFiscale intenzionalmente assente
       },
       NOW,

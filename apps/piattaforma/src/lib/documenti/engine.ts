@@ -94,17 +94,20 @@ export type EsitoSchemaDocumentale =
 
 /**
  * Vero se l'identificazione avviene con CI elettronica (CIE), che contiene già
- * il codice fiscale. Privato: dipende dalla variante CI scelta (default
- * elettronica). Azienda/operatore: la CI del legale rappresentante è trattata
- * come elettronica. Straniero: usa passaporto/permesso, mai CIE.
+ * il codice fiscale. La variante CI è selezionabile per OGNI tipo di soggetto
+ * (per la PG è la CI del legale rappresentante); cambia solo il DEFAULT quando
+ * il broker non sceglie esplicitamente:
+ *  - privato e legale rappresentante di azienda/operatore → default elettronica
+ *    (la CIE è ormai la norma, contiene già il CF);
+ *  - straniero extra-UE → default cartacea (la CIE italiana è l'eccezione), così
+ *    il CF continua a essere raccolto salvo scelta esplicita 'ELETTRONICA'.
  */
 export function ciElettronica(
   tipoSoggetto: TipoSoggetto,
   ciTipo: CiTipo | null | undefined,
 ): boolean {
-  if (tipoSoggetto === 'AZIENDA' || tipoSoggetto === 'OPERATORE_AUTO') return true;
-  if (tipoSoggetto === 'PRIVATO_ITALIANO') return (ciTipo ?? 'ELETTRONICA') === 'ELETTRONICA';
-  return false;
+  if (tipoSoggetto === 'STRANIERO_EXTRA_UE') return ciTipo === 'ELETTRONICA';
+  return (ciTipo ?? 'ELETTRONICA') === 'ELETTRONICA';
 }
 
 /**
@@ -162,7 +165,7 @@ function aggiungiDocumentiPersona(
     return;
   }
   if (tipo === 'STRANIERO_EXTRA_UE') {
-    emettiIdentita(out, parteCI, motivoPrefix, false, docIdentita, venditoreOrdine);
+    emettiIdentita(out, parteCI, motivoPrefix, ciElettronica(tipo, ciTipo), docIdentita, venditoreOrdine);
     out.push({
       tipo: 'PERMESSO_SOGGIORNO',
       parte: parteCI,
@@ -178,8 +181,9 @@ function aggiungiDocumentiPersona(
       motivo: `${motivoPrefix}: visura camerale rilasciata negli ultimi 6 mesi`,
       venditoreOrdine,
     });
-    // La CI del legale rappresentante è trattata come elettronica (niente CF).
-    emettiIdentita(out, parteAmministratore, motivoPrefix, true, docIdentita, venditoreOrdine);
+    // CI del legale rappresentante: segue la variante scelta (default elettronica
+    // → niente CF; cartacea → tessera sanitaria / CF del rappresentante).
+    emettiIdentita(out, parteAmministratore, motivoPrefix, ciElettronica(tipo, ciTipo), docIdentita, venditoreOrdine);
   }
 }
 

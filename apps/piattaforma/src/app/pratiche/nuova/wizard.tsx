@@ -382,11 +382,21 @@ const TIPI_SOGGETTO_VENDITORE: { value: TipoSoggetto; label: string }[] = [
   { value: 'OPERATORE_AUTO', label: 'Operatore auto / Commerciante' },
 ];
 
-/** Variante della carta d'identità (mostrata solo per privato + documento CI). */
+/** Variante della carta d'identità (mostrata per ogni tipo soggetto + documento CI). */
 const CI_TIPO_OPTIONS: { value: CiTipo; label: string }[] = [
   { value: 'ELETTRONICA', label: 'CI elettronica (CIE)' },
   { value: 'CARTACEA', label: 'CI cartacea' },
 ];
+
+/**
+ * Variante CI di default quando si sceglie un tipo soggetto. Lo straniero
+ * extra-UE raramente ha una CIE italiana → default CARTACEA (così il CF viene
+ * raccolto); gli altri → ELETTRONICA. Allinea la UI al default di dominio
+ * (lib/documenti/engine → ciElettronica).
+ */
+function defaultCiTipo(t: TipoSoggetto): CiTipo {
+  return t === 'STRANIERO_EXTRA_UE' ? 'CARTACEA' : 'ELETTRONICA';
+}
 
 // Acquirente SEMPLICE: privato (no operatore auto). Acquirente MINIVOLTURA: il
 // compratore è un commerciante d'auto → solo OPERATORE_AUTO (con visura).
@@ -1723,6 +1733,9 @@ function WizardBody({
               updateVenditore(v.id, {
                 tipoSoggetto: next,
                 isPG,
+                // Default variante CI per tipo (straniero → cartacea, così il CF
+                // resta richiesto; altri → elettronica): allinea la UI al dominio.
+                ciTipo: defaultCiTipo(next),
                 visuraOcr: isPG ? v.visuraOcr : undefined,
                 permessoOcr: next === 'STRANIERO_EXTRA_UE' ? v.permessoOcr : undefined,
               });
@@ -1862,6 +1875,7 @@ function WizardBody({
               updateCoAcquirente(c.id, {
                 tipoSoggetto: next,
                 isPG,
+                ciTipo: defaultCiTipo(next),
                 visuraOcr: isPG ? c.visuraOcr : undefined,
                 permessoOcr: next === 'STRANIERO_EXTRA_UE' ? c.permessoOcr : undefined,
               });
@@ -2474,6 +2488,7 @@ function WizardBody({
                       ...prev,
                       tipoSoggetto: next,
                       isPG,
+                      ciTipo: defaultCiTipo(next),
                       visuraOcr: isPG ? prev.visuraOcr : undefined,
                       permessoOcr: next === 'STRANIERO_EXTRA_UE' ? prev.permessoOcr : undefined,
                     }));
@@ -3440,9 +3455,10 @@ function IdentitaSection({
         </Select>
       </Field>
 
-      {/* Variante CI: solo per privato + CI. La CIE elettronica contiene il CF
-          (nessun documento CF separato); la cartacea no. Default: elettronica. */}
-      {tipoSoggetto === 'PRIVATO_ITALIANO' && docId === 'CI' && (
+      {/* Variante CI: per OGNI tipo soggetto quando il documento è la CI (per la
+          PG è la CI del legale rappresentante). La CIE elettronica contiene il CF
+          (nessun documento CF separato); la cartacea no → serve il CF. */}
+      {!!tipoSoggetto && docId === 'CI' && (
         <Field label="Tipo di carta d'identità" required>
           <Select value={ciTipo} onChange={(e) => onCiTipo(e.target.value as CiTipo)}>
             {CI_TIPO_OPTIONS.map((o) => (

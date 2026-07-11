@@ -115,6 +115,45 @@ describe('calcolaDocumentiRichiesti — straniero / azienda (emissione documenti
     if (r.kind !== 'OK') return;
     expect(r.documentiRichiesti.map((d) => d.tipo)).toContain('VISURA_CAMERALE');
   });
+
+  it('venditore azienda + CI CARTACEA del rappresentante → visura + CI F+R + CF', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({
+        venditori: [
+          { ordine: 1, tipoSoggetto: 'AZIENDA', documentoIdentita: 'CI', ciTipo: 'CARTACEA' },
+        ],
+      }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const venditori = r.documentiRichiesti.filter(
+      (d) => d.parte === 'VENDITORE' || d.parte === 'AMMINISTRATORE_VENDITORE',
+    );
+    expect(venditori.map((d) => d.tipo).sort()).toEqual([
+      'CI_FRONTE',
+      'CI_RETRO',
+      'CODICE_FISCALE',
+      'VISURA_CAMERALE',
+    ]);
+  });
+
+  it('venditore straniero + CI ELETTRONICA esplicita → CI F+R + permesso, niente CF', () => {
+    const r = calcolaDocumentiRichiesti(
+      baseInput({
+        venditori: [
+          { ordine: 1, tipoSoggetto: 'STRANIERO_EXTRA_UE', documentoIdentita: 'CI', ciTipo: 'ELETTRONICA' },
+        ],
+      }),
+    );
+    expect(r.kind).toBe('OK');
+    if (r.kind !== 'OK') return;
+    const venditore = r.documentiRichiesti.filter((d) => d.parte === 'VENDITORE');
+    expect(venditore.map((d) => d.tipo).sort()).toEqual([
+      'CI_FRONTE',
+      'CI_RETRO',
+      'PERMESSO_SOGGIORNO',
+    ]);
+  });
 });
 
 describe('calcolaDocumentiRichiesti — flag speciali', () => {

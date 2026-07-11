@@ -1352,8 +1352,9 @@ export async function submitNuovaPraticaAction(
       // Le date visura/permesso non sono più raccolte (verifica via OCR nello
       // step parte): le colonne restano null.
       acquirenteTipoSoggetto: d.acquirenteTipoSoggetto ?? null,
-      acquirenteCiTipo:
-        d.acquirenteTipoSoggetto === 'PRIVATO_ITALIANO' ? (d.acquirenteCiTipo ?? null) : null,
+      // Variante CI persistita per ogni tipo soggetto (non più solo privato): la
+      // cartacea richiede il CF anche per PG (legale rappresentante) e straniero.
+      acquirenteCiTipo: d.acquirenteCiTipo ?? null,
       flagSuccessione: d.flagSuccessione,
       flagMinore: d.flagMinore,
 
@@ -1547,7 +1548,7 @@ export async function submitNuovaPraticaAction(
           telefono: v.telefono || null,
           email: v.email?.toLowerCase() || null,
           tipoSoggetto: v.tipoSoggetto ?? null,
-          ciTipo: v.tipoSoggetto === 'PRIVATO_ITALIANO' ? (v.ciTipo ?? null) : null,
+          ciTipo: v.ciTipo ?? null,
           documentoIdentita: v.docId,
         },
       });
@@ -1571,7 +1572,7 @@ export async function submitNuovaPraticaAction(
           telefono: c.telefono || null,
           email: c.email?.toLowerCase() || null,
           tipoSoggetto: c.tipoSoggetto ?? null,
-          ciTipo: c.tipoSoggetto === 'PRIVATO_ITALIANO' ? (c.ciTipo ?? null) : null,
+          ciTipo: c.ciTipo ?? null,
           documentoIdentita: c.docId,
           indirizzoResidenza: c.indirizzoResidenza || null,
         },

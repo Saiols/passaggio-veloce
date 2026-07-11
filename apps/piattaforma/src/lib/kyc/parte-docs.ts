@@ -65,11 +65,11 @@ function isPG(p: ParteDati): boolean {
 /** Documenti richiesti per la parte in base al tipo soggetto + documento scelto. */
 export function documentiRichiestiParte(p: ParteDati): DocRequisiti {
   const pg = isPG(p);
-  // Per la PG il documento d'identità è del legale rappresentante: la sua CI è
-  // trattata come elettronica (niente CF); passaporto/patente richiedono il CF.
-  const ciElett = pg
-    ? true
-    : ciElettronica(p.tipoSoggetto ?? 'PRIVATO_ITALIANO', p.ciTipo);
+  // La variante CI vale per OGNI tipo di soggetto: la cartacea non contiene il CF
+  // (va raccolto a parte), la elettronica (CIE) sì. Per la PG è la CI del legale
+  // rappresentante. Il default per tipo è dentro `ciElettronica` (default
+  // elettronica per privato/PG, cartacea per lo straniero → CF raccolto).
+  const ciElett = ciElettronica(p.tipoSoggetto ?? 'PRIVATO_ITALIANO', p.ciTipo);
   return {
     identita: true,
     visura: pg,

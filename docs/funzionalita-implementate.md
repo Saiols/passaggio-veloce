@@ -16,7 +16,7 @@ chatbot_visibility: internal
 
 | # | Tema | Codice | Decisione/Doc | Azione |
 |---|---|---|---|---|
-| 1 | **Penale broker** | `lib/penali/config.ts` → `PENALE_BROKER_DEFAULT_CENT: 10_000` (**€100**), modello flat **senza** storno compenso | Decisione confermata: **€25** + storno compenso €25 = **−€50** (`segnalazioni-penali.md`) | **Fix codice**: portare a `2500` e aggiungere lo storno del compenso €25 nell'azione `confermaAnnullamentoConPenaleAction`. Non ancora fatto. |
+| 1 | ~~**Penale broker**~~ | **Risolto (2026-07-11)**: `lib/penali/config.ts` → `PENALE_BROKER_DEFAULT_CENT = 2_500` (**€25**) × numero di veicoli segnalati (`calcolaPenaleBrokerCent`), non più flat a pratica. Il compenso non è mai stornato nel caso normale (segnalazione pre-firma → il broker semplicemente non lo matura); lo storno resta un ramo difensivo per l'edge case di credito già accreditato. Vedi `sistema-penali-broker.md` e clausole 10.4/10.5 dei Termini. | — | — |
 | 2 | **Payout reale** | `lib/providers/payment/stripe.ts`: payout "Strada B" è **no-op** (rifiuta se chiave live) | Spec: bonifico manuale conto PV | Da implementare prima del go-live payout. |
 | 3 | **Fatturazione elettronica** | Modello `DocumentoFiscale` / `RegimeFiscale` **non presenti** nello schema Prisma | Spec `fatturazione-piattaforma.md` (FASE FT futura) | Non in MVP — fatturazione descritta ma non implementata. |
 | 4 | **Canali notifiche** | Solo **EMAIL** (Resend). `SMS` e `IN_APP` sono enum definiti ma **non implementati** | Landing cita "notifiche multi-canale" | Allineare aspettative; SMS/in-app futuri. |

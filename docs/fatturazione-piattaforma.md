@@ -18,12 +18,16 @@ La fatturazione è integrata in due punti per ogni profilo:
 
 **2.1 Dashboard KPI**: Fatturato mese corrente (somma €75 lordi verso agenzie); Ricavo
 netto PV mese (€50 lordi/pratica); Somme di terzi in wallet (€25 lordi trattenuti per
-broker); Payout erogati mese; **Penali incassate mese (€25 addebitate a broker)**; Fatture non pagate (alert).
+broker); Payout erogati mese; **Penali incassate mese (€25 per ciascun veicolo segnalato,
+addebitate al broker via wallet)**; Fatture non pagate (alert).
 
 **2.2 Lista documenti fiscali**: tabella con data, ID pratica, tipo documento (Fattura PV
-€50 / Documento broker €25 / Penale €25), agenzia, broker, importo lordo, stato
-(Pagata/In attesa/Scaduta), azioni (PDF/XML/mail). Filtri per periodo, tipo, stato,
-agenzia/broker. Export: ZIP selezione, CSV periodo (commercialista), riepilogo mese/anno.
+€50 / Documento broker €25), agenzia, broker, importo lordo, stato (Pagata/In
+attesa/Scaduta), azioni (PDF/XML/mail). Filtri per periodo, tipo, stato, agenzia/broker.
+Export: ZIP selezione, CSV periodo (commercialista), riepilogo mese/anno. Le **penali
+broker non compaiono qui**: non sono documenti fiscali (fuori campo IVA, art. 15 co. 1
+n. 1 D.P.R. 633/1972), sono un movimento wallet `PENALE_BROKER` visibile in "Somme di
+terzi" (§2.3) e nello storico wallet del broker.
 
 **2.3 Somme di terzi**: vista separata wallet broker (saldo, totale trattenuto, storico
 payout, alert wallet negativo, export mensile per commercialista).
@@ -66,6 +70,7 @@ automatico). Storico payout e penali. Pulsante "Richiedi payout" attivo quando w
 
 > ⚠️ Sezione critica: i documenti fiscali generati non devono mai essere persi o corrotti. Priorità alta.
 
-> **Nota (2026-06-10):** penale broker allineata a **€25** (riferimento confermato
-> `segnalazioni-penali.md` / `SegnalazioniPenali.docx`). Impatto totale broker −€50
-> (storno compenso €25 + penale €25); PV trattiene €25.
+> **Nota (2026-07-11):** la penale broker è **€25 per ciascun veicolo effettivamente
+> segnalato** (non più flat €25 a pratica). Il compenso della pratica di norma non è
+> ancora maturato quando scatta la penale (segnalazione pre-firma) → nulla da stornare
+> nel caso normale. Vedi `sistema-penali-broker.md` e clausole 10.4/10.5 dei Termini.

@@ -59,10 +59,14 @@ situazione" nel wizard. La pratica resta in bozza e il team la analizza manualme
 
 Il **fermo amministrativo** e l'**ipoteca** NON sono visibili sul libretto: si verificano
 **solo con una visura PRA** sulla targa (es. su sportello.aci.it). La verifica è
-**responsabilità del broker** prima di caricare la pratica. Se invii una pratica con un
-veicolo gravato da fermo o ipoteca, la pratica viene annullata: **perdi il compenso di €25**
-maturato e ti viene addebitata una **penale di €25** (impatto totale −€50 sul wallet).
-Verifica sempre con una visura PRA prima di inviare.
+**responsabilità del broker**, per ciascun veicolo, prima di caricare la pratica. Se
+l'agenzia segnala un veicolo con fermo o ipoteca e la segnalazione viene confermata dal
+team Passaggio Veloce, la pratica viene annullata: il compenso della pratica **non matura**
+(matura solo alla firma, che a quel punto non avviene) e ti viene addebitata una **penale di
+€25 per ciascun veicolo segnalato** — i veicoli regolari della stessa pratica non pagano
+nulla. La penale non è soggetta a IVA. Su una pratica con più veicoli, ad esempio, se solo 1
+dei 3 ha un fermo confermato la penale è di €25 (non €75).
+Verifica sempre con una visura PRA prima di inviare, per ogni veicolo della pratica.
 
 ## Come vengono scelte le agenzie
 
@@ -96,13 +100,20 @@ lo stato della pratica e le notifiche.
 
 ## Wallet e payout (broker)
 
-- I compensi delle pratiche si accumulano nel tuo **wallet**.
-- Puoi **richiedere il payout** a partire da **€500**; al raggiungimento di **€1.000** il
-  payout parte **automaticamente** (la soglia automatica può essere configurata).
+- I compensi maturano **alla firma** della pratica e si accumulano liberamente nel tuo
+  **wallet**: il saldo è sempre e integralmente tuo, senza scadenza né decadenza.
+- Puoi **richiedere il payout** a partire da un saldo di **€500**. Sotto questa soglia non
+  perdi nulla: i compensi restano accreditati e continuano ad accumularsi.
+- Al raggiungimento della soglia di payout automatico che configuri (di regola €1.000,
+  impostabile tra €1.000 e €5.000) l'erogazione parte **automaticamente** via bonifico
+  sull'IBAN indicato.
+- In caso di chiusura o cancellazione dell'account, il saldo residuo ti viene **liquidato
+  integralmente**, anche se è inferiore a €500.
 - Nel wallet vedi saldo pratiche, saldo affiliazione, eventuali penali addebitate e il
   prossimo payout previsto.
-- Il saldo può diventare **negativo** in caso di penali: in tal caso il payout è bloccato
-  finché non reintegri.
+- Il saldo può diventare **negativo** in caso di penali: in tal caso i prelievi sono
+  **sospesi** finché non torna positivo, ma la tua operatività resta invariata (puoi
+  continuare a caricare e gestire pratiche).
 
 ## Documenti fiscali
 

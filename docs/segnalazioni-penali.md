@@ -28,21 +28,29 @@ visura PRA prima dell'invio.
 3. Il **team PV** verifica (eventuale chiamata) e clicca **"Conferma storno e applica penale"**.
 4. **Un solo click** avvia in transazione atomica:
    - Annullamento pratica ("Annullata — fermo/ipoteca").
-   - Storno fee €75 all'agenzia (o nessun addebito) → l'agenzia non paga nulla.
-   - Rimozione compenso broker (€25 maturati tolti dal wallet).
-   - **Addebito penale €25** al broker (wallet può andare negativo).
-   - Generazione fattura penale €25 (TD01) intestata al broker con riferimento pratica.
+   - Storno della fee schedulata per l'agenzia (se presente) → l'agenzia non paga nulla.
+   - Il compenso broker **non matura**: la segnalazione è sempre pre-firma, quindi non c'è
+     nulla da rimuovere dal wallet. Storno solo nell'edge case in cui il compenso fosse già
+     stato eccezionalmente accreditato.
+   - **Addebito penale di €25 per ciascun veicolo segnalato** al broker (wallet può andare
+     negativo; fallback a 1 veicolo per segnalazioni legacy prive del flag `segnalato`).
    - Notifiche a broker e agenzia; aggiornamento segnalazione ("Risolta"); log immutabile.
 
 ## 5. Impatto economico
 
-| Soggetto | Normale | Con fermo/ipoteca | Differenza |
-|---|---|---|---|
-| Agenzia | paga €75 | €0 | risparmio €75 |
-| Broker | guadagna €25 | −€25 compenso − €25 penale = **−€50** | −€50 |
-| Passaggio Veloce | guadagna €50 | €0 ordinario + €25 penale | solo penale €25 |
+Esempio illustrativo con **1 solo veicolo segnalato** (listino corrente da `/admin/tariffe`,
+importi indicativi):
 
-Forte incentivo per il broker a verificare sempre lo stato del veicolo prima di caricare.
+| Soggetto | Normale (senza problemi) | Con fermo/ipoteca confermato | Differenza |
+|---|---|---|---|
+| Agenzia | paga la fee di piattaforma alla firma | €0 (fee schedulata annullata) | risparmio della fee |
+| Broker | matura il compenso alla firma | compenso **non maturato** (pratica annullata prima della firma) + penale di €25 | mancato guadagno + €25 di penale |
+| Passaggio Veloce | trattiene la propria quota | €0 di quota ordinaria + €25 di penale | solo la penale |
+
+Su pratiche **multi-veicolo** la penale è **€25 × numero di veicoli segnalati** (non tutti i
+veicoli della pratica): 3 veicoli, 1 segnalato → penale €25, non €75.
+
+Forte incentivo per il broker a verificare sempre lo stato di ogni veicolo prima di caricare.
 
 ## 6. Pagina Segnalazioni (tre aree)
 
@@ -50,17 +58,22 @@ Forte incentivo per il broker a verificare sempre lo stato del veicolo prima di 
   pendenti; scheda con dettaglio, note interne, 3 azioni ("Conferma storno e applica
   penale", "Rifiuta", "Richiedi info"), log completo.
 - **Agenzia**: archivio segnalazioni inviate (sola lettura) con stato e notifiche.
-- **Broker**: archivio segnalazioni a suo carico con impatto wallet, link alla fattura penale.
+- **Broker**: archivio segnalazioni a suo carico con impatto wallet (nessuna fattura penale: è un movimento wallet fuori campo IVA).
 
 ## 7. Requisiti tecnici CTO
 
 - Pulsante "Segnala problema" nelle pratiche Accettata/In lavorazione (tipo problema + nota).
 - Banner giallo permanente con accordion + link sportello.aci.it.
 - Operazioni storno in **transazione atomica** (tutte o nessuna, rollback su errore), log
-  con timestamp, fattura penale TD01 €25 automatica, notifiche.
+  con timestamp, movimento wallet `PENALE_BROKER` tracciato in `TransazioneWallet`,
+  notifiche. Nessuna fattura viene generata per la penale: è fuori campo IVA (art. 15,
+  co. 1, n. 1, D.P.R. 633/1972) e resta un semplice movimento di wallet.
 - Badge contatore pendenti sempre visibile; alert mail team a ogni nuova segnalazione;
   popup di conferma esplicita prima dell'esecuzione (operazione **non reversibile**).
 
-> **Nota (2026-06-10):** **€25 è l'importo di riferimento confermato.**
-> `fatturazione-piattaforma.md` e `sistema-penali-broker.md` sono stati allineati a €25
-> (impatto totale broker −€50: storno compenso €25 + penale €25).
+> **Nota (2026-07-11):** la penale è **€25 per ciascun veicolo effettivamente segnalato**
+> (non più flat €25 a pratica). Il compenso broker non viene stornato nel caso normale: la
+> segnalazione è pre-firma, quindi il compenso semplicemente non matura. Lo storno del
+> compenso resta un ramo difensivo per l'edge case in cui fosse già stato eccezionalmente
+> accreditato. `sistema-penali-broker.md` e `docs/kb-clienti.md` sono stati allineati.
+> Vedi clausole 10.4/10.5 dei Termini (`/termini`).

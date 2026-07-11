@@ -149,6 +149,8 @@ export type N17BrokerPenaleAddebitataPayload = {
   targa: string | null;
   tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
   importoPenaleCent: number;
+  /** Targhe dei veicoli su cui è calcolata la penale (€25 ciascuno). */
+  veicoliSegnalati: string[];
   saldoWalletCent: number;
 };
 
@@ -681,6 +683,9 @@ export function tplN17BrokerPenaleAddebitata(
     `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} e' stata annullata ` +
     `in seguito a segnalazione di "${tipoLbl}" verificata dal team Passaggio Veloce.\n` +
     `Sono stati detratti ${formatCurrencyCent(p.importoPenaleCent)} dal tuo wallet.\n` +
+    (p.veicoliSegnalati.length > 0
+      ? `Veicoli segnalati (${p.veicoliSegnalati.length}): ${p.veicoliSegnalati.join(', ')}.\n`
+      : '') +
     `Saldo attuale: ${formatCurrencyCent(p.saldoWalletCent)}.\n` +
     (p.saldoWalletCent < 0
       ? 'Il saldo è negativo: dovrai reintegrarlo prima di poter ricevere payout.\n'
@@ -696,6 +701,11 @@ export function tplN17BrokerPenaleAddebitata(
     </p>
     <div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:14px;font-size:13px;color:#0a2540">
       <strong style="color:#dc2626">−${formatCurrencyCent(p.importoPenaleCent)}</strong> detratti dal tuo wallet.<br>
+      ${
+        p.veicoliSegnalati.length > 0
+          ? `Veicoli segnalati (${p.veicoliSegnalati.length}): <strong>${p.veicoliSegnalati.join(', ')}</strong><br>`
+          : ''
+      }
       Saldo attuale: <strong>${formatCurrencyCent(p.saldoWalletCent)}</strong>
     </div>
     ${

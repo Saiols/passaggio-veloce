@@ -187,6 +187,8 @@ export async function confermaAnnullamentoConPenaleAction(
     codicePratica: string;
     targa: string | null;
     tipoSegnalazione: SegnalazioneTipo;
+    importoPenaleCent: number;
+    veicoliSegnalatiTarghe: string[];
     saldoBroker: number;
     brokerEmail: string | null;
     brokerUserId: string | null;
@@ -222,7 +224,10 @@ export async function confermaAnnullamentoConPenaleAction(
               },
             },
           },
-          veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+          veicoli: {
+            orderBy: { ordine: 'asc' },
+            select: { targa: true, segnalato: true },
+          },
         },
       });
       if (!pratica) throw new Error('Pratica non trovata');
@@ -237,7 +242,14 @@ export async function confermaAnnullamentoConPenaleAction(
       }
 
       const now = new Date();
-      const importoPenaleCent = PENALI.PENALE_BROKER_DEFAULT_CENT;
+      // Penale = €25 × veicoli SEGNALATI. Mai sui veicoli sani: sarebbe una
+      // penale sproporzionata rispetto all'inadempimento (riducibile ex art.
+      // 1384 c.c.) e contraddirebbe il presupposto dichiarato nel popup.
+      // Fallback su 1 per le segnalazioni legacy (create prima che il campo
+      // `segnalato` esistesse): mai 0 — non addebiteremmo nulla.
+      const veicoliSegnalati = pratica.veicoli.filter((v) => v.segnalato).length;
+      const nPenali = veicoliSegnalati > 0 ? veicoliSegnalati : 1;
+      const importoPenaleCent = PENALI.PENALE_BROKER_DEFAULT_CENT * nPenali;
 
       // Wallet operativo della pratica: quello della SEDE del broker. Cercarlo
       // per companyId ne creava uno nuovo "madre", invisibile a operatori e
@@ -328,6 +340,10 @@ export async function confermaAnnullamentoConPenaleAction(
             : null,
         tipoSegnalazione:
           (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo,
+        importoPenaleCent,
+        veicoliSegnalatiTarghe: pratica.veicoli
+          .filter((v) => v.segnalato)
+          .map((v) => v.targa ?? '—'),
         saldoBroker: newSaldo,
         brokerEmail: brokerUser?.email ?? pratica.broker.email,
         brokerUserId: brokerUser?.id ?? null,
@@ -359,7 +375,8 @@ export async function confermaAnnullamentoConPenaleAction(
           codicePratica: payload.codicePratica,
           targa: payload.targa,
           tipoSegnalazione: payload.tipoSegnalazione,
-          importoPenaleCent: PENALI.PENALE_BROKER_DEFAULT_CENT,
+          importoPenaleCent: payload.importoPenaleCent,
+          veicoliSegnalati: payload.veicoliSegnalatiTarghe,
           saldoWalletCent: payload.saldoBroker,
         },
       }, { praticaId }).catch(() => undefined);

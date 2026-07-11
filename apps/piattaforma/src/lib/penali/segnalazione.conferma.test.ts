@@ -74,7 +74,7 @@ function praticaFixture(over: Record<string, unknown> = {}) {
     brokerSedeId: SEDE_BROKER,
     agenziaAssegnataId: AGENZIA_ID,
     agenziaSedeId: SEDE_AGENZIA,
-    veicoli: [{ targa: 'AA000AA' }],
+    veicoli: [{ targa: 'AA000AA', segnalato: true }],
     broker: {
       ragioneSociale: 'Broker SRL',
       email: 'broker@example.com',
@@ -196,5 +196,63 @@ describe('confermaAnnullamentoConPenaleAction — cablaggio wallet di sede', () 
       where: { id: 'wallet-sede-1' },
       data: { saldoCent: 5_000 - PENALI.PENALE_BROKER_DEFAULT_CENT },
     });
+  });
+});
+
+describe('confermaAnnullamentoConPenaleAction — penale per veicolo segnalato', () => {
+  it('3 veicoli, 2 segnalati → penale = 2 × €25 (i veicoli sani non si pagano)', async () => {
+    txMock.pratica.findUnique.mockResolvedValue(
+      praticaFixture({
+        veicoli: [
+          { targa: 'AA000AA', segnalato: true },
+          { targa: 'BB111BB', segnalato: true },
+          { targa: 'CC222CC', segnalato: false },
+        ],
+      }),
+    );
+    txMock.wallet.upsert.mockResolvedValue({ id: 'w-1', saldoCent: 0 });
+
+    const res = await confermaAnnullamentoConPenaleAction(PID);
+    expect(res).toEqual({ ok: true });
+
+    const atteso = 2 * PENALI.PENALE_BROKER_DEFAULT_CENT;
+    expect(txMock.transazioneWallet.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          tipo: 'PENALE_BROKER',
+          importoCent: -atteso,
+          saldoPostCent: -atteso,
+        }),
+      }),
+    );
+    expect(txMock.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ penaleAddebitatoCent: atteso }),
+      }),
+    );
+  });
+
+  it('nessun veicolo segnalato (dati legacy) → fallback su 1 veicolo, mai 0', async () => {
+    txMock.pratica.findUnique.mockResolvedValue(
+      praticaFixture({
+        veicoli: [
+          { targa: 'AA000AA', segnalato: false },
+          { targa: 'BB111BB', segnalato: false },
+        ],
+      }),
+    );
+    txMock.wallet.upsert.mockResolvedValue({ id: 'w-1', saldoCent: 0 });
+
+    const res = await confermaAnnullamentoConPenaleAction(PID);
+    expect(res).toEqual({ ok: true });
+
+    // Mai 0 (non addebiteremmo nulla), mai 2 (addebiteremmo veicoli sani).
+    expect(txMock.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          penaleAddebitatoCent: PENALI.PENALE_BROKER_DEFAULT_CENT,
+        }),
+      }),
+    );
   });
 });

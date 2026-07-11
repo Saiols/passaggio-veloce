@@ -341,7 +341,12 @@ export default async function PraticaDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-y-2">
-            {canSegnalare && <SegnalaProblemaButton praticaId={pratica.id} />}
+            {canSegnalare && (
+              <SegnalaProblemaButton
+                praticaId={pratica.id}
+                veicoli={pratica.veicoli.map((v) => ({ id: v.id, targa: v.targa }))}
+              />
+            )}
             {canAnnulla && <AnnullaPraticaButton praticaId={pratica.id} />}
             {pratica.documenti.length > 0 && canDownload && (
               <DownloadDocumentiButton

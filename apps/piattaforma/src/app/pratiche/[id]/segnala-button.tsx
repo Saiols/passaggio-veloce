@@ -21,12 +21,24 @@ const TIPI: { value: SegnalazioneTipo; label: string }[] = [
  * sulla scheda pratica, in stati ACCETTATA o PROCESSATA. Apre form modale
  * con select tipo + textarea nota.
  */
-export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
+export type VeicoloSegnalabile = { id: string; targa: string | null };
+
+export function SegnalaProblemaButton({
+  praticaId,
+  veicoli,
+}: {
+  praticaId: string;
+  veicoli: VeicoloSegnalabile[];
+}) {
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
   const [tipo, setTipo] = useState<SegnalazioneTipo>('FERMO_AMMINISTRATIVO');
   const [nota, setNota] = useState('');
+  // Monoveicolo: preselezionato e non modificabile — non c'è nulla da scegliere.
+  const [selected, setSelected] = useState<string[]>(
+    veicoli.length === 1 ? [veicoli[0].id] : [],
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -50,8 +62,12 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
 
   const handleConfirm = (): void => {
     setError(null);
+    if (selected.length === 0) {
+      setError('Seleziona almeno un veicolo');
+      return;
+    }
     startTransition(async () => {
-      const res = await segnalaPraticaAction(praticaId, tipo, nota);
+      const res = await segnalaPraticaAction(praticaId, tipo, nota, selected);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -61,6 +77,12 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
       toast('Segnalazione inviata', 'success');
       router.refresh();
     });
+  };
+
+  const toggle = (id: string): void => {
+    setSelected((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   };
 
   return (
@@ -79,6 +101,35 @@ export function SegnalaProblemaButton({ praticaId }: { praticaId: string }) {
         </p>
 
         <div className="mt-4 space-y-3">
+          {veicoli.length > 1 && (
+            <fieldset className="block">
+              <legend className="text-[12px] font-semibold text-pv-slate-700">
+                Veicoli interessati
+              </legend>
+              <p className="mt-0.5 text-[11px] text-pv-slate-500">
+                La penale a carico del broker è calcolata sui soli veicoli che
+                selezioni.
+              </p>
+              <div className="mt-1.5 space-y-1.5">
+                {veicoli.map((v) => (
+                  <label
+                    key={v.id}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-[10px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-3 py-2 transition-colors hover:bg-pv-slate-100"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(v.id)}
+                      onChange={() => toggle(v.id)}
+                      className="h-4 w-4 shrink-0 accent-pv-navy-700"
+                    />
+                    <span className="text-[13px] font-semibold text-pv-navy-800">
+                      {v.targa ?? 'Targa non indicata'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <label className="block">
             <span className="text-[12px] font-semibold text-pv-slate-700">
               Tipo problema

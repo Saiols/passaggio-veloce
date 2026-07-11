@@ -39,5 +39,9 @@ export function fatturaPaTipoPerRegime(
     if (regime === 'FORFETTARIO') return 'TD06';
     return null; // PRIVATO
   }
-  return null; // PENALE_BROKER → TBD
+  // PENALE_BROKER: clausola 10.4(b) dei Termini — la penale non è soggetta a
+  // IVA (fuori campo ex art. 15, co. 1, n. 1, D.P.R. 633/1972). Non è un
+  // corrispettivo per un servizio reso, quindi non genera alcun documento
+  // fiscale/FatturaPA: il valore è deliberatamente `null` per ogni regime.
+  return null; // PENALE_BROKER → fuori campo IVA, nessun documento fiscale
 }

@@ -31,7 +31,15 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
   if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
 
   if (await isAgenziaBloccata(agenziaId)) {
-    return { ok: false, error: 'Account sospeso per addebito non riuscito: aggiorna l\'IBAN in /blocco-pagamento' };
+    // Clausola 11.1 dei Termini: questa è una limitazione OPERATIVA, non una
+    // sospensione — l'account resta accessibile, è solo esclusa la gestione
+    // delle pratiche. Il messaggio non deve dire "sospeso" (contraddirebbe
+    // esplicitamente la clausola, che lo nega).
+    return {
+      ok: false,
+      error:
+        "Operatività sospesa per addebito non riuscito: regolarizza il pagamento in /blocco-pagamento per tornare a lavorare le pratiche.",
+    };
   }
 
   // Multi-sede: l'assegnazione da accettare è quella di una sede a cui l'utente

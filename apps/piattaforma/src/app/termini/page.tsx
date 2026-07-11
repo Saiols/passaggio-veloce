@@ -21,10 +21,12 @@ export const metadata: Metadata = {
  * elencate alla clausola 17 e richiedono la seconda accettazione specifica
  * raccolta in fase di registrazione.
  *
- * Revisione 2026-07-11: riscritte le clausole 5 (prelievo — soglia di accumulo,
- * nessuna decadenza, liquidazione del residuo alla cessazione), 10 (penali —
+ * Revisione 2026-07-11: riscritte le clausole 5 (prelievo — un wallet per
+ * sede + wallet madre affiliazione, soglia di accumulo per wallet, nessuna
+ * decadenza, liquidazione del residuo alla cessazione), 10 (penali —
  * esaustiva e tassativa) e 11 (limitazione / sospensione / cancellazione —
- * tre misure distinte, motivi tassativi). Spec:
+ * quattro misure distinte, motivi tassativi, incl. 11.3-bis sospensione
+ * della singola utenza). Spec:
  * docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
  */
 export default function TerminiPage() {
@@ -131,10 +133,10 @@ export default function TerminiPage() {
 
         <Section title="5. Wallet, compensi e condizioni di prelievo (payout)">
           <p>
-            I compensi maturati dall&apos;Utente sono accreditati sul wallet <strong>alla firma</strong> della relativa pratica. <strong>Il saldo del wallet è in ogni momento e integralmente di spettanza dell&apos;Utente: non è soggetto a scadenza né a decadenza; le uniche variazioni in diminuzione sono quelle previste dalle clausole 10.4 (penale) e 10.8 (rettifiche contabili).</strong>
+            I compensi maturati dall&apos;Utente sono accreditati sul wallet <strong>alla firma</strong> della relativa pratica. <strong>Il saldo del wallet è in ogni momento e integralmente di spettanza dell&apos;Utente: non è soggetto a scadenza né a decadenza; le uniche variazioni in diminuzione, diverse dall&apos;erogazione dei payout, sono quelle previste dalle clausole 10.4 (penale) e 10.8 (rettifiche contabili).</strong>
           </p>
           <p>
-            L&apos;Utente dispone di due portafogli distinti: il wallet dei <strong>compensi delle pratiche</strong> (per sede operativa) e, ove applicabile, il wallet delle <strong>commissioni di affiliazione</strong> (clausola 4). I compensi <strong>si accumulano liberamente</strong> su ciascun wallet. La <strong>richiesta di prelievo</strong> può essere presentata, <strong>per ciascun portafoglio separatamente</strong>, una volta raggiunto su di esso un saldo di <strong>500 €</strong>; al di sotto di tale importo i compensi <strong>restano accreditati e continuano ad accumularsi senza alcuna perdita</strong>. Al raggiungimento della soglia di payout automatico configurata dall&apos;Utente (di regola 1.000 €, impostabile tra 1.000 € e 5.000 €) l&apos;erogazione è avviata automaticamente. L&apos;erogazione avviene mediante bonifico sull&apos;IBAN indicato.
+            L&apos;Utente dispone di <strong>portafogli distinti</strong>: <strong>un wallet per ciascuna sede operativa</strong>, sul quale confluiscono i compensi delle pratiche lavorate da quella sede (ed eventuali bonus promozionali), e — ove applicabile — <strong>un unico wallet aziendale</strong> per le <strong>commissioni di affiliazione</strong> (clausola 4). Un Utente con più sedi dispone pertanto di più wallet di sede, ciascuno indipendente dagli altri. I compensi <strong>si accumulano liberamente</strong> su ciascun wallet. La <strong>richiesta di prelievo</strong> può essere presentata, <strong>per ciascun wallet separatamente</strong>, una volta raggiunto su di esso un saldo di <strong>500 €</strong>; al di sotto di tale importo i compensi <strong>restano accreditati e continuano ad accumularsi senza alcuna perdita</strong>. Al raggiungimento della soglia di payout automatico configurata dall&apos;Utente (di regola 1.000 €, impostabile tra 1.000 € e 5.000 €) l&apos;erogazione è avviata automaticamente, wallet per wallet. L&apos;erogazione avviene mediante bonifico sull&apos;IBAN indicato.
           </p>
           <p>
             <strong>In ogni caso di cessazione del rapporto</strong> (recesso di una delle parti, chiusura o cancellazione dell&apos;account) <strong>il saldo residuo è liquidato integralmente all&apos;Utente anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali.
@@ -242,7 +244,7 @@ export default function TerminiPage() {
 
         <Section title="11. Limitazione operativa, sospensione e cancellazione dell'account">
           <p>
-            Passaggio Veloce adotta <strong>tre misure distinte</strong>, di gravità crescente, di seguito elencate <strong>in modo tassativo</strong>.
+            Passaggio Veloce adotta <strong>quattro misure distinte</strong>, di gravità crescente, di seguito elencate <strong>in modo tassativo</strong>.
           </p>
           <p>
             <strong>11.1 &mdash; Limitazione operativa per mancato incasso della fee (solo agenzie).</strong> <em>Presupposto:</em> l&apos;addebito SEPA della fee (clausola 3) non va a buon fine. <em>Effetto:</em> l&apos;agenzia <strong>conserva l&apos;accesso alla Piattaforma</strong> &mdash; <strong>l&apos;account NON è sospeso</strong> &mdash; ma è esclusa dalla distribuzione di nuove pratiche e non può accettare, lavorare o portare a firma pratiche fino alla regolarizzazione. <em>Rimedio:</em> l&apos;agenzia può in ogni momento <strong>aggiornare l&apos;IBAN</strong> o <strong>richiedere un nuovo tentativo di addebito</strong> dall&apos;apposita sezione. <em>Revoca:</em> <strong>automatica</strong>, non appena non risultino più addebiti insoluti o in corso. Non è discrezionale.
@@ -299,6 +301,9 @@ export default function TerminiPage() {
             <em>Effetti economici:</em> <strong>la sospensione non comporta in alcun caso la perdita dei compensi già maturati</strong>, che restano accreditati sul wallet e sono liquidati ai sensi della clausola 5.
           </p>
           <p>
+            <strong>11.3-bis &mdash; Sospensione della singola utenza.</strong> Oltre alla sospensione dell&apos;intero account di cui al punto 11.3, Passaggio Veloce può sospendere una <strong>singola utenza</strong> associata all&apos;Utente (un dipendente o collaboratore autorizzato ad accedere alla Piattaforma), per uno dei <strong>motivi tassativi elencati al punto 11.3</strong>, quando la condotta contestata sia riferibile a quella specifica persona e non renda necessaria la sospensione dell&apos;intero account. <em>Effetto:</em> l&apos;utenza interessata <strong>non può più accedere</strong> alla Piattaforma; <strong>l&apos;account aziendale e le altre utenze dell&apos;Utente restano pienamente operativi</strong>. <em>Comunicazione e riesame:</em> la sospensione è <strong>comunicata via email all&apos;utenza interessata, con indicazione del motivo</strong>; l&apos;Utente (tramite il proprio account amministratore) e la persona interessata possono chiedere il <strong>riesame</strong> con le stesse modalità del punto 11.3. <em>Effetti economici:</em> restano fermi quelli del punto 11.3 &mdash; <strong>nessuna perdita dei compensi già maturati</strong>.
+          </p>
+          <p>
             <strong>11.4 &mdash; Cancellazione dell&apos;account.</strong> <em>Su richiesta dell&apos;Utente:</em> scrivendo ad{' '}
             <a
               href="mailto:assistenza@passaggioveloce.it"
@@ -309,7 +314,7 @@ export default function TerminiPage() {
             . <em>Su iniziativa di Passaggio Veloce:</em> <strong>solo</strong> nelle ipotesi di cui al punto 11.3 di <strong>particolare gravità</strong> (frode accertata, falsità documentale, illecito, ordine dell&apos;Autorità) <strong>oppure</strong> in caso di perdurante sospensione senza regolarizzazione. <em>Effetti:</em> disattivazione dell&apos;account e cancellazione dei dati secondo l&apos;Informativa Privacy, fatti salvi gli obblighi di conservazione di legge (in particolare fiscali e contabili) e le esigenze di audit sulle pratiche già eseguite. <em>Effetti economici:</em> restano dovuti gli importi maturati fino alla cessazione; <strong>il saldo residuo del wallet è liquidato integralmente all&apos;Utente, anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce.
           </p>
           <p>
-            <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account. <strong>In nessun caso</strong> la limitazione, la sospensione o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente. L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola 17).
+            <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account o delle singole utenze. <strong>In nessun caso</strong> la limitazione, la sospensione (dell&apos;account o della singola utenza) o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente. L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione dell&apos;account, sospensione della singola utenza e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola 17).
           </p>
         </Section>
 

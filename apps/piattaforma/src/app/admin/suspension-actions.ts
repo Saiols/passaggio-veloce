@@ -76,9 +76,22 @@ export type SuspensionResult = { ok: true } | { ok: false; error: string };
  *
  * Clausola 11.3-bis dei Termini (quarta misura, distinta dalla sospensione
  * dell'intera azienda al punto 11.3): "la sospensione è comunicata via email
- * con indicazione del motivo". Come `suspendCompanyAction`, il motivo NON è
- * opzionale: senza di esso il diritto di riesame previsto dalla stessa
- * clausola sarebbe svuotato. Rifiutata se vuoto dopo il trim.
+ * con indicazione del motivo" e "l'account aziendale e le altre utenze
+ * dell'Utente restano pienamente operativi". Come `suspendCompanyAction`, il
+ * motivo NON è opzionale: senza di esso il diritto di riesame previsto dalla
+ * stessa clausola sarebbe svuotato. Rifiutata se vuoto dopo il trim.
+ *
+ * CRITICAL (review finale pre-merge): il target NON può essere il titolare
+ * (ADMIN_AZIENDA). Nella maggior parte delle aziende clienti l'ADMIN_AZIENDA
+ * è l'UNICA utenza (caso standard alla registrazione): sospenderlo
+ * individualmente lascerebbe l'azienda senza alcun accesso mentre
+ * `Company.suspendedAt` resta `null` — la sede continuerebbe a ricevere
+ * assegnazioni (lib/distribuzione/tick.ts) senza che nessuno possa
+ * rispondere, portando a 5 timeout e quindi all'auto-sospensione anti-abuso
+ * (clausola 11.2) per un lockout causato da noi. La clausola 11.3-bis
+ * promette invece che "l'account aziendale e le altre utenze restano
+ * pienamente operativi": per il titolare l'unica misura individuale
+ * disponibile è sospendere l'intero account (clausola 11.3).
  */
 export async function suspendUserAction(
   userId: string,
@@ -101,6 +114,23 @@ export async function suspendUserAction(
     };
   }
 
+  // Una sola query: serve sia per il guard sul ruolo del target sia (se il
+  // guard passa) per popolare l'email N45 — evita un secondo giro sul DB.
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, email: true, nome: true, companyId: true, company: { select: { ragioneSociale: true } } },
+  });
+  if (!target) {
+    return { ok: false, error: 'Utente non trovato' };
+  }
+  if (target.role === 'ADMIN_AZIENDA') {
+    return {
+      ok: false,
+      error:
+        "Il titolare (ADMIN_AZIENDA) non è sospendibile singolarmente: per sospendere il titolare occorre sospendere l'intero account (clausola 11.3 dei Termini).",
+    };
+  }
+
   await prisma.user.update({
     where: { id: userId },
     data: { status: 'SUSPENDED', suspensionLastNote: note },
@@ -110,21 +140,15 @@ export async function suspendUserAction(
   // L'account aziendale e le altre utenze NON sono toccati da questa azione:
   // il payload lo dichiara esplicitamente nel template N45.
   try {
-    const u = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true, nome: true, companyId: true, company: { select: { ragioneSociale: true } } },
+    await sendNotification({
+      tipo: 'N45_UTENTE_SOSPESO',
+      target: { email: target.email, userId, companyId: target.companyId },
+      payload: {
+        nomeUtente: target.nome,
+        ragioneSociale: target.company?.ragioneSociale ?? '—',
+        motivo: note,
+      },
     });
-    if (u) {
-      await sendNotification({
-        tipo: 'N45_UTENTE_SOSPESO',
-        target: { email: u.email, userId, companyId: u.companyId },
-        payload: {
-          nomeUtente: u.nome,
-          ragioneSociale: u.company?.ragioneSociale ?? '—',
-          motivo: note,
-        },
-      });
-    }
   } catch {
     // best-effort
   }
@@ -194,6 +218,28 @@ export async function suspendCompanyAction(
   return { ok: true };
 }
 
+/**
+ * MINOR non risolto (review finale pre-merge, ultima ondata — follow-up
+ * deliberato, NON dimenticato): riattiva TUTTI gli utenti SUSPENDED della
+ * company, incluso chi era stato sospeso individualmente da
+ * `suspendUserAction` (clausola 11.3-bis) prima della sospensione aziendale
+ * — la riattivazione dell'account revoca così, silenziosamente, anche una
+ * sospensione individuale motivata e distinta.
+ *
+ * Una soluzione "pulita" richiederebbe una colonna esplicita che distingua
+ * "sospeso dalla cascata aziendale" da "sospeso individualmente" (come
+ * `Sede.suspensionOrigin` per le sedi) — non presente su `User` e valutata
+ * eccessiva per questo giro (richiede migration). Un'euristica SENZA
+ * migration — riattivare solo chi ha `suspensionLastNote: null` (il campo è
+ * scritto solo da `suspendUserAction`/`reactivateUserAction`) — è stata
+ * considerata e scartata: `reactivateUserAction` può lasciare una nota anche
+ * su un utente tornato ACTIVE, quindi un utente MAI sospeso individualmente
+ * ma con una nota residua da una vecchia riattivazione verrebbe erroneamente
+ * escluso dalla riattivazione aziendale, restando bloccato — un lockout
+ * silenzioso diverso ma non meno grave del bug originale. Follow-up:
+ * aggiungere `User.suspensionSource` (enum, analogo a
+ * `SedeSuspensionOrigin`) con relativa migration.
+ */
 export async function reactivateCompanyAction(
   companyId: string,
   noteRaw?: string,

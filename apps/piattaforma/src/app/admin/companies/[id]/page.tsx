@@ -248,10 +248,16 @@ export default async function AdminCompanyDetailPage({
                         : ' · mai entrato'}
                     </p>
                   </div>
-                  <SuspendButton
-                    target={{ kind: 'user', id: u.id }}
-                    suspended={u.status === 'SUSPENDED'}
-                  />
+                  {u.role !== 'ADMIN_AZIENDA' && (
+                    // Il titolare non è sospendibile singolarmente (clausola
+                    // 11.3-bis dei Termini, guard server in
+                    // suspendUserAction): usa il bottone "Sospendi" in testata,
+                    // che sospende l'intero account.
+                    <SuspendButton
+                      target={{ kind: 'user', id: u.id }}
+                      suspended={u.status === 'SUSPENDED'}
+                    />
+                  )}
                 </li>
               ))}
             </ul>

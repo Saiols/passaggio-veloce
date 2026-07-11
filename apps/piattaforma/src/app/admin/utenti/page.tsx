@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -134,7 +135,21 @@ export default async function AdminUtentiPage({
                     {formatDate(u.lastLoginAt)}
                   </td>
                   <td className="px-5 py-3 text-right">
-                    {u.role !== 'ADMIN_PIATTAFORMA' && (
+                    {u.role === 'ADMIN_PIATTAFORMA' ? null : u.role === 'ADMIN_AZIENDA' ? (
+                      // Il titolare non è sospendibile singolarmente
+                      // (clausola 11.3-bis dei Termini, guard server in
+                      // suspendUserAction): l'unica misura individuale
+                      // disponibile per lui è sospendere l'intero account.
+                      u.companyId && (
+                        <Link
+                          href={`/admin/companies/${u.companyId}`}
+                          title="Il titolare non è sospendibile singolarmente: sospendi l'intero account (clausola 11.3 dei Termini)"
+                          className="text-[12px] font-semibold text-pv-navy-600 hover:underline"
+                        >
+                          Sospendi l&apos;account →
+                        </Link>
+                      )
+                    ) : (
                       <SuspendButton
                         target={{ kind: 'user', id: u.id }}
                         suspended={u.status === 'SUSPENDED'}

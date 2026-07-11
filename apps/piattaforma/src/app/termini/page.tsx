@@ -20,6 +20,12 @@ export const metadata: Metadata = {
  * responsabilità (12). Le clausole vessatorie ex artt. 1341-1342 c.c. sono
  * elencate alla clausola 17 e richiedono la seconda accettazione specifica
  * raccolta in fase di registrazione.
+ *
+ * Revisione 2026-07-11: riscritte le clausole 5 (prelievo — soglia di accumulo,
+ * nessuna decadenza, liquidazione del residuo alla cessazione), 10 (penali —
+ * esaustiva e tassativa) e 11 (limitazione / sospensione / cancellazione —
+ * tre misure distinte, motivi tassativi). Spec:
+ * docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
  */
 export default function TerminiPage() {
   return (
@@ -36,7 +42,7 @@ export default function TerminiPage() {
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Termini e Condizioni di Utilizzo
         </h1>
-        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-07</p>
+        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-11</p>
 
         <p className="mt-4">
           I presenti Termini e Condizioni (i &laquo;<strong>Termini</strong>&raquo;) disciplinano
@@ -125,23 +131,16 @@ export default function TerminiPage() {
 
         <Section title="5. Wallet, compensi e condizioni di prelievo (payout)">
           <p>
-            I compensi maturati dall&apos;Utente (compensi pratica e commissioni di affiliazione)
-            sono accreditati su un portafoglio elettronico (&laquo;wallet&raquo;) alla{' '}
-            <strong>firma</strong> della relativa pratica. Il saldo del wallet rappresenta un credito
-            dell&apos;Utente verso Passaggio Veloce, erogabile secondo le condizioni che seguono.
+            I compensi maturati dall&apos;Utente sono accreditati sul wallet <strong>alla firma</strong> della relativa pratica. <strong>Il saldo del wallet è in ogni momento e integralmente di spettanza dell&apos;Utente: non è soggetto a scadenza, decadenza, né ad alcuna forma di decurtazione, qualunque sia il suo importo.</strong>
           </p>
           <p>
-            <strong>Il prelievo (payout) è disponibile solo al raggiungimento di un saldo minimo di
-            500 €.</strong> Al raggiungimento della soglia di payout automatico configurata
-            dall&apos;Utente (di regola 1.000 €, comunque impostabile tra 1.000 € e 5.000 €)
-            l&apos;erogazione è avviata automaticamente. L&apos;erogazione avviene mediante bonifico
-            sull&apos;IBAN indicato dall&apos;Utente.
+            I compensi <strong>si accumulano liberamente</strong> sul wallet. La <strong>richiesta di prelievo</strong> può essere presentata una volta raggiunto un saldo di <strong>500 €</strong>; al di sotto di tale importo i compensi <strong>restano accreditati e continuano ad accumularsi senza alcuna perdita</strong>. Al raggiungimento della soglia di payout automatico configurata dall&apos;Utente (di regola 1.000 €, impostabile tra 1.000 € e 5.000 €) l&apos;erogazione è avviata automaticamente. L&apos;erogazione avviene mediante bonifico sull&apos;IBAN indicato.
           </p>
           <p>
-            In caso di penali o rettifiche il saldo del wallet può risultare negativo: in tale
-            ipotesi i payout sono sospesi fino al ripristino di un saldo positivo, mentre i compensi
-            successivi continuano ad accreditarsi a compensazione. L&apos;Utente accetta
-            espressamente le presenti condizioni di prelievo (clausola vessatoria: v. clausola 17).
+            <strong>In ogni caso di cessazione del rapporto</strong> (recesso di una delle parti, chiusura o cancellazione dell&apos;account) <strong>il saldo residuo è liquidato integralmente all&apos;Utente anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali.
+          </p>
+          <p>
+            In caso di penali (clausola 10) il saldo può risultare negativo: in tale ipotesi i prelievi sono sospesi fino al ripristino di un saldo positivo, mentre i compensi successivi continuano ad accreditarsi a compensazione. <strong>L&apos;operatività dell&apos;Utente resta invariata.</strong>
           </p>
         </Section>
 
@@ -204,33 +203,113 @@ export default function TerminiPage() {
           </p>
         </Section>
 
+        {/*
+          L'importo "€ 25,00" scritto nel testo (punto 10.4) è una costante del
+          contratto, non un calcolo: deve coincidere con
+          PENALI.PENALE_BROKER_DEFAULT_CENT (lib/penali/config.ts, oggi 2_500
+          cent = € 25,00). Se quella costante cambia, questo testo va aggiornato
+          a mano.
+        */}
         <Section title="10. Sistema di segnalazioni e penali">
           <p>
-            La Piattaforma prevede un sistema di segnalazioni relative alla gestione delle pratiche
-            (ad esempio ipoteche o fermi non dichiarati) e l&apos;applicazione di penali a carico del
-            broker nei casi previsti, con addebito sul relativo wallet. L&apos;Utente accetta
-            l&apos;applicazione delle penali secondo le regole indicate in Piattaforma (clausola
-            vessatoria: v. clausola 17).
+            <strong>10.1 &mdash; Verifica preventiva a carico del broker.</strong> Passaggio Veloce <strong>non effettua visure PRA</strong>. Prima dell&apos;invio di ogni pratica il broker verifica personalmente, <strong>per ciascun veicolo</strong>, che: (a) non sussistano fermi amministrativi; (b) non sussistano ipoteche o vincoli iscritti al PRA; (c) i documenti caricati siano autentici e corrispondenti al veicolo. Tale verifica forma oggetto di <strong>dichiarazione espressa</strong> resa in Piattaforma prima di ogni invio, registrata con data, ora e versione del testo accettato.
+          </p>
+          <p>
+            <strong>10.2 &mdash; Segnalazione dell&apos;agenzia.</strong> La sola <strong>agenzia assegnataria</strong> può segnalare, <strong>esclusivamente prima della firma</strong> (pratica in stato &laquo;Accettata&raquo; o &laquo;Processata&raquo;): <strong>fermo amministrativo</strong>, <strong>ipoteca o vincolo PRA</strong>, <strong>documento non valido</strong>, <strong>altro</strong> (con nota). L&apos;agenzia <strong>indica i veicoli interessati</strong>. Dopo la firma la pratica è chiusa e non è più segnalabile.
+          </p>
+          <p>
+            <strong>10.3 &mdash; Verifica di Passaggio Veloce. Nessuna penale è mai applicata automaticamente.</strong> Ogni segnalazione è verificata da Passaggio Veloce, che può <strong>confermarla</strong> (pratica annullata, penale addebitata) o <strong>respingerla</strong> (pratica prosegue, nessun addebito). L&apos;esito è comunicato via email a entrambe le parti.
+          </p>
+          <p>
+            <strong>10.4 &mdash; Penale: unica penale prevista.</strong> In caso di segnalazione <strong>confermata</strong> è addebitata al broker una penale di <strong>€ 25,00 per ciascun veicolo oggetto della segnalazione confermata</strong>. La penale: (a) è addebitata sul wallet del broker; (b) <strong>non è soggetta a IVA</strong>, costituendo somma dovuta a titolo di penalità, esclusa dalla base imponibile ai sensi dell&apos;<strong>art. 15, co. 1, n. 1, D.P.R. 633/1972</strong>; (c) <strong>non si applica ai veicoli non segnalati</strong> della medesima pratica.
+          </p>
+          <p className="italic">
+            Esempio: pratica con 3 veicoli, di cui 1 con fermo confermato → penale € 25,00 (un solo veicolo), non € 75,00.
+          </p>
+          <p>
+            <strong>10.5 &mdash; Effetti della conferma.</strong> (a) la pratica è <strong>annullata</strong>; (b) il compenso della pratica <strong>non è maturato</strong> dal broker, poiché matura solo alla firma (se già eccezionalmente accreditato, è stornato); (c) all&apos;agenzia segnalante <strong>non è addebitata alcuna fee</strong>.
+          </p>
+          <p>
+            <strong>10.6 &mdash; Saldo negativo.</strong> L&apos;addebito può portare il wallet a saldo negativo. In tal caso i prelievi sono sospesi fino al ripristino, i compensi successivi si accreditano a compensazione, e <strong>l&apos;operatività resta invariata</strong>: il broker può continuare a caricare e gestire pratiche.
+          </p>
+          <p>
+            <strong>10.7 &mdash; Reiterazione.</strong> Al raggiungimento di <strong>2 penali confermate</strong>, la posizione del broker è sottoposta a valutazione ai fini della sospensione ai sensi della clausola 11.
+          </p>
+          <p>
+            <strong>10.8 &mdash; Tassatività.</strong> La penale di cui al punto 10.4 è <strong>l&apos;unica penale</strong> applicata da Passaggio Veloce. Oltre ad essa e al corrispettivo di cui alla clausola 3, <strong>nessun altro importo è addebitato all&apos;Utente a titolo di penale, sanzione o costo</strong>. Restano salve le sole <strong>rettifiche contabili</strong> volte a correggere accrediti o addebiti erronei, prive di natura sanzionatoria e sempre motivate e tracciate nel wallet.
           </p>
         </Section>
 
-        <Section title="11. Sospensione, anti-abuso e cancellazione dell'account">
+        <Section title="11. Limitazione operativa, sospensione e cancellazione dell'account">
           <p>
-            Passaggio Veloce può sospendere o cancellare, anche senza preavviso in caso di urgenza,
-            l&apos;account dell&apos;Utente in ipotesi di frode, abuso del programma di affiliazione,
-            reiterata mancata accettazione delle pratiche assegnate (anti-abuso), mancato pagamento
-            delle fee, violazione dei presenti Termini o richiesta dell&apos;Autorità. L&apos;Utente
-            accetta espressamente tale facoltà (clausola vessatoria: v. clausola 17).
+            Passaggio Veloce adotta <strong>tre misure distinte</strong>, di gravità crescente, di seguito elencate <strong>in modo tassativo</strong>.
           </p>
           <p>
-            L&apos;Utente può richiedere la cessazione del servizio scrivendo a{' '}
+            <strong>11.1 &mdash; Limitazione operativa per mancato incasso della fee (solo agenzie).</strong> <em>Presupposto:</em> l&apos;addebito SEPA della fee (clausola 3) non va a buon fine. <em>Effetto:</em> l&apos;agenzia <strong>conserva l&apos;accesso alla Piattaforma</strong> &mdash; <strong>l&apos;account NON è sospeso</strong> &mdash; ma è esclusa dalla distribuzione di nuove pratiche e non può accettare, lavorare o portare a firma pratiche fino alla regolarizzazione. <em>Rimedio:</em> l&apos;agenzia può in ogni momento <strong>aggiornare l&apos;IBAN</strong> o <strong>richiedere un nuovo tentativo di addebito</strong> dall&apos;apposita sezione. <em>Revoca:</em> <strong>automatica</strong>, non appena non risultino più addebiti insoluti o in corso. Non è discrezionale.
+          </p>
+          <p>
+            <strong>11.2 &mdash; Sospensione automatica per mancate risposte reiterate (solo agenzie).</strong> <em>Presupposto:</em> <strong>5 assegnazioni consecutive lasciate scadere senza alcuna risposta</strong> (né accettazione né rifiuto). <em>Effetto:</em> è sospesa la <strong>singola sede</strong> interessata, esclusa dalla distribuzione. <strong>Le altre sedi restano attive e gli utenti non sono disabilitati.</strong> <em>Precisazione:</em> il <strong>rifiuto espresso</strong> di una pratica <strong>non concorre</strong> a questa soglia &mdash; incide solo sull&apos;ordinamento in distribuzione. Rileva <strong>unicamente la mancata risposta</strong>. <em>Revoca:</em> la sospensione disposta dal sistema anti-abuso è revocata <strong>da Passaggio Veloce</strong>, su richiesta dell&apos;Utente e previa verifica. Resta ferma e impregiudicata la facoltà dell&apos;Utente di <strong>sospendere e riattivare autonomamente</strong> le proprie sedi per esigenze organizzative: tale facoltà <strong>non consente</strong> di revocare la sospensione disposta ai sensi del presente punto.
+          </p>
+          <p>
+            <strong>11.3 &mdash; Sospensione dell&apos;account.</strong> <em>Effetto:</em> l&apos;accesso alla Piattaforma è inibito per l&apos;azienda e per tutte le sue utenze. La misura è <strong>reversibile</strong>. <em>Motivi tassativi</em> &mdash; la sospensione può essere disposta <strong>esclusivamente</strong> per uno dei seguenti motivi:
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>
+              <strong>1.</strong> <strong>frode o tentativo di frode</strong> ai danni di Passaggio Veloce, di altri Utenti o di terzi;
+            </li>
+            <li>
+              <strong>2.</strong> <strong>falsità o alterazione</strong> di dati aziendali, documenti d&apos;identità, documenti del veicolo o della pratica;
+            </li>
+            <li>
+              <strong>3.</strong> <strong>abuso del programma di affiliazione</strong>: iscrizioni fittizie, account multipli riconducibili al medesimo soggetto, collusione tra referente e referito, o altre condotte volte a generare commissioni non corrispondenti a pratiche reali;
+            </li>
+            <li>
+              <strong>4.</strong> <strong>raggiungimento di 2 penali confermate</strong> ai sensi della clausola 10;
+            </li>
+            <li>
+              <strong>5.</strong> <strong>mancata regolarizzazione</strong> della limitazione di cui al punto 11.1 nonostante i solleciti;
+            </li>
+            <li>
+              <strong>6.</strong> <strong>violazione grave o reiterata</strong> dei presenti Termini;
+            </li>
+            <li>
+              <strong>7.</strong> <strong>uso della Piattaforma per finalità illecite</strong> o in violazione di legge;
+            </li>
+            <li>
+              <strong>8.</strong> <strong>richiesta dell&apos;Autorità</strong> giudiziaria o amministrativa, o obbligo di legge;
+            </li>
+            <li>
+              <strong>9.</strong> <strong>venir meno dei requisiti soggettivi</strong>: cessazione della partita IVA, cancellazione dal Registro delle Imprese, cessazione dell&apos;attività d&apos;impresa;
+            </li>
+            <li>
+              <strong>10.</strong> <strong>condotta gravemente lesiva</strong> verso altri Utenti o il personale di Passaggio Veloce.
+            </li>
+          </ul>
+          <p>
+            <em>Comunicazione e riesame:</em> la sospensione è <strong>comunicata via email con indicazione del motivo</strong>. L&apos;Utente può presentare osservazioni e chiedere il <strong>riesame</strong> scrivendo ad{' '}
             <a
               href="mailto:assistenza@passaggioveloce.it"
               className="font-semibold text-pv-navy-700 hover:underline"
             >
               assistenza@passaggioveloce.it
             </a>
-            . Restano dovuti gli importi maturati fino alla cessazione.
+            ; Passaggio Veloce riscontra entro <strong>15 giorni</strong>. Venuto meno il motivo, l&apos;account è riattivato.
+          </p>
+          <p>
+            <em>Effetti economici:</em> <strong>la sospensione non comporta in alcun caso la perdita dei compensi già maturati</strong>, che restano accreditati sul wallet e sono liquidati ai sensi della clausola 5.
+          </p>
+          <p>
+            <strong>11.4 &mdash; Cancellazione dell&apos;account.</strong> <em>Su richiesta dell&apos;Utente:</em> scrivendo ad{' '}
+            <a
+              href="mailto:assistenza@passaggioveloce.it"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              assistenza@passaggioveloce.it
+            </a>
+            . <em>Su iniziativa di Passaggio Veloce:</em> <strong>solo</strong> nelle ipotesi di cui al punto 11.3 di <strong>particolare gravità</strong> (frode accertata, falsità documentale, illecito, ordine dell&apos;Autorità) <strong>oppure</strong> in caso di perdurante sospensione senza regolarizzazione. <em>Effetti:</em> disattivazione dell&apos;account e cancellazione dei dati secondo l&apos;Informativa Privacy, fatti salvi gli obblighi di conservazione di legge (in particolare fiscali e contabili) e le esigenze di audit sulle pratiche già eseguite. <em>Effetti economici:</em> restano dovuti gli importi maturati fino alla cessazione; <strong>il saldo residuo del wallet è liquidato integralmente all&apos;Utente, anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce.
+          </p>
+          <p>
+            <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account. <strong>In nessun caso</strong> la limitazione, la sospensione o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente.
           </p>
         </Section>
 
@@ -317,7 +396,8 @@ export default function TerminiPage() {
               <strong>10</strong> (Sistema di segnalazioni e penali);
             </li>
             <li>
-              <strong>11</strong> (Sospensione, anti-abuso e cancellazione dell&apos;account);
+              <strong>11</strong> (Limitazione operativa, sospensione e cancellazione
+              dell&apos;account);
             </li>
             <li>
               <strong>12</strong> (Limitazioni di responsabilità);

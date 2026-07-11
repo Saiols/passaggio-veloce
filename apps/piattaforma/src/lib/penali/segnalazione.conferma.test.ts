@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * anche quando risolveva (o creava) il wallet sbagliato.
  */
 
-const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock } = vi.hoisted(() => {
+const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, sendNotificationMock } = vi.hoisted(() => {
   const txMock = {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     wallet: { upsert: vi.fn(), update: vi.fn() },
@@ -35,6 +35,7 @@ const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock } = v
       throw new Error(`__REDIRECT__:${url}`);
     }),
     destinatariAgenziaMock: vi.fn(() => Promise.resolve([])),
+    sendNotificationMock: vi.fn(() => Promise.resolve()),
   };
 });
 
@@ -43,7 +44,7 @@ vi.mock('@/auth', () => ({ auth: authMock }));
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/notifiche', () => ({
-  sendNotification: vi.fn(() => Promise.resolve()),
+  sendNotification: sendNotificationMock,
   getAdminEmails: vi.fn(() => Promise.resolve([])),
   notifyClientiAvanzamento: vi.fn(() => Promise.resolve()),
 }));
@@ -93,6 +94,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN_PIATTAFORMA' } });
   destinatariAgenziaMock.mockResolvedValue([]);
+  sendNotificationMock.mockResolvedValue(undefined);
   txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
   txMock.pratica.update.mockResolvedValue({});
   txMock.wallet.upsert.mockResolvedValue({ id: 'wallet-sede-1', saldoCent: 0 });
@@ -253,6 +255,42 @@ describe('confermaAnnullamentoConPenaleAction — penale per veicolo segnalato',
           penaleAddebitatoCent: PENALI.PENALE_BROKER_DEFAULT_CENT,
         }),
       }),
+    );
+  });
+
+  it('N17 al broker riporta l\'importo REALE (2 × €25, non la costante flat), le targhe dei soli veicoli segnalati e il saldo post-addebito', async () => {
+    // 3 veicoli, 2 segnalati con targhe distinte e riconoscibili: se il codice
+    // regredisse a PENALI.PENALE_BROKER_DEFAULT_CENT "nudo" (flat €25) questo
+    // test deve fallire, non solo quando manda tutte e 3 le targhe.
+    txMock.pratica.findUnique.mockResolvedValue(
+      praticaFixture({
+        veicoli: [
+          { targa: 'MN001XX', segnalato: true },
+          { targa: 'MN002XX', segnalato: true },
+          { targa: 'MN003XX', segnalato: false },
+        ],
+      }),
+    );
+    // Saldo iniziale non-zero e non banale, per distinguere davvero il saldo
+    // post-addebito da uno zero di comodo.
+    txMock.wallet.upsert.mockResolvedValue({ id: 'w-multi', saldoCent: 10_000 });
+
+    const res = await confermaAnnullamentoConPenaleAction(PID);
+    expect(res).toEqual({ ok: true });
+
+    const attesoImporto = 2 * PENALI.PENALE_BROKER_DEFAULT_CENT; // 5_000, non 2_500
+    const attesoSaldo = 10_000 - attesoImporto; // 5_000
+
+    expect(sendNotificationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: 'N17_BROKER_PENALE_ADDEBITATA',
+        payload: expect.objectContaining({
+          importoPenaleCent: attesoImporto,
+          veicoliSegnalati: ['MN001XX', 'MN002XX'],
+          saldoWalletCent: attesoSaldo,
+        }),
+      }),
+      { praticaId: PID },
     );
   });
 });

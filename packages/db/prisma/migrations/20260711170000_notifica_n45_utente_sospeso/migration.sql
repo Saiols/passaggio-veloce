@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "NotificaTipo" ADD VALUE 'N45_UTENTE_SOSPESO';

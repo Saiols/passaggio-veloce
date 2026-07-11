@@ -143,6 +143,17 @@ export type N16AccountEliminatoPayload = {
   ragioneSociale: string;
 };
 
+/**
+ * Clausola 11.3-bis dei Termini: sospensione della SINGOLA utenza (distinta
+ * dalla sospensione dell'intera azienda, N14). Il motivo è sempre presente
+ * (obbligatorio in `suspendUserAction`), a differenza di N14 dov'è opzionale.
+ */
+export type N45UtenteSospesoPayload = {
+  nomeUtente: string;
+  ragioneSociale: string;
+  motivo: string;
+};
+
 export type N17BrokerPenaleAddebitataPayload = {
   nomeBroker: string;
   codicePratica: string;
@@ -684,6 +695,45 @@ export function tplN16AccountEliminato(
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Per chiarimenti scrivi a <a href="mailto:assistenza@passaggioveloce.it">assistenza@passaggioveloce.it</a>.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+/**
+ * Clausola 11.3-bis: sospensione della singola utenza (non dell'intera
+ * azienda — v. N14/tplN14AccountSospeso). L'account aziendale e le altre
+ * utenze restano operativi: il testo lo dichiara esplicitamente perché è
+ * il punto che distingue questa misura dalla sospensione dell'account (11.3).
+ */
+export function tplN45UtenteSospeso(
+  p: N45UtenteSospesoPayload,
+): NotificaContent {
+  const subject = `La tua utenza su ${p.ragioneSociale} è stata sospesa`;
+  const text =
+    `Ciao ${p.nomeUtente},\n` +
+    `la tua utenza sulla piattaforma Passaggio Veloce, associata a ${p.ragioneSociale}, ` +
+    `e' stata sospesa da un amministratore.\n` +
+    `Motivo: ${p.motivo}\n` +
+    `L'account aziendale e le altre utenze di ${p.ragioneSociale} restano pienamente ` +
+    `operativi: la sospensione riguarda esclusivamente questa utenza.\n` +
+    `Puoi chiedere il riesame scrivendo a assistenza@passaggioveloce.it.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">La tua utenza è stata sospesa</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeUtente)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la tua utenza sulla piattaforma Passaggio Veloce, associata a
+      <strong>${escapeHtml(p.ragioneSociale)}</strong>, e&apos; stata sospesa da un
+      amministratore. Non puoi accedere alla piattaforma fino alla riattivazione.
+    </p>
+    <div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540"><strong>Motivo:</strong> ${escapeHtml(p.motivo)}</div>
+    <p style="margin:16px 0 0;color:#334155;font-size:13px">
+      L&apos;account aziendale di <strong>${escapeHtml(p.ragioneSociale)}</strong> e le
+      altre eventuali utenze restano pienamente operativi: la sospensione
+      riguarda esclusivamente questa utenza.
+    </p>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Puoi chiedere il riesame scrivendo a <a href="mailto:assistenza@passaggioveloce.it">assistenza@passaggioveloce.it</a>.
     </p>
   `);
   return { subject, html, text };

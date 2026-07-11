@@ -318,6 +318,7 @@ enum NotificaTipo {
   N42_BROKER_SEGNALAZIONE_GESTITA
   N43_AGENZIA_SEGNALAZIONE_RESPINTA
   N44_BROKER_SEGNALAZIONE_RESPINTA
+  N45_UTENTE_SOSPESO
 }
 
 enum NotificaCanale {
@@ -515,6 +516,12 @@ model User {
 
   role   UserRole   @default(UTENTE_AZIENDA)
   status UserStatus @default(PENDING_EMAIL_VERIFICATION)
+
+  /// Clausola 11.3-bis dei Termini: ultima nota admin sulla sospensione della
+  /// SINGOLA utenza (distinta da Company.suspensionLastNote, che riguarda la
+  /// sospensione dell'intera azienda). Audit semplificato: una sola nota,
+  /// sovrascritta ad ogni sospensione.
+  suspensionLastNote String?
 
   companyId String?  @db.Uuid
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)

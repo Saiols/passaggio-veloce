@@ -33,7 +33,7 @@ export function SuspendButton({
   const submit = (): void => {
     setError(null);
     const trimmed = note.trim();
-    if (target.kind === 'company' && dialog === 'suspend' && !trimmed) {
+    if (dialog === 'suspend' && !trimmed) {
       setError('Indica il motivo della sospensione: è obbligatorio.');
       return;
     }
@@ -43,8 +43,8 @@ export function SuspendButton({
       if (target.kind === 'user') {
         res =
           dialog === 'reactivate'
-            ? await reactivateUserAction(target.id)
-            : await suspendUserAction(target.id);
+            ? await reactivateUserAction(target.id, optionalNote)
+            : await suspendUserAction(target.id, optionalNote);
       } else {
         res =
           dialog === 'reactivate'
@@ -106,10 +106,17 @@ export function SuspendButton({
             <div className="p-5">
               <p className="text-[13px] text-pv-slate-700">
                 {dialog === 'reactivate' ? (
-                  <>
-                    L&apos;account torna <strong>ACTIVE</strong>. Email N15 di
-                    riattivazione inviata a tutti gli utenti aziendali.
-                  </>
+                  target.kind === 'company' ? (
+                    <>
+                      L&apos;account torna <strong>ACTIVE</strong>. Email N15 di
+                      riattivazione inviata a tutti gli utenti aziendali.
+                    </>
+                  ) : (
+                    <>
+                      L&apos;utente torna <strong>ACTIVE</strong> e può accedere
+                      di nuovo alla piattaforma.
+                    </>
+                  )
                 ) : target.kind === 'company' ? (
                   <>
                     Sospendere l&apos;azienda? Tutti gli utenti aziendali
@@ -119,38 +126,40 @@ export function SuspendButton({
                 ) : (
                   <>
                     L&apos;utente non potrà più accedere alla piattaforma
-                    finché non viene riattivato.
+                    finché non viene riattivato. L&apos;account aziendale e le
+                    altre utenze restano operativi. Email N45 con il motivo
+                    verrà inviata all&apos;utente sospeso.
                   </>
                 )}
               </p>
 
-              {target.kind === 'company' && (
-                <label className="mt-4 block">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                    {dialog === 'reactivate'
-                      ? 'Nota motivazione (opzionale)'
-                      : 'Nota motivazione (obbligatoria)'}
-                  </span>
-                  <textarea
-                    value={note}
-                    rows={3}
-                    maxLength={1000}
-                    required={dialog === 'suspend'}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder={
-                      dialog === 'reactivate'
-                        ? 'Es. KYC completato, ripristino accesso.'
-                        : 'Es. mancata risposta segnalazioni, sospensione cautelare.'
-                    }
-                    className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
-                  />
-                  <p className="mt-1 text-[11px] text-pv-slate-500">
-                    {dialog === 'reactivate'
-                      ? "Salvata sull'audit trail della company e inclusa nell'email."
-                      : "Obbligatoria (clausola 11.3 dei Termini): salvata sull'audit trail della company e inclusa nell'email di sospensione."}
-                  </p>
-                </label>
-              )}
+              <label className="mt-4 block">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                  {dialog === 'reactivate'
+                    ? 'Nota motivazione (opzionale)'
+                    : 'Nota motivazione (obbligatoria)'}
+                </span>
+                <textarea
+                  value={note}
+                  rows={3}
+                  maxLength={1000}
+                  required={dialog === 'suspend'}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder={
+                    dialog === 'reactivate'
+                      ? 'Es. KYC completato, ripristino accesso.'
+                      : 'Es. mancata risposta segnalazioni, sospensione cautelare.'
+                  }
+                  className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+                />
+                <p className="mt-1 text-[11px] text-pv-slate-500">
+                  {dialog === 'reactivate'
+                    ? "Salvata sull'audit trail e inclusa nell'email."
+                    : target.kind === 'company'
+                      ? "Obbligatoria (clausola 11.3 dei Termini): salvata sull'audit trail della company e inclusa nell'email di sospensione."
+                      : "Obbligatoria (clausola 11.3-bis dei Termini): salvata sull'audit trail e inclusa nell'email di sospensione inviata all'utente."}
+                </p>
+              </label>
 
               {error && (
                 <p className="mt-3 rounded-[8px] bg-pv-red-50 px-3 py-2 text-[12.5px] text-pv-red-500">

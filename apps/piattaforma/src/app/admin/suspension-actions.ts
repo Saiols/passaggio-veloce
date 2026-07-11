@@ -73,8 +73,17 @@ export type SuspensionResult = { ok: true } | { ok: false; error: string };
 /**
  * F-01: sospende un singolo utente. Visibile a ADMIN_PIATTAFORMA + ASSISTENTE.
  * L'utente sospeso non può fare login (auth.ts esce a null su SUSPENDED).
+ *
+ * Clausola 11.3-bis dei Termini (quarta misura, distinta dalla sospensione
+ * dell'intera azienda al punto 11.3): "la sospensione è comunicata via email
+ * con indicazione del motivo". Come `suspendCompanyAction`, il motivo NON è
+ * opzionale: senza di esso il diritto di riesame previsto dalla stessa
+ * clausola sarebbe svuotato. Rifiutata se vuoto dopo il trim.
  */
-export async function suspendUserAction(userId: string): Promise<SuspensionResult> {
+export async function suspendUserAction(
+  userId: string,
+  noteRaw: string | undefined,
+): Promise<SuspensionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!isAdminOrAssistente(session.user.role)) {
@@ -83,23 +92,60 @@ export async function suspendUserAction(userId: string): Promise<SuspensionResul
   if (userId === session.user.id) {
     return { ok: false, error: 'Non puoi sospendere te stesso' };
   }
+  const note = sanitizeNote(noteRaw);
+  if (!note) {
+    return {
+      ok: false,
+      error:
+        'Indica il motivo della sospensione: è obbligatorio (clausola 11.3-bis dei Termini) e viene incluso nell\'email inviata all\'utente.',
+    };
+  }
+
   await prisma.user.update({
     where: { id: userId },
-    data: { status: 'SUSPENDED' },
+    data: { status: 'SUSPENDED', suspensionLastNote: note },
   });
+
+  // Email best-effort all'utente sospeso, con il motivo (clausola 11.3-bis).
+  // L'account aziendale e le altre utenze NON sono toccati da questa azione:
+  // il payload lo dichiara esplicitamente nel template N45.
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, nome: true, companyId: true, company: { select: { ragioneSociale: true } } },
+    });
+    if (u) {
+      await sendNotification({
+        tipo: 'N45_UTENTE_SOSPESO',
+        target: { email: u.email, userId, companyId: u.companyId },
+        payload: {
+          nomeUtente: u.nome,
+          ragioneSociale: u.company?.ragioneSociale ?? '—',
+          motivo: note,
+        },
+      });
+    }
+  } catch {
+    // best-effort
+  }
+
   revalidatePath('/admin/utenti');
   return { ok: true };
 }
 
-export async function reactivateUserAction(userId: string): Promise<SuspensionResult> {
+export async function reactivateUserAction(
+  userId: string,
+  noteRaw?: string,
+): Promise<SuspensionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!isAdminOrAssistente(session.user.role)) {
     return { ok: false, error: 'Operazione riservata ad admin/assistente' };
   }
+  const note = sanitizeNote(noteRaw);
   await prisma.user.update({
     where: { id: userId },
-    data: { status: 'ACTIVE' },
+    data: { status: 'ACTIVE', suspensionLastNote: note },
   });
   revalidatePath('/admin/utenti');
   return { ok: true };

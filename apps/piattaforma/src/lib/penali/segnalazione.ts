@@ -105,6 +105,11 @@ export async function segnalaPraticaAction(
 
   const cleanNota = nota.trim().slice(0, 500) || null;
 
+  // Deduplicazione defensiva: i duplicati sono innocui (updateMany li collassa),
+  // ma il codice calcola una penale in denaro e non deve dipendere dalla
+  // semantica SQL.
+  const idsUnici = [...new Set(veicoliIds)];
+
   await prisma.$transaction([
     prisma.pratica.update({
       where: { id: praticaId },
@@ -118,7 +123,7 @@ export async function segnalaPraticaAction(
       },
     }),
     prisma.veicolo.updateMany({
-      where: { praticaId, id: { in: veicoliIds } },
+      where: { praticaId, id: { in: idsUnici } },
       data: { segnalato: true },
     }),
   ]);

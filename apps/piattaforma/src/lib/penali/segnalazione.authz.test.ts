@@ -93,7 +93,7 @@ describe('segnalaPraticaAction — scoping sede', () => {
   it('rifiuta la segnalazione di una pratica di un\'altra sede (nessuna penale al broker)', async () => {
     prismaMock.pratica.findUnique.mockResolvedValue(pratica());
 
-    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota', ['veicolo-1']);
 
     expect(res).toEqual({ ok: false, error: 'Pratica non assegnata alla tua sede' });
     expect(prismaMock.pratica.update).not.toHaveBeenCalled();
@@ -104,7 +104,7 @@ describe('segnalaPraticaAction — scoping sede', () => {
       pratica({ agenziaAssegnataId: 'ag-estranea', agenziaSedeId: SEDE_MIA }),
     );
 
-    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota', ['veicolo-1']);
 
     expect(res).toEqual({ ok: false, error: 'Pratica non assegnata alla tua agenzia' });
   });
@@ -114,7 +114,7 @@ describe('segnalaPraticaAction — scoping sede', () => {
       pratica({ agenziaSedeId: SEDE_MIA, stato: 'FIRMATA' }),
     );
 
-    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota', ['veicolo-1']);
 
     // Asserzione ESATTA sul messaggio di stato: una negativa
     // (`not.toEqual(errore-di-sede)`) passerebbe anche se il gate negasse con
@@ -135,7 +135,7 @@ describe('segnalaPraticaAction — capability', () => {
   it('un operatore senza pratiche.segnala non apre la segnalazione', async () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['pratiche.view']));
 
-    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota', ['veicolo-1']);
 
     expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
     expect(prismaMock.pratica.update).not.toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe('segnalaPraticaAction — capability', () => {
     getSessionContextMock.mockResolvedValue(ctxConPermessi(['pratiche.view', 'pratiche.segnala']));
     prismaMock.pratica.findUnique.mockResolvedValue(pratica());
 
-    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota');
+    const res = await segnalaPraticaAction(PID, 'FERMO_AMMINISTRATIVO', 'nota', ['veicolo-1']);
 
     expect(res).toEqual({ ok: false, error: 'Pratica non assegnata alla tua sede' });
   });

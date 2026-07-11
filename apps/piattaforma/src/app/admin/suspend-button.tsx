@@ -32,8 +32,12 @@ export function SuspendButton({
 
   const submit = (): void => {
     setError(null);
+    const trimmed = note.trim();
+    if (target.kind === 'company' && dialog === 'suspend' && !trimmed) {
+      setError('Indica il motivo della sospensione: è obbligatorio.');
+      return;
+    }
     startTransition(async () => {
-      const trimmed = note.trim();
       const optionalNote = trimmed || undefined;
       let res: { ok: true } | { ok: false; error: string };
       if (target.kind === 'user') {
@@ -123,12 +127,15 @@ export function SuspendButton({
               {target.kind === 'company' && (
                 <label className="mt-4 block">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                    Nota motivazione (opzionale)
+                    {dialog === 'reactivate'
+                      ? 'Nota motivazione (opzionale)'
+                      : 'Nota motivazione (obbligatoria)'}
                   </span>
                   <textarea
                     value={note}
                     rows={3}
                     maxLength={1000}
+                    required={dialog === 'suspend'}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder={
                       dialog === 'reactivate'
@@ -138,7 +145,9 @@ export function SuspendButton({
                     className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
                   />
                   <p className="mt-1 text-[11px] text-pv-slate-500">
-                    Salvata sull&apos;audit trail della company e inclusa nell&apos;email.
+                    {dialog === 'reactivate'
+                      ? "Salvata sull'audit trail della company e inclusa nell'email."
+                      : "Obbligatoria (clausola 11.3 dei Termini): salvata sull'audit trail della company e inclusa nell'email di sospensione."}
                   </p>
                 </label>
               )}

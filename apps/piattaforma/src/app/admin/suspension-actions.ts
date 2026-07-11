@@ -108,10 +108,15 @@ export async function reactivateUserAction(userId: string): Promise<SuspensionRe
 /**
  * F-01: sospende un'azienda intera (broker o agenzia). Setta suspendedAt
  * e sospende tutti i suoi utenti in cascata. Reversibile via reactivate.
+ *
+ * Clausola 11.3 dei Termini: "la sospensione è comunicata via email con
+ * indicazione del motivo". Il motivo NON è più opzionale: senza di esso il
+ * diritto di riesame previsto dalla stessa clausola sarebbe svuotato (l'utente
+ * non saprebbe cosa contestare). Rifiutata se vuoto dopo il trim.
  */
 export async function suspendCompanyAction(
   companyId: string,
-  noteRaw?: string,
+  noteRaw: string | undefined,
 ): Promise<SuspensionResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -119,6 +124,13 @@ export async function suspendCompanyAction(
     return { ok: false, error: 'Operazione riservata ad admin/assistente' };
   }
   const note = sanitizeNote(noteRaw);
+  if (!note) {
+    return {
+      ok: false,
+      error:
+        'Indica il motivo della sospensione: è obbligatorio (clausola 11.3 dei Termini) e viene incluso nell\'email inviata all\'azienda.',
+    };
+  }
   await prisma.$transaction([
     prisma.company.update({
       where: { id: companyId },
@@ -260,8 +272,22 @@ export async function reactivateSedeAntiAbusoAction(
     return { ok: false, error: 'Operazione riservata ad admin/assistente' };
   }
 
-  await prisma.sede.update({
+  // Guardia: questa azione esiste SOLO per sciogliere la sanzione anti-abuso
+  // (5 no-show consecutivi). Senza questo controllo riattiverebbe anche una
+  // sede sospesa volontariamente dal titolare (es. per ferie/chiusura
+  // stagionale, `suspensionOrigin: 'UTENTE'`) — non è una falla di sicurezza
+  // (azione admin-only, la UI mostra il bottone solo per sedi ANTI_ABUSO), ma
+  // scavalcherebbe una scelta organizzativa dell'utente per errore.
+  const sede = await prisma.sede.findUnique({
     where: { id: sedeId },
+    select: { suspensionOrigin: true },
+  });
+  if (!sede || sede.suspensionOrigin !== 'ANTI_ABUSO') {
+    return { ok: false, error: 'Questa sede non risulta sospesa dal sistema anti-abuso' };
+  }
+
+  await prisma.sede.update({
+    where: { id: sedeId, suspensionOrigin: 'ANTI_ABUSO' },
     data: { suspendedAt: null, suspensionOrigin: null },
   });
 

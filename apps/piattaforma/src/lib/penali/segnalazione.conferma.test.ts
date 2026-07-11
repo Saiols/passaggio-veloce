@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, sendNotificationMock } = vi.hoisted(() => {
   const txMock = {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
+    veicolo: { updateMany: vi.fn() },
     wallet: { upsert: vi.fn(), update: vi.fn() },
     transazioneWallet: { findFirst: vi.fn(), create: vi.fn() },
     feeAddebito: { updateMany: vi.fn() },
@@ -52,7 +53,7 @@ vi.mock('@/lib/notifiche/pratica', () => ({ destinatariAgenzia: destinatariAgenz
 vi.mock('@/lib/eventi/emit', () => ({ emitEventiPratica: vi.fn(() => Promise.resolve()) }));
 vi.mock('@/lib/eventi/pratica-eventi', () => ({ eventoPraticaPenale: vi.fn(() => ({})) }));
 
-import { confermaAnnullamentoConPenaleAction } from './segnalazione';
+import { confermaAnnullamentoConPenaleAction, respingiSegnalazioneAction } from './segnalazione';
 import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
 import { PENALI } from './config';
 
@@ -97,6 +98,7 @@ beforeEach(() => {
   sendNotificationMock.mockResolvedValue(undefined);
   txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
   txMock.pratica.update.mockResolvedValue({});
+  txMock.veicolo.updateMany.mockResolvedValue({ count: 0 });
   txMock.wallet.upsert.mockResolvedValue({ id: 'wallet-sede-1', saldoCent: 0 });
   txMock.wallet.update.mockResolvedValue({});
   txMock.transazioneWallet.findFirst.mockResolvedValue(null);
@@ -292,5 +294,19 @@ describe('confermaAnnullamentoConPenaleAction — penale per veicolo segnalato',
       }),
       { praticaId: PID },
     );
+  });
+});
+
+describe('respingiSegnalazioneAction — reset dei veicoli segnalati', () => {
+  it('azzera segnalato sui veicoli della pratica, altrimenti la prossima segnalazione eredita la penale', async () => {
+    txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
+
+    const res = await respingiSegnalazioneAction(PID, 'Fermo non riscontrato');
+
+    expect(res).toEqual({ ok: true });
+    expect(txMock.veicolo.updateMany).toHaveBeenCalledWith({
+      where: { praticaId: PID },
+      data: { segnalato: false },
+    });
   });
 });

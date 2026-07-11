@@ -458,34 +458,52 @@ export async function respingiSegnalazioneAction(
     };
   }
   const adminId = session.user.id;
-
-  const pratica = await prisma.pratica.findUnique({
-    where: { id: praticaId },
-    select: {
-      flagSegnalata: true,
-      segnalazioneStato: true,
-      notaSegnalazione: true,
-    },
-  });
-  if (!pratica) return { ok: false, error: 'Pratica non trovata' };
-  if (!pratica.flagSegnalata || pratica.segnalazioneStato !== 'RICEVUTA') {
-    return { ok: false, error: 'Nessuna segnalazione attiva da respingere' };
-  }
-
   const motivoTrim = motivo.trim().slice(0, 500);
-  await prisma.pratica.update({
-    where: { id: praticaId },
-    data: {
-      flagSegnalata: false,
-      segnalazioneStato: 'RESPINTA',
-      segnalazioneEsitaAt: new Date(),
-      segnalazioneEsitaDaId: adminId,
-      // Conserviamo nota originale agenzia + appendiamo motivo respinta in audit
-      notaSegnalazione: motivoTrim
-        ? `[ORIG] ${pratica.notaSegnalazione ?? ''}\n[RESPINTA] ${motivoTrim}`
-        : pratica.notaSegnalazione,
-    },
-  });
+
+  // Transazione: reset di `flagSegnalata` e reset dei veicoli segnalati devono
+  // essere atomici. Se il secondo fallisse dopo che il primo è già passato, la
+  // pratica risulterebbe "non segnalata" ma con i veicoli ancora marcati — la
+  // segnalazione successiva sulla stessa pratica erediterebbe la penale su
+  // veicoli che nessuno ha mai segnalato.
+  try {
+    await prisma.$transaction(async (tx) => {
+      const pratica = await tx.pratica.findUnique({
+        where: { id: praticaId },
+        select: {
+          flagSegnalata: true,
+          segnalazioneStato: true,
+          notaSegnalazione: true,
+        },
+      });
+      if (!pratica) throw new Error('Pratica non trovata');
+      if (!pratica.flagSegnalata || pratica.segnalazioneStato !== 'RICEVUTA') {
+        throw new Error('Nessuna segnalazione attiva da respingere');
+      }
+
+      await tx.pratica.update({
+        where: { id: praticaId },
+        data: {
+          flagSegnalata: false,
+          segnalazioneStato: 'RESPINTA',
+          segnalazioneEsitaAt: new Date(),
+          segnalazioneEsitaDaId: adminId,
+          // Conserviamo nota originale agenzia + appendiamo motivo respinta in audit
+          notaSegnalazione: motivoTrim
+            ? `[ORIG] ${pratica.notaSegnalazione ?? ''}\n[RESPINTA] ${motivoTrim}`
+            : pratica.notaSegnalazione,
+        },
+      });
+
+      // Reset dei veicoli: una segnalazione respinta non deve lasciare traccia,
+      // altrimenti la successiva calcolerebbe la penale su veicoli mai segnalati.
+      await tx.veicolo.updateMany({
+        where: { praticaId },
+        data: { segnalato: false },
+      });
+    });
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 
   revalidatePath('/admin/segnalazioni');
   revalidatePath(`/pratiche/${praticaId}`);

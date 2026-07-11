@@ -15,7 +15,7 @@ import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
 import { walletBrokerDellaPratica } from '@/lib/wallet/wallet-pratica';
-import { PENALI } from './config';
+import { calcolaPenaleBrokerCent } from './config';
 
 export type SegnalazioneTipo =
   | 'FERMO_AMMINISTRATIVO'
@@ -246,10 +246,11 @@ export async function confermaAnnullamentoConPenaleAction(
       // penale sproporzionata rispetto all'inadempimento (riducibile ex art.
       // 1384 c.c.) e contraddirebbe il presupposto dichiarato nel popup.
       // Fallback su 1 per le segnalazioni legacy (create prima che il campo
-      // `segnalato` esistesse): mai 0 — non addebiteremmo nulla.
-      const veicoliSegnalati = pratica.veicoli.filter((v) => v.segnalato).length;
-      const nPenali = veicoliSegnalati > 0 ? veicoliSegnalati : 1;
-      const importoPenaleCent = PENALI.PENALE_BROKER_DEFAULT_CENT * nPenali;
+      // `segnalato` esistesse): mai 0 — non addebiteremmo nulla. Regola
+      // condivisa con `/admin/segnalazioni` (calcolaPenaleBrokerCent) perché
+      // l'importo mostrato in UI prima del click deve coincidere esattamente
+      // con quello addebitato qui.
+      const importoPenaleCent = calcolaPenaleBrokerCent(pratica.veicoli);
 
       // Wallet operativo della pratica: quello della SEDE del broker. Cercarlo
       // per companyId ne creava uno nuovo "madre", invisibile a operatori e
@@ -469,15 +470,18 @@ export async function respingiSegnalazioneAction(
     brokerEmail: string | null;
     brokerUserId: string | null;
     brokerCompanyId: string;
-    brokerSedeId: string | null;
     brokerNome: string;
   } | null = null;
 
   // Transazione: reset di `flagSegnalata` e reset dei veicoli segnalati devono
-  // essere atomici. Se il secondo fallisse dopo che il primo è già passato, la
-  // pratica risulterebbe "non segnalata" ma con i veicoli ancora marcati — la
-  // segnalazione successiva sulla stessa pratica erediterebbe la penale su
-  // veicoli che nessuno ha mai segnalato.
+  // essere atomici. A isolamento READ COMMITTED (default Postgres) questo NON
+  // protegge da una race con `confermaAnnullamentoConPenaleAction` concorrente
+  // (nessun `FOR UPDATE`, quindi nessuna vera prevenzione TOCTOU): il beneficio
+  // reale è che le due update passano o falliscono insieme. Se il secondo
+  // fallisse dopo che il primo è già passato, la pratica risulterebbe "non
+  // segnalata" ma con i veicoli ancora marcati — la segnalazione successiva
+  // sulla stessa pratica erediterebbe la penale su veicoli che nessuno ha mai
+  // segnalato.
   try {
     payload = await prisma.$transaction(async (tx) => {
       const pratica = await tx.pratica.findUnique({
@@ -490,7 +494,6 @@ export async function respingiSegnalazioneAction(
           tipoSegnalazione: true,
           agenziaAssegnataId: true,
           brokerId: true,
-          brokerSedeId: true,
           veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           agenziaAssegnata: { select: { ragioneSociale: true } },
           broker: {
@@ -548,7 +551,6 @@ export async function respingiSegnalazioneAction(
         brokerEmail: brokerUser?.email ?? pratica.broker.email,
         brokerUserId: brokerUser?.id ?? null,
         brokerCompanyId: pratica.brokerId,
-        brokerSedeId: pratica.brokerSedeId,
         brokerNome: brokerUser?.nome ?? pratica.broker.ragioneSociale,
       };
     });

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { formatCurrencyCent } from '@/lib/format';
 import {
   confermaAnnullamentoConPenaleAction,
   respingiSegnalazioneAction,
@@ -12,9 +13,18 @@ import {
 /**
  * Sistema Penali Broker — SP-B: form admin per gestire una segnalazione
  * pendente (RICEVUTA). Due azioni: conferma → annulla pratica + addebita
- * penale broker €25; respingi → segnalazione annullata, pratica torna live.
+ * penale broker (€25 per ciascun veicolo segnalato, calcolata dal chiamante
+ * con `calcolaPenaleBrokerCent` — stessa regola del server action); respingi
+ * → segnalazione annullata, pratica torna live.
  */
-export function GestioneSegnalazione({ praticaId }: { praticaId: string }) {
+export function GestioneSegnalazione({
+  praticaId,
+  importoPenaleCent,
+}: {
+  praticaId: string;
+  /** Importo reale della penale per QUESTA pratica (già €25 × veicoli segnalati). */
+  importoPenaleCent: number;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -24,7 +34,7 @@ export function GestioneSegnalazione({ praticaId }: { praticaId: string }) {
   const handleConferma = (): void => {
     if (
       !confirm(
-        'Confermi annullamento + addebito penale €25 al broker? Operazione non reversibile.',
+        `Confermi annullamento + addebito penale ${formatCurrencyCent(importoPenaleCent)} al broker? Operazione non reversibile.`,
       )
     ) {
       return;

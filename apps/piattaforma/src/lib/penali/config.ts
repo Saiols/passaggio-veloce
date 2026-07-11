@@ -37,3 +37,18 @@ export const PENALI = {
    */
   POPUP_VERSION: 'v2.0',
 } as const;
+
+/**
+ * Penale broker per una pratica segnalata: €25 (PENALE_BROKER_DEFAULT_CENT) ×
+ * numero di veicoli segnalati. Fallback a 1 veicolo per le segnalazioni legacy
+ * create prima che il campo `Veicolo.segnalato` esistesse (mai 0: non
+ * addebiteremmo nulla). Fonte unica della regola — usata sia dal server action
+ * che la applica (`lib/penali/segnalazione.ts`) sia dalla UI admin che la deve
+ * mostrare PRIMA di eseguirla (`/admin/segnalazioni`), per garantire che i due
+ * numeri coincidano sempre.
+ */
+export function calcolaPenaleBrokerCent(veicoli: { segnalato: boolean }[]): number {
+  const veicoliSegnalati = veicoli.filter((v) => v.segnalato).length;
+  const nPenali = veicoliSegnalati > 0 ? veicoliSegnalati : 1;
+  return PENALI.PENALE_BROKER_DEFAULT_CENT * nPenali;
+}

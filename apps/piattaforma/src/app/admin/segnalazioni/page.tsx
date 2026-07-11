@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatRelative, formatDate, formatCurrencyCent } from '@/lib/format';
+import { PENALI, calcolaPenaleBrokerCent } from '@/lib/penali/config';
 import { GestioneSegnalazione } from './gestione-form';
 
 const TIPO_LABEL: Record<string, string> = {
@@ -41,7 +42,7 @@ export default async function AdminSegnalazioniPage() {
         agenziaAssegnata: {
           select: { id: true, ragioneSociale: true, telefono: true, email: true },
         },
-        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, segnalato: true } },
       },
     }),
     // Storico (sola lettura): segnalazioni già gestite. Filtra per stato perché
@@ -53,7 +54,7 @@ export default async function AdminSegnalazioniPage() {
       include: {
         broker: { select: { ragioneSociale: true } },
         agenziaAssegnata: { select: { ragioneSociale: true } },
-        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true, segnalato: true } },
       },
     }),
   ]);
@@ -70,8 +71,10 @@ export default async function AdminSegnalazioniPage() {
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
             Pratiche segnalate dalle agenzie per fermi amministrativi, ipoteche
-            o documenti non validi. Conferma per annullare con penale broker
-            €25, oppure respingi se la verifica esclude il problema.
+            o documenti non validi. Conferma per annullare con penale broker di{' '}
+            {formatCurrencyCent(PENALI.PENALE_BROKER_DEFAULT_CENT)} per ciascun
+            veicolo segnalato, oppure respingi se la verifica esclude il
+            problema.
           </p>
         </header>
 
@@ -81,68 +84,86 @@ export default async function AdminSegnalazioniPage() {
           </Alert>
         ) : (
           <div className="space-y-4">
-            {pendenti.map((p) => (
-              <Card
-                key={p.id}
-                className="border-pv-amber-500/40 bg-pv-amber-50/40"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <Link
-                      href={`/pratiche/${p.id}`}
-                      className="font-mono text-[14px] font-bold text-pv-navy-700 hover:underline"
-                    >
-                      {p.codicePratica ?? '—'}
-                    </Link>
-                    <p className="mt-1 text-[14px] font-semibold text-pv-navy-800">
-                      {p.veicoli[0]?.targa
-                        ? p.veicoli.length > 1
-                          ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
-                          : p.veicoli[0].targa
-                        : '—'}{' '}
-                      · {p.comune ?? '—'} ({p.provincia ?? '—'})
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-pv-slate-700">
-                      <strong>Tipo:</strong>{' '}
-                      <span className="rounded-full bg-pv-amber-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-pv-amber-500">
-                        {TIPO_LABEL[p.tipoSegnalazione ?? 'ALTRO']}
-                      </span>
-                    </p>
-                    {p.notaSegnalazione && (
-                      <p className="mt-2 rounded-[10px] border border-pv-slate-200 bg-white px-3 py-2 text-[12.5px] italic text-pv-slate-700">
-                        “{p.notaSegnalazione}”
-                      </p>
-                    )}
-                    <p className="mt-2 text-[11px] text-pv-slate-500">
-                      Broker:{' '}
+            {pendenti.map((p) => {
+              const veicoliSegnalati = p.veicoli.filter((v) => v.segnalato);
+              const importoPenaleCent = calcolaPenaleBrokerCent(p.veicoli);
+              return (
+                <Card
+                  key={p.id}
+                  className="border-pv-amber-500/40 bg-pv-amber-50/40"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
                       <Link
-                        href={`/admin/companies/${p.broker.id}`}
-                        className="font-semibold text-pv-navy-700 hover:underline"
+                        href={`/pratiche/${p.id}`}
+                        className="font-mono text-[14px] font-bold text-pv-navy-700 hover:underline"
                       >
-                        {p.broker.ragioneSociale}
-                      </Link>{' '}
-                      · {p.broker.email}
-                    </p>
-                    <p className="text-[11px] text-pv-slate-500">
-                      Agenzia:{' '}
-                      <Link
-                        href={`/admin/companies/${p.agenziaAssegnata?.id}`}
-                        className="font-semibold text-pv-navy-700 hover:underline"
-                      >
-                        {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                        {p.codicePratica ?? '—'}
                       </Link>
-                    </p>
-                    <p className="mt-1 text-[11px] text-pv-slate-500">
-                      Segnalata {formatRelative(p.segnalataAt)}
-                    </p>
+                      <p className="mt-1 text-[14px] font-semibold text-pv-navy-800">
+                        {p.veicoli[0]?.targa
+                          ? p.veicoli.length > 1
+                            ? `${p.veicoli[0].targa} +${p.veicoli.length - 1}`
+                            : p.veicoli[0].targa
+                          : '—'}{' '}
+                        · {p.comune ?? '—'} ({p.provincia ?? '—'})
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-pv-slate-700">
+                        <strong>Tipo:</strong>{' '}
+                        <span className="rounded-full bg-pv-amber-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-pv-amber-500">
+                          {TIPO_LABEL[p.tipoSegnalazione ?? 'ALTRO']}
+                        </span>
+                      </p>
+                      <p className="mt-2 rounded-[10px] border border-pv-red-500/30 bg-white px-3 py-2 text-[12px] text-pv-navy-800">
+                        <strong>Veicoli segnalati:</strong>{' '}
+                        {veicoliSegnalati.length > 0
+                          ? veicoliSegnalati.map((v) => v.targa ?? '—').join(', ')
+                          : 'nessuno indicato (segnalazione legacy, fallback 1 veicolo)'}
+                        {' · '}
+                        <strong>Penale reale:</strong>{' '}
+                        <span className="font-bold text-pv-red-500">
+                          {formatCurrencyCent(importoPenaleCent)}
+                        </span>
+                      </p>
+                      {p.notaSegnalazione && (
+                        <p className="mt-2 rounded-[10px] border border-pv-slate-200 bg-white px-3 py-2 text-[12.5px] italic text-pv-slate-700">
+                          “{p.notaSegnalazione}”
+                        </p>
+                      )}
+                      <p className="mt-2 text-[11px] text-pv-slate-500">
+                        Broker:{' '}
+                        <Link
+                          href={`/admin/companies/${p.broker.id}`}
+                          className="font-semibold text-pv-navy-700 hover:underline"
+                        >
+                          {p.broker.ragioneSociale}
+                        </Link>{' '}
+                        · {p.broker.email}
+                      </p>
+                      <p className="text-[11px] text-pv-slate-500">
+                        Agenzia:{' '}
+                        <Link
+                          href={`/admin/companies/${p.agenziaAssegnata?.id}`}
+                          className="font-semibold text-pv-navy-700 hover:underline"
+                        >
+                          {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                        </Link>
+                      </p>
+                      <p className="mt-1 text-[11px] text-pv-slate-500">
+                        Segnalata {formatRelative(p.segnalataAt)}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                <div className="mt-4 border-t border-pv-amber-500/30 pt-3">
-                  <GestioneSegnalazione praticaId={p.id} />
-                </div>
-              </Card>
-            ))}
+                  <div className="mt-4 border-t border-pv-amber-500/30 pt-3">
+                    <GestioneSegnalazione
+                      praticaId={p.id}
+                      importoPenaleCent={importoPenaleCent}
+                    />
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
 

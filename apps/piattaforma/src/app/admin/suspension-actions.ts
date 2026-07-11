@@ -7,6 +7,7 @@ import { prisma } from '@pv/db';
 import { isAdminOrAssistente, isAdminPiattaforma } from '@/lib/auth/permissions';
 import { sendNotification } from '@/lib/notifiche';
 import { eseguiPayoutImmediato } from '@/lib/wallet/payout-exec';
+import { hasNegativeCompanyWallet } from '@/lib/wallet/negative-wallet-guard';
 
 /**
  * Helper: invia notifica lifecycle a tutti gli utenti attivi di una company,
@@ -314,19 +315,38 @@ export async function deleteCompanyAction(
   await notifyCompanyLifecycle(companyId, 'N16_ACCOUNT_ELIMINATO');
 
   // Clausola 11.4 dei Termini: alla cessazione il saldo residuo è liquidato
-  // integralmente, ANCHE se inferiore a 500 €. Best-effort: un fallimento
-  // dell'erogazione non deve bloccare la cancellazione — resta il credito a
-  // registro, che l'admin liquida a mano.
+  // integralmente, ANCHE se inferiore a 500 €, "previa... regolarizzazione di
+  // quanto eventualmente dovuto a Passaggio Veloce". Se un wallet qualsiasi
+  // dell'azienda (madre o di sede) è in saldo negativo — es. penale non
+  // ripianata, clausola 10.6 — bonificare i wallet positivi e abbandonare il
+  // debito violerebbe la clausola (IMPORTANT, review finale pre-merge: prima
+  // di questo fix un'azienda con sede A a -25€ e sede B a +600€ incassava i
+  // 600€ e il debito di 25€ semplicemente spariva).
+  //
+  // Scelta: BLOCCO della liquidazione automatica (non netting contabile fra
+  // wallet). `eseguiPayoutImmediato` liquida un wallet per volta, per
+  // l'intero saldo positivo: un vero netting (importo liquidato = Σ positivi
+  // − |Σ negativi|) richiederebbe payout parziali su singolo wallet, non
+  // supportati oggi, per un guadagno di automazione marginale a fronte di più
+  // superficie per bug su un flusso di denaro reale. Se esiste un debito, i
+  // wallet restano COSÌ COME SONO (nessun payout, nessuna scrittura): la
+  // company viene comunque cancellata (soft delete, sotto), e la
+  // regolarizzazione/liquidazione del residuo netto è gestita dall'admin
+  // fuori da questo flusso best-effort. Se il debito assorbe per intero il
+  // credito, correttamente non si bonifica nulla.
   try {
-    const wallets = await prisma.wallet.findMany({
-      where: {
-        OR: [{ companyId }, { sede: { companyId } }],
-        saldoCent: { gt: 0 },
-      },
-      select: { id: true },
-    });
-    for (const w of wallets) {
-      await eseguiPayoutImmediato(w.id, { ignoraSoglia: true }).catch(() => undefined);
+    const debito = await hasNegativeCompanyWallet(prisma, companyId);
+    if (!debito) {
+      const wallets = await prisma.wallet.findMany({
+        where: {
+          OR: [{ companyId }, { sede: { companyId } }],
+          saldoCent: { gt: 0 },
+        },
+        select: { id: true },
+      });
+      for (const w of wallets) {
+        await eseguiPayoutImmediato(w.id, { ignoraSoglia: true }).catch(() => undefined);
+      }
     }
   } catch {
     // best-effort

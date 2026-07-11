@@ -21,7 +21,7 @@ const { authMock, prismaMock, redirectMock, eseguiPayoutImmediatoMock } = vi.hoi
   authMock: vi.fn(),
   prismaMock: {
     company: { findUnique: vi.fn(), update: vi.fn() },
-    wallet: { findMany: vi.fn() },
+    wallet: { findMany: vi.fn(), findFirst: vi.fn() },
     user: { updateMany: vi.fn() },
     $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
   },
@@ -61,6 +61,11 @@ beforeEach(() => {
   authMock.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN_PIATTAFORMA' } });
   mockCompanyFindUnique();
   prismaMock.wallet.findMany.mockResolvedValue([]);
+  // Nessun wallet negativo di default: la maggior parte dei test qui esercita
+  // il percorso "liquidazione normale" (IMPORTANT, review finale pre-merge —
+  // vedi suspension-actions.liquidazione-netting.test.ts per il caso con
+  // debito).
+  prismaMock.wallet.findFirst.mockResolvedValue(null);
   prismaMock.company.update.mockResolvedValue({});
   prismaMock.user.updateMany.mockResolvedValue({ count: 0 });
   eseguiPayoutImmediatoMock.mockResolvedValue({ ok: true, payoutId: 'p1', importoCent: 1 });

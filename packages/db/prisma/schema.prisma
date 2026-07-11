@@ -1033,6 +1033,11 @@ model Veicolo {
   preImm2015           Boolean              @default(false)
   flagComodatoDuso     Boolean              @default(false)
   flagDelegaVendita    Boolean              @default(false)
+  /// Sistema Penali Broker: true se questo veicolo è oggetto della segnalazione
+  /// attiva sulla pratica. La penale è €25 × (veicoli segnalati) — mai sui
+  /// veicoli sani (penale sproporzionata, cfr. art. 1384 c.c.).
+  /// Resettato a false quando la segnalazione viene RESPINTA.
+  segnalato            Boolean              @default(false)
   prezzoVenditaCent    Int? // prezzo di vendita veicolo (cent); richiesto in creazione pratica
   ocrData              Json?
   ocrProvider          String?

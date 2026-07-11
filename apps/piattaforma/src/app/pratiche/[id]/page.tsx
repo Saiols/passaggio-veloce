@@ -62,6 +62,13 @@ export default async function PraticaDetailPage({
   // Multi-sede: l'accesso non-staff è scoped alle sedi (broker o agenzia).
   const ctx = await getSessionContext();
   const scopeIds = ctx?.scopeIds ?? [];
+  // Accesso al dettaglio (permalink): consentito per QUALSIASI sede a cui l'utente
+  // ha diritto (`accessibleSedi`), non solo la sede attualmente selezionata
+  // (`scopeIds`). Altrimenti chi crea una pratica per una sede diversa da quella
+  // corrente riceve un 404 sul redirect (la pratica esiste ma è fuori vista).
+  // `scopeIds` resta il filtro di liste/badge e il gate delle azioni-workflow
+  // (`inScope`, "sto operando in questa sede?").
+  const accessibleSedeIds = ctx?.accessibleSedi.map((s) => s.id) ?? [];
   const inScope = (sedeId: string | null): boolean => sedeId != null && scopeIds.includes(sedeId);
 
   // Difesa in profondità: ogni ramo dell'OR vincola ANCHE la company del lato
@@ -69,14 +76,14 @@ export default async function PraticaDetailPage({
   // filtrasse solo per `brokerSedeId`/`agenziaSedeId` si appoggerebbe
   // all'invariante "`brokerSedeId` è sempre una sede di `brokerId`", invariante
   // su cui `canAccessPratica` (lib/pratiche/access.ts) di proposito non si fida.
-  // Fail-closed: `scopeIds` vuoto ⇒ `{ in: [] }` ⇒ nessuna riga.
+  // Fail-closed: `accessibleSedeIds` vuoto ⇒ `{ in: [] }` ⇒ nessuna riga.
   let whereProprieta: Prisma.PraticaWhereInput = {};
   if (!isStaff) {
     if (!companyId) notFound();
     whereProprieta = {
       OR: [
-        { brokerId: companyId, brokerSedeId: { in: scopeIds } },
-        { agenziaAssegnataId: companyId, agenziaSedeId: { in: scopeIds } },
+        { brokerId: companyId, brokerSedeId: { in: accessibleSedeIds } },
+        { agenziaAssegnataId: companyId, agenziaSedeId: { in: accessibleSedeIds } },
       ],
     };
   }
@@ -137,9 +144,11 @@ export default async function PraticaDetailPage({
   // `pratica.documentiFiscali` è selezionato SENZA le relazioni `pratica`/
   // `payout` (righe della pratica stessa, non del documento): passarle al
   // predicato così com'è darebbe campi sede `undefined` e farebbe sparire le
-  // fatture per ogni non-owner. La pagina è già scopata per `scopeIds` (la
-  // pratica è visibile solo se in scope), quindi i suoi documenti ereditano la
-  // sede della pratica stessa.
+  // fatture per ogni non-owner. Il predicato è autoportante: riceve la sede della
+  // pratica stessa e la confronta con lo scope della VISTA corrente (`scopeIds`).
+  // NB: l'accesso alla pratica ora è per `accessibleSedeIds` (permalink), più
+  // ampio della vista corrente; una fattura di una pratica di un'altra sede resta
+  // quindi nascosta finché non si opera come quella sede (confine finanziario).
   const fattureVisibili = pratica.documentiFiscali.filter((d) =>
     canViewDocumentoFiscale(
       {
@@ -171,6 +180,41 @@ export default async function PraticaDetailPage({
     : undefined;
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
+
+  // Numerazione documenti: quando ci sono più soggetti dello stesso ruolo
+  // (co-venditori / co-acquirenti) o più veicoli, le etichette si ripeterebbero
+  // identiche ("CI fronte — venditore"). Numeriamo per posizione nelle liste già
+  // ordinate per `ordine` così i documenti dei diversi soggetti si distinguono.
+  // L'acquirente principale (dati inline sulla pratica, nessun coAcquirenteId) è
+  // il n.1; i co-intestatari seguono (indice + 2).
+  const numVenditori = pratica.venditori.length;
+  const numAcquirenti = 1 + pratica.coAcquirenti.length;
+  const numVeicoli = pratica.veicoli.length;
+  const venditoreNumById = new Map(pratica.venditori.map((v, i): [string, number] => [v.id, i + 1]));
+  const coAcquirenteNumById = new Map(
+    pratica.coAcquirenti.map((c, i): [string, number] => [c.id, i + 2]),
+  );
+  const veicoloNumById = new Map(pratica.veicoli.map((v, i): [string, number] => [v.id, i + 1]));
+  const documentoLabel = (d: (typeof pratica.documenti)[number]): string => {
+    const base = labelDocumento(d.tipo);
+    const dettagli: string[] = [];
+    if (d.owner) {
+      let owner = labelOwner(d.owner);
+      if (d.owner === 'VENDITORE' && numVenditori > 1 && d.venditoreId) {
+        const n = venditoreNumById.get(d.venditoreId);
+        if (n) owner += ` ${n}`;
+      } else if (d.owner === 'ACQUIRENTE' && numAcquirenti > 1) {
+        const n = d.coAcquirenteId ? coAcquirenteNumById.get(d.coAcquirenteId) : 1;
+        if (n) owner += ` ${n}`;
+      }
+      dettagli.push(owner);
+    }
+    if (d.veicoloId && numVeicoli > 1) {
+      const n = veicoloNumById.get(d.veicoloId);
+      if (n) dettagli.push(`veicolo ${n}`);
+    }
+    return dettagli.length ? `${base} — ${dettagli.join(' · ')}` : base;
+  };
 
   // Quick-action nel dettaglio: renderizzate solo se l'utente ha la capability
   // corrispondente. Lo staff non ha permessi azienda (bypassato sopra), quindi
@@ -554,8 +598,7 @@ export default async function PraticaDetailPage({
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">
                             <p className="font-semibold text-pv-navy-800">
-                              {labelDocumento(d.tipo)}
-                              {d.owner ? ` — ${labelOwner(d.owner)}` : ''}
+                              {documentoLabel(d)}
                             </p>
                             <p className="truncate text-[12px] text-pv-slate-500">
                               {formatBytes(d.sizeBytes)}

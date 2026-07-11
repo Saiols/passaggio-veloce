@@ -59,6 +59,13 @@ enum RuoloSede {
   OPERATORE
 }
 
+/// Chi ha disposto la sospensione di una sede. Determina chi può revocarla:
+/// UTENTE → self-service; ANTI_ABUSO → solo Passaggio Veloce (è una sanzione).
+enum SedeSuspensionOrigin {
+  UTENTE
+  ANTI_ABUSO
+}
+
 enum VerificationTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
@@ -608,8 +615,9 @@ model Sede {
   referralCode        String? @unique
   codiceInterno       String?
 
-  suspendedAt DateTime?
-  createdAt   DateTime  @default(now())
+  suspendedAt       DateTime?
+  suspensionOrigin  SedeSuspensionOrigin?
+  createdAt         DateTime              @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 

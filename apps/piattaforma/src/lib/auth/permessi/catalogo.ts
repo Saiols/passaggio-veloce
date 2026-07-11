@@ -93,7 +93,7 @@ export const CATALOGO: CategoriaDef[] = [
       {
         chiave: 'pratiche.segnala',
         etichetta: 'Segnala un problema sulla pratica',
-        nota: 'apre una penale di €25 al broker',
+        nota: 'apre una penale di €25 per ciascun veicolo segnalato al broker',
         sensibile: true,
         richiede: 'pratiche.view',
         soloPer: 'AGENZIA',

@@ -8,15 +8,17 @@
 
 export const PENALI = {
   /**
-   * Importo penale addebitato al broker per ogni pratica annullata in seguito
-   * a segnalazione confermata (fermo amministrativo / ipoteca / doc non
-   * valido). In cent. €25 default (rif. docs/segnalazioni-penali.md, 2026-06-10).
+   * Importo penale addebitato al broker per CIASCUN VEICOLO effettivamente
+   * segnalato (mai per pratica intera, mai sui veicoli sani della stessa
+   * pratica). In cent, €25 per veicolo (rif. docs/segnalazioni-penali.md,
+   * aggiornato 2026-07-11 — clausola 10.4 dei Termini). Il totale per pratica
+   * è `calcolaPenaleBrokerCent(veicoli)` qui sotto, non questa costante presa
+   * da sola: pratica con 3 veicoli e 1 segnalato → penale €25, non €75.
    *
-   * NB: la segnalazione è pre-firma, quindi il compenso €25 della pratica non è
+   * NB: la segnalazione è pre-firma, quindi il compenso della pratica non è
    * ancora accreditato → il broker lo PERDE (non lo matura), non glielo si
    * storna dal wallet. Lo storno del compenso scatta solo nell'edge case in cui
-   * il credito fosse già stato accreditato. Impatto complessivo broker: −€50
-   * (€25 penale reale + €25 compenso non maturato).
+   * il credito fosse già stato eccezionalmente accreditato.
    */
   PENALE_BROKER_DEFAULT_CENT: 2_500,
 

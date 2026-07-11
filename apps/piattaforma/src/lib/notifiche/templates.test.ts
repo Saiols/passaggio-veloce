@@ -137,7 +137,7 @@ describe('N40 cliente avanzamento', () => {
 });
 
 describe('N9 addebito fallito agenzia', () => {
-  it('contiene il messaggio di sospensione, l\'invito a aggiornare l\'IBAN e il CTA', () => {
+  it('contiene il messaggio di limitazione operativa, l\'invito a aggiornare l\'IBAN e il CTA', () => {
     const { subject, text, html } = tplN9AgenziaAddebitoFallito({
       nomeAgenzia: 'Agenzia Rossi',
       rimedioUrl: 'https://passaggioveloce.it/blocco-pagamento',
@@ -146,7 +146,8 @@ describe('N9 addebito fallito agenzia', () => {
     const hay = `${subject}\n${text}\n${html}`.toLowerCase();
     expect(hay).toContain('addebito');
     expect(hay).toContain('iban');
-    expect(hay).toContain('sospeso');
+    expect(hay).toContain('operatività');
+    expect(hay).toContain('accesso');
     expect(html).toContain('https://passaggioveloce.it/blocco-pagamento');
   });
 });

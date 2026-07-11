@@ -382,21 +382,27 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
 }
 
 export function tplN9AgenziaAddebitoFallito(p: N9AgenziaAddebitoFallitoPayload): NotificaContent {
-  const subject = 'Addebito automatico non riuscito — account momentaneamente sospeso';
+  const subject = 'Addebito automatico non riuscito — operatività limitata';
   const text =
     `Ciao ${p.nomeAgenzia},\n` +
-    `non ha funzionato l'addebito automatico, il tuo account è stato momentaneamente sospeso. ` +
-    `Aggiorna l'IBAN inserito nella piattaforma (o richiedi un nuovo tentativo se hai già sistemato con la banca).\n` +
+    `non ha funzionato l'addebito automatico della fee. L'accesso alla Piattaforma resta attivo, ` +
+    `ma la tua operatività è al momento limitata: non riceverai nuove pratiche e non puoi lavorare ` +
+    `quelle in corso fino alla regolarizzazione.\n` +
+    `Aggiorna l'IBAN inserito nella piattaforma (o richiedi un nuovo tentativo se hai già sistemato con la banca). ` +
+    `Lo sblocco avviene automaticamente una volta regolarizzato.\n` +
     `Vai a: ${p.rimedioUrl}`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Addebito automatico non riuscito</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      non ha funzionato l&apos;addebito automatico e il tuo account è stato
-      <strong>momentaneamente sospeso</strong>. Aggiorna l&apos;IBAN inserito nella
-      piattaforma, oppure richiedi un nuovo tentativo se hai già sistemato con la banca.
+      non ha funzionato l&apos;addebito automatico della fee. <strong>L&apos;accesso alla Piattaforma resta attivo</strong>,
+      ma la tua operatività è al momento limitata: non riceverai nuove pratiche e non potrai lavorare
+      quelle in corso fino alla regolarizzazione.
     </p>
     ${ctaButton(p.rimedioUrl, 'Aggiorna IBAN / Riprova')}
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Lo sblocco avviene automaticamente una volta che l&apos;addebito sarà regolarizzato.
+    </p>
   `);
   return { subject, html, text };
 }

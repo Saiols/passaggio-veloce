@@ -103,7 +103,7 @@ export function DichiarazionePopup({
           <strong>
             €{(PENALI.PENALE_BROKER_DEFAULT_CENT / 100).toFixed(2).replace('.', ',')} lordi
           </strong>{' '}
-          dal tuo wallet.
+          per veicolo dal tuo wallet.
         </div>
 
         <div className="mb-5 flex items-start gap-2.5 rounded-[12px] border border-pv-navy-600/20 bg-pv-navy-100 px-4 py-3 text-[12.5px] text-pv-navy-800">

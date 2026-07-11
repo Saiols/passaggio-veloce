@@ -236,10 +236,7 @@ export default function TerminiPage() {
             <strong>10.7 &mdash; Reiterazione.</strong> Al raggiungimento di <strong>2 penali confermate</strong>, la posizione del broker è sottoposta a valutazione ai fini della sospensione ai sensi della clausola 11.
           </p>
           <p>
-            <strong>10.8 &mdash; Tassatività.</strong> La penale di cui al punto 10.4 è <strong>l&apos;unica penale</strong> applicata da Passaggio Veloce. Oltre ad essa e al corrispettivo di cui alla clausola 3, <strong>nessun altro importo è addebitato all&apos;Utente a titolo di penale, sanzione o costo</strong>. Restano salve le sole <strong>rettifiche contabili</strong> volte a correggere accrediti o addebiti erronei, prive di natura sanzionatoria e sempre motivate e tracciate nel wallet.
-          </p>
-          <p>
-            L&apos;Utente accetta espressamente il presente sistema di segnalazioni e penali (clausola vessatoria: v. clausola 17).
+            <strong>10.8 &mdash; Tassatività.</strong> La penale di cui al punto 10.4 è <strong>l&apos;unica penale</strong> applicata da Passaggio Veloce. Oltre ad essa e al corrispettivo di cui alla clausola 3, <strong>nessun altro importo è addebitato all&apos;Utente a titolo di penale, sanzione o costo</strong>. Restano salve le sole <strong>rettifiche contabili</strong> volte a correggere accrediti o addebiti erronei, prive di natura sanzionatoria e sempre motivate e tracciate nel wallet. L&apos;Utente accetta espressamente il presente sistema di segnalazioni e penali (clausola vessatoria: v. clausola 17).
           </p>
         </Section>
 
@@ -312,10 +309,7 @@ export default function TerminiPage() {
             . <em>Su iniziativa di Passaggio Veloce:</em> <strong>solo</strong> nelle ipotesi di cui al punto 11.3 di <strong>particolare gravità</strong> (frode accertata, falsità documentale, illecito, ordine dell&apos;Autorità) <strong>oppure</strong> in caso di perdurante sospensione senza regolarizzazione. <em>Effetti:</em> disattivazione dell&apos;account e cancellazione dei dati secondo l&apos;Informativa Privacy, fatti salvi gli obblighi di conservazione di legge (in particolare fiscali e contabili) e le esigenze di audit sulle pratiche già eseguite. <em>Effetti economici:</em> restano dovuti gli importi maturati fino alla cessazione; <strong>il saldo residuo del wallet è liquidato integralmente all&apos;Utente, anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce.
           </p>
           <p>
-            <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account. <strong>In nessun caso</strong> la limitazione, la sospensione o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente.
-          </p>
-          <p>
-            L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola 17).
+            <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account. <strong>In nessun caso</strong> la limitazione, la sospensione o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente. L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola 17).
           </p>
         </Section>
 

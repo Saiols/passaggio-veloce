@@ -466,6 +466,11 @@ export async function respingiSegnalazioneAction(
     tipoSegnalazione: SegnalazioneTipo;
     agenziaCompanyId: string | null;
     agenziaNome: string;
+    brokerEmail: string | null;
+    brokerUserId: string | null;
+    brokerCompanyId: string;
+    brokerSedeId: string | null;
+    brokerNome: string;
   } | null = null;
 
   // Transazione: reset di `flagSegnalata` e reset dei veicoli segnalati devono
@@ -484,8 +489,21 @@ export async function respingiSegnalazioneAction(
           codicePratica: true,
           tipoSegnalazione: true,
           agenziaAssegnataId: true,
+          brokerId: true,
+          brokerSedeId: true,
           veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           agenziaAssegnata: { select: { ragioneSociale: true } },
+          broker: {
+            select: {
+              ragioneSociale: true,
+              email: true,
+              users: {
+                where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
+                select: { id: true, email: true, nome: true },
+                take: 1,
+              },
+            },
+          },
         },
       });
       if (!pratica) throw new Error('Pratica non trovata');
@@ -514,6 +532,8 @@ export async function respingiSegnalazioneAction(
         data: { segnalato: false },
       });
 
+      const brokerUser = pratica.broker.users[0];
+
       return {
         codicePratica: pratica.codicePratica ?? '—',
         targa:
@@ -525,6 +545,11 @@ export async function respingiSegnalazioneAction(
         tipoSegnalazione: (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo,
         agenziaCompanyId: pratica.agenziaAssegnataId,
         agenziaNome: pratica.agenziaAssegnata?.ragioneSociale ?? '—',
+        brokerEmail: brokerUser?.email ?? pratica.broker.email,
+        brokerUserId: brokerUser?.id ?? null,
+        brokerCompanyId: pratica.brokerId,
+        brokerSedeId: pratica.brokerSedeId,
+        brokerNome: brokerUser?.nome ?? pratica.broker.ragioneSociale,
       };
     });
   } catch (err) {
@@ -550,6 +575,34 @@ export async function respingiSegnalazioneAction(
           targa: payload.targa,
           tipoSegnalazione: payload.tipoSegnalazione,
           motivo: motivoTrim,
+        },
+      }, { praticaId }).catch(() => undefined);
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Post-commit: notifica anche il BROKER — best-effort. Clausola 10.3: "entrambe
+  // le parti" sono l'agenzia segnalante E il broker (10.2). Senza questa notifica
+  // la pratica del broker mostrava la pill "Segnalata / in revisione"
+  // (stato-extra.ts) e poi la faceva sparire nel silenzio al respingimento.
+  // Volutamente NESSUN motivo/nota agenzia nel payload: solo l'esito rassicurante
+  // (nessuna penale, pratica prosegue) — il motivo contiene valutazioni
+  // sull'operato dell'agenzia, non destinate al broker.
+  try {
+    if (payload.brokerEmail) {
+      await sendNotification({
+        tipo: 'N44_BROKER_SEGNALAZIONE_RESPINTA',
+        target: {
+          email: payload.brokerEmail,
+          userId: payload.brokerUserId,
+          companyId: payload.brokerCompanyId,
+        },
+        payload: {
+          nomeBroker: payload.brokerNome,
+          codicePratica: payload.codicePratica,
+          targa: payload.targa,
+          tipoSegnalazione: payload.tipoSegnalazione,
         },
       }, { praticaId }).catch(() => undefined);
     }

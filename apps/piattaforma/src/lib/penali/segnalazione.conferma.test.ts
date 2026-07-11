@@ -39,7 +39,12 @@ const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, send
       (): Promise<{ email: string; userId: string | null; nome: string }[]> =>
         Promise.resolve([]),
     ),
-    sendNotificationMock: vi.fn(() => Promise.resolve()),
+    sendNotificationMock: vi.fn(
+      (
+        _input: { tipo: string; target?: unknown; payload?: Record<string, unknown> },
+        _opts?: unknown,
+      ): Promise<void> => Promise.resolve(),
+    ),
   };
 });
 
@@ -338,5 +343,42 @@ describe('respingiSegnalazioneAction — notifica N43 all\'agenzia (clausola 10.
       }),
       { praticaId: PID },
     );
+  });
+});
+
+describe('respingiSegnalazioneAction — notifica N44 al broker (clausola 10.3: l\'esito è comunicato a entrambe le parti)', () => {
+  it('invia N44_BROKER_SEGNALAZIONE_RESPINTA al broker della pratica, con esito rassicurante e SENZA il motivo del respingimento', async () => {
+    txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
+    destinatariAgenziaMock.mockResolvedValue([]);
+
+    const res = await respingiSegnalazioneAction(PID, 'Fermo non riscontrato in PRA — nota interna riservata');
+
+    expect(res).toEqual({ ok: true });
+    expect(sendNotificationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tipo: 'N44_BROKER_SEGNALAZIONE_RESPINTA',
+        target: expect.objectContaining({
+          email: 'admin@broker.it',
+          userId: 'u-broker',
+          companyId: BROKER_ID,
+        }),
+        payload: expect.objectContaining({
+          nomeBroker: 'Mario',
+          codicePratica: 'PV-42',
+          tipoSegnalazione: 'FERMO_AMMINISTRATIVO',
+        }),
+      }),
+      { praticaId: PID },
+    );
+
+    // Il broker riceve solo l'esito e le sue conseguenze: MAI il motivo del
+    // respingimento né la nota dell'agenzia, che contengono valutazioni
+    // sull'operato altrui.
+    const brokerCall = sendNotificationMock.mock.calls.find(
+      ([arg]) => arg.tipo === 'N44_BROKER_SEGNALAZIONE_RESPINTA',
+    );
+    expect(brokerCall?.[0].payload).not.toHaveProperty('motivo');
+    expect(brokerCall?.[0].payload).not.toHaveProperty('nota');
+    expect(JSON.stringify(brokerCall?.[0].payload)).not.toContain('riservata');
   });
 });

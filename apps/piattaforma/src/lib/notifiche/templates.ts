@@ -170,6 +170,20 @@ export type N43AgenziaSegnalazioneRespintaPayload = {
   motivo: string;
 };
 
+/**
+ * Controparte del broker per N43: la sua pratica era comparsa come "Segnalata /
+ * in revisione" (stato-extra.ts) e senza questa notifica sparisce nel silenzio
+ * al respingimento. Volutamente NON riporta `motivo` né la nota dell'agenzia:
+ * contengono valutazioni sull'operato altrui, il broker deve sapere solo
+ * l'esito (nessuna penale, pratica prosegue).
+ */
+export type N44BrokerSegnalazioneRespintaPayload = {
+  nomeBroker: string;
+  codicePratica: string;
+  targa: string | null;
+  tipoSegnalazione: 'FERMO_AMMINISTRATIVO' | 'IPOTECA' | 'DOCUMENTO_NON_VALIDO' | 'ALTRO';
+};
+
 export type N19AdminNuovaSegnalazionePayload = {
   codicePratica: string;
   targa: string | null;
@@ -781,6 +795,44 @@ export function tplN43AgenziaSegnalazioneRespinta(
     <p style="margin:16px 0 0;color:#334155;font-size:14px">
       La pratica <strong>prosegue regolarmente</strong>: puoi continuare a lavorarla
       normalmente dalla tua dashboard, come prima della segnalazione.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+/**
+ * Controparte broker di N18/N43: prima di questa notifica la pratica del
+ * broker mostrava "Segnalata / in revisione" (stato-extra.ts) e la pill
+ * spariva nel silenzio al respingimento, senza che il broker sapesse
+ * l'esito. Tono rassicurante: per lui è una buona notizia. Non riporta il
+ * motivo del respingimento né la nota dell'agenzia (non è nel payload).
+ */
+export function tplN44BrokerSegnalazioneRespinta(
+  p: N44BrokerSegnalazioneRespintaPayload,
+): NotificaContent {
+  const tipoLbl = labelTipoSegnalazione(p.tipoSegnalazione);
+  const subject = `Segnalazione respinta — pratica ${p.codicePratica} prosegue regolarmente`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `la segnalazione di "${tipoLbl}" ricevuta sulla pratica ${p.codicePratica}` +
+    `${p.targa ? ` (${p.targa})` : ''} e' stata verificata dal team Passaggio Veloce ` +
+    `ed e' stata respinta.\n` +
+    `Nessuna penale e' stata addebitata al tuo wallet.\n` +
+    `La pratica prosegue regolarmente: puoi continuare a lavorarla normalmente.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#16a34a">Segnalazione respinta — nessun addebito</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la segnalazione di <strong>${tipoLbl}</strong> ricevuta sulla pratica
+      <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
+      verificata dal nostro team ed è stata <strong>respinta</strong>.
+    </p>
+    <div style="background:#ecfdf5;border:1px solid #16a34a33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
+      Nessuna penale è stata addebitata al tuo wallet.
+    </div>
+    <p style="margin:16px 0 0;color:#334155;font-size:14px">
+      La pratica <strong>prosegue regolarmente</strong>: puoi continuare a lavorarla
+      normalmente dalla tua dashboard.
     </p>
   `);
   return { subject, html, text };

@@ -6,6 +6,7 @@ import { StatCard } from '@/components/ui';
 import { TextSearchFilter } from '@/components/text-search-filter';
 import { SuspendButton } from '../suspend-button';
 import { PENALI } from '@/lib/penali/config';
+import { countPenaliByCompany } from '@/lib/penali/count';
 
 type SearchParams = { q?: string };
 
@@ -40,29 +41,11 @@ export default async function AdminBrokerPage({
 
   // Sistema Penali Broker — SP-C: conteggio penali per broker (per badge ⚠️
   // nella lista + alert sospensione quando >= MAX_PENALI_BEFORE_ALERT).
-  // Aggregare via Wallet evita join multipli: ogni penale è una transazione.
-  const wallets = await prisma.wallet.findMany({
-    where: { companyId: { in: broker.map((b) => b.id) } },
-    select: { id: true, companyId: true },
-  });
-  const walletByCompany = new Map(wallets.map((w) => [w.companyId, w.id]));
-  const penaliCounts = wallets.length
-    ? await prisma.transazioneWallet.groupBy({
-        by: ['walletId'],
-        where: {
-          walletId: { in: wallets.map((w) => w.id) },
-          tipo: 'PENALE_BROKER',
-        },
-        _count: { _all: true },
-      })
-    : [];
-  const penaliByWallet = new Map(
-    penaliCounts.map((p) => [p.walletId, p._count._all]),
-  );
+  // Il wallet operativo di una pratica è quello di SEDE, non di company:
+  // `countPenaliByCompany` copre entrambi (vedi lib/penali/count.ts).
+  const penaliByCompany = await countPenaliByCompany(broker.map((b) => b.id));
   function countPenali(companyId: string): number {
-    const wid = walletByCompany.get(companyId);
-    if (!wid) return 0;
-    return penaliByWallet.get(wid) ?? 0;
+    return penaliByCompany.get(companyId) ?? 0;
   }
 
   return (

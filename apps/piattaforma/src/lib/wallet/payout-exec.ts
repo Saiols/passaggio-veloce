@@ -163,9 +163,12 @@ export async function eseguiPayoutImmediato(
       // Clausola 5 dei Termini: finché un wallet qualsiasi dell'azienda (altra
       // sede, o il wallet madre) è in saldo negativo — tipicamente per una
       // penale, clausola 10.6 — TUTTI i payout dell'azienda sono sospesi, non
-      // solo quelli del wallet in negativo. Non si applica alla liquidazione
-      // di cessazione (`ignoraSoglia`, clausola 11.4): quella deve poter
-      // svuotare il residuo positivo a prescindere dal debito su altri wallet.
+      // solo quelli del wallet in negativo. Il controllo qui sotto è saltato
+      // per la liquidazione di cessazione (`ignoraSoglia`, clausola 11.4), ma
+      // il debito NON viene ignorato in quel flusso: per la cessazione il
+      // blocco è imposto a monte, a livello di intera azienda, dal chiamante
+      // (`deleteCompanyAction`, cfr. negative-wallet-guard.ts), che non
+      // richiama nemmeno questa funzione se esiste un wallet negativo.
       if (!ignoraSoglia) {
         const companyId = wallet.companyId ?? wallet.sede?.companyId ?? null;
         if (companyId && (await hasNegativeCompanyWallet(tx, companyId))) {

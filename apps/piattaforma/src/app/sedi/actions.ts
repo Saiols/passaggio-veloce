@@ -44,6 +44,22 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   });
   if (!company) return { ok: false, error: 'Azienda non trovata' };
 
+  // L'anti-abuso non è aggirabile aprendo una sede nuova: un'azienda con
+  // almeno una sede sospesa da Passaggio Veloce (5 no-show consecutivi) non
+  // può crearne un'altra per rientrare in distribuzione. Altrimenti la
+  // sanzione è aggirata in una sola mossa dal sanzionato stesso.
+  const sanzionata = await prisma.sede.findFirst({
+    where: { companyId, deletedAt: null, suspendedAt: { not: null }, suspensionOrigin: 'ANTI_ABUSO' },
+    select: { id: true },
+  });
+  if (sanzionata) {
+    return {
+      ok: false,
+      error:
+        'La tua azienda ha una sede sospesa da Passaggio Veloce per mancate risposte reiterate: non puoi aprirne una nuova per aggirare la sospensione. Scrivi ad assistenza@passaggioveloce.it per chiedere la riattivazione.',
+    };
+  }
+
   const parsed = parseSedeFields(sedeFormRaw(formData));
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
@@ -164,11 +180,14 @@ async function setSedeSuspended(sedeId: string, suspended: boolean): Promise<Sed
     return { ok: false, error: 'Sede non trovata' };
   }
 
-  // Una sanzione non è revocabile dal sanzionato. La sede sospesa dal sistema
-  // anti-abuso (5 no-show consecutivi) può essere riattivata solo da Passaggio
-  // Veloce: altrimenti la misura non avrebbe alcun effetto — l'agenzia si
-  // riattiverebbe da sé, ogni volta.
-  if (!suspended && sede.suspensionOrigin === 'ANTI_ABUSO') {
+  // Una sanzione non è revocabile dal sanzionato, in NESSUNA direzione. La sede
+  // sospesa dal sistema anti-abuso (5 no-show consecutivi) non può essere né
+  // riattivata né ri-sospesa dall'utente: altrimenti bastano due chiamate
+  // (suspendSedeAction sulla sede già ANTI_ABUSO riscrive suspensionOrigin a
+  // 'UTENTE', poi reactivateSedeAction passa la guardia) per far rientrare in
+  // distribuzione un'agenzia sanzionata. Solo Passaggio Veloce può sciogliere
+  // la sanzione.
+  if (sede.suspensionOrigin === 'ANTI_ABUSO') {
     return {
       ok: false,
       error:

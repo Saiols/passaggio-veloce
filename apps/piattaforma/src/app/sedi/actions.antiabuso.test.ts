@@ -36,6 +36,32 @@ beforeEach(() => {
   prismaMock.sede.update.mockResolvedValue({});
 });
 
+describe('suspendSedeAction — sanzione anti-abuso (exploit a due chiamate)', () => {
+  /**
+   * CRITICAL 2 (review finale branch): la guardia copriva solo il ramo di
+   * RIATTIVAZIONE. Il ramo di SOSPENSIONE non era guardato e riscriveva
+   * `suspensionOrigin: 'UTENTE'` anche su una sede già sospesa dall'anti-abuso.
+   * Exploit in due chiamate, entrambe server action raggiungibili dal browser:
+   *   1. suspendSedeAction(sedeId) su una sede già ANTI_ABUSO → l'unico
+   *      effetto era ANTI_ABUSO -> UTENTE.
+   *   2. reactivateSedeAction(sedeId) → ora passava la guardia → il
+   *      sanzionato rientrava in distribuzione.
+   * `sede.update` non deve MAI essere chiamato su una sede già ANTI_ABUSO, in
+   * nessuna delle due direzioni.
+   */
+  it('sede già sospesa dall_ANTI_ABUSO: suspendSedeAction è rifiutata, update NON chiamato', async () => {
+    prismaMock.sede.findUnique.mockResolvedValue({
+      companyId: COMPANY,
+      suspensionOrigin: 'ANTI_ABUSO',
+    });
+
+    const res = await suspendSedeAction(SEDE);
+
+    expect(res.ok).toBe(false);
+    expect(prismaMock.sede.update).not.toHaveBeenCalled();
+  });
+});
+
 describe('reactivateSedeAction — sanzione anti-abuso', () => {
   it('sede sospesa dall_ANTI_ABUSO: l_utente NON può riattivarla', async () => {
     prismaMock.sede.findUnique.mockResolvedValue({

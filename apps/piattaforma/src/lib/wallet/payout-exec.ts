@@ -133,15 +133,23 @@ export async function settlePayout(payoutId: string): Promise<EseguiPayoutResult
  */
 export async function eseguiPayoutImmediato(
   walletId: string,
-  opts: { automatico?: boolean } = {},
+  opts: { automatico?: boolean; ignoraSoglia?: boolean } = {},
 ): Promise<EseguiPayoutResult> {
   const automatico = opts.automatico ?? false;
+  // Solo per la liquidazione del residuo alla cessazione del rapporto
+  // (clausole 5 e 11.4 dei Termini). NON raggiungibile dal path utente.
+  const ignoraSoglia = opts.ignoraSoglia ?? false;
 
   const reserve = await prisma.$transaction(
     async (tx): Promise<{ ok: true; payoutId: string } | { ok: false; error: string }> => {
       const wallet = await tx.wallet.findUnique({ where: { id: walletId } });
       if (!wallet) return { ok: false, error: 'Wallet non trovato' };
-      if (wallet.saldoCent < WALLET.MIN_PAYOUT_CENT) {
+      // Un saldo <= 0 non è mai erogabile, nemmeno alla cessazione: non si
+      // bonifica un debito.
+      if (wallet.saldoCent <= 0) {
+        return { ok: false, error: 'Saldo non erogabile' };
+      }
+      if (!ignoraSoglia && wallet.saldoCent < WALLET.MIN_PAYOUT_CENT) {
         return {
           ok: false,
           error: `Saldo sotto la soglia minima di ${WALLET.MIN_PAYOUT_CENT / 100}€`,

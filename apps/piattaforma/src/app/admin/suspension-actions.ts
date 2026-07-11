@@ -6,6 +6,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminOrAssistente, isAdminPiattaforma } from '@/lib/auth/permissions';
 import { sendNotification } from '@/lib/notifiche';
+import { eseguiPayoutImmediato } from '@/lib/wallet/payout-exec';
 
 /**
  * Helper: invia notifica lifecycle a tutti gli utenti attivi di una company,
@@ -207,6 +208,25 @@ export async function deleteCompanyAction(
   // l'invio resta valido perche' attinge da deletedAt: null al momento
   // della chiamata (il suspension non azzera deletedAt).
   await notifyCompanyLifecycle(companyId, 'N16_ACCOUNT_ELIMINATO');
+
+  // Clausola 11.4 dei Termini: alla cessazione il saldo residuo è liquidato
+  // integralmente, ANCHE se inferiore a 500 €. Best-effort: un fallimento
+  // dell'erogazione non deve bloccare la cancellazione — resta il credito a
+  // registro, che l'admin liquida a mano.
+  try {
+    const wallets = await prisma.wallet.findMany({
+      where: {
+        OR: [{ companyId }, { sede: { companyId } }],
+        saldoCent: { gt: 0 },
+      },
+      select: { id: true },
+    });
+    for (const w of wallets) {
+      await eseguiPayoutImmediato(w.id, { ignoraSoglia: true }).catch(() => undefined);
+    }
+  } catch {
+    // best-effort
+  }
 
   const now = new Date();
   await prisma.$transaction([

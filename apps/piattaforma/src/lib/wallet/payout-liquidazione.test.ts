@@ -1,0 +1,98 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+/**
+ * Clausole 5 e 11.4 dei Termini: alla cessazione del rapporto il saldo residuo
+ * è liquidato integralmente ANCHE se inferiore a 500 €. Oggi MIN_PAYOUT_CENT
+ * gatea anche l'admin, quindi la promessa contrattuale sarebbe ineseguibile.
+ * `ignoraSoglia` è il solo modo di onorarla — e NON deve essere raggiungibile
+ * dal path utente.
+ *
+ * Nota sui mock: `settlePayout` vive nello stesso modulo di
+ * `eseguiPayoutImmediato` (non in un file `./settle` separato) e
+ * `createDocBroker` si importa da `@/lib/fatturazione/engine` (non da
+ * `@/lib/fatturazione/doc-broker`). I mock qui rispecchiano la struttura
+ * reale — stesso pattern di `payout-exec.test.ts` — così il path
+ * "ignoraSoglia → eseguito" attraversa davvero `settlePayout`.
+ */
+
+const { prismaMock, txMock, executePayoutMock, createDocBrokerMock } = vi.hoisted(() => {
+  const txMock = {
+    wallet: { findUnique: vi.fn(), update: vi.fn() },
+    payout: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    transazioneWallet: { updateMany: vi.fn(), create: vi.fn() },
+  };
+  const executePayoutMock = vi.fn();
+  return {
+    txMock,
+    executePayoutMock,
+    createDocBrokerMock: vi.fn(),
+    prismaMock: {
+      $transaction: vi.fn((cb: (tx: typeof txMock) => unknown) => cb(txMock)),
+      payout: { findUnique: vi.fn(), update: vi.fn() },
+    },
+  };
+});
+
+vi.mock('@pv/db', () => ({ prisma: prismaMock }));
+vi.mock('@/lib/fatturazione/engine', () => ({ createDocBroker: createDocBrokerMock }));
+vi.mock('@/lib/providers/payment', () => ({
+  getPayment: vi.fn(() => ({ executePayout: executePayoutMock })),
+}));
+
+import { eseguiPayoutImmediato } from './payout-exec';
+import { WALLET } from './config';
+
+const W = 'wallet-1';
+const SOTTO_SOGLIA = WALLET.MIN_PAYOUT_CENT - 1; // 499,99 €
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  txMock.wallet.findUnique.mockResolvedValue({ id: W, saldoCent: SOTTO_SOGLIA });
+  txMock.payout.findFirst.mockResolvedValue(null);
+  txMock.payout.create.mockResolvedValue({ id: 'payout-1' });
+  txMock.wallet.update.mockResolvedValue({ saldoCent: 0 });
+  txMock.transazioneWallet.updateMany.mockResolvedValue({ count: 0 });
+  txMock.transazioneWallet.create.mockResolvedValue({});
+  txMock.payout.update.mockResolvedValue({});
+  // settlePayout (path job/istantaneo, top-level prisma): serve solo per lo
+  // scenario "ignoraSoglia → eseguito", che attraversa il settlement reale.
+  prismaMock.payout.findUnique.mockResolvedValue({
+    id: 'payout-1',
+    walletId: W,
+    importoCent: SOTTO_SOGLIA,
+    automatico: false,
+    wallet: { sede: { iban: 'IT60X0542811101', company: { iban: null } }, company: null },
+  });
+  prismaMock.payout.update.mockResolvedValue({});
+  executePayoutMock.mockResolvedValue({ ok: true, providerRef: 'ref-1' });
+  createDocBrokerMock.mockResolvedValue(undefined);
+});
+
+describe('eseguiPayoutImmediato — liquidazione alla cessazione', () => {
+  it('saldo sotto soglia SENZA ignoraSoglia → rifiutato (comportamento utente invariato)', async () => {
+    const res = await eseguiPayoutImmediato(W);
+
+    expect(res.ok).toBe(false);
+    expect(txMock.payout.create).not.toHaveBeenCalled();
+  });
+
+  it('saldo sotto soglia CON ignoraSoglia → eseguito per l_intero residuo', async () => {
+    const res = await eseguiPayoutImmediato(W, { ignoraSoglia: true });
+
+    expect(res.ok).toBe(true);
+    expect(txMock.payout.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ importoCent: SOTTO_SOGLIA }),
+      }),
+    );
+  });
+
+  it('saldo NEGATIVO con ignoraSoglia → comunque rifiutato (non si bonifica un debito)', async () => {
+    txMock.wallet.findUnique.mockResolvedValue({ id: W, saldoCent: -5_000 });
+
+    const res = await eseguiPayoutImmediato(W, { ignoraSoglia: true });
+
+    expect(res.ok).toBe(false);
+    expect(txMock.payout.create).not.toHaveBeenCalled();
+  });
+});

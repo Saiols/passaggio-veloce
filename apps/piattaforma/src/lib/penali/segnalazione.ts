@@ -36,6 +36,7 @@ export async function segnalaPraticaAction(
   praticaId: string,
   tipo: SegnalazioneTipo,
   nota: string,
+  veicoliIds: string[],
 ): Promise<SegnalaPraticaResult> {
   const session = await auth();
   if (!session?.user?.id) redirect('/login');
@@ -64,7 +65,7 @@ export async function segnalaPraticaAction(
       agenziaSedeId: true,
       flagSegnalata: true,
       codicePratica: true,
-      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+      veicoli: { orderBy: { ordine: 'asc' }, select: { id: true, targa: true } },
       broker: { select: { ragioneSociale: true } },
       agenziaAssegnata: { select: { ragioneSociale: true } },
     },
@@ -91,19 +92,36 @@ export async function segnalaPraticaAction(
     return { ok: false, error: 'Hai già segnalato questa pratica' };
   }
 
+  // Base di calcolo della penale (€25 × veicoli segnalati): va validata qui,
+  // non lato client. Un POST forgiato con veicoli altrui gonfierebbe la penale
+  // di un broker a piacere.
+  if (veicoliIds.length === 0) {
+    return { ok: false, error: 'Seleziona almeno un veicolo' };
+  }
+  const idsPratica = new Set(pratica.veicoli.map((v) => v.id));
+  if (!veicoliIds.every((id) => idsPratica.has(id))) {
+    return { ok: false, error: 'Veicolo non appartenente alla pratica' };
+  }
+
   const cleanNota = nota.trim().slice(0, 500) || null;
 
-  await prisma.pratica.update({
-    where: { id: praticaId },
-    data: {
-      flagSegnalata: true,
-      tipoSegnalazione: tipo,
-      notaSegnalazione: cleanNota,
-      segnalataAt: new Date(),
-      segnalataDaUserId: userId,
-      segnalazioneStato: 'RICEVUTA',
-    },
-  });
+  await prisma.$transaction([
+    prisma.pratica.update({
+      where: { id: praticaId },
+      data: {
+        flagSegnalata: true,
+        tipoSegnalazione: tipo,
+        notaSegnalazione: cleanNota,
+        segnalataAt: new Date(),
+        segnalataDaUserId: userId,
+        segnalazioneStato: 'RICEVUTA',
+      },
+    }),
+    prisma.veicolo.updateMany({
+      where: { praticaId, id: { in: veicoliIds } },
+      data: { segnalato: true },
+    }),
+  ]);
 
   // Notifica admin platform — best effort
   try {

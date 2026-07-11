@@ -3,6 +3,7 @@ import { prisma } from '@pv/db';
 import { createDocBroker } from '@/lib/fatturazione/engine';
 import { getPayment } from '@/lib/providers/payment';
 import { WALLET } from './config';
+import { hasNegativeCompanyWallet } from './negative-wallet-guard';
 
 export type EseguiPayoutResult =
   | { ok: true; payoutId: string; importoCent: number }
@@ -142,7 +143,10 @@ export async function eseguiPayoutImmediato(
 
   const reserve = await prisma.$transaction(
     async (tx): Promise<{ ok: true; payoutId: string } | { ok: false; error: string }> => {
-      const wallet = await tx.wallet.findUnique({ where: { id: walletId } });
+      const wallet = await tx.wallet.findUnique({
+        where: { id: walletId },
+        include: { sede: { select: { companyId: true } } },
+      });
       if (!wallet) return { ok: false, error: 'Wallet non trovato' };
       // Un saldo <= 0 non è mai erogabile, nemmeno alla cessazione: non si
       // bonifica un debito.
@@ -154,6 +158,23 @@ export async function eseguiPayoutImmediato(
           ok: false,
           error: `Saldo sotto la soglia minima di ${WALLET.MIN_PAYOUT_CENT / 100}€`,
         };
+      }
+
+      // Clausola 5 dei Termini: finché un wallet qualsiasi dell'azienda (altra
+      // sede, o il wallet madre) è in saldo negativo — tipicamente per una
+      // penale, clausola 10.6 — TUTTI i payout dell'azienda sono sospesi, non
+      // solo quelli del wallet in negativo. Non si applica alla liquidazione
+      // di cessazione (`ignoraSoglia`, clausola 11.4): quella deve poter
+      // svuotare il residuo positivo a prescindere dal debito su altri wallet.
+      if (!ignoraSoglia) {
+        const companyId = wallet.companyId ?? wallet.sede?.companyId ?? null;
+        if (companyId && (await hasNegativeCompanyWallet(tx, companyId))) {
+          return {
+            ok: false,
+            error:
+              'Un wallet della tua azienda è in saldo negativo: i payout sono sospesi finché non torna positivo (clausola 5 dei Termini).',
+          };
+        }
       }
 
       const inflight = await tx.payout.findFirst({

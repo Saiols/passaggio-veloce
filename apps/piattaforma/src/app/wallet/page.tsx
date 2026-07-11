@@ -15,6 +15,7 @@ import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { WALLET } from '@/lib/wallet/config';
 import { getWalletBreakdown } from '@/lib/wallet/breakdown';
+import { hasNegativeCompanyWallet } from '@/lib/wallet/negative-wallet-guard';
 import { getRendimento, type RendimentoPeriod } from './rendimento';
 import { RendimentoChart } from './rendimento-chart';
 import { PayoutThresholdForm } from './payout-threshold-form';
@@ -263,7 +264,7 @@ export default async function WalletPage({
   } as const;
   const payoutsInclude = { orderBy: { richiestoAt: 'desc' }, take: 10 } as const;
 
-  const [wallet, walletMadre, sedeRow, company] = await Promise.all([
+  const [wallet, walletMadre, sedeRow, company, saldoNegativoAzienda] = await Promise.all([
     // Wallet di sede: compensi maturati dalle pratiche.
     prisma.wallet.findUnique({
       where: { sedeId: sede.id },
@@ -286,6 +287,10 @@ export default async function WalletPage({
           select: { ragioneSociale: true, payoutThresholdCent: true },
         })
       : null,
+    // Clausola 5 dei Termini: i payout sono sospesi per l'INTERA azienda se
+    // un wallet qualsiasi (anche di un'altra sede, non solo i due mostrati
+    // qui) è in saldo negativo — stesso guard di `eseguiPayoutImmediato`.
+    session.user.companyId ? hasNegativeCompanyWallet(prisma, session.user.companyId) : false,
   ]);
 
   const saldoSedeCent = wallet?.saldoCent ?? 0;
@@ -309,13 +314,20 @@ export default async function WalletPage({
   // Sistema Penali Broker — SP-C: il wallet può andare in negativo se sono
   // state addebitate penali superiori al saldo. In tal caso mostriamo banner
   // dedicato che invita a reintegrare per sbloccare i payout.
-  const saldoNegativo = saldoSedeCent < 0 || saldoAffiliazioneCent < 0;
+  //
+  // Clausola 5 dei Termini (IMPORTANT 3, review finale pre-merge): il blocco
+  // dei payout è AZIENDALE, non per-wallet — `saldoNegativoAzienda` copre
+  // anche un wallet negativo su una sede diversa da quella qui visualizzata,
+  // che i due saldi locali (sede + madre) da soli non vedrebbero.
+  const saldoNegativo = saldoSedeCent < 0 || saldoAffiliazioneCent < 0 || saldoNegativoAzienda;
 
-  // Payout possibile se ALMENO uno dei due wallet supera la soglia minima
-  // (l'azione li incassa entrambi se eleggibili).
+  // Payout possibile se ALMENO uno dei due wallet supera la soglia minima E
+  // nessun wallet dell'azienda è in negativo (altrimenti `eseguiPayoutImmediato`
+  // rifiuterebbe comunque: il bottone non deve promettere ciò che il server nega).
   const canPayout =
-    saldoSedeCent >= WALLET.MIN_PAYOUT_CENT ||
-    saldoAffiliazioneCent >= WALLET.MIN_PAYOUT_CENT;
+    !saldoNegativoAzienda &&
+    (saldoSedeCent >= WALLET.MIN_PAYOUT_CENT ||
+      saldoAffiliazioneCent >= WALLET.MIN_PAYOUT_CENT);
 
   // Scomposizione del saldo per origine (pratiche / affiliazione / bonus welcome),
   // mostrata nella modale di conferma payout. Calcolata solo se un payout è
@@ -396,10 +408,12 @@ export default async function WalletPage({
         {saldoNegativo && (
           <div className="mb-6">
             <Alert variant="warning" title="Saldo wallet negativo">
-              Il tuo saldo è sotto zero a causa di una o più penali addebitate.
-              I payout sono bloccati finché il saldo non torna positivo. Le
-              pratiche successive accumuleranno credito normalmente fino al
-              riallineamento.
+              {saldoSedeCent < 0 || saldoAffiliazioneCent < 0
+                ? 'Il tuo saldo è sotto zero a causa di una o più penali addebitate.'
+                : "Un wallet della tua azienda (un'altra sede) è sotto zero a causa di una o più penali addebitate."}{' '}
+              I payout sono bloccati per l&apos;intera azienda finché il saldo
+              non torna positivo. Le pratiche successive accumuleranno
+              credito normalmente fino al riallineamento.
             </Alert>
           </div>
         )}
@@ -489,7 +503,8 @@ export default async function WalletPage({
           </div>
           {saldoNegativo && (
             <p className="mt-2 text-xs font-semibold text-pv-amber-500">
-              ⚠️ Saldo negativo: reintegra prima di poter richiedere payout.
+              ⚠️ Un wallet della tua azienda è in saldo negativo: reintegralo
+              prima di poter richiedere un payout.
             </p>
           )}
           {!saldoNegativo && canPayout && (

@@ -8,7 +8,7 @@ const {
   createDocBrokerMock,
 } = vi.hoisted(() => {
   const txMock = {
-    wallet: { findUnique: vi.fn(), update: vi.fn() },
+    wallet: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     payout: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     transazioneWallet: { updateMany: vi.fn(), create: vi.fn() },
   };
@@ -47,6 +47,7 @@ function payoutSede(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   // reserve (transazione)
+  txMock.wallet.findFirst.mockResolvedValue(null);
   txMock.payout.findFirst.mockResolvedValue(null);
   txMock.payout.create.mockResolvedValue({ id: 'p1' });
   txMock.wallet.update.mockResolvedValue({ saldoCent: 0 });
@@ -169,6 +170,78 @@ describe('eseguiPayoutImmediato', () => {
     expect(txMock.transazioneWallet.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ tipo: 'PAYOUT_AUTOMATICO' }) }),
     );
+  });
+});
+
+/**
+ * IMPORTANT 3 (review finale pre-merge): `richiediPayoutAction` filtrava gli
+ * eleggibili wallet per wallet — un wallet a saldo negativo (penale) veniva
+ * escluso, ma l'ALTRO wallet della stessa azienda (es. l'affiliazione)
+ * veniva comunque pagato, lasciando il debito a registro indefinitamente e
+ * contraddicendo il banner "payout bloccati" di /wallet. Fix: blocca OGNI
+ * payout dell'azienda finché uno qualsiasi dei suoi wallet è negativo,
+ * eccetto la liquidazione alla cessazione (`ignoraSoglia`, clausola 11.4),
+ * che deve poter svuotare il residuo positivo a prescindere.
+ */
+describe('eseguiPayoutImmediato — guard saldo negativo aziendale (clausola 5)', () => {
+  it('wallet eleggibile ma un altro wallet della stessa azienda è negativo → rifiutato, nessun payout creato', async () => {
+    txMock.wallet.findUnique.mockResolvedValue({
+      id: 'w1',
+      saldoCent: 80_000,
+      companyId: null,
+      sedeId: 'sede-1',
+      sede: { companyId: 'company-1' },
+    });
+    txMock.wallet.findFirst.mockResolvedValue({ id: 'w-negativo' });
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/negativo/i);
+    expect(txMock.wallet.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [{ companyId: 'company-1' }, { sede: { companyId: 'company-1' } }],
+          saldoCent: { lt: 0 },
+        }),
+      }),
+    );
+    expect(txMock.payout.create).not.toHaveBeenCalled();
+    expect(executePayoutMock).not.toHaveBeenCalled();
+  });
+
+  it("tutti i wallet dell'azienda sono ≥ 0 → payout consentito normalmente", async () => {
+    txMock.wallet.findUnique.mockResolvedValue({
+      id: 'w1',
+      saldoCent: 80_000,
+      companyId: null,
+      sedeId: 'sede-1',
+      sede: { companyId: 'company-1' },
+    });
+    txMock.wallet.findFirst.mockResolvedValue(null);
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r.ok).toBe(true);
+    expect(txMock.payout.create).toHaveBeenCalled();
+  });
+
+  it("liquidazione alla cessazione (ignoraSoglia) NON è bloccata da un wallet negativo di un'altra sede", async () => {
+    txMock.wallet.findUnique.mockResolvedValue({
+      id: 'w1',
+      saldoCent: 30_000, // sotto soglia 500€: ammesso solo perché ignoraSoglia
+      companyId: null,
+      sedeId: 'sede-1',
+      sede: { companyId: 'company-1' },
+    });
+
+    const r = await eseguiPayoutImmediato('w1', { ignoraSoglia: true });
+
+    expect(r.ok).toBe(true);
+    // Il guard non deve nemmeno interrogare gli altri wallet: la liquidazione
+    // di cessazione è incondizionata sul saldo positivo del wallet stesso.
+    expect(txMock.wallet.findFirst).not.toHaveBeenCalled();
+    expect(txMock.payout.create).toHaveBeenCalled();
   });
 });
 

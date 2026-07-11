@@ -140,7 +140,7 @@ export default function TerminiPage() {
             <strong>In ogni caso di cessazione del rapporto</strong> (recesso di una delle parti, chiusura o cancellazione dell&apos;account) <strong>il saldo residuo è liquidato integralmente all&apos;Utente anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali.
           </p>
           <p>
-            In caso di penali (clausola 10) il saldo può risultare negativo: in tale ipotesi i prelievi sono sospesi fino al ripristino di un saldo positivo, mentre i compensi successivi continuano ad accreditarsi a compensazione. <strong>L&apos;operatività dell&apos;Utente resta invariata.</strong>
+            In caso di penali (clausola 10) il saldo può risultare negativo: in tale ipotesi i prelievi sono sospesi fino al ripristino di un saldo positivo, mentre i compensi successivi continuano ad accreditarsi a compensazione. <strong>L&apos;operatività dell&apos;Utente resta invariata.</strong> L&apos;Utente accetta espressamente le presenti condizioni di prelievo, inclusa la soglia di richiesta del payout e la sospensione dei prelievi in caso di saldo negativo (clausola vessatoria: v. clausola 17).
           </p>
         </Section>
 
@@ -238,6 +238,9 @@ export default function TerminiPage() {
           <p>
             <strong>10.8 &mdash; Tassatività.</strong> La penale di cui al punto 10.4 è <strong>l&apos;unica penale</strong> applicata da Passaggio Veloce. Oltre ad essa e al corrispettivo di cui alla clausola 3, <strong>nessun altro importo è addebitato all&apos;Utente a titolo di penale, sanzione o costo</strong>. Restano salve le sole <strong>rettifiche contabili</strong> volte a correggere accrediti o addebiti erronei, prive di natura sanzionatoria e sempre motivate e tracciate nel wallet.
           </p>
+          <p>
+            L&apos;Utente accetta espressamente il presente sistema di segnalazioni e penali (clausola vessatoria: v. clausola 17).
+          </p>
         </Section>
 
         <Section title="11. Limitazione operativa, sospensione e cancellazione dell'account">
@@ -253,38 +256,38 @@ export default function TerminiPage() {
           <p>
             <strong>11.3 &mdash; Sospensione dell&apos;account.</strong> <em>Effetto:</em> l&apos;accesso alla Piattaforma è inibito per l&apos;azienda e per tutte le sue utenze. La misura è <strong>reversibile</strong>. <em>Motivi tassativi</em> &mdash; la sospensione può essere disposta <strong>esclusivamente</strong> per uno dei seguenti motivi:
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
+          <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>
-              <strong>1.</strong> <strong>frode o tentativo di frode</strong> ai danni di Passaggio Veloce, di altri Utenti o di terzi;
+              <strong>frode o tentativo di frode</strong> ai danni di Passaggio Veloce, di altri Utenti o di terzi;
             </li>
             <li>
-              <strong>2.</strong> <strong>falsità o alterazione</strong> di dati aziendali, documenti d&apos;identità, documenti del veicolo o della pratica;
+              <strong>falsità o alterazione</strong> di dati aziendali, documenti d&apos;identità, documenti del veicolo o della pratica;
             </li>
             <li>
-              <strong>3.</strong> <strong>abuso del programma di affiliazione</strong>: iscrizioni fittizie, account multipli riconducibili al medesimo soggetto, collusione tra referente e referito, o altre condotte volte a generare commissioni non corrispondenti a pratiche reali;
+              <strong>abuso del programma di affiliazione</strong>: iscrizioni fittizie, account multipli riconducibili al medesimo soggetto, collusione tra referente e referito, o altre condotte volte a generare commissioni non corrispondenti a pratiche reali;
             </li>
             <li>
-              <strong>4.</strong> <strong>raggiungimento di 2 penali confermate</strong> ai sensi della clausola 10;
+              <strong>raggiungimento di 2 penali confermate</strong> ai sensi della clausola 10;
             </li>
             <li>
-              <strong>5.</strong> <strong>mancata regolarizzazione</strong> della limitazione di cui al punto 11.1 nonostante i solleciti;
+              <strong>mancata regolarizzazione</strong> della limitazione di cui al punto 11.1 nonostante i solleciti;
             </li>
             <li>
-              <strong>6.</strong> <strong>violazione grave o reiterata</strong> dei presenti Termini;
+              <strong>violazione grave o reiterata</strong> dei presenti Termini;
             </li>
             <li>
-              <strong>7.</strong> <strong>uso della Piattaforma per finalità illecite</strong> o in violazione di legge;
+              <strong>uso della Piattaforma per finalità illecite</strong> o in violazione di legge;
             </li>
             <li>
-              <strong>8.</strong> <strong>richiesta dell&apos;Autorità</strong> giudiziaria o amministrativa, o obbligo di legge;
+              <strong>richiesta dell&apos;Autorità</strong> giudiziaria o amministrativa, o obbligo di legge;
             </li>
             <li>
-              <strong>9.</strong> <strong>venir meno dei requisiti soggettivi</strong>: cessazione della partita IVA, cancellazione dal Registro delle Imprese, cessazione dell&apos;attività d&apos;impresa;
+              <strong>venir meno dei requisiti soggettivi</strong>: cessazione della partita IVA, cancellazione dal Registro delle Imprese, cessazione dell&apos;attività d&apos;impresa;
             </li>
             <li>
-              <strong>10.</strong> <strong>condotta gravemente lesiva</strong> verso altri Utenti o il personale di Passaggio Veloce.
+              <strong>condotta gravemente lesiva</strong> verso altri Utenti o il personale di Passaggio Veloce.
             </li>
-          </ul>
+          </ol>
           <p>
             <em>Comunicazione e riesame:</em> la sospensione è <strong>comunicata via email con indicazione del motivo</strong>. L&apos;Utente può presentare osservazioni e chiedere il <strong>riesame</strong> scrivendo ad{' '}
             <a
@@ -310,6 +313,9 @@ export default function TerminiPage() {
           </p>
           <p>
             <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account. <strong>In nessun caso</strong> la limitazione, la sospensione o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente.
+          </p>
+          <p>
+            L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola 17).
           </p>
         </Section>
 
@@ -381,8 +387,9 @@ export default function TerminiPage() {
               limitazioni);
             </li>
             <li>
-              <strong>5</strong> (Wallet e condizioni di prelievo, incluso il saldo minimo e la
-              sospensione dei payout in caso di saldo negativo);
+              <strong>5</strong> (Wallet e condizioni di prelievo, inclusa la soglia di 500 € per
+              la richiesta di payout &mdash; senza decadenza del credito al di sotto di essa
+              &mdash; e la sospensione dei payout in caso di saldo negativo);
             </li>
             <li>
               <strong>7</strong> (Regime fiscale e determinazione differenziata del compenso, incluse

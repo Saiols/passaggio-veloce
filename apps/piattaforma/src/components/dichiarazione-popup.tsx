@@ -98,12 +98,14 @@ export function DichiarazionePopup({
         </p>
 
         <div className="mb-5 rounded-[12px] border border-pv-amber-500/40 bg-pv-amber-50 px-4 py-3 text-[12.5px] text-pv-navy-800">
-          In caso di pratica inviata con veicolo soggetto a fermo o ipoteca,
-          la pratica verrà annullata e ti verrà addebitata una penale di{' '}
+          Se un veicolo di questa pratica risulta soggetto a fermo o ipoteca, la
+          pratica verrà annullata e ti verrà addebitata dal wallet una penale di{' '}
           <strong>
-            €{(PENALI.PENALE_BROKER_DEFAULT_CENT / 100).toFixed(2).replace('.', ',')} lordi
+            €{(PENALI.PENALE_BROKER_DEFAULT_CENT / 100).toFixed(2).replace('.', ',')}
           </strong>{' '}
-          per veicolo dal tuo wallet.
+          <strong>per ciascun veicolo segnalato</strong> (i veicoli regolari non
+          vengono addebitati). La penale non è soggetta a IVA. Perderai inoltre il
+          compenso previsto per la pratica annullata.
         </div>
 
         <div className="mb-5 flex items-start gap-2.5 rounded-[12px] border border-pv-navy-600/20 bg-pv-navy-100 px-4 py-3 text-[12.5px] text-pv-navy-800">

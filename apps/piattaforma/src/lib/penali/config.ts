@@ -30,6 +30,10 @@ export const PENALI = {
    * Versione corrente del testo del popup di responsabilità. Cambiarla
    * quando si modifica il copy del popup, in modo che il log
    * BrokerDichiarazione preservi la traccia esatta del testo accettato.
+   *
+   * v2.0 (2026-07-11): la penale è €25 per ciascun VEICOLO SEGNALATO (non per
+   * pratica) e non è soggetta a IVA — rimosso «lordi», che non corrispondeva
+   * ad alcun calcolo. Vedi docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
    */
-  POPUP_VERSION: 'v1.0',
+  POPUP_VERSION: 'v2.0',
 } as const;

@@ -7,6 +7,8 @@ import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context
 import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
 import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
+import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
+import type { SedeRuolo } from '@/lib/sedi/scope';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
 import { TeamEditForm } from './edit-form';
@@ -54,6 +56,13 @@ export default async function TeamUserEditPage({
     if (isOwnerTarget) notFound();
     if (!membership || !manageableIds.includes(membership.sedeId)) notFound();
   }
+  // Stessa fonte della sidebar (`etichettaRuolo`): questa pagina già riduce
+  // l'utente a UNA sede/ruolo (il form di modifica ne gestisce una sola), quindi
+  // qui non può nascere la contraddizione "ruoli diversi per sede" del team.
+  const ruoloLabel = etichettaRuolo({
+    role: target.role,
+    sedeRole: isOwnerTarget ? 'OWNER' : ((membership?.ruolo as SedeRuolo | undefined) ?? null),
+  });
   // Selettore sede: il proprietario vede tutte le sedi; l'admin di sede solo le sue.
   const sedi = ctx.isOwner
     ? await prisma.sede.findMany({
@@ -81,7 +90,7 @@ export default async function TeamUserEditPage({
             {target.nome} {target.cognome}
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            {target.email} · {target.role === 'ADMIN_AZIENDA' ? 'Admin' : 'Utente'} ·{' '}
+            {target.email} · {ruoloLabel} ·{' '}
             {target.lastLoginAt
               ? `Ultimo accesso ${formatRelative(target.lastLoginAt)}`
               : 'Mai entrato'}

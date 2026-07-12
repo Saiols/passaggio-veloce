@@ -8,6 +8,8 @@ import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/c
 import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { riconoscePreset, PRESET_ETICHETTE } from '@/lib/auth/permessi/preset';
+import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
+import type { SedeRuolo } from '@/lib/sedi/scope';
 import { RevokeButton } from './revoke-button';
 import { DisableTeamUserButton } from './disable-button';
 import { TeamPageClient } from './team-page-client';
@@ -51,6 +53,13 @@ export default async function TeamPage() {
       select: {
         id: true, email: true, nome: true, cognome: true,
         role: true, status: true, lastLoginAt: true, permessi: true,
+        // Ristretta a manageableIds: un admin di sede non deve vedere le
+        // membership dell'utente in sedi che non amministra (stesso confine
+        // già applicato a usersWhere sopra).
+        sediMembership: {
+          where: { sedeId: { in: manageableIds } },
+          select: { sedeId: true, ruolo: true },
+        },
       },
     }),
     prisma.invitation.findMany({
@@ -60,6 +69,7 @@ export default async function TeamPage() {
     }),
   ]);
   const sedi = manageable.map((s) => ({ id: s.id, nome: s.nome }));
+  const sedeNomeById = new Map(manageable.map((s) => [s.id, s.nome]));
 
   /**
    * Badge permessi: nome del preset se il set coincide esattamente, altrimenti
@@ -72,6 +82,35 @@ export default async function TeamPage() {
     const puliti = u.permessi.filter(isPermesso);
     const presetId = riconoscePreset(puliti, companyType);
     return presetId ? PRESET_ETICHETTE[presetId] : `Personalizzato · ${puliti.length} permessi`;
+  }
+
+  /**
+   * Etichetta di ruolo per la riga utente: STESSA fonte (`etichettaRuolo`)
+   * usata dalla card sidebar, non un "Admin"/"Utente" locale. Un non-owner non
+   * ha un ruolo unico: dipende dalla sede (admin in una, operatore in
+   * un'altra). Se tutte le sue membership visibili producono la stessa
+   * etichetta ne basta una; se divergono, il dettaglio per sede — un'etichetta
+   * sola ne nasconderebbe una vera.
+   */
+  function ruoloRigaTeam(u: {
+    role: string;
+    sediMembership: { sedeId: string; ruolo: string }[];
+  }): string {
+    if (u.role === 'ADMIN_AZIENDA') {
+      return etichettaRuolo({ role: u.role, sedeRole: 'OWNER' });
+    }
+    if (u.sediMembership.length === 0) {
+      return etichettaRuolo({ role: u.role, sedeRole: null });
+    }
+    const perSede = u.sediMembership.map((m) => ({
+      sedeId: m.sedeId,
+      label: etichettaRuolo({ role: u.role, sedeRole: m.ruolo as SedeRuolo }),
+    }));
+    const distinte = new Set(perSede.map((s) => s.label));
+    if (distinte.size === 1) return perSede[0]!.label;
+    return perSede
+      .map((s) => `${s.label} a ${sedeNomeById.get(s.sedeId) ?? '—'}`)
+      .join(' · ');
   }
 
   return (
@@ -114,7 +153,7 @@ export default async function TeamPage() {
                     {u.nome} {u.cognome}
                   </p>
                   <p className="truncate text-xs text-pv-slate-500">
-                    {u.email} · {u.role === 'ADMIN_AZIENDA' ? 'Admin' : 'Utente'}
+                    {u.email} · {ruoloRigaTeam(u)}
                     {badge && (
                       <>
                         {' · '}

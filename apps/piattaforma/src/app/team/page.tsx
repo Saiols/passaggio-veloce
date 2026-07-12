@@ -9,6 +9,7 @@ import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { riconoscePreset, PRESET_ETICHETTE } from '@/lib/auth/permessi/preset';
 import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
+import { etichetteSediUniche } from '@/lib/sedi/etichetta-sede';
 import type { SedeRuolo } from '@/lib/sedi/scope';
 import { RevokeButton } from './revoke-button';
 import { DisableTeamUserButton } from './disable-button';
@@ -69,7 +70,13 @@ export default async function TeamPage() {
     }),
   ]);
   const sedi = manageable.map((s) => ({ id: s.id, nome: s.nome }));
-  const sedeNomeById = new Map(manageable.map((s) => [s.id, s.nome]));
+  // Le sedi si chiamano qui come si chiamano nella card utente e nel selettore:
+  // stesso helper, quindi la stessa filiale non ha due nomi in due schermate.
+  // Col nome grezzo la riga diceva "Admin di sede a Dimensione Auto Milano Srls"
+  // mentre la sidebar, per quella sede, diceva "Buccinasco".
+  const sedeNomeById = new Map(
+    etichetteSediUniche(manageable, session.user.companyName).map((s) => [s.id, s.label]),
+  );
 
   /**
    * Badge permessi: nome del preset se il set coincide esattamente, altrimenti

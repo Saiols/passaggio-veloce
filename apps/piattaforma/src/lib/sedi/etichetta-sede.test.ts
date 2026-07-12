@@ -27,7 +27,7 @@ describe('etichettaSede — sede selezionata (kind ONE)', () => {
     expect(
       etichettaSede({
         currentSede: { kind: 'ONE', sede: SEDE_OMONIMA },
-        accessibleSediCount: 2,
+        accessibleSedi: [SEDE_OMONIMA, SEDE_PROPRIA],
         ragioneSociale: AZIENDA,
       }),
     ).toBe('Buccinasco');
@@ -37,7 +37,7 @@ describe('etichettaSede — sede selezionata (kind ONE)', () => {
     expect(
       etichettaSede({
         currentSede: { kind: 'ONE', sede: SEDE_PROPRIA },
-        accessibleSediCount: 2,
+        accessibleSedi: [SEDE_OMONIMA, SEDE_PROPRIA],
         ragioneSociale: AZIENDA,
       }),
     ).toBe('Dimensione Auto Corsico');
@@ -49,7 +49,7 @@ describe('etichettaSede — vista aggregata (kind ALL, solo il titolare)', () =>
     expect(
       etichettaSede({
         currentSede: { kind: 'ALL' },
-        accessibleSediCount: 2,
+        accessibleSedi: [SEDE_OMONIMA, SEDE_PROPRIA],
         ragioneSociale: AZIENDA,
       }),
     ).toBe('Tutte le sedi');
@@ -63,9 +63,8 @@ describe('etichettaSede — vista aggregata (kind ALL, solo il titolare)', () =>
     expect(
       etichettaSede({
         currentSede: { kind: 'ALL' },
-        accessibleSediCount: 1,
+        accessibleSedi: [SEDE_OMONIMA],
         ragioneSociale: AZIENDA,
-        sedeUnica: SEDE_OMONIMA,
       }),
     ).toBe('Buccinasco');
   });
@@ -74,24 +73,35 @@ describe('etichettaSede — vista aggregata (kind ALL, solo il titolare)', () =>
     expect(
       etichettaSede({
         currentSede: { kind: 'ALL' },
-        accessibleSediCount: 1,
+        accessibleSedi: [SEDE_PROPRIA],
         ragioneSociale: AZIENDA,
-        sedeUnica: SEDE_PROPRIA,
       }),
     ).toBe('Dimensione Auto Corsico');
+  });
+
+  it('con ALL e una sola sede accessibile è impossibile ottenere "Tutte le sedi": non esiste più un secondo parametro da dimenticare, la lista è l\'unica fonte di verità', () => {
+    // Col vecchio design bastava passare accessibleSediCount: 1 e dimenticare
+    // sedeUnica per ricadere in silenzio su "Tutte le sedi". Ora la lunghezza
+    // dell'array è l'unica fonte di verità: non c'è modo di passare un
+    // conteggio incoerente con le sedi elencate.
+    const risultato = etichettaSede({
+      currentSede: { kind: 'ALL' },
+      accessibleSedi: [SEDE_PROPRIA],
+      ragioneSociale: AZIENDA,
+    });
+    expect(risultato).not.toBe('Tutte le sedi');
+    expect(risultato).toBe('Dimensione Auto Corsico');
   });
 });
 
 describe('etichettaSede — nessuna sede', () => {
   it('senza sede corrente non mostra nulla (staff di piattaforma)', () => {
-    expect(
-      etichettaSede({ currentSede: null, accessibleSediCount: 0, ragioneSociale: null }),
-    ).toBeNull();
+    expect(etichettaSede({ currentSede: null, accessibleSedi: [], ragioneSociale: null })).toBeNull();
   });
 
   it('in ALL senza sedi accessibili non inventa un\'etichetta', () => {
     expect(
-      etichettaSede({ currentSede: { kind: 'ALL' }, accessibleSediCount: 0, ragioneSociale: AZIENDA }),
+      etichettaSede({ currentSede: { kind: 'ALL' }, accessibleSedi: [], ragioneSociale: AZIENDA }),
     ).toBeNull();
   });
 });

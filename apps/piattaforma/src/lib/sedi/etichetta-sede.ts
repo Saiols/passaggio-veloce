@@ -21,12 +21,12 @@ import type { CurrentSede, SedeRef } from './scope';
  */
 export function etichettaSede(args: {
   currentSede: CurrentSede | null;
-  accessibleSediCount: number;
+  /** Le sedi a cui l'utente ha accesso. Conteggio e sede unica si derivano da qui:
+   *  due parametri separati potevano desincronizzarsi e far sbagliare in silenzio. */
+  accessibleSedi: SedeRef[];
   ragioneSociale: string | null | undefined;
-  /** L'unica sede accessibile: serve solo nel caso ALL con una sede sola. */
-  sedeUnica?: SedeRef | null;
 }): string | null {
-  const { currentSede, accessibleSediCount, ragioneSociale, sedeUnica } = args;
+  const { currentSede, accessibleSedi, ragioneSociale } = args;
 
   if (!currentSede) return null;
 
@@ -35,10 +35,10 @@ export function etichettaSede(args: {
   }
 
   // kind === 'ALL'
-  if (accessibleSediCount === 1 && sedeUnica) {
-    return labelSede(sedeUnica, ragioneSociale);
+  if (accessibleSedi.length === 1) {
+    return labelSede(accessibleSedi[0], ragioneSociale);
   }
-  if (accessibleSediCount === 0) return null;
+  if (accessibleSedi.length === 0) return null;
   return 'Tutte le sedi';
 }
 

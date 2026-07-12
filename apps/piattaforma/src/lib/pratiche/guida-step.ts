@@ -1,4 +1,5 @@
 import type { PraticaStato } from '@/components/ui/status-chip';
+import { STATI_IN_ATTESA } from '@/lib/pratiche/stati';
 
 export type StepKey = 'inviata' | 'accettata' | 'processata' | 'firmata';
 export type GuidaVariant = 'azione' | 'attesa' | 'chiusa';
@@ -28,15 +29,8 @@ const STEP_LABEL: Record<StepKey, string> = {
   firmata: 'Firmata',
 };
 
-const WAITING_STATI: PraticaStato[] = [
-  'IN_ATTESA_ROUND_1',
-  'IN_ATTESA_ROUND_2',
-  'IN_ATTESA_ROUND_3',
-  'IN_ESCALATION',
-];
-
 function currentIndex(stato: PraticaStato): number {
-  if (WAITING_STATI.includes(stato) || stato === 'ACCETTATA') return 1;
+  if ((STATI_IN_ATTESA as readonly PraticaStato[]).includes(stato) || stato === 'ACCETTATA') return 1;
   if (stato === 'PROCESSATA') return 2;
   if (stato === 'FIRMATA') return 3;
   return 0; // BOZZA, SCADUTA, ANNULLATA
@@ -44,7 +38,7 @@ function currentIndex(stato: PraticaStato): number {
 
 function buildSteps(stato: PraticaStato): GuidaStepItem[] {
   const idx = currentIndex(stato);
-  const waiting = WAITING_STATI.includes(stato);
+  const waiting = (STATI_IN_ATTESA as readonly PraticaStato[]).includes(stato);
   const terminalNeg = stato === 'SCADUTA' || stato === 'ANNULLATA';
   const firmata = stato === 'FIRMATA';
   return STEP_ORDER.map((key, i) => {

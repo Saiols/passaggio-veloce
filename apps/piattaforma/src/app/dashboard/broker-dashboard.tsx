@@ -3,6 +3,7 @@ import { prisma } from '@pv/db';
 import { Button, Card, StatCard, StatusChip, TipoPraticaChip, cn, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { hasPermesso } from '@/lib/auth/permessi/guard';
+import { contaGruppi, STATI_IN_ATTESA } from '@/lib/pratiche/stati';
 
 export async function BrokerDashboard({
   scopeIds,
@@ -96,22 +97,14 @@ export async function BrokerDashboard({
   const count = (s: PraticaStato): number =>
     byStato.find((g) => g.stato === s)?._count._all ?? 0;
 
-  const totale =
-    count('BOZZA') +
-    count('IN_ATTESA_ROUND_1') +
-    count('IN_ATTESA_ROUND_2') +
-    count('IN_ATTESA_ROUND_3') +
-    count('IN_ESCALATION') +
-    count('ACCETTATA') +
-    count('FIRMATA') +
-    count('SCADUTA') +
-    count('ANNULLATA');
+  // Fonte unica (lib/pratiche/stati.ts): somma TUTTI i gruppi, nessuno stato
+  // può più essere dimenticato (era mancato PROCESSATA nell'enumerazione a mano).
+  const totale = contaGruppi(byStato).tutte;
 
-  const inAttesa =
-    count('IN_ATTESA_ROUND_1') +
-    count('IN_ATTESA_ROUND_2') +
-    count('IN_ATTESA_ROUND_3') +
-    count('IN_ESCALATION');
+  const inAttesa = (STATI_IN_ATTESA as readonly PraticaStato[]).reduce(
+    (sum, s) => sum + count(s),
+    0,
+  );
 
   return (
     <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">

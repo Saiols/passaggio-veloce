@@ -47,6 +47,7 @@ export function PraticheFilters({ q, stato, periodo, sede, stati, periodi, sedi 
         className="block w-full rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-[14px] py-2.5 text-sm font-medium text-pv-slate-900 placeholder:text-pv-slate-500 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
       />
       <select
+        key={stato ?? ''}
         name="stato"
         defaultValue={stato ?? ''}
         onChange={submit}

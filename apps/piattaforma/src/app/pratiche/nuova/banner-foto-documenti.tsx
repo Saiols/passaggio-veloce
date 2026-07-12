@@ -27,9 +27,10 @@ export function BannerFotoDocumenti() {
           vengono compilati in automatico.
         </li>
         <li>
-          <strong>Da telefono puoi scattare la foto direttamente</strong>: tocca
-          &quot;Carica file&quot; e scegli la fotocamera. Poi puoi ritagliarla e
-          raddrizzarla nell&apos;editor.
+          <strong>Da telefono puoi scattare la foto direttamente</strong>{' '}
+          dal menu di caricamento, scegliendo la fotocamera. Poi puoi ritagliarla e
+          raddrizzarla nell&apos;editor. (Dove è ammesso solo il PDF, la card lo
+          indica: lì la foto non vale.)
         </li>
       </ul>
     </Alert>

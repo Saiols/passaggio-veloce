@@ -18,30 +18,10 @@ import { mostraColonnaSede, filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratich
 import { opzioniSedeProprie, opzioniSedeAgenziaDaPratiche } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
 import { whereStato, contaGruppi, isInCorso } from '@/lib/pratiche/stati';
-import { tabsPratiche, tabAttivo } from '@/lib/pratiche/tabs';
+import { tabsPratiche, tabAttivo, opzioniStato, hrefPaginaPratiche } from '@/lib/pratiche/tabs';
 import { PraticheTabs } from './tabs';
 
 const PAGE_SIZE = 15;
-
-// Filtri stato per la lista pratiche broker/agenzia (item 10 release 2026-05).
-// Niente R1/R2/R3 ne "Escalation": questi dettagli sono interni al motore di
-// distribuzione e non devono apparire all'utente. Lato admin la lista
-// completa rimane in /admin/pratiche.
-//
-// I primi due valori sono gli AGGREGATI dei tab: stando nella stessa select, il
-// `defaultValue` mostra il valore giusto anche quando arrivi da un tab.
-const STATI_USER: { value: string; label: string }[] = [
-  { value: '', label: 'Tutti gli stati' },
-  { value: 'IN_CORSO', label: 'In corso' },
-  { value: 'CONCLUSE', label: 'Concluse' },
-  { value: 'BOZZA', label: 'Bozza' },
-  { value: 'IN_ATTESA', label: 'In attesa' },
-  { value: 'ACCETTATA', label: 'Accettata' },
-  { value: 'PROCESSATA', label: 'Processata' },
-  { value: 'FIRMATA', label: 'Firmata' },
-  { value: 'SCADUTA', label: 'Scaduta' },
-  { value: 'ANNULLATA', label: 'Annullata' },
-];
 
 const PERIODI = [
   { value: '', label: 'Qualsiasi periodo' },
@@ -192,6 +172,16 @@ export default async function PratichePage({
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // `?page=` fuori range (es. una lista si è svuotata dopo un filtro, o l'URL
+  // è stato modificato a mano): senza questo redirect la pagina mostra "Nessuna
+  // pratica trovata" mentre l'intestazione e il pager riportano ancora i totali
+  // reali, una schermata che si contraddice. Va chiamato FUORI da try/catch:
+  // `redirect()` lancia un'eccezione di controllo, e solo dopo che `total` /
+  // `totalPages` sono risolti.
+  if (page > totalPages) {
+    redirect(hrefPaginaPratiche(totalPages, { stato: sp.stato, q: sp.q, periodo: sp.periodo, sede: sp.sede }));
+  }
+
   return (
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
@@ -229,7 +219,7 @@ export default async function PratichePage({
           stato={sp.stato}
           periodo={sp.periodo}
           sede={sp.sede}
-          stati={STATI_USER}
+          stati={opzioniStato({ isAgenzia })}
           periodi={PERIODI}
           sedi={sediSelect}
         />
@@ -378,16 +368,8 @@ function Pagination({
   total: number;
   sp: SearchParams;
 }) {
-  const makeHref = (p: number): string => {
-    const params = new URLSearchParams();
-    if (sp.stato) params.set('stato', sp.stato);
-    if (sp.q) params.set('q', sp.q);
-    if (sp.periodo) params.set('periodo', sp.periodo);
-    if (sp.sede) params.set('sede', sp.sede);
-    if (p > 1) params.set('page', String(p));
-    const s = params.toString();
-    return s ? `/pratiche?${s}` : '/pratiche';
-  };
+  const makeHref = (p: number): string =>
+    hrefPaginaPratiche(p, { stato: sp.stato, q: sp.q, periodo: sp.periodo, sede: sp.sede });
 
   return (
     <nav className="mt-5 flex items-center justify-between">

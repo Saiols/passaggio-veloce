@@ -52,3 +52,52 @@ export function hrefTab(value: ValoreTab, filtri: FiltriTab): string {
   const s = qs.toString();
   return s ? `/pratiche?${s}` : '/pratiche';
 }
+
+/**
+ * Opzioni della select "Stato". Devono restare coerenti coi tab: l'agenzia non
+ * ha il tab Bozze (vedi `tabsPratiche`) perché `agenziaSedeId` viene scritto
+ * solo all'accettazione (inbox/actions.ts:92) — prima non è ancora "sua". Per
+ * lo stesso motivo la select non le deve offrire `BOZZA`/`IN_ATTESA`: sono
+ * garantite zero risultati. `SCADUTA` è uno stato legacy che nessun percorso
+ * del codice scrive più: non ha senso offrirlo a nessuno dei due ruoli... ma
+ * il broker la vedeva già prima di questo fix, quindi resta per non togliere
+ * una voce storica senza che sia stato chiesto esplicitamente.
+ */
+export function opzioniStato({
+  isAgenzia,
+}: {
+  isAgenzia: boolean;
+}): { value: string; label: string }[] {
+  const comuni = [
+    { value: '', label: 'Tutti gli stati' },
+    { value: 'IN_CORSO', label: 'In corso' },
+    { value: 'CONCLUSE', label: 'Concluse' },
+    ...(isAgenzia ? [] : [{ value: 'BOZZA', label: 'Bozza' }]),
+    ...(isAgenzia ? [] : [{ value: 'IN_ATTESA', label: 'In attesa' }]),
+    { value: 'ACCETTATA', label: 'Accettata' },
+    { value: 'PROCESSATA', label: 'Processata' },
+    { value: 'FIRMATA', label: 'Firmata' },
+    ...(isAgenzia ? [] : [{ value: 'SCADUTA', label: 'Scaduta' }]),
+    { value: 'ANNULLATA', label: 'Annullata' },
+  ];
+  return comuni;
+}
+
+/** Filtri che la paginazione deve trascinarsi dietro (oltre a `page`). */
+export type FiltriPagina = FiltriTab & { stato?: string };
+
+/**
+ * URL di una pagina della lista pratiche, preservando tutti i filtri attivi.
+ * `page` viene omesso quando è 1: gli URL restano puliti e condivisibili.
+ * Usato sia dal pager sia dal redirect di `?page=` fuori range.
+ */
+export function hrefPaginaPratiche(page: number, filtri: FiltriPagina): string {
+  const qs = new URLSearchParams();
+  if (filtri.stato) qs.set('stato', filtri.stato);
+  if (filtri.q) qs.set('q', filtri.q);
+  if (filtri.periodo) qs.set('periodo', filtri.periodo);
+  if (filtri.sede) qs.set('sede', filtri.sede);
+  if (page > 1) qs.set('page', String(page));
+  const s = qs.toString();
+  return s ? `/pratiche?${s}` : '/pratiche';
+}

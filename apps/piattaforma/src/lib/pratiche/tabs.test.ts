@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tabsPratiche, tabAttivo, hrefTab } from './tabs';
+import { tabsPratiche, tabAttivo, hrefTab, opzioniStato, hrefPaginaPratiche } from './tabs';
 
 const conteggi = { tutte: 11, inCorso: 4, bozze: 2, concluse: 5 };
 
@@ -62,5 +62,59 @@ describe('hrefTab', () => {
     expect(hrefTab('', { q: 'mario rossi & figli' })).toBe(
       '/pratiche?q=mario+rossi+%26+figli',
     );
+  });
+});
+
+describe('opzioniStato', () => {
+  it('il broker vede tutte le voci, incluse Bozza/In attesa/Scaduta', () => {
+    const opzioni = opzioniStato({ isAgenzia: false });
+    expect(opzioni.map((o) => o.value)).toEqual([
+      '',
+      'IN_CORSO',
+      'CONCLUSE',
+      'BOZZA',
+      'IN_ATTESA',
+      'ACCETTATA',
+      'PROCESSATA',
+      'FIRMATA',
+      'SCADUTA',
+      'ANNULLATA',
+    ]);
+  });
+
+  it("l'agenzia non vede Bozza/In attesa/Scaduta: in agenda danno sempre zero risultati", () => {
+    // `agenziaSedeId` viene scritto solo all'accettazione (inbox/actions.ts:92) e
+    // SCADUTA non è mai scritto da nessun percorso del codice: offrirle nella
+    // select porterebbe l'agenzia a una lista garantita vuota.
+    const opzioni = opzioniStato({ isAgenzia: true });
+    const values = opzioni.map((o) => o.value);
+    expect(values).not.toContain('BOZZA');
+    expect(values).not.toContain('IN_ATTESA');
+    expect(values).not.toContain('SCADUTA');
+    expect(values).toEqual([
+      '',
+      'IN_CORSO',
+      'CONCLUSE',
+      'ACCETTATA',
+      'PROCESSATA',
+      'FIRMATA',
+      'ANNULLATA',
+    ]);
+  });
+});
+
+describe('hrefPaginaPratiche', () => {
+  it('omette il parametro page quando è 1', () => {
+    expect(hrefPaginaPratiche(1, {})).toBe('/pratiche');
+  });
+
+  it('preserva tutti i filtri e aggiunge page quando >1', () => {
+    expect(
+      hrefPaginaPratiche(2, { stato: 'IN_CORSO', q: 'AB123CD', periodo: '30d', sede: 'sede-1' }),
+    ).toBe('/pratiche?stato=IN_CORSO&q=AB123CD&periodo=30d&sede=sede-1&page=2');
+  });
+
+  it('nessun filtro attivo e page 1 ⇒ URL nuda', () => {
+    expect(hrefPaginaPratiche(1, { stato: '', q: '', periodo: '', sede: '' })).toBe('/pratiche');
   });
 });

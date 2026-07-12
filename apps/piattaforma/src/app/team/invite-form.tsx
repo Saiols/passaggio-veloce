@@ -63,13 +63,13 @@ export function InviteForm({
   }
 
   return (
-    <form action={handleSubmit} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+    <form action={handleSubmit} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       <input
         type="email"
         name="email"
         required
         placeholder="utente@azienda.it"
-        className="flex-1 rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
+        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm sm:col-span-2"
       />
       {sedi.length > 1 && (
         <select
@@ -92,13 +92,13 @@ export function InviteForm({
         name="ruoloSede"
         value={ruoloSede}
         onChange={(e) => onRuoloChange(e.target.value as 'ADMIN_SEDE' | 'OPERATORE')}
-        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
+        className={`rounded-lg border border-pv-slate-300 px-3 py-2 text-sm ${sedi.length > 1 ? '' : 'sm:col-span-2'}`}
       >
         <option value="OPERATORE">Operatore</option>
         <option value="ADMIN_SEDE">Admin di sede</option>
       </select>
       {puoScegliere ? (
-        <div className="basis-full">
+        <div className="sm:col-span-2">
           <MatricePermessi
             companyType={companyType}
             ruoloSede={ruoloSede}
@@ -108,7 +108,7 @@ export function InviteForm({
           />
         </div>
       ) : (
-        <p className="basis-full text-sm text-pv-slate-500">
+        <p className="text-sm text-pv-slate-500 sm:col-span-2">
           L&apos;utente riceverà i permessi di base. Per personalizzarli, chiedi al titolare.
         </p>
       )}
@@ -116,15 +116,15 @@ export function InviteForm({
         type="submit"
         disabled={pending}
         aria-busy={pending || undefined}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+        className="inline-flex items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2"
       >
         {pending && <InlineSpinner className="h-4 w-4" />}
         <span>{pending ? 'Invio…' : 'Invia invito'}</span>
       </button>
-      {error && <p className="text-sm text-pv-red-500 basis-full">{error}</p>}
-      {success && <p className="text-sm text-pv-green-500 basis-full">{success}</p>}
+      {error && <p className="text-sm text-pv-red-500 sm:col-span-2">{error}</p>}
+      {success && <p className="text-sm text-pv-green-500 sm:col-span-2">{success}</p>}
       {demoLink && (
-        <div className="basis-full rounded-lg bg-pv-amber-50 border border-pv-amber-500 p-3 text-xs">
+        <div className="rounded-lg bg-pv-amber-50 border border-pv-amber-500 p-3 text-xs sm:col-span-2">
           <p className="font-bold text-pv-navy-900">🧪 Modalità DEMO — link diretto</p>
           <a href={demoLink} className="text-pv-navy-700 underline break-all">{demoLink}</a>
         </div>

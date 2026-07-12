@@ -37,8 +37,11 @@ export function MatricePermessi({
     <fieldset className="rounded-xl border border-pv-slate-200 p-4">
       <legend className="px-2 text-sm font-semibold text-pv-navy-700">Permessi</legend>
       <p className="mb-3 text-xs text-pv-slate-500">
-        I permessi in grassetto sono azioni sensibili: hanno un effetto finanziario o
-        irreversibile (vedi la nota a fianco di ciascuno).
+        Apri una categoria per scegliere i singoli permessi: il contatore a destra
+        (es. <span className="font-medium">3/5 attivi</span>) dice quanti ne sono
+        accesi sul totale della categoria. I permessi in grassetto sono azioni
+        sensibili: hanno un effetto finanziario o irreversibile (vedi la nota a
+        fianco di ciascuno).
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -91,8 +94,11 @@ export function MatricePermessi({
                   aria-expanded={aperta}
                 >
                   <span>{cat.etichetta}</span>
-                  <span className="text-xs text-pv-slate-500">
-                    {n}/{chiavi.length}
+                  <span
+                    className="text-xs text-pv-slate-500"
+                    title={`${n} permessi attivi su ${chiavi.length} in questa categoria`}
+                  >
+                    {n}/{chiavi.length} attivi
                   </span>
                 </button>
               </div>

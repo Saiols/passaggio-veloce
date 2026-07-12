@@ -20,14 +20,16 @@ describe('partizione degli stati', () => {
   it.each(TUTTI)('%s cade in esattamente un gruppo', (stato) => {
     const gruppi = [
       stato === 'BOZZA',
-      STATI_IN_CORSO.includes(stato),
-      STATI_CONCLUSI.includes(stato),
+      (STATI_IN_CORSO as readonly PraticaStato[]).includes(stato),
+      (STATI_CONCLUSI as readonly PraticaStato[]).includes(stato),
     ].filter(Boolean).length;
     expect(gruppi).toBe(1);
   });
 
   it('i gruppi non si sovrappongono', () => {
-    const overlap = STATI_IN_CORSO.filter((s) => STATI_CONCLUSI.includes(s));
+    const overlap = STATI_IN_CORSO.filter((s) =>
+      (STATI_CONCLUSI as readonly PraticaStato[]).includes(s),
+    );
     expect(overlap).toEqual([]);
   });
 

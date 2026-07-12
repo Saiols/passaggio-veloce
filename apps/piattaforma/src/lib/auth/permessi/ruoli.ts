@@ -1,3 +1,4 @@
+import type { UserRole } from '@pv/db';
 import type { SedeRole } from '@/lib/sedi/scope';
 
 /**
@@ -19,6 +20,28 @@ export type RuoloVisualizzato =
   | 'Staff';
 
 /**
+ * Etichetta dei ruoli di PIATTAFORMA: quelli che non dipendono dalla sede,
+ * perché derivano solo da `User.role`. `null` = ruolo azienda (ADMIN_AZIENDA
+ * o UTENTE_AZIENDA): per questi l'etichetta si calcola sempre dalla sede
+ * (vedi `etichettaRuolo` sotto).
+ *
+ * `satisfies Record<UserRole, ...>` è la protezione reale: se domani si
+ * aggiunge un valore a `UserRole` senza classificarlo qui, il TYPECHECK fallisce
+ * (non un test che spera). Vedi ruoli.test.ts per la prova rosso→verde.
+ */
+const ETICHETTA_PER_RUOLO = {
+  ADMIN_PIATTAFORMA: 'Admin piattaforma',
+  ASSISTENTE: 'Assistente',
+  AD: 'Staff',
+  CTO: 'Staff',
+  CFO: 'Staff',
+  SALES_MANAGER: 'Staff',
+  SALES: 'Staff',
+  ADMIN_AZIENDA: null,
+  UTENTE_AZIENDA: null,
+} satisfies Record<UserRole, RuoloVisualizzato | null>;
+
+/**
  * Il ruolo con cui l'utente sta operando ORA.
  *
  * Attenzione: per i non-owner `User.role` è sempre `UTENTE_AZIENDA` e NON dice
@@ -33,12 +56,15 @@ export function etichettaRuolo(args: {
 }): RuoloVisualizzato {
   const { role, sedeRole } = args;
 
-  // Lo staff di piattaforma non ha sedi: si decide sul solo User.role.
-  if (role === 'ADMIN_PIATTAFORMA') return 'Admin piattaforma';
-  if (role === 'ASSISTENTE') return 'Assistente';
-  if (role === 'AD' || role === 'CTO' || role === 'CFO' || role === 'SALES_MANAGER' || role === 'SALES') {
-    return 'Staff';
-  }
+  // Lo staff di piattaforma non ha sedi: si decide sul solo User.role. `role`
+  // qui è una stringa qualunque (arriva dalla sessione, non tipizzata come
+  // UserRole): un valore sconosciuto ("PIPPO", undefined) semplicemente non è
+  // una chiave della mappa e cade nei rami azienda sotto.
+  const etichettaPiattaforma =
+    role !== undefined && Object.prototype.hasOwnProperty.call(ETICHETTA_PER_RUOLO, role)
+      ? ETICHETTA_PER_RUOLO[role as UserRole]
+      : null;
+  if (etichettaPiattaforma) return etichettaPiattaforma;
 
   // Azienda: il proprietario resta Titolare anche in vista aggregata, dove non
   // esiste una sede corrente su cui calcolare un ruolo di membership.

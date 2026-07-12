@@ -16,9 +16,9 @@ import {
   type SedeRef,
 } from './scope';
 
-const sedeA: SedeRef = { id: 'a', nome: 'Sede A', type: 'AGENZIA' };
-const sedeB: SedeRef = { id: 'b', nome: 'Sede B', type: 'AGENZIA' };
-const sedeC: SedeRef = { id: 'c', nome: 'Sede C', type: 'AGENZIA' };
+const sedeA: SedeRef = { id: 'a', nome: 'Sede A', type: 'AGENZIA', citta: 'Milano' };
+const sedeB: SedeRef = { id: 'b', nome: 'Sede B', type: 'AGENZIA', citta: 'Milano' };
+const sedeC: SedeRef = { id: 'c', nome: 'Sede C', type: 'AGENZIA', citta: 'Milano' };
 const companySedi = [sedeA, sedeB, sedeC];
 
 describe('resolveAccessibleSedi', () => {
@@ -222,10 +222,11 @@ describe('canSelectSede', () => {
   });
 });
 
-const S = (id: string): { id: string; nome: string; type: 'AGENZIA' } => ({
+const S = (id: string): SedeRef => ({
   id,
   nome: id,
   type: 'AGENZIA',
+  citta: 'Milano',
 });
 
 describe('resolveSedeRole', () => {

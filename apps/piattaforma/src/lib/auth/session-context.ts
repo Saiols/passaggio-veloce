@@ -75,7 +75,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
   const [companySedi, memberships, dbUser, company] = await Promise.all([
     prisma.sede.findMany({
       where: { companyId, deletedAt: null },
-      select: { id: true, nome: true, type: true },
+      select: { id: true, nome: true, type: true, citta: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.userSede.findMany({

@@ -12,6 +12,8 @@ export type SedeRef = {
   id: string;
   nome: string;
   type: SedeType;
+  /** Serve come etichetta quando `nome` coincide con la ragione sociale. */
+  citta: string;
 };
 
 /** Valore speciale del cookie `pv_sede` per la vista aggregata del proprietario. */

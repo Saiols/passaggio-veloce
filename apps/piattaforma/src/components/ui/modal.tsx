@@ -94,7 +94,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`pv-modal-panel relative w-full ${SIZE_CLASS[size]} overflow-hidden rounded-2xl bg-white shadow-[var(--pv-shadow-card)]`}
+        className={`pv-modal-panel relative flex max-h-[calc(100dvh-2rem)] w-full ${SIZE_CLASS[size]} flex-col overflow-hidden rounded-2xl bg-white shadow-[var(--pv-shadow-card)]`}
       >
         <button
           type="button"
@@ -104,7 +104,7 @@ export function Modal({
         >
           ✕
         </button>
-        <div className="border-b border-pv-slate-200 px-6 py-4 pr-12">
+        <div className="shrink-0 border-b border-pv-slate-200 px-6 py-4 pr-12">
           <h2 id={titleId} className="text-[16px] font-bold text-pv-navy-900">
             {title}
           </h2>
@@ -112,7 +112,10 @@ export function Modal({
             <p className="mt-1 text-[12.5px] text-pv-slate-500">{description}</p>
           )}
         </div>
-        <div className="px-6 py-5">{children}</div>
+        {/* Il pannello è alto al massimo quanto il viewport: il corpo scrolla
+            da solo (il body è in scroll-lock, senza questo un contenuto alto
+            — es. la matrice permessi aperta — resterebbe irraggiungibile). */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>,
     document.body,

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth, unstable_update } from '@/auth';
 import { prisma } from '@pv/db';
+import { hashPassword, verifyPassword, validatePasswordPolicy } from '@/lib/auth/password';
 
 export type UpdateOwnProfileResult =
   | { ok: true }
@@ -70,5 +71,48 @@ export async function updateOwnProfileAction(
 
   revalidatePath('/profilo');
   revalidatePath('/profilo/personale');
+  return { ok: true };
+}
+
+export type ChangeOwnPasswordResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Cambio password self-service: richiede la password attuale (chi ha la
+ * sessione aperta su un PC altrui non deve poter cambiare le credenziali).
+ * Chi non ricorda la password attuale passa dal recupero via email
+ * (/reset-password).
+ */
+export async function changeOwnPasswordAction(
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangeOwnPasswordResult> {
+  const session = await auth();
+  if (!session?.user?.id) redirect('/login');
+
+  const me = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!me) return { ok: false, error: 'Account non trovato' };
+
+  if (!(await verifyPassword(currentPassword, me.passwordHash))) {
+    return { ok: false, error: 'La password attuale non è corretta' };
+  }
+
+  const invalid = validatePasswordPolicy(newPassword);
+  if (invalid) return { ok: false, error: invalid };
+
+  if (await verifyPassword(newPassword, me.passwordHash)) {
+    return { ok: false, error: 'La nuova password deve essere diversa da quella attuale' };
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  // Stessa semantica del reset via email (confirmPasswordResetAction): la
+  // stessa persona può avere più User con la stessa email (uno per azienda).
+  // La password li segue tutti, altrimenti la vecchia resterebbe valida per
+  // entrare — cambiarla su un solo record darebbe una falsa sicurezza.
+  await prisma.user.updateMany({
+    where: { email: me.email, deletedAt: null },
+    data: { passwordHash },
+  });
+
   return { ok: true };
 }

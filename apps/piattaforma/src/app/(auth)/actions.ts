@@ -7,7 +7,7 @@ import { prisma } from '@pv/db';
 
 import { signIn, signOut } from '@/auth';
 import { env } from '@/env';
-import { hashPassword } from '@/lib/auth/password';
+import { hashPassword, validatePasswordPolicy } from '@/lib/auth/password';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
 import { headers, cookies } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
@@ -878,15 +878,8 @@ export async function confirmPasswordResetAction(
   newPassword: string,
 ): Promise<ConfirmPasswordResetResult> {
   if (!token) return { ok: false, error: 'Token mancante' };
-  if (!newPassword || newPassword.length < 8) {
-    return { ok: false, error: 'Password troppo corta (min 8 caratteri)' };
-  }
-  if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-    return {
-      ok: false,
-      error: 'La password deve contenere maiuscole, minuscole e numeri',
-    };
-  }
+  const invalid = validatePasswordPolicy(newPassword);
+  if (invalid) return { ok: false, error: invalid };
 
   const record = await prisma.verificationToken.findUnique({ where: { token } });
   if (!record) return { ok: false, error: 'Token non valido' };

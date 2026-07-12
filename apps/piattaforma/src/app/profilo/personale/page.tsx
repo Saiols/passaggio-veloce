@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { ProfiloPersonaleForm } from './form';
+import { CambioPasswordForm } from './password-form';
 
 export default async function ProfiloPersonalePage() {
   const session = await auth();
@@ -40,7 +41,7 @@ export default async function ProfiloPersonalePage() {
             Modifica i tuoi dati
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            Aggiorna nome, cognome ed email del tuo account.
+            Aggiorna nome, cognome, email e password del tuo account.
           </p>
         </header>
 
@@ -51,6 +52,14 @@ export default async function ProfiloPersonalePage() {
             defaultCognome={user.cognome}
             defaultCodiceFiscale={user.codiceFiscale ?? ''}
           />
+        </Card>
+
+        <Card className="mt-5">
+          <h2 className="text-[15px] font-bold text-pv-navy-900">Password</h2>
+          <p className="mb-4 mt-1 text-[13px] text-pv-slate-500">
+            Imposta una nuova password confermando quella attuale.
+          </p>
+          <CambioPasswordForm />
         </Card>
       </div>
     </AppShell>

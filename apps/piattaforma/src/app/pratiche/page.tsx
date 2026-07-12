@@ -17,6 +17,9 @@ import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { mostraColonnaSede, filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeProprie, opzioniSedeAgenziaDaPratiche } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
+import { whereStato, contaGruppi } from '@/lib/pratiche/stati';
+import { tabsPratiche, tabAttivo } from '@/lib/pratiche/tabs';
+import { PraticheTabs } from './tabs';
 
 const PAGE_SIZE = 15;
 
@@ -24,8 +27,13 @@ const PAGE_SIZE = 15;
 // Niente R1/R2/R3 ne "Escalation": questi dettagli sono interni al motore di
 // distribuzione e non devono apparire all'utente. Lato admin la lista
 // completa rimane in /admin/pratiche.
+//
+// I primi due valori sono gli AGGREGATI dei tab: stando nella stessa select, il
+// `defaultValue` mostra il valore giusto anche quando arrivi da un tab.
 const STATI_USER: { value: string; label: string }[] = [
   { value: '', label: 'Tutti gli stati' },
+  { value: 'IN_CORSO', label: 'In corso' },
+  { value: 'CONCLUSE', label: 'Concluse' },
   { value: 'BOZZA', label: 'Bozza' },
   { value: 'IN_ATTESA', label: 'In attesa' },
   { value: 'ACCETTATA', label: 'Accettata' },
@@ -34,14 +42,6 @@ const STATI_USER: { value: string; label: string }[] = [
   { value: 'SCADUTA', label: 'Scaduta' },
   { value: 'ANNULLATA', label: 'Annullata' },
 ];
-
-// Mappatura del valore aggregato "IN_ATTESA" sui valori reali del DB.
-const STATI_IN_ATTESA = [
-  'IN_ATTESA_ROUND_1',
-  'IN_ATTESA_ROUND_2',
-  'IN_ATTESA_ROUND_3',
-  'IN_ESCALATION',
-] as const;
 
 const PERIODI = [
   { value: '', label: 'Qualsiasi periodo' },
@@ -147,13 +147,7 @@ export default async function PratichePage({
 
   const grid = mostraSede ? PRATICHE_GRID.utenteConSede : PRATICHE_GRID.utenteSenzaSede;
 
-  if (sp.stato && STATI_USER.some((s) => s.value === sp.stato)) {
-    if (sp.stato === 'IN_ATTESA') {
-      where.stato = { in: STATI_IN_ATTESA as unknown as PraticaStato[] };
-    } else {
-      where.stato = sp.stato as PraticaStato;
-    }
-  }
+  const filtroStato = whereStato(sp.stato);
 
   if (sp.periodo === '7d') where.submittedAt = { gte: daysAgo(7) };
   else if (sp.periodo === '30d') where.submittedAt = { gte: daysAgo(30) };
@@ -168,7 +162,13 @@ export default async function PratichePage({
     ];
   }
 
-  const [items, total] = await Promise.all([
+  // I conteggi dei tab usano gli STESSI filtri della lista (ricerca, periodo,
+  // sede, scope) MENO lo stato: il numero sul tab è esattamente quello che
+  // ottieni cliccandolo. `where` include lo stato, `whereBase` no.
+  const whereBase: Prisma.PraticaWhereInput = { ...where };
+  if (filtroStato !== undefined) where.stato = filtroStato;
+
+  const [items, total, gruppi] = await Promise.all([
     prisma.pratica.findMany({
       where,
       orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
@@ -182,7 +182,13 @@ export default async function PratichePage({
       },
     }),
     prisma.pratica.count({ where }),
+    prisma.pratica.groupBy({ by: ['stato'], where: whereBase, _count: { _all: true } }),
   ]);
+
+  const conteggi = contaGruppi(gruppi);
+  const tabs = tabsPratiche({ isAgenzia, conteggi });
+  const attivo = tabAttivo(sp.stato);
+  const filtriTab = { q, periodo: sp.periodo, sede: sp.sede };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -215,6 +221,8 @@ export default async function PratichePage({
             </div>
           )}
         </header>
+
+        <PraticheTabs tabs={tabs} attivo={attivo} filtri={filtriTab} />
 
         <PraticheFilters
           q={q}

@@ -75,6 +75,7 @@ export const MAPPA_ENFORCEMENT: Record<string, Record<string, Permesso | null>> 
   },
   'src/app/profilo/personale/actions.ts': {
     updateOwnProfileAction: null, // proprio account: nessun permesso delegabile in gioco
+    changeOwnPasswordAction: null, // proprio account: agisce su session.user.id e richiede la password attuale
   },
   'src/app/profilo/azienda/actions.ts': {
     updateCompanyProfileAction: null, // owner-only (ADMIN_AZIENDA): identità fiscale

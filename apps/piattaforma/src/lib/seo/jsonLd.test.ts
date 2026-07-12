@@ -46,7 +46,7 @@ describe('organizationJsonLd', () => {
   it('include ContactPoint con telefono e email', () => {
     expect(org.contactPoint).toMatchObject({
       '@type': 'ContactPoint',
-      telephone: '+393462877310',
+      telephone: '+393513521656',
       email: 'info@passaggioveloce.it',
       contactType: 'customer service',
       availableLanguage: ['Italian'],

@@ -21,7 +21,15 @@ describe('emailLayout', () => {
     expect(out).toContain('14688390963');
     expect(out).toContain('Via delle Querce 5');
     expect(out).toContain('assistenza@passaggioveloce.it');
-    expect(out).toContain('+39 346 287 7310');
+    expect(out).toContain('+39 351 352 1656');
+  });
+  it('telefono su una riga a sé, sotto la mail di assistenza', () => {
+    const mail = out.indexOf('mailto:assistenza@passaggioveloce.it');
+    const tel = out.indexOf('tel:+393513521656');
+    expect(mail).toBeGreaterThan(-1);
+    expect(tel).toBeGreaterThan(mail);
+    // Fra i due c'è la chiusura del paragrafo: sono due righe, non una separata da "·".
+    expect(out.slice(mail, tel)).toContain('</p>');
   });
   it('include il token unsubscribe per iniezione da send.ts', () => {
     expect(out).toContain('<!--PV_UNSUB-->');

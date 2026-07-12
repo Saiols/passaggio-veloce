@@ -14,8 +14,8 @@ export const BRAND = {
   vatIdSchema: 'IT14688390963',
   taxId: '14688390963', // per SRL coincide con la P.IVA
   // E.164 senza spazi (richiesto da telephone URI e schema.org ContactPoint).
-  phoneE164: '+393462877310',
-  phoneDisplay: '+39 346 287 7310',
+  phoneE164: '+393513521656',
+  phoneDisplay: '+39 351 352 1656',
   address: {
     street: 'Via delle Querce 5',
     postalCode: '20057',
@@ -32,7 +32,7 @@ export const BRAND = {
   piva: '14688390963',
   sede: 'Via delle Querce 5 — 20057 Assago (MI)',
   supportEmail: 'assistenza@passaggioveloce.it',
-  tel: '+39 346 287 7310',
+  tel: '+39 351 352 1656',
 } as const;
 
 export function siteUrl(path?: string): string {

@@ -62,7 +62,8 @@ const headerCell = `<td style="background:${NAVY};border-radius:12px 12px 0 0;pa
 const footerCell = `<td style="background:#f8fafc;border:1px solid ${BORDER};border-top:0;border-radius:0 0 12px 12px;padding:18px 24px;text-align:center">
   <p style="margin:0 0 6px;font-size:12px;color:#334155;font-weight:600">${BRAND.legalName} · P.IVA ${BRAND.piva}</p>
   <p style="margin:0 0 2px;font-size:11.5px;color:#64748b">${BRAND.sede}</p>
-  <p style="margin:0 0 2px;font-size:11.5px;color:#64748b"><a href="mailto:${BRAND.supportEmail}" style="color:#0054a6;text-decoration:none">${BRAND.supportEmail}</a> · ${BRAND.tel}</p>
+  <p style="margin:0 0 2px;font-size:11.5px;color:#64748b"><a href="mailto:${BRAND.supportEmail}" style="color:#0054a6;text-decoration:none">${BRAND.supportEmail}</a></p>
+  <p style="margin:0 0 2px;font-size:11.5px;color:#64748b"><a href="tel:${BRAND.phoneE164}" style="color:#0054a6;text-decoration:none">${BRAND.tel}</a></p>
   <p style="margin:0;font-size:11.5px;color:#64748b"><a href="${BRAND.url}" style="color:#0054a6;text-decoration:none">${hostLabel}</a></p>
   <!--PV_UNSUB-->
 </td>`;

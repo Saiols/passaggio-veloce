@@ -9,7 +9,7 @@ describe('BRAND', () => {
     expect(BRAND.email).toBe('info@passaggioveloce.it');
     expect(BRAND.vatId).toBe('14688390963');
     expect(BRAND.vatIdSchema).toBe('IT14688390963');
-    expect(BRAND.phoneE164).toBe('+393462877310');
+    expect(BRAND.phoneE164).toBe('+393513521656');
     expect(BRAND.themeColor).toBe('#0b1e3a');
   });
 
@@ -37,6 +37,8 @@ describe('BRAND', () => {
     expect(BRAND.piva).toBe('14688390963');
     expect(BRAND.sede).toBe('Via delle Querce 5 — 20057 Assago (MI)');
     expect(BRAND.supportEmail).toBe('assistenza@passaggioveloce.it');
-    expect(BRAND.tel).toBe('+39 346 287 7310');
+    expect(BRAND.tel).toBe('+39 351 352 1656');
+    // Stesso numero del sito pubblico/JSON-LD: un solo recapito aziendale.
+    expect(BRAND.tel.replace(/\s/g, '')).toBe(BRAND.phoneE164);
   });
 });

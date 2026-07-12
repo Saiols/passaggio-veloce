@@ -17,7 +17,7 @@ import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { mostraColonnaSede, filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeProprie, opzioniSedeAgenziaDaPratiche } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
-import { whereStato, contaGruppi } from '@/lib/pratiche/stati';
+import { whereStato, contaGruppi, isInCorso } from '@/lib/pratiche/stati';
 import { tabsPratiche, tabAttivo } from '@/lib/pratiche/tabs';
 import { PraticheTabs } from './tabs';
 
@@ -248,7 +248,7 @@ export default async function PratichePage({
             <div className="overflow-x-auto">
               <div className={`${PRATICHE_TABLE_MIN_W} text-[13px]`}>
                 <div
-                  className={`grid ${grid} items-center border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
+                  className={`grid ${grid} items-center border-b border-l-[3px] border-pv-slate-200 border-l-transparent bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500`}
                 >
                   <div className="py-3 pl-5 pr-3">Codice</div>
                   <div className="px-3 py-3">Targa</div>
@@ -276,7 +276,11 @@ export default async function PratichePage({
                     return (
                       <div
                         key={p.id}
-                        className={`relative grid ${grid} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
+                        className={`relative grid ${grid} items-center border-l-[3px] transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50 ${
+                          isInCorso(p.stato as PraticaStato)
+                            ? 'border-l-pv-navy-600'
+                            : 'border-l-transparent'
+                        }`}
                       >
                         {/* Anchor a tutta riga: block-level parent → containing block
                             affidabile su ogni browser (fix iOS). Resta un vero <a>,

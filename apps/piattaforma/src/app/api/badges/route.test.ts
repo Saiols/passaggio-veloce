@@ -60,7 +60,18 @@ describe('GET /api/badges — scoping sede', () => {
       where: {
         AND: [
           { agenziaAssegnataId: 'c1', deletedAt: null, agenziaSedeId: { in: ['sedeAssago'] } },
-          { stato: { notIn: ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] } },
+          {
+            stato: {
+              in: [
+                'IN_ATTESA_ROUND_1',
+                'IN_ATTESA_ROUND_2',
+                'IN_ATTESA_ROUND_3',
+                'IN_ESCALATION',
+                'ACCETTATA',
+                'PROCESSATA',
+              ],
+            },
+          },
         ],
       },
     });
@@ -86,7 +97,18 @@ describe('GET /api/badges — scoping sede', () => {
       where: {
         AND: [
           { agenziaAssegnataId: 'c1', deletedAt: null, agenziaSedeId: { in: ['s1', 's2'] } },
-          { stato: { notIn: ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] } },
+          {
+            stato: {
+              in: [
+                'IN_ATTESA_ROUND_1',
+                'IN_ATTESA_ROUND_2',
+                'IN_ATTESA_ROUND_3',
+                'IN_ESCALATION',
+                'ACCETTATA',
+                'PROCESSATA',
+              ],
+            },
+          },
         ],
       },
     });
@@ -125,7 +147,18 @@ describe('GET /api/badges — scoping sede', () => {
       where: {
         AND: [
           { agenziaAssegnataId: 'c1', deletedAt: null, agenziaSedeId: { in: [] } },
-          { stato: { notIn: ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] } },
+          {
+            stato: {
+              in: [
+                'IN_ATTESA_ROUND_1',
+                'IN_ATTESA_ROUND_2',
+                'IN_ATTESA_ROUND_3',
+                'IN_ESCALATION',
+                'ACCETTATA',
+                'PROCESSATA',
+              ],
+            },
+          },
         ],
       },
     });

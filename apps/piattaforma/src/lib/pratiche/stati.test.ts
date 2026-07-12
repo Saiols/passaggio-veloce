@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { PraticaStato } from '@pv/db';
 import {
+  STATI_IN_ATTESA,
   STATI_IN_CORSO,
   STATI_CONCLUSI,
+  SINGOLI,
   isInCorso,
   whereStato,
   contaGruppi,
@@ -26,6 +28,27 @@ describe('partizione degli stati', () => {
 
   it('i gruppi non si sovrappongono', () => {
     const overlap = STATI_IN_CORSO.filter((s) => STATI_CONCLUSI.includes(s));
+    expect(overlap).toEqual([]);
+  });
+
+  // Seconda classificazione, indipendente dalla prima: quali stati sono
+  // selezionabili uno per uno dalla UI (SINGOLI) contro quali sono dettagli
+  // interni al motore di distribuzione (STATI_IN_ATTESA). Senza questo test
+  // un nuovo stato aggiunto all'enum e classificato in STATI_IN_CORSO/
+  // STATI_CONCLUSI passerebbe il test sopra ma resterebbe fuori da SINGOLI
+  // senza che nulla lo segnali: whereStato(nuovoStato) tornerebbe undefined
+  // (nessun filtro) in silenzio, lo stesso bug che questo modulo esiste per
+  // eliminare.
+  it.each(TUTTI)('%s cade in esattamente uno tra SINGOLI e STATI_IN_ATTESA', (stato) => {
+    const gruppi = [
+      (STATI_IN_ATTESA as readonly PraticaStato[]).includes(stato),
+      (SINGOLI as readonly PraticaStato[]).includes(stato),
+    ].filter(Boolean).length;
+    expect(gruppi).toBe(1);
+  });
+
+  it('SINGOLI e STATI_IN_ATTESA non si sovrappongono', () => {
+    const overlap = SINGOLI.filter((s) => (STATI_IN_ATTESA as readonly PraticaStato[]).includes(s));
     expect(overlap).toEqual([]);
   });
 });
@@ -77,6 +100,14 @@ describe('whereStato', () => {
 
   it('uno stato singolo filtra per uguaglianza', () => {
     expect(whereStato('PROCESSATA')).toBe('PROCESSATA');
+  });
+
+  it('gli altri stati singoli filtrano per uguaglianza', () => {
+    expect(whereStato('BOZZA')).toBe('BOZZA');
+    expect(whereStato('ACCETTATA')).toBe('ACCETTATA');
+    expect(whereStato('FIRMATA')).toBe('FIRMATA');
+    expect(whereStato('SCADUTA')).toBe('SCADUTA');
+    expect(whereStato('ANNULLATA')).toBe('ANNULLATA');
   });
 
   it('gli stati interni del motore non sono selezionabili dall utente', () => {

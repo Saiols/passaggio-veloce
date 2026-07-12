@@ -46,7 +46,14 @@ export function isInCorso(stato: PraticaStato): boolean {
  * interni al motore di distribuzione e non vanno esposti all'utente (la lista
  * completa resta in /admin/pratiche).
  */
-const SINGOLI = ['BOZZA', 'ACCETTATA', 'PROCESSATA', 'FIRMATA', 'SCADUTA', 'ANNULLATA'] as const;
+export const SINGOLI = [
+  'BOZZA',
+  'ACCETTATA',
+  'PROCESSATA',
+  'FIRMATA',
+  'SCADUTA',
+  'ANNULLATA',
+] as const satisfies readonly PraticaStato[];
 
 export function whereStato(
   param: string | undefined,

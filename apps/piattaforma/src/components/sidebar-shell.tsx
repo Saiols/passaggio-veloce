@@ -53,7 +53,9 @@ export function SidebarShell({
   groups,
   userName,
   userEmail,
-  roleLabel,
+  companyLabel,
+  ruoloLabel,
+  sedeLabel,
   homeHref = '/dashboard',
   activePath,
   buildSha,
@@ -64,7 +66,12 @@ export function SidebarShell({
   groups: SidebarNavGroup[];
   userName: string;
   userEmail?: string | null;
-  roleLabel: string;
+  /** Ragione sociale. `null` per lo staff di piattaforma, che non ha azienda. */
+  companyLabel: string | null;
+  /** Ruolo con cui l'utente sta operando ora (segue la sede corrente). */
+  ruoloLabel: string;
+  /** Sede corrente. `null` = non mostrarla (staff, o nessuna sede accessibile). */
+  sedeLabel: string | null;
   homeHref?: string;
   activePath?: string;
   buildSha?: string;
@@ -216,7 +223,12 @@ export function SidebarShell({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12.5px] font-semibold leading-tight text-white">{userName}</p>
-              <p className="truncate text-[11px] text-[#8aa6cd]">{roleLabel}</p>
+              {companyLabel && (
+                <p className="truncate text-[11px] text-[#8aa6cd]">{companyLabel}</p>
+              )}
+              <p className="truncate text-[11px] text-[#8aa6cd]">
+                {sedeLabel ? `${ruoloLabel} · ${sedeLabel}` : ruoloLabel}
+              </p>
             </div>
             <LogoutButton
               ariaLabel="Esci"
@@ -264,7 +276,7 @@ export function SidebarShell({
           <div className="flex flex-col items-start justify-between gap-2 px-5 py-3 text-[11px] text-pv-slate-500 sm:flex-row sm:items-center sm:px-6">
             <p>
               © {new Date().getFullYear()} Passaggio Veloce ·{' '}
-              <span className="font-semibold text-pv-slate-700">{roleLabel}</span>
+              <span className="font-semibold text-pv-slate-700">{companyLabel ?? ruoloLabel}</span>
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Link href="/privacy" className="hover:text-pv-navy-900">

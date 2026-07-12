@@ -43,6 +43,8 @@ export function AgenziaShell({
   isOwner = false,
   permessi = [],
   puoGestireTeam = false,
+  ruoloLabel,
+  sedeLabel,
   demoBanner,
   children,
 }: {
@@ -52,6 +54,8 @@ export function AgenziaShell({
   isOwner?: boolean;
   permessi?: Permesso[];
   puoGestireTeam?: boolean;
+  ruoloLabel: string;
+  sedeLabel: string | null;
   demoBanner?: ReactNode;
   children: ReactNode;
 }) {
@@ -73,7 +77,9 @@ export function AgenziaShell({
       groups={groups}
       userName={name}
       userEmail={session.user.email}
-      roleLabel={companyName || 'Agenzia'}
+      companyLabel={companyName || 'Agenzia'}
+      ruoloLabel={ruoloLabel}
+      sedeLabel={sedeLabel}
       activePath={activePath}
       buildSha={buildSha}
       scrollKey="pv-agenzia-sidebar-scroll"

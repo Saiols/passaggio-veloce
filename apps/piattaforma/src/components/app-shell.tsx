@@ -11,6 +11,9 @@ import { BrokerShell } from '@/components/broker/broker-shell';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
 import { SedeSwitcher } from '@/components/sede/sede-switcher';
 import { getManageableSedi, getSessionContext } from '@/lib/auth/session-context';
+import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
+import { etichettaSede } from '@/lib/sedi/etichetta-sede';
+import { resolveSedeRole } from '@/lib/sedi/scope';
 
 export type AppShellSession = {
   user: {
@@ -139,6 +142,28 @@ export async function AppShell({
   const isOwner = ctx?.isOwner ?? false;
   const permessi = ctx ? [...ctx.permessi] : [];
 
+  // Ruolo e sede della card utente. Il ruolo SEGUE la sede corrente: per i
+  // non-owner `User.role` è sempre UTENTE_AZIENDA e non distingue un admin di
+  // sede da un operatore — la distinzione sta nella membership della sede.
+  // In vista aggregata non c'è una sede corrente, quindi nessun ruolo di
+  // membership: `sedeRole` resta null e `etichettaRuolo` tiene il Titolare.
+  const currentSede = ctx?.currentSede ?? null;
+  const sedeRole =
+    ctx && currentSede?.kind === 'ONE'
+      ? resolveSedeRole({
+          isOwner: ctx.isOwner,
+          accessibleSedi: ctx.accessibleSedi,
+          membershipRuoli: ctx.membershipRuoli,
+          sedeId: currentSede.sede.id,
+        })
+      : null;
+  const ruoloLabel = etichettaRuolo({ role: session.user.role, sedeRole });
+  const sedeLabel = etichettaSede({
+    currentSede,
+    accessibleSedi: ctx?.accessibleSedi ?? [],
+    ragioneSociale: session.user.companyName,
+  });
+
   // Le agenzie usano la stessa chrome a sidebar (troppe voci per la top-bar).
   if (session.user.companyType === 'AGENZIA') {
     const buildSha = (process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev').slice(0, 7);
@@ -150,6 +175,8 @@ export async function AppShell({
         isOwner={isOwner}
         permessi={permessi}
         puoGestireTeam={puoGestireTeam}
+        ruoloLabel={ruoloLabel}
+        sedeLabel={sedeLabel}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} />
@@ -170,6 +197,8 @@ export async function AppShell({
         isOwner={isOwner}
         permessi={permessi}
         puoGestireTeam={puoGestireTeam}
+        ruoloLabel={ruoloLabel}
+        sedeLabel={sedeLabel}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} />

@@ -3,6 +3,7 @@
 import { type ComponentType, type ReactNode } from 'react';
 import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
 import { NavBadge } from '@/components/nav-badge';
+import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
 import {
   IconAffiliazioni,
   IconAgenzie,
@@ -125,12 +126,6 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-function roleLabel(role: string | undefined): string {
-  if (role === 'ADMIN_PIATTAFORMA') return 'Admin piattaforma';
-  if (role === 'ASSISTENTE') return 'Assistente';
-  return 'Staff';
-}
-
 export function AdminShell({
   session,
   activePath,
@@ -157,7 +152,9 @@ export function AdminShell({
       groups={groups}
       userName={name}
       userEmail={session.user.email}
-      roleLabel={roleLabel(session.user.role)}
+      companyLabel={null}
+      ruoloLabel={etichettaRuolo({ role: session.user.role, sedeRole: null })}
+      sedeLabel={null}
       activePath={activePath}
       buildSha={buildSha}
       scrollKey="pv-admin-sidebar-scroll"

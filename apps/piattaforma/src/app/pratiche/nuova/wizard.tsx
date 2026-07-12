@@ -44,6 +44,7 @@ import {
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 import { UploadCard, type BlobSlot } from './upload-card';
+import { BannerFotoDocumenti } from './banner-foto-documenti';
 import {
   extractLibrettoAction,
   extractFoglioComplementareAction,
@@ -2263,6 +2264,8 @@ function WizardBody({
               )}
             </div>
 
+            <BannerFotoDocumenti />
+
             {veicoli.map((v, idx) => (
               <div key={idx} className="space-y-3">
                 <VeicoloSection
@@ -2340,6 +2343,8 @@ function WizardBody({
               persona, fisicamente in agenzia</strong>, al momento della firma.
               Gli upload qui servono solo per avviare la pratica.
             </Alert>
+
+            <BannerFotoDocumenti />
 
             {multiplo ? (
               veicoli.map((veic, vi) => {
@@ -2469,6 +2474,8 @@ function WizardBody({
               persona, fisicamente in agenzia</strong>, al momento della firma.
               Gli upload qui servono solo per avviare la pratica.
             </Alert>
+
+            <BannerFotoDocumenti />
 
             <div className="rounded-[16px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
               <h2 className="mb-3 text-[15px] font-bold text-pv-navy-800">Acquirente</h2>

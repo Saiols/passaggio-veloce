@@ -56,10 +56,12 @@ export default async function TeamPage() {
         role: true, status: true, lastLoginAt: true, permessi: true,
         // Ristretta a manageableIds: un admin di sede non deve vedere le
         // membership dell'utente in sedi che non amministra (stesso confine
-        // già applicato a usersWhere sopra).
+        // già applicato a usersWhere sopra). Solo `ruolo`: nel modello
+        // mono-sede (vedi commento su `ruoloRigaTeam`) è l'unico campo che
+        // serve — `sedeId` non è più mostrato da nessuna parte della pagina.
         sediMembership: {
           where: { sedeId: { in: manageableIds } },
-          select: { sedeId: true, ruolo: true },
+          select: { ruolo: true },
         },
       },
     }),
@@ -69,14 +71,19 @@ export default async function TeamPage() {
       select: { id: true, email: true, createdAt: true, expiresAt: true },
     }),
   ]);
-  const sedi = manageable.map((s) => ({ id: s.id, nome: s.nome }));
-  // Le sedi si chiamano qui come si chiamano nella card utente e nel selettore:
-  // stesso helper, quindi la stessa filiale non ha due nomi in due schermate.
-  // Col nome grezzo la riga diceva "Admin di sede a Dimensione Auto Milano Srls"
-  // mentre la sidebar, per quella sede, diceva "Buccinasco".
-  const sedeNomeById = new Map(
-    etichetteSediUniche(manageable, session.user.companyName).map((s) => [s.id, s.label]),
+  // Etichette calcolate sull'INTERO universo `ctx.accessibleSedi` (non solo
+  // `manageable`), la stessa fonte usata dalla sidebar (`app-shell.tsx`) e dal
+  // selettore (`sede-switcher.tsx`): altrimenti una collisione disambiguata lì
+  // potrebbe restare non disambiguata qui (o viceversa) e la stessa sede
+  // avrebbe due nomi diversi in due schermate.
+  const labelSedeById = new Map(
+    etichetteSediUniche(ctx.accessibleSedi, session.user.companyName).map((s) => [s.id, s.label]),
   );
+  // Le sedi si chiamano qui come si chiamano nella card utente e nel selettore:
+  // stesse etichette, quindi la stessa filiale non ha due nomi in due schermate.
+  // Col nome grezzo il dropdown diceva "Dimensione Auto Milano Srls" mentre la
+  // sidebar, per quella sede, diceva "Buccinasco".
+  const sedi = manageable.map((s) => ({ id: s.id, nome: labelSedeById.get(s.id) ?? s.nome }));
 
   /**
    * Badge permessi: nome del preset se il set coincide esattamente, altrimenti
@@ -93,31 +100,23 @@ export default async function TeamPage() {
 
   /**
    * Etichetta di ruolo per la riga utente: STESSA fonte (`etichettaRuolo`)
-   * usata dalla card sidebar, non un "Admin"/"Utente" locale. Un non-owner non
-   * ha un ruolo unico: dipende dalla sede (admin in una, operatore in
-   * un'altra). Se tutte le sue membership visibili producono la stessa
-   * etichetta ne basta una; se divergono, il dettaglio per sede — un'etichetta
-   * sola ne nasconderebbe una vera.
+   * usata dalla card sidebar, non un "Admin"/"Utente" locale.
+   *
+   * Modello mono-sede: `updateTeamUserAction` (team/actions.ts) collassa
+   * sempre a un'unica membership, quindi un non-owner ha al più una riga in
+   * `sediMembership`. Il ruolo utile sta lì (`UserSede.ruolo`), MAI in
+   * `User.role`: per un non-owner quel campo è sempre `UTENTE_AZIENDA` e non
+   * distingue un admin di sede da un operatore.
    */
   function ruoloRigaTeam(u: {
     role: string;
-    sediMembership: { sedeId: string; ruolo: string }[];
+    sediMembership: { ruolo: string }[];
   }): string {
     if (u.role === 'ADMIN_AZIENDA') {
       return etichettaRuolo({ role: u.role, sedeRole: 'OWNER' });
     }
-    if (u.sediMembership.length === 0) {
-      return etichettaRuolo({ role: u.role, sedeRole: null });
-    }
-    const perSede = u.sediMembership.map((m) => ({
-      sedeId: m.sedeId,
-      label: etichettaRuolo({ role: u.role, sedeRole: m.ruolo as SedeRuolo }),
-    }));
-    const distinte = new Set(perSede.map((s) => s.label));
-    if (distinte.size === 1) return perSede[0]!.label;
-    return perSede
-      .map((s) => `${s.label} a ${sedeNomeById.get(s.sedeId) ?? '—'}`)
-      .join(' · ');
+    const membership = u.sediMembership[0];
+    return etichettaRuolo({ role: u.role, sedeRole: (membership?.ruolo as SedeRuolo) ?? null });
   }
 
   return (
@@ -150,6 +149,8 @@ export default async function TeamPage() {
           <ul className="mt-3 divide-y divide-pv-slate-100">
             {users.map((u) => {
               const badge = permessiBadge(u);
+              const ruolo = ruoloRigaTeam(u);
+              const rigaCompleta = `${u.email} · ${ruolo}${badge ? ` · ${badge}` : ''}`;
               return (
               <li
                 key={u.id}
@@ -159,8 +160,8 @@ export default async function TeamPage() {
                   <p className="font-semibold text-pv-navy-900">
                     {u.nome} {u.cognome}
                   </p>
-                  <p className="truncate text-xs text-pv-slate-500">
-                    {u.email} · {ruoloRigaTeam(u)}
+                  <p className="truncate text-xs text-pv-slate-500" title={rigaCompleta}>
+                    {u.email} · {ruolo}
                     {badge && (
                       <>
                         {' · '}

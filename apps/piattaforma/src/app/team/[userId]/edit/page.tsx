@@ -8,6 +8,7 @@ import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/c
 import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
+import { etichetteSediUniche } from '@/lib/sedi/etichetta-sede';
 import type { SedeRuolo } from '@/lib/sedi/scope';
 import { Card } from '@/components/ui';
 import { formatRelative } from '@/lib/format';
@@ -63,14 +64,20 @@ export default async function TeamUserEditPage({
     role: target.role,
     sedeRole: isOwnerTarget ? 'OWNER' : ((membership?.ruolo as SedeRuolo | undefined) ?? null),
   });
-  // Selettore sede: il proprietario vede tutte le sedi; l'admin di sede solo le sue.
-  const sedi = ctx.isOwner
-    ? await prisma.sede.findMany({
-        where: { companyId, deletedAt: null },
-        select: { id: true, nome: true },
-        orderBy: { createdAt: 'asc' },
-      })
-    : manageable.map((s) => ({ id: s.id, nome: s.nome }));
+  // Selettore sede: le OPZIONI seguono la regola di sempre — il proprietario
+  // vede tutte le sedi dell'azienda (= ctx.accessibleSedi per l'owner, niente
+  // query ad-hoc: resolveAccessibleSedi() gli dà già tutte le sedi della
+  // madre), l'admin di sede solo quelle che amministra (`manageable`). Le
+  // ETICHETTE invece si calcolano SEMPRE sull'intero universo
+  // `ctx.accessibleSedi`, la stessa fonte di /team e della sidebar: altrimenti
+  // la stessa sede avrebbe un nome diverso in due schermate (es. "Admin di
+  // sede a Buccinasco" nella riga /team, "Dimensione Auto Milano Srls" nel
+  // dropdown qui).
+  const labelSedeById = new Map(
+    etichetteSediUniche(ctx.accessibleSedi, session.user.companyName).map((s) => [s.id, s.label]),
+  );
+  const sediOpzioni = ctx.isOwner ? ctx.accessibleSedi : manageable;
+  const sedi = sediOpzioni.map((s) => ({ id: s.id, nome: labelSedeById.get(s.id) ?? s.nome }));
 
   return (
     <AppShell session={session} activePath="/team">

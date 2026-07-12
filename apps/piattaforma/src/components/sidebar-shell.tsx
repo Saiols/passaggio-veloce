@@ -222,7 +222,7 @@ export function SidebarShell({
               {initials(userName)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[12.5px] font-semibold leading-tight text-white">{userName}</p>
+              <p className="truncate text-[12.5px] font-semibold leading-tight text-white" title={userName}>{userName}</p>
               {companyLabel && (
                 <p className="truncate text-[11px] text-[#8aa6cd]" title={companyLabel}>
                   {companyLabel}

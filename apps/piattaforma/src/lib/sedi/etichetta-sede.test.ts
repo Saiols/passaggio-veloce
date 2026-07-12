@@ -106,6 +106,29 @@ describe('etichettaSede — nessuna sede', () => {
   });
 });
 
+describe('etichettaSede — non deve mai divergere da etichetteSediUniche in caso di collisione', () => {
+  it('due sedi omonime ("Filiale") in due città diverse: la card mostra la STESSA forma disambiguata del selettore, mai il nome nudo', () => {
+    // Prima del fix: la card calcolava l'etichetta da sola con `labelSede`,
+    // ignara delle altre sedi, e mostrava "Filiale" (ambiguo) mentre il
+    // selettore, per la stessa sede, mostrava "Filiale — Milano".
+    const filialeMilano: SedeRef = { id: 'f1', nome: 'Filiale', type: 'DEALER', citta: 'Milano' };
+    const filialeRoma: SedeRef = { id: 'f2', nome: 'Filiale', type: 'DEALER', citta: 'Roma' };
+    const accessibleSedi = [filialeMilano, filialeRoma];
+
+    const etichette = etichetteSediUniche(accessibleSedi, AZIENDA);
+    const labelSelettoreMilano = etichette.find((e) => e.id === 'f1')!.label;
+
+    const labelCardMilano = etichettaSede({
+      currentSede: { kind: 'ONE', sede: filialeMilano },
+      accessibleSedi,
+      ragioneSociale: AZIENDA,
+    });
+
+    expect(labelCardMilano).toBe(labelSelettoreMilano);
+    expect(labelCardMilano).toBe('Filiale — Milano');
+  });
+});
+
 describe('etichetteSediUniche — selettore (menu con tutte le sedi viste insieme)', () => {
   it('caso normale: nessuna collisione, ciascuna sede la sua etichetta — stessa regola della card', () => {
     // Lo stesso identico input di etichettaSede sopra: il selettore non deve
@@ -141,5 +164,33 @@ describe('etichetteSediUniche — selettore (menu con tutte le sedi viste insiem
     // Difesa esplicita contro la regressione che questo test previene: le due
     // etichette finali non devono mai tornare a coincidere.
     expect(risultato[0]!.label).not.toBe(risultato[1]!.label);
+  });
+
+  it('due sedi con stesso nome e stessa città: la forma "nome — città" non basta, serve un\'ulteriore disambiguazione', () => {
+    // Qui la collisione nasce proprio da nome+città uguali: la forma
+    // disambiguante "nome — città" produce la STESSA stringa per entrambe.
+    const sedeUno: SedeRef = { id: 'y1', nome: 'Filiale', type: 'DEALER', citta: 'Milano' };
+    const sedeDue: SedeRef = { id: 'y2', nome: 'Filiale', type: 'DEALER', citta: 'Milano' };
+
+    const risultato = etichetteSediUniche([sedeUno, sedeDue], AZIENDA);
+
+    const labels = risultato.map((r) => r.label);
+    // L'invariante: le label sono sempre tutte distinte, comunque siano fatti i dati.
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('due sedi entrambe omonime della ragione sociale, nella stessa città: idem, serve disambiguazione oltre "nome — città"', () => {
+    // Caso citato testualmente nel commento della funzione: due sedi nella
+    // stessa città, entrambe col nome uguale alla ragione sociale → la label
+    // di base ricade sulla città per entrambe ("Milano"), la forma
+    // disambiguante "nome — città" produce ANCH'ESSA la stessa stringa
+    // ("Auto Srl — Milano") per entrambe.
+    const sedeUno: SedeRef = { id: 'z1', nome: AZIENDA, type: 'DEALER', citta: 'Milano' };
+    const sedeDue: SedeRef = { id: 'z2', nome: AZIENDA, type: 'DEALER', citta: 'Milano' };
+
+    const risultato = etichetteSediUniche([sedeUno, sedeDue], AZIENDA);
+
+    const labels = risultato.map((r) => r.label);
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });

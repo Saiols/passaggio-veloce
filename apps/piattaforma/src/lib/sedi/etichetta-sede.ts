@@ -31,12 +31,12 @@ export function etichettaSede(args: {
   if (!currentSede) return null;
 
   if (currentSede.kind === 'ONE') {
-    return labelSede(currentSede.sede, ragioneSociale);
+    return labelSedeCorrente(currentSede.sede, accessibleSedi, ragioneSociale);
   }
 
   // kind === 'ALL'
   if (accessibleSedi.length === 1) {
-    return labelSede(accessibleSedi[0], ragioneSociale);
+    return labelSedeCorrente(accessibleSedi[0], accessibleSedi, ragioneSociale);
   }
   if (accessibleSedi.length === 0) return null;
   return 'Tutte le sedi';
@@ -44,6 +44,29 @@ export function etichettaSede(args: {
 
 function labelSede(sede: SedeRef, ragioneSociale: string | null | undefined): string {
   return nomeSedeDistintivo(sede.nome, ragioneSociale) ?? sede.citta;
+}
+
+/**
+ * Etichetta della sede corrente per la card, calcolata attraverso
+ * `etichetteSediUniche` sull'INTERO elenco `accessibleSedi` — mai da sola con
+ * `labelSede`. Se calcolasse da sola, nel caso limite di una collisione (es.
+ * due sedi "Filiale" in due città diverse) il selettore mostrerebbe
+ * "Filiale — Milano" / "Filiale — Roma" (disambiguate) mentre la card, per
+ * la sede corrente, mostrerebbe ancora "Filiale" (ambiguo): l'utente sceglie
+ * un'etichetta nel menu e ne vede comparire un'altra nella card. Passando
+ * dalla stessa funzione, card e selettore non possono divergere per
+ * costruzione.
+ */
+function labelSedeCorrente(
+  sede: SedeRef,
+  accessibleSedi: SedeRef[],
+  ragioneSociale: string | null | undefined,
+): string {
+  const trovata = etichetteSediUniche(accessibleSedi, ragioneSociale).find((e) => e.id === sede.id);
+  // Fallback difensivo, non dovrebbe accadere: `sede` arriva sempre da un
+  // sottoinsieme di `accessibleSedi` (kind ONE la risolve dalle stesse sedi
+  // accessibili; il caso ALL-con-una-sede usa accessibleSedi[0] stessa sede).
+  return trovata?.label ?? labelSede(sede, ragioneSociale);
 }
 
 /**
@@ -56,24 +79,40 @@ function labelSede(sede: SedeRef, ragioneSociale: string | null | undefined): st
  * sulla stessa etichetta (es. due filiali nella stessa città, entrambe col
  * nome uguale alla ragione sociale) l'utente non potrebbe più distinguerle nel
  * menu. Per le sole sedi coinvolte in una collisione si usa una forma
- * disambiguante che riporta anche il nome. (Se anche `nome` e `citta` fossero
- * identici tra due sedi la collisione resterebbe: è un problema di dati a
- * monte, non risolvibile lato etichetta — fuori dallo scope di questa
- * funzione.)
+ * disambiguante che riporta anche il nome.
+ *
+ * Invariante garantita per costruzione, qualunque siano i dati: le label
+ * restituite sono SEMPRE tutte distinte. La forma "nome — città" da sola non
+ * basta se la collisione nasce proprio da nome+città uguali (due sedi
+ * "Filiale"/Milano, oppure due sedi entrambe omonime della ragione sociale
+ * nella stessa città: in entrambi i casi "nome — città" produce la STESSA
+ * stringa per le due sedi). Alle sole etichette ancora colliduenti dopo quel
+ * passaggio si aggiunge un suffisso ordinale progressivo.
  */
 export function etichetteSediUniche(
   sedi: SedeRef[],
   ragioneSociale: string | null | undefined,
 ): { id: string; label: string }[] {
   const base = sedi.map((sede) => ({ sede, label: labelSede(sede, ragioneSociale) }));
+  const occorrenzeBase = conta(base.map((b) => b.label));
 
-  const occorrenze = new Map<string, number>();
-  for (const { label } of base) {
-    occorrenze.set(label, (occorrenze.get(label) ?? 0) + 1);
-  }
-
-  return base.map(({ sede, label }) => ({
+  const disambiguate = base.map(({ sede, label }) => ({
     id: sede.id,
-    label: (occorrenze.get(label) ?? 0) > 1 ? `${sede.nome} — ${sede.citta}` : label,
+    label: occorrenzeBase.get(label)! > 1 ? `${sede.nome} — ${sede.citta}` : label,
   }));
+
+  const occorrenzeFinali = conta(disambiguate.map((d) => d.label));
+  const progressivo = new Map<string, number>();
+  return disambiguate.map(({ id, label }) => {
+    if (occorrenzeFinali.get(label)! <= 1) return { id, label };
+    const n = (progressivo.get(label) ?? 0) + 1;
+    progressivo.set(label, n);
+    return { id, label: `${label} (${n})` };
+  });
+}
+
+function conta(valori: string[]): Map<string, number> {
+  const occorrenze = new Map<string, number>();
+  for (const v of valori) occorrenze.set(v, (occorrenze.get(v) ?? 0) + 1);
+  return occorrenze;
 }

@@ -224,9 +224,14 @@ export function SidebarShell({
             <div className="min-w-0 flex-1">
               <p className="truncate text-[12.5px] font-semibold leading-tight text-white">{userName}</p>
               {companyLabel && (
-                <p className="truncate text-[11px] text-[#8aa6cd]">{companyLabel}</p>
+                <p className="truncate text-[11px] text-[#8aa6cd]" title={companyLabel}>
+                  {companyLabel}
+                </p>
               )}
-              <p className="truncate text-[11px] text-[#8aa6cd]">
+              <p
+                className="truncate text-[11px] text-[#8aa6cd]"
+                title={sedeLabel ? `${ruoloLabel} · ${sedeLabel}` : ruoloLabel}
+              >
                 {sedeLabel ? `${ruoloLabel} · ${sedeLabel}` : ruoloLabel}
               </p>
             </div>

@@ -16,7 +16,12 @@
 - **Tailwind non risolve nomi di classe costruiti a runtime**: le classi vanno scritte per intero come stringhe letterali (vedi il commento in `lib/pratiche/table-grid.ts:20`).
 - **Palette**: usare solo token del design system (`pv-navy-*`, `pv-slate-*`, …). Nessun colore hardcoded.
 - **`pnpm typecheck` a cache fredda è inaffidabile** in questo repo (stack overflow / falsi errori Prisma): usarlo solo con il `tsbuildinfo` già presente. Il segnale affidabile è `pnpm test` + `pnpm lint` + `pnpm build`.
-- **Comandi** (dalla root del repo): `pnpm --filter @pv/piattaforma test`, `pnpm --filter @pv/piattaforma lint`. Node ≥ 18: se la shell è appena stata riavviata, `nvm use 22.15.0`.
+- ⚠️ **Node NON gira su Git Bash in questa macchina.** Test/lint/build vanno lanciati **solo da PowerShell**, con Node in PATH:
+  ```powershell
+  $env:Path = "C:\Users\fsiol\AppData\Local\nvm\v22.15.0;" + $env:Path; pnpm --filter piattaforma test
+  ```
+  Gli esempi in sintassi bash qui sotto vanno tradotti così. Il package si chiama `piattaforma` (non `@pv/piattaforma`).
+- ⚠️ **Non riscrivere file di testo con PowerShell 5.1** (`Get-Content -Raw` + `Set-Content`): legge come ANSI e corrompe le accentate italiane (`qualità` → `qualitÃ `). Usare gli strumenti di edit, o `sed` da Git Bash.
 - Commit in italiano, formato `tipo(scope): descrizione`, senza `--no-verify`.
 
 ---
@@ -156,7 +161,7 @@ describe('contaGruppi', () => {
 - [ ] **Step 2: Eseguire il test e verificare che fallisca**
 
 ```bash
-pnpm --filter @pv/piattaforma test -- stati
+pnpm --filter piattaforma test -- stati
 ```
 
 Atteso: FAIL — `Failed to resolve import "./stati"` (il modulo non esiste ancora).
@@ -254,7 +259,7 @@ export function contaGruppi(
 - [ ] **Step 4: Eseguire i test e verificare che passino**
 
 ```bash
-pnpm --filter @pv/piattaforma test -- stati
+pnpm --filter piattaforma test -- stati
 ```
 
 Atteso: PASS, tutti i test del file.
@@ -296,8 +301,8 @@ diventano:
 - [ ] **Step 6: Verificare lint e test**
 
 ```bash
-pnpm --filter @pv/piattaforma lint
-pnpm --filter @pv/piattaforma test -- stati
+pnpm --filter piattaforma lint
+pnpm --filter piattaforma test -- stati
 ```
 
 Atteso: lint pulito (nessun import inutilizzato in `route.ts`), test PASS.
@@ -407,7 +412,7 @@ describe('hrefTab', () => {
 - [ ] **Step 2: Eseguire il test e verificare che fallisca**
 
 ```bash
-pnpm --filter @pv/piattaforma test -- tabs
+pnpm --filter piattaforma test -- tabs
 ```
 
 Atteso: FAIL — `Failed to resolve import "./tabs"`.
@@ -476,7 +481,7 @@ export function hrefTab(value: ValoreTab, filtri: FiltriTab): string {
 - [ ] **Step 4: Eseguire i test e verificare che passino**
 
 ```bash
-pnpm --filter @pv/piattaforma test -- tabs
+pnpm --filter piattaforma test -- tabs
 ```
 
 Atteso: PASS.
@@ -642,8 +647,8 @@ Sempre in `page.tsx`, subito **prima** di `<PraticheFilters ... />` (riga 219):
 - [ ] **Step 9: Verificare test e lint**
 
 ```bash
-pnpm --filter @pv/piattaforma test -- tabs stati
-pnpm --filter @pv/piattaforma lint
+pnpm --filter piattaforma test -- tabs stati
+pnpm --filter piattaforma lint
 ```
 
 Atteso: test PASS, lint pulito (nessun import o costante inutilizzati in `page.tsx`).
@@ -710,7 +715,7 @@ Nota: `PraticaStato` serve qui come cast, quindi l'import di riga 8 resta necess
 - [ ] **Step 4: Verificare lint e build**
 
 ```bash
-pnpm --filter @pv/piattaforma lint
+pnpm --filter piattaforma lint
 ```
 
 Atteso: pulito. Le classi sono letterali (Tailwind non risolve nomi costruiti a runtime): `border-l-pv-navy-600` e `border-l-transparent` compaiono per intero nel sorgente.
@@ -821,7 +826,7 @@ Nello step 3, subito dopo l'`</Alert>` di riga 2471:
 - [ ] **Step 6: Verificare lint**
 
 ```bash
-pnpm --filter @pv/piattaforma lint
+pnpm --filter piattaforma lint
 ```
 
 Atteso: pulito. In particolare nessun errore `react/no-unescaped-entities`: apostrofi e virgolette nel banner sono già come entità (`&apos;`, `&quot;`).
@@ -844,9 +849,9 @@ Niente di quanto sopra è "fatto" finché non lo si è visto funzionare: i test 
 - [ ] **Step 1: Suite completa e build**
 
 ```bash
-pnpm --filter @pv/piattaforma test
-pnpm --filter @pv/piattaforma lint
-pnpm --filter @pv/piattaforma build
+pnpm --filter piattaforma test
+pnpm --filter piattaforma lint
+pnpm --filter piattaforma build
 ```
 
 Atteso: test tutti verdi, lint pulito, build completata. (`pnpm typecheck` a cache fredda in questo repo è inaffidabile: il segnale è la build.)
@@ -854,7 +859,7 @@ Atteso: test tutti verdi, lint pulito, build completata. (`pnpm typecheck` a cac
 - [ ] **Step 2: Avviare l'app in locale**
 
 ```bash
-pnpm --filter @pv/piattaforma dev
+pnpm --filter piattaforma dev
 ```
 
 Serve il Postgres locale (copia di prod) attivo. Login con un utente **dealer/broker**.

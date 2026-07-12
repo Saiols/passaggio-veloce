@@ -15,8 +15,12 @@ export function BannerFotoDocumenti() {
     <Alert variant="info" title="Come fotografare i documenti">
       <ul className="mt-1 list-disc space-y-0.5 pl-5">
         <li>
+          {/* Gli spazi ai bordi di <strong> sono espliciti con {' '}: uno spazio
+              letterale a ridosso di un tag, con l'a-capo subito dopo, viene
+              mangiato dal JSX (reso: "interonell'inquadratura"). */}
           Foto <strong>nitide e ben illuminate</strong>, con il documento{' '}
-          <strong>intero</strong> nell&apos;inquadratura.
+          <strong>intero</strong>{' '}
+          nell&apos;inquadratura.
         </li>
         <li>
           Evita riflessi, ombre e foto storte: se il testo non si legge, i dati non

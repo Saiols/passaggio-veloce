@@ -91,7 +91,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
 
   const accessibleSedi = resolveAccessibleSedi({
     isOwner,
-    companySedi: companySedi as SedeRef[],
+    companySedi,
     membershipSedeIds: memberships.map((m) => m.sedeId),
   });
 

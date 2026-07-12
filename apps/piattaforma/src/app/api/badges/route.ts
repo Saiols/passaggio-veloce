@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma, type PraticaStato } from '@pv/db';
+import { prisma } from '@pv/db';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import {
@@ -7,14 +7,10 @@ import {
   wherePraticaAttiva,
   whereAssegnazionePending,
 } from '@/lib/sedi/scope-filters';
+import { STATI_IN_CORSO } from '@/lib/pratiche/stati';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// Stati esclusi dal conteggio "attive": terminali (FIRMATA/ANNULLATA/SCADUTA,
-// nessuna azione attesa) + BOZZA (bozze non ancora inviate, non sono lavoro in
-// corso). Resta attivo tutto il mezzo: in distribuzione, accettata, processata.
-const STATI_ESCLUSI = ['BOZZA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as unknown as PraticaStato[];
 
 /**
  * Conteggi per i badge di navigazione (polled dal client via NavBadge).
@@ -59,7 +55,9 @@ export async function GET(): Promise<Response> {
       where: {
         AND: [
           wherePraticaAttiva(scope, { companyId, ruolo: 'AGENZIA' }),
-          { stato: { notIn: STATI_ESCLUSI } },
+          // "Attive" = in corso: stessa definizione dei tab della lista pratiche,
+          // così badge e tab non possono mostrare numeri diversi.
+          { stato: { in: [...STATI_IN_CORSO] } },
         ],
       },
     });
@@ -68,7 +66,9 @@ export async function GET(): Promise<Response> {
       where: {
         AND: [
           wherePraticaAttiva(scope, { companyId, ruolo: 'DEALER' }),
-          { stato: { notIn: STATI_ESCLUSI } },
+          // "Attive" = in corso: stessa definizione dei tab della lista pratiche,
+          // così badge e tab non possono mostrare numeri diversi.
+          { stato: { in: [...STATI_IN_CORSO] } },
         ],
       },
     });

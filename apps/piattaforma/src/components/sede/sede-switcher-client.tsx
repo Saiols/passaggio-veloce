@@ -15,7 +15,9 @@ export function SedeSwitcherClient({
   current,
   isOwner,
 }: {
-  sedi: { id: string; nome: string }[];
+  /** `label` è già l'etichetta finale (stessa regola della card sidebar,
+   *  disambiguata in caso di collisione) — non il nome grezzo della sede. */
+  sedi: { id: string; label: string }[];
   current: string;
   isOwner: boolean;
 }) {
@@ -43,7 +45,7 @@ export function SedeSwitcherClient({
           {isOwner && <option value="ALL">Tutte le sedi</option>}
           {sedi.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.nome}
+              {s.label}
             </option>
           ))}
         </select>

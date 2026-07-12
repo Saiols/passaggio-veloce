@@ -91,13 +91,6 @@ function navForRole(
   return links;
 }
 
-function roleBadgeLabel(role: string | undefined, companyType: string | undefined): string {
-  if (role === 'ADMIN_PIATTAFORMA') return 'Admin';
-  if (companyType === 'DEALER') return 'Dealer';
-  if (companyType === 'AGENZIA') return 'Agenzia';
-  return 'Utente';
-}
-
 function initials(name?: string | null): string {
   if (!name) return 'U';
   const parts = name.trim().split(/\s+/);
@@ -179,7 +172,7 @@ export async function AppShell({
         sedeLabel={sedeLabel}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
-        <SedeSwitcher activePath={activePath} />
+        <SedeSwitcher activePath={activePath} ragioneSociale={session.user.companyName} />
         {children}
       </AgenziaShell>
     );
@@ -201,7 +194,7 @@ export async function AppShell({
         sedeLabel={sedeLabel}
         demoBanner={<DemoBanner isAdmin={false} />}
       >
-        <SedeSwitcher activePath={activePath} />
+        <SedeSwitcher activePath={activePath} ragioneSociale={session.user.companyName} />
         {children}
       </BrokerShell>
     );
@@ -265,7 +258,7 @@ export async function AppShell({
         <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-3 px-5 py-4 text-[12px] text-pv-slate-500 sm:flex-row sm:items-center sm:px-6">
           <p>
             © {new Date().getFullYear()} Passaggio Veloce ·{' '}
-            <span className="text-pv-slate-700 font-semibold">{roleBadgeLabel(session.user.role, session.user.companyType)}</span>
+            <span className="text-pv-slate-700 font-semibold">{etichettaRuolo({ role: session.user.role, sedeRole: null })}</span>
           </p>
           <nav className="flex flex-wrap items-center gap-2 text-[11px]">
             <Link href="/privacy" className="hover:text-pv-navy-900">Privacy</Link>
@@ -299,7 +292,7 @@ function UserMenu({ session }: { session: AppShellSession }) {
             </span>
           )}
           <span className="inline-flex items-center rounded-full bg-white/10 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-[#b8cdea] ring-1 ring-inset ring-white/15">
-            {roleBadgeLabel(session.user.role, session.user.companyType)}
+            {etichettaRuolo({ role: session.user.role, sedeRole: null })}
           </span>
         </div>
       </div>

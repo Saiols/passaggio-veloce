@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { etichettaSede } from './etichetta-sede';
+import { etichettaSede, etichetteSediUniche } from './etichetta-sede';
 import type { SedeRef } from './scope';
 
 const AZIENDA = 'Dimensione Auto Milano Srls';
@@ -103,5 +103,43 @@ describe('etichettaSede — nessuna sede', () => {
     expect(
       etichettaSede({ currentSede: { kind: 'ALL' }, accessibleSedi: [], ragioneSociale: AZIENDA }),
     ).toBeNull();
+  });
+});
+
+describe('etichetteSediUniche — selettore (menu con tutte le sedi viste insieme)', () => {
+  it('caso normale: nessuna collisione, ciascuna sede la sua etichetta — stessa regola della card', () => {
+    // Lo stesso identico input di etichettaSede sopra: il selettore non deve
+    // dire una cosa diversa dalla card per la stessa sede.
+    expect(etichetteSediUniche([SEDE_OMONIMA, SEDE_PROPRIA], AZIENDA)).toEqual([
+      { id: 's1', label: 'Buccinasco' },
+      { id: 's2', label: 'Dimensione Auto Corsico' },
+    ]);
+  });
+
+  it('con una sola sede l\'etichetta è quella singola, senza confronti spuri', () => {
+    expect(etichetteSediUniche([SEDE_PROPRIA], AZIENDA)).toEqual([
+      { id: 's2', label: 'Dimensione Auto Corsico' },
+    ]);
+  });
+
+  it('due sedi che collidono sulla stessa etichetta passano alla forma disambiguante "nome — città"', () => {
+    // sedeUno: il nome coincide con la ragione sociale → l'etichetta di base
+    // ricade sulla città ("Milano"). sedeDue: ha per nome proprio, per
+    // coincidenza, proprio "Milano", ma è a Roma. Le due etichette di base
+    // collidono entrambe su "Milano": nel menu l'utente non potrebbe più
+    // capire quale delle due sta scegliendo. Un selettore con due opzioni
+    // identiche è rotto — qui NON deve restare tale.
+    const sedeUno: SedeRef = { id: 'x1', nome: AZIENDA, type: 'DEALER', citta: 'Milano' };
+    const sedeDue: SedeRef = { id: 'x2', nome: 'Milano', type: 'DEALER', citta: 'Roma' };
+
+    const risultato = etichetteSediUniche([sedeUno, sedeDue], AZIENDA);
+
+    expect(risultato).toEqual([
+      { id: 'x1', label: `${AZIENDA} — Milano` },
+      { id: 'x2', label: 'Milano — Roma' },
+    ]);
+    // Difesa esplicita contro la regressione che questo test previene: le due
+    // etichette finali non devono mai tornare a coincidere.
+    expect(risultato[0]!.label).not.toBe(risultato[1]!.label);
   });
 });

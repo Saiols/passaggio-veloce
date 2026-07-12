@@ -1,5 +1,6 @@
 import { getSessionContext } from '@/lib/auth/session-context';
 import { SEDE_ALL } from '@/lib/sedi/scope';
+import { etichetteSediUniche } from '@/lib/sedi/etichetta-sede';
 import { SedeSwitcherClient } from './sede-switcher-client';
 
 /**
@@ -21,7 +22,15 @@ const SEDE_SCOPED_PATHS = [
  * e (b) quando l'utente ha più di una sede accessibile (multi-sede). Per il caso
  * 1:1 o nelle pagine non-scoped non compare → UX invariata.
  */
-export async function SedeSwitcher({ activePath }: { activePath?: string }) {
+export async function SedeSwitcher({
+  activePath,
+  ragioneSociale,
+}: {
+  activePath?: string;
+  /** Ragione sociale dell'azienda: stesso input di `etichettaSede`, per far
+   *  concordare l'etichetta del menu con quella della card sidebar. */
+  ragioneSociale?: string | null;
+}) {
   const scoped =
     !!activePath &&
     SEDE_SCOPED_PATHS.some((p) => activePath === p || activePath.startsWith(p + '/'));
@@ -32,11 +41,19 @@ export async function SedeSwitcher({ activePath }: { activePath?: string }) {
 
   const current = ctx.currentSede?.kind === 'ONE' ? ctx.currentSede.sede.id : SEDE_ALL;
 
+  // Stessa regola della card (`etichettaSede`/`nomeSedeDistintivo`), non il
+  // nome grezzo della sede: altrimenti il menu dice "Dimensione Auto Milano
+  // Srls" mentre la card, per la stessa sede, dice "Buccinasco". Se due sedi
+  // collidessero sulla stessa etichetta, `etichetteSediUniche` le disambigua:
+  // un selettore con due opzioni identiche sarebbe inutilizzabile.
+  const etichette = etichetteSediUniche(ctx.accessibleSedi, ragioneSociale);
+  const labelById = new Map(etichette.map((e) => [e.id, e.label]));
+
   return (
     <div className="border-b border-pv-slate-200 bg-white px-5 py-2 sm:px-6">
       <div className="mx-auto flex max-w-6xl items-center justify-end">
         <SedeSwitcherClient
-          sedi={ctx.accessibleSedi.map((s) => ({ id: s.id, nome: s.nome }))}
+          sedi={ctx.accessibleSedi.map((s) => ({ id: s.id, label: labelById.get(s.id) ?? s.nome }))}
           current={current}
           isOwner={ctx.isOwner}
         />

@@ -45,3 +45,35 @@ export function etichettaSede(args: {
 function labelSede(sede: SedeRef, ragioneSociale: string | null | undefined): string {
   return nomeSedeDistintivo(sede.nome, ragioneSociale) ?? sede.citta;
 }
+
+/**
+ * Etichetta di ciascuna sede per il SELETTORE (menu con tutte le sedi
+ * accessibili viste insieme), con la STESSA regola della card (`labelSede`
+ * sopra): niente il selettore dica "Dimensione Auto Milano Srls" mentre la
+ * card, per la stessa sede, dice "Buccinasco".
+ *
+ * Un selettore con due opzioni identiche è rotto: se due sedi collidessero
+ * sulla stessa etichetta (es. due filiali nella stessa città, entrambe col
+ * nome uguale alla ragione sociale) l'utente non potrebbe più distinguerle nel
+ * menu. Per le sole sedi coinvolte in una collisione si usa una forma
+ * disambiguante che riporta anche il nome. (Se anche `nome` e `citta` fossero
+ * identici tra due sedi la collisione resterebbe: è un problema di dati a
+ * monte, non risolvibile lato etichetta — fuori dallo scope di questa
+ * funzione.)
+ */
+export function etichetteSediUniche(
+  sedi: SedeRef[],
+  ragioneSociale: string | null | undefined,
+): { id: string; label: string }[] {
+  const base = sedi.map((sede) => ({ sede, label: labelSede(sede, ragioneSociale) }));
+
+  const occorrenze = new Map<string, number>();
+  for (const { label } of base) {
+    occorrenze.set(label, (occorrenze.get(label) ?? 0) + 1);
+  }
+
+  return base.map(({ sede, label }) => ({
+    id: sede.id,
+    label: (occorrenze.get(label) ?? 0) > 1 ? `${sede.nome} — ${sede.citta}` : label,
+  }));
+}

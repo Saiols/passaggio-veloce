@@ -11,30 +11,16 @@ import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeAgenziaTutte } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
 import { whereStato, SINGOLI_ADMIN, contaGruppi } from '@/lib/pratiche/stati';
-import { tabsPraticheAdmin, tabAttivo, hrefPaginaPratiche } from '@/lib/pratiche/tabs';
+import {
+  tabsPraticheAdmin,
+  tabAttivo,
+  hrefPaginaPratiche,
+  opzioniStatoAdmin,
+} from '@/lib/pratiche/tabs';
 import { PraticheTabs } from '@/app/pratiche/tabs';
 
 const BASE_PATH = '/admin/pratiche';
 const PAGE_SIZE = 15;
-
-/**
- * Stati selezionabili dalla select. Più fini dei tab: l'admin è l'unico a vedere
- * i round di distribuzione (il broker no, sono dettagli interni del motore).
- * `whereStato` li accetta solo passando `SINGOLI_ADMIN`.
- */
-const STATI: { value: string; label: string }[] = [
-  { value: '', label: 'Tutti gli stati' },
-  { value: 'IN_ESCALATION', label: 'Escalation' },
-  { value: 'IN_ATTESA_ROUND_1', label: 'In attesa · R1' },
-  { value: 'IN_ATTESA_ROUND_2', label: 'In attesa · R2' },
-  { value: 'IN_ATTESA_ROUND_3', label: 'In attesa · R3' },
-  { value: 'ACCETTATA', label: 'Accettata' },
-  { value: 'PROCESSATA', label: 'Processata' },
-  { value: 'FIRMATA', label: 'Firmata' },
-  { value: 'BOZZA', label: 'Bozza' },
-  { value: 'SCADUTA', label: 'Scaduta' },
-  { value: 'ANNULLATA', label: 'Annullata' },
-];
 
 type SearchParams = { q?: string; stato?: string; sede?: string; page?: string };
 
@@ -136,7 +122,13 @@ export default async function AdminPratichePage({
 
         <PraticheTabs tabs={tabs} attivo={attivo} filtri={filtriTab} basePath={BASE_PATH} />
 
-        <AdminPraticheFilters q={q} stato={sp.stato} sede={sp.sede} stati={STATI} sedi={sediSelect} />
+        <AdminPraticheFilters
+          q={q}
+          stato={sp.stato}
+          sede={sp.sede}
+          stati={opzioniStatoAdmin()}
+          sedi={sediSelect}
+        />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
           {pratiche.length === 0 ? (

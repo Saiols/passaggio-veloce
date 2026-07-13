@@ -4,6 +4,7 @@ import {
   tabAttivo,
   hrefTab,
   opzioniStato,
+  opzioniStatoAdmin,
   hrefPaginaPratiche,
   tabsPraticheAdmin,
 } from './tabs';
@@ -173,5 +174,44 @@ describe('tabsPraticheAdmin', () => {
   // corso" attivo mentre vedi solo le R2 sarebbe fuorviante.
   it('un filtro fine non accende nessun tab', () => {
     expect(tabAttivo('IN_ATTESA_ROUND_2')).toBeNull();
+  });
+});
+
+describe('opzioniStatoAdmin (I-1)', () => {
+  // Bug reale: la select admin (STATI, in admin/pratiche/page.tsx) non
+  // conteneva IN_CORSO né CONCLUSE. Con `?stato=IN_CORSO` (arrivo dal tab)
+  // nessuna <option> matchava il defaultValue, il browser selezionava "Tutti
+  // gli stati" e il form — ad auto-submit su ogni filtro — rinviava `stato=""`
+  // al primo tocco: il tab spariva senza errori. Ogni valore prodotto dai tab
+  // admin deve avere un'opzione corrispondente nella select, altrimenti si
+  // ripresenta esattamente questo difetto.
+  it('ogni valore dei tab admin ha una option corrispondente nella select', () => {
+    const conteggi = { tutte: 1, inCorso: 1, escalation: 1, bozze: 1, concluse: 1 };
+    const valoriTab = tabsPraticheAdmin(conteggi).map((t) => t.value);
+    const valoriOpzioni = opzioniStatoAdmin().map((o) => o.value);
+    for (const v of valoriTab) {
+      expect(valoriOpzioni).toContain(v);
+    }
+  });
+
+  it('include comunque i valori fini (round/escalation) che l’admin filtra e il broker no', () => {
+    const valori = opzioniStatoAdmin().map((o) => o.value);
+    expect(valori).toEqual(
+      expect.arrayContaining([
+        'IN_ATTESA_ROUND_1',
+        'IN_ATTESA_ROUND_2',
+        'IN_ATTESA_ROUND_3',
+        'ACCETTATA',
+        'PROCESSATA',
+        'FIRMATA',
+        'BOZZA',
+        'SCADUTA',
+        'ANNULLATA',
+      ]),
+    );
+  });
+
+  it('"Tutti gli stati" resta la prima voce', () => {
+    expect(opzioniStatoAdmin()[0]).toEqual({ value: '', label: 'Tutti gli stati' });
   });
 });

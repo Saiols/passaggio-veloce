@@ -107,6 +107,37 @@ export function opzioniStato({
   return comuni;
 }
 
+/**
+ * Opzioni della select "Stato" per l'ADMIN di piattaforma. Più fine di
+ * `opzioniStato` (broker/agenzia): l'admin è l'unico a vedere i round di
+ * distribuzione e l'escalation come voci singole (dettagli interni del
+ * motore, `whereStato` li accetta solo passando `SINGOLI_ADMIN`).
+ *
+ * DEVE contenere IN_CORSO e CONCLUSE (oltre ai valori fini): sono i valori che
+ * scrive `tabsPraticheAdmin` in `?stato=`. Senza queste due voci nessuna
+ * `<option>` combacia col `defaultValue` del tab cliccato, il browser
+ * seleziona "Tutti gli stati" in silenzio e il form ad auto-submit (onChange)
+ * rinvia `stato=""` al primo tocco di un altro filtro: il tab sparisce senza
+ * errori. `tabs.test.ts` blinda l'invariante confrontando i due elenchi.
+ */
+export function opzioniStatoAdmin(): { value: string; label: string }[] {
+  return [
+    { value: '', label: 'Tutti gli stati' },
+    { value: 'IN_CORSO', label: 'In corso' },
+    { value: 'CONCLUSE', label: 'Concluse' },
+    { value: 'IN_ESCALATION', label: 'Escalation' },
+    { value: 'IN_ATTESA_ROUND_1', label: 'In attesa · R1' },
+    { value: 'IN_ATTESA_ROUND_2', label: 'In attesa · R2' },
+    { value: 'IN_ATTESA_ROUND_3', label: 'In attesa · R3' },
+    { value: 'ACCETTATA', label: 'Accettata' },
+    { value: 'PROCESSATA', label: 'Processata' },
+    { value: 'FIRMATA', label: 'Firmata' },
+    { value: 'BOZZA', label: 'Bozza' },
+    { value: 'SCADUTA', label: 'Scaduta' },
+    { value: 'ANNULLATA', label: 'Annullata' },
+  ];
+}
+
 /** Filtri che la paginazione deve trascinarsi dietro (oltre a `page`). */
 export type FiltriPagina = FiltriTab & { stato?: string };
 

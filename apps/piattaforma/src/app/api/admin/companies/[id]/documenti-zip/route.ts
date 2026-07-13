@@ -4,6 +4,7 @@ import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { storageGetBuffer } from '@/lib/providers/storage';
 import { documentoDownloadName } from '@/lib/documenti/labels';
+import { appendToFilename } from '@/lib/documenti/filename';
 import { buildDocumentiZip, type ZipEntry } from '@/lib/documenti/zip';
 
 export const runtime = 'nodejs';
@@ -69,7 +70,12 @@ export async function GET(
   if (mandato?.storageKey) {
     const buffer = await storageGetBuffer(mandato.storageKey).catch(() => null);
     if (buffer) {
-      entries.push({ name: `${company.ragioneSociale} - Mandato fatturazione.pdf`, buffer });
+      // Stesso sanitizer dei documenti KYC sopra (documentoDownloadName →
+      // appendToFilename → sanitizePart): la ragione sociale può contenere
+      // caratteri vietati in un nome file (es. '/'), che altrimenti
+      // creerebbero una cartella dentro lo ZIP invece di un file.
+      const name = appendToFilename(`${company.ragioneSociale}.pdf`, 'Mandato fatturazione');
+      entries.push({ name, buffer });
     }
   }
 

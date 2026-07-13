@@ -169,4 +169,26 @@ describe('GET /api/admin/companies/[id]/documenti-zip — mandato di fatturazion
     expect(res.status).toBe(404);
     expect(buildZipMock).not.toHaveBeenCalled();
   });
+
+  it("ragione sociale con '/' → il nome del mandato passa dal sanitizer condiviso (M-4)", async () => {
+    // I documenti KYC passano da documentoDownloadName → appendToFilename →
+    // sanitizePart, che toglie i caratteri vietati (\ / : * ? " < > |). Il
+    // mandato interpolava la ragione sociale a mano: una ragione sociale con
+    // '/' creerebbe una cartella dentro lo ZIP invece di un file.
+    authMock.mockResolvedValue(sessione('ADMIN_PIATTAFORMA'));
+    prismaMock.company.findUnique.mockResolvedValue({
+      ...azienda,
+      ragioneSociale: 'Rossi/Bianchi Srl',
+      documenti: [],
+      mandatoFatturazione: { storageKey: 'k-mandato', firmatoAt: new Date('2026-01-01') },
+    });
+
+    const res = await GET(new Request('http://x'), params());
+
+    expect(res.status).toBe(200);
+    const entries = buildZipMock.mock.calls[0][0];
+    expect(entries).toHaveLength(1);
+    expect(entries[0].name).not.toContain('/');
+    expect(entries[0].name).toBe('RossiBianchi Srl - Mandato fatturazione.pdf');
+  });
 });

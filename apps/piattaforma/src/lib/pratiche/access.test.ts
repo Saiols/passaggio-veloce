@@ -311,16 +311,17 @@ describe('canAccessDocumento', () => {
   });
 
   it('documento aziendale: viewer SENZA companyId (staff non-admin, es. ASSISTENTE) → negato (I-3)', () => {
-    // Invariante di sicurezza dell'ASSISTENTE (api/documenti/[id]/route.ts:
-    // `isAdmin` è calcolato SOLO su `role === 'ADMIN_PIATTAFORMA'`, MAI su
-    // `isAdminOrAssistente`). Un futuro "cleanup" che unificasse le due
-    // funzioni passerebbe `isAdminPiattaforma: true` per l'ASSISTENTE e questo
-    // test diventerebbe rosso: `canAccessDocumento` tornerebbe true per QUALUNQUE
-    // documento aziendale (carta d'identità del legale rappresentante) di
-    // QUALUNQUE azienda della piattaforma, bypassando anche il match su
-    // `companyId`. Qui isAdminPiattaforma è correttamente `false`: lo staff
-    // senza company non può mai combaciare col `companyId` di un documento
-    // aziendale reale (non è `null === null`, è `undefined !== 'c9'`).
+    // Metà dell'invariante di sicurezza dell'ASSISTENTE: uno staff senza company
+    // non combacia mai col `companyId` di un documento aziendale reale (non è
+    // `null === null`, è `undefined !== 'c9'`) ⇒ fail-closed.
+    //
+    // ⚠️ Questo test NON protegge l'altra metà, ed è importante non crederlo: qui
+    // `isAdminPiattaforma` è cablato a `false`, quindi resta verde qualunque cosa
+    // faccia il chiamante. Chi decide quel booleano è la route, e l'invariante che
+    // conta — `isAdmin` calcolato SOLO su `role === 'ADMIN_PIATTAFORMA'`, mai su
+    // `isAdminOrAssistente` — è blindata dal test corrispondente in
+    // `api/documenti/route.authz.test.ts`, l'unico che diventa rosso se le due
+    // righe della route vengono "uniformate". Non toglierlo.
     expect(
       canAccessDocumento(docAziendale({ companyId: 'c9' }), {
         companyId: undefined,

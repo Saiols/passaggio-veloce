@@ -11,8 +11,12 @@
 ## Global Constraints
 
 - **Nessuna migration.** Se un task sembra richiederne una, fermati: hai sbagliato strada.
-- **Node 22**: prima di qualunque comando, `nvm use 22.15.0` (post-riavvio la shell torna a Node 16 e pnpm richiede ≥18).
-- **Typecheck**: `pnpm typecheck` è affidabile solo a cache calda (col `tsbuildinfo`). A cache fredda dà falsi errori Prisma / stack overflow. Non trarne conclusioni se è la prima esecuzione.
+- ⚠️ **Node NON gira su Git Bash.** Test/lint/typecheck/build SOLO da PowerShell, con il path di Node in testa:
+  `$env:Path = "C:\Users\fsiol\AppData\Local\nvm\v22.15.0;" + $env:Path; pnpm --filter piattaforma <cmd>`
+  Il package si chiama **`piattaforma`** (non `@pv/piattaforma`).
+- ⚠️ **PowerShell 5.1 corrompe le lettere accentate** quando riscrive un file. Usa gli strumenti di edit (Edit/Write), mai `Out-File`/`Set-Content` su file con accenti.
+- ⚠️ **Test verdi NON implicano typecheck verde**: vitest non fa typecheck. Lancia **sempre anche** `typecheck`, mai solo i test.
+- **Typecheck**: affidabile solo a cache calda (col `tsbuildinfo`). A cache fredda dà falsi errori Prisma / stack overflow: se è la prima esecuzione, rilancia prima di trarre conclusioni.
 - **Test**: `pnpm --filter piattaforma test -- <path>`. Un test che non è mai stato rosso non dimostra nulla: esegui sempre lo step "verifica che fallisca".
 - **Colori**: solo token del design system (`pv-navy-*`, `pv-slate-*`, `pv-red-*`, `pv-amber-*`/`pv-green-*` se esistono — verifica in `globals.css` prima di usarli, mai hex hardcoded).
 - **Scope Prisma**: filtri e scope si compongono con `{ AND: [...] }`, **mai** con lo spread `{ ...scope, ...filtri }` (sovrascriverebbe l'`AND` dello scope: leak). Vincolo già documentato in `lib/fatturazione/filtri.ts:47-56`.
@@ -49,15 +53,17 @@
 
 ## Task 1: `buildDocumentiZip` generico
 
-Oggi `lib/documenti/zip.ts` espone solo `buildPraticaZip`, che di "pratica" non ha nulla — è un builder di zip. Va reso riusabile prima di usarlo per le aziende, senza rompere i due call site esistenti (`api/pratiche/[id]/zip`, `api/pratiche/documenti-zip`).
+Oggi `lib/documenti/zip.ts` espone solo `buildPraticaZip`, che di "pratica" non ha nulla — è un builder di zip. Va **rinominato** `buildDocumentiZip` e i call site aggiornati. Niente alias: un secondo nome per la stessa funzione è indirezione morta, e il rename è meccanico (2 call site).
 
 **Files:**
 - Modify: `apps/piattaforma/src/lib/documenti/zip.ts:30`
+- Modify: `apps/piattaforma/src/app/api/pratiche/[id]/zip/route.ts` (call site)
+- Modify: `apps/piattaforma/src/app/api/pratiche/documenti-zip/route.ts` (call site)
 - Test: `apps/piattaforma/src/lib/documenti/zip.test.ts` (creare se non esiste)
 
 **Interfaces:**
 - Produces: `buildDocumentiZip(entries: readonly ZipEntry[]): Promise<Buffer>` — usato dal Task 2.
-- `buildPraticaZip` resta esportato con la stessa firma (i call site non cambiano).
+- `buildPraticaZip` **non esiste più**: nessun riferimento residuo deve restare nel codice.
 
 - [ ] **Step 1: Scrivi il test**
 
@@ -66,7 +72,7 @@ Se `zip.test.ts` esiste già, aggiungi solo il `describe` nuovo.
 ```ts
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
-import { buildDocumentiZip, buildPraticaZip } from './zip';
+import { buildDocumentiZip } from './zip';
 
 describe('buildDocumentiZip', () => {
   it('impacchetta le entry con nome e contenuto', async () => {
@@ -82,51 +88,42 @@ describe('buildDocumentiZip', () => {
     expect(await zip.file('Rossi Srl - CI fronte.jpg')!.async('string')).toBe('aaa');
   });
 
-  it('buildPraticaZip resta il vecchio nome dello stesso builder', async () => {
-    const buf = await buildPraticaZip([{ name: 'a.pdf', buffer: Buffer.from('x') }]);
-    const zip = await JSZip.loadAsync(buf);
-    expect(Object.keys(zip.files)).toEqual(['a.pdf']);
+  it('uno zip senza entry non esplode', async () => {
+    const zip = await JSZip.loadAsync(await buildDocumentiZip([]));
+    expect(Object.keys(zip.files)).toEqual([]);
   });
 });
 ```
 
 - [ ] **Step 2: Verifica che fallisca**
 
-Run: `pnpm --filter piattaforma test -- src/lib/documenti/zip.test.ts`
+Run (da PowerShell, vedi Global Constraints): `pnpm --filter piattaforma test -- src/lib/documenti/zip.test.ts`
 Expected: FAIL — `buildDocumentiZip` non è esportato.
 
-- [ ] **Step 3: Implementa**
+- [ ] **Step 3: Rinomina**
 
-In `apps/piattaforma/src/lib/documenti/zip.ts`, sostituisci `buildPraticaZip` (righe 29-36) con:
+In `apps/piattaforma/src/lib/documenti/zip.ts`, rinomina `buildPraticaZip` (riga 30) in `buildDocumentiZip`. Il corpo non cambia. Aggiorna il commento:
 
 ```ts
 /** Costruisce uno zip in-memory dalle entry. Pura (no I/O). */
 export async function buildDocumentiZip(entries: readonly ZipEntry[]): Promise<Buffer> {
-  const zip = new JSZip();
-  for (const e of entries) {
-    zip.file(e.name, e.buffer);
-  }
-  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
-}
-
-/**
- * Alias storico: i documenti di una pratica sono entry come le altre, il builder
- * non ha mai avuto nulla di specifico sulle pratiche. Mantenuto per non toccare
- * i call site esistenti (api/pratiche/[id]/zip, api/pratiche/documenti-zip).
- */
-export const buildPraticaZip = buildDocumentiZip;
 ```
 
-- [ ] **Step 4: Verifica che passi**
+- [ ] **Step 4: Aggiorna i call site**
 
-Run: `pnpm --filter piattaforma test -- src/lib/documenti/zip.test.ts`
-Expected: PASS (entrambi i test).
+Run: `grep -rn "buildPraticaZip" apps/piattaforma/src`
+Aspettati due route (`api/pratiche/[id]/zip/route.ts`, `api/pratiche/documenti-zip/route.ts`). Aggiorna import e chiamata in entrambe. Rilancia il grep: **zero** occorrenze residue.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Verifica che passi**
+
+Run: `pnpm --filter piattaforma test -- src/lib/documenti/` e `pnpm --filter piattaforma typecheck`
+Expected: test PASS, typecheck exit 0. Se il typecheck lamenta `buildPraticaZip`, un call site è rimasto indietro.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/piattaforma/src/lib/documenti/zip.ts apps/piattaforma/src/lib/documenti/zip.test.ts
-git commit -m "refactor(documenti): buildDocumentiZip generico, buildPraticaZip alias"
+git add apps/piattaforma/src/lib/documenti apps/piattaforma/src/app/api/pratiche
+git commit -m "refactor(documenti): buildPraticaZip -> buildDocumentiZip (non e' specifico delle pratiche)"
 ```
 
 ---

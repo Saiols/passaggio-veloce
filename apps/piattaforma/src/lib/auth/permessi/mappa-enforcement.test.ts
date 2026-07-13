@@ -107,6 +107,49 @@ function corpoFunzione(src: string, nome: string): string | null {
 }
 
 /**
+ * Modulo specifier importato per un identificatore nominato, es.
+ * `import { firmaPraticaCore } from '@/lib/pratiche/firma-engine'` per
+ * `nomeLocale = 'firmaPraticaCore'` ritorna `'@/lib/pratiche/firma-engine'`.
+ * Gestisce anche `import { x as y }` (confronta il nome LOCALE, cioè `y`).
+ */
+function specificatoreModulo(src: string, nomeLocale: string): string | null {
+  const importRe = /import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g;
+  let m: RegExpExecArray | null;
+  while ((m = importRe.exec(src))) {
+    const nomi = m[1].split(',').map((s) => s.trim());
+    for (const n of nomi) {
+      if (!n) continue;
+      const parti = n.split(/\s+as\s+/).map((s) => s.trim());
+      const locale = parti.length > 1 ? parti[1] : parti[0];
+      if (locale === nomeLocale) return m[2];
+    }
+  }
+  return null;
+}
+
+/**
+ * Risolve uno specifier di import ('@/...' o relativo) al path del file
+ * (relativo a ROOT), provando le estensioni `.ts`/`.tsx`. `null` se non è un
+ * modulo locale (pacchetto esterno tipo `@pv/db`, `next/navigation`) o se il
+ * file risolto non esiste.
+ */
+function risolviModuloLocale(relFileChiamante: string, specifier: string): string | null {
+  let relSenzaEstensione: string;
+  if (specifier.startsWith('@/')) {
+    relSenzaEstensione = `src/${specifier.slice(2)}`;
+  } else if (specifier.startsWith('.')) {
+    relSenzaEstensione = toPosix(join(dirname(relFileChiamante), specifier));
+  } else {
+    return null;
+  }
+  for (const ext of ['.ts', '.tsx']) {
+    const candidato = `${relSenzaEstensione}${ext}`;
+    if (existsSync(resolve(ROOT, candidato))) return candidato;
+  }
+  return null;
+}
+
+/**
  * Un solo livello di indirezione: se il corpo dell'action non cita il
  * permesso ma chiama un identificatore `nomeHelper(` per cui esiste una
  * `function nomeHelper` NELLO STESSO FILE, e il corpo di QUELL'helper cita il
@@ -114,21 +157,38 @@ function corpoFunzione(src: string, nome: string): string | null {
  * che chiamano `gateCreazione()`, o i wrapper lista/dettaglio di
  * pratiche/actions.ts che chiamano un *Core condiviso).
  *
- * Volutamente non ricorsivo: se il gate fosse più lontano di un helper diretto,
- * l'action non sarebbe più leggibile guardando solo se stessa, e la mappa
- * dovrebbe dirlo esplicitamente (o il codice andrebbe riavvicinato).
+ * Lo stesso hop vale se l'helper è importato da un modulo locale (alias `@/`
+ * o path relativo) invece che dichiarato nel file: un motore condiviso fra più
+ * percorsi (es. firma agenzia + firma admin) non può vivere in un file
+ * `'use server'`, perché lì ogni export diventa un endpoint HTTP invocabile dal
+ * client — deve stare in un modulo a parte. Resta comunque UN hop: non si
+ * segue l'import a sua volta dentro le funzioni che chiama.
+ *
+ * Volutamente non ricorsivo oltre questo: se il gate fosse più lontano di un
+ * helper diretto (in-file o importato), l'action non sarebbe più leggibile
+ * guardando solo se stessa e il suo import diretto, e la mappa dovrebbe dirlo
+ * esplicitamente (o il codice andrebbe riavvicinato).
  */
 function citaPermessoViaHelper(
   src: string,
   corpoAction: string,
   nomeAction: string,
   permesso: string,
+  rel: string,
 ): boolean {
   const chiamate = [...corpoAction.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)].map((m) => m[1]);
   const candidati = [...new Set(chiamate)].filter((h) => h !== nomeAction);
   return candidati.some((h) => {
     const corpoHelper = corpoFunzione(src, h);
-    return corpoHelper !== null && corpoHelper.includes(`'${permesso}'`);
+    if (corpoHelper !== null) return corpoHelper.includes(`'${permesso}'`);
+
+    const spec = specificatoreModulo(src, h);
+    if (!spec) return false;
+    const modRel = risolviModuloLocale(rel, spec);
+    if (!modRel) return false;
+    const modSrc = readFileSync(resolve(ROOT, modRel), 'utf8');
+    const corpoHelperEsterno = corpoFunzione(modSrc, h);
+    return corpoHelperEsterno !== null && corpoHelperEsterno.includes(`'${permesso}'`);
   });
 }
 
@@ -186,7 +246,7 @@ describe('mappa-enforcement', () => {
           continue;
         }
         if (corpo.includes(`'${permesso}'`)) continue;
-        if (citaPermessoViaHelper(src, corpo, nome, permesso)) continue;
+        if (citaPermessoViaHelper(src, corpo, nome, permesso, rel)) continue;
 
         senzaGate.push(`${rel}:${nome} → ${permesso}`);
       }

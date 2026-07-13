@@ -815,6 +815,11 @@ model Pratica {
   accettataAt     DateTime?
   processataAt    DateTime?
   firmaAvvenutaAt DateTime?
+  /// Attestazione admin (Termini art. 11): chi, quando, perché. NULL = firma
+  /// segnalata normalmente dall'agenzia.
+  firmaForzataDaId   String?   @db.Uuid
+  firmaForzataAt     DateTime?
+  firmaForzataMotivo String?
 
   // Sistema Penali Broker (SP-A release 2026-05): segnalazione fermo/ipoteca
   // dall'agenzia, gestione admin, log penale addebitata.

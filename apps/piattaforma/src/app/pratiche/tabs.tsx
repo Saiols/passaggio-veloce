@@ -9,11 +9,14 @@ export function PraticheTabs({
   tabs,
   attivo,
   filtri,
+  basePath = '/pratiche',
 }: {
   tabs: TabPratiche[];
   /** `null` quando è attivo un filtro fine dalla select: nessun tab selezionato. */
   attivo: ValoreTab | null;
   filtri: FiltriTab;
+  /** La lista admin riusa gli stessi tab su `/admin/pratiche`. */
+  basePath?: string;
 }) {
   return (
     <nav
@@ -25,7 +28,7 @@ export function PraticheTabs({
         return (
           <Link
             key={t.value || 'tutte'}
-            href={hrefTab(t.value, filtri)}
+            href={hrefTab(t.value, filtri, basePath)}
             aria-current={selezionato ? 'page' : undefined}
             className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-2 text-[13px] font-semibold transition ${
               selezionato

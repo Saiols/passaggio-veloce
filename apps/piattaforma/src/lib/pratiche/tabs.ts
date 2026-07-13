@@ -6,7 +6,7 @@ import type { ConteggiTab } from './stati';
  * CONCLUSE (stesso meccanismo di IN_ATTESA, già in uso). Un solo parametro ⇒
  * tab e select non possono entrare in conflitto e gli URL restano condivisibili.
  */
-export type ValoreTab = '' | 'IN_CORSO' | 'BOZZA' | 'CONCLUSE';
+export type ValoreTab = '' | 'IN_CORSO' | 'IN_ESCALATION' | 'BOZZA' | 'CONCLUSE';
 
 export type TabPratiche = { value: ValoreTab; label: string; count: number };
 
@@ -33,24 +33,48 @@ export function tabsPratiche({
 }
 
 /**
+ * Tab della lista admin. Come quelli di broker/agenzia, più "In escalation":
+ * è l'unica coda su cui l'admin deve davvero agire, e per il broker non esiste.
+ *
+ * `escalation` è un SOTTOINSIEME di `inCorso` (vedi ConteggiTab): i due tab si
+ * sovrappongono di proposito — cliccando "In corso" vedi anche le escalation.
+ */
+export function tabsPraticheAdmin(conteggi: ConteggiTab): TabPratiche[] {
+  return [
+    { value: '', label: 'Tutte', count: conteggi.tutte },
+    { value: 'IN_CORSO', label: 'In corso', count: conteggi.inCorso },
+    { value: 'IN_ESCALATION', label: 'In escalation', count: conteggi.escalation },
+    { value: 'BOZZA', label: 'Bozze', count: conteggi.bozze },
+    { value: 'CONCLUSE', label: 'Concluse', count: conteggi.concluse },
+  ];
+}
+
+/**
  * Quale tab risulta selezionato dato `?stato=`. Un filtro più fine di qualunque
  * tab (es. `PROCESSATA` scelto dalla select) non ne accende nessuno: mostrare
  * "In corso" attivo mentre vedi solo le processate sarebbe fuorviante.
  */
 export function tabAttivo(stato: string | undefined): ValoreTab | null {
   if (!stato) return '';
-  if (stato === 'IN_CORSO' || stato === 'BOZZA' || stato === 'CONCLUSE') return stato;
+  if (
+    stato === 'IN_CORSO' ||
+    stato === 'IN_ESCALATION' ||
+    stato === 'BOZZA' ||
+    stato === 'CONCLUSE'
+  ) {
+    return stato;
+  }
   return null;
 }
 
-export function hrefTab(value: ValoreTab, filtri: FiltriTab): string {
+export function hrefTab(value: ValoreTab, filtri: FiltriTab, basePath = '/pratiche'): string {
   const qs = new URLSearchParams();
   if (value) qs.set('stato', value);
   if (filtri.q) qs.set('q', filtri.q);
   if (filtri.periodo) qs.set('periodo', filtri.periodo);
   if (filtri.sede) qs.set('sede', filtri.sede);
   const s = qs.toString();
-  return s ? `/pratiche?${s}` : '/pratiche';
+  return s ? `${basePath}?${s}` : basePath;
 }
 
 /**
@@ -91,7 +115,11 @@ export type FiltriPagina = FiltriTab & { stato?: string };
  * `page` viene omesso quando è 1: gli URL restano puliti e condivisibili.
  * Usato sia dal pager sia dal redirect di `?page=` fuori range.
  */
-export function hrefPaginaPratiche(page: number, filtri: FiltriPagina): string {
+export function hrefPaginaPratiche(
+  page: number,
+  filtri: FiltriPagina,
+  basePath = '/pratiche',
+): string {
   const qs = new URLSearchParams();
   if (filtri.stato) qs.set('stato', filtri.stato);
   if (filtri.q) qs.set('q', filtri.q);
@@ -99,5 +127,5 @@ export function hrefPaginaPratiche(page: number, filtri: FiltriPagina): string {
   if (filtri.sede) qs.set('sede', filtri.sede);
   if (page > 1) qs.set('page', String(page));
   const s = qs.toString();
-  return s ? `/pratiche?${s}` : '/pratiche';
+  return s ? `${basePath}?${s}` : basePath;
 }

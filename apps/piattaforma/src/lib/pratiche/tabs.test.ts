@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { tabsPratiche, tabAttivo, hrefTab, opzioniStato, hrefPaginaPratiche } from './tabs';
+import {
+  tabsPratiche,
+  tabAttivo,
+  hrefTab,
+  opzioniStato,
+  hrefPaginaPratiche,
+  tabsPraticheAdmin,
+} from './tabs';
 
 const conteggi = { tutte: 11, inCorso: 4, escalation: 0, bozze: 2, concluse: 5 };
 
@@ -116,5 +123,55 @@ describe('hrefPaginaPratiche', () => {
 
   it('nessun filtro attivo e page 1 ⇒ URL nuda', () => {
     expect(hrefPaginaPratiche(1, { stato: '', q: '', periodo: '', sede: '' })).toBe('/pratiche');
+  });
+});
+
+describe('basePath', () => {
+  it('di default punta a /pratiche (comportamento invariato)', () => {
+    expect(hrefTab('IN_CORSO', {})).toBe('/pratiche?stato=IN_CORSO');
+    expect(hrefPaginaPratiche(2, {})).toBe('/pratiche?page=2');
+  });
+
+  it('con basePath punta alla lista admin, preservando i filtri', () => {
+    expect(hrefTab('IN_ESCALATION', { q: 'AB123' }, '/admin/pratiche')).toBe(
+      '/admin/pratiche?stato=IN_ESCALATION&q=AB123',
+    );
+    expect(hrefPaginaPratiche(3, { stato: 'BOZZA' }, '/admin/pratiche')).toBe(
+      '/admin/pratiche?stato=BOZZA&page=3',
+    );
+  });
+
+  it('tab "Tutte" e pagina 1 non sporcano l’URL', () => {
+    expect(hrefTab('', {}, '/admin/pratiche')).toBe('/admin/pratiche');
+    expect(hrefPaginaPratiche(1, {}, '/admin/pratiche')).toBe('/admin/pratiche');
+  });
+});
+
+describe('tabsPraticheAdmin', () => {
+  const conteggi = { tutte: 10, inCorso: 5, escalation: 2, bozze: 1, concluse: 4 };
+
+  it('ha i cinque tab, con escalation dopo In corso', () => {
+    expect(tabsPraticheAdmin(conteggi).map((t) => t.value)).toEqual([
+      '',
+      'IN_CORSO',
+      'IN_ESCALATION',
+      'BOZZA',
+      'CONCLUSE',
+    ]);
+  });
+
+  it('il tab escalation mostra il suo conteggio, non quello di In corso', () => {
+    const t = tabsPraticheAdmin(conteggi).find((x) => x.value === 'IN_ESCALATION');
+    expect(t?.count).toBe(2);
+  });
+
+  it('IN_ESCALATION accende il suo tab', () => {
+    expect(tabAttivo('IN_ESCALATION')).toBe('IN_ESCALATION');
+  });
+
+  // Un filtro fine dalla select (es. R2) non accende nessun tab: mostrare "In
+  // corso" attivo mentre vedi solo le R2 sarebbe fuorviante.
+  it('un filtro fine non accende nessun tab', () => {
+    expect(tabAttivo('IN_ATTESA_ROUND_2')).toBeNull();
   });
 });

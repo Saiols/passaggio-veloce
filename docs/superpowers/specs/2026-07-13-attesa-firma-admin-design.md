@@ -375,8 +375,10 @@ byte del sorgente.
    dal test esistente in `tabs.test.ts`.
 2. **La rinumerazione dei Termini.** 12 punti; sbagliarne uno rende il contratto
    auto-contraddittorio. Mitigato dalla fonte unica per l'occorrenza più ripetuta (9 su 12).
-3. **La KB del chatbot è generata dai docs al prebuild** (`lib/providers/chatbot/kb/kb.generated.ts`):
-   dopo la modifica ai Termini va rigenerata, o il chatbot cita i numeri vecchi.
+3. ~~La KB del chatbot cita i numeri delle clausole.~~ **Verificato: non è un rischio.**
+   `scripts/build-chatbot-kb.ts` genera la KB dai soli `docs/*.md`, non dalla pagina dei
+   Termini, e la KB attuale non cita alcuna clausola oltre la 10 (che non cambia). Nessuna
+   rigenerazione necessaria.
 4. **Duplicare gli effetti della firma invece di estrarre il motore.** Sarebbe il bug più
    costoso possibile: una fattura non emessa o un payout non scattato. Il refactor a
    `eseguiFirma` non è opzionale.

@@ -395,7 +395,7 @@ Expected: `db:deploy` stampa "1 migration applied". **Non** usare `db:migrate`.
 - [ ] **Step 4: Verificare che le colonne esistano davvero sul DB locale**
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c "\d companies" | grep -E "clausoleVessatorie|termsVersion"
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c "\d companies" | grep -E "clausoleVessatorie|termsVersion"
 ```
 
 Expected: due righe. Se non stampa nulla, la migration non è passata — non proseguire.
@@ -1035,7 +1035,7 @@ Expected: nessun errore.
 La query del tab, in read-only, sul postgres locale (copia di prod):
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c \
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c \
   "SELECT \"codicePratica\", \"processataAt\", \"flagSegnalata\" FROM pratiche WHERE stato='PROCESSATA' AND \"deletedAt\" IS NULL ORDER BY \"processataAt\" ASC NULLS LAST LIMIT 20;"
 ```
 
@@ -1107,7 +1107,7 @@ In `model Pratica`, nella sezione Timeline vicino a `firmaAvvenutaAt`:
 ```bash
 pnpm --filter @pv/db db:deploy
 pnpm db:generate
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c "\d pratiche" | grep firmaForzata
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c "\d pratiche" | grep firmaForzata
 ```
 
 Expected: tre righe. Se non stampa nulla, non proseguire.
@@ -1552,7 +1552,7 @@ Con `pnpm --filter piattaforma dev`:
 4. Verifica sul DB che gli effetti siano tutti scattati:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c \
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c \
   "SELECT p.\"codicePratica\", p.stato, p.\"firmaForzataAt\", p.\"firmaForzataMotivo\",
           (SELECT count(*) FROM fee_addebiti f WHERE f.\"praticaId\"=p.id) AS addebiti,
           (SELECT count(*) FROM transazioni_wallet t WHERE t.\"praticaId\"=p.id) AS transazioni,
@@ -1750,7 +1750,7 @@ Expected: PASS (5 test)
 Rifai l'attestazione del Task 10 Step 5 e leggi la riga registrata in `notifiche_inviate`:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c \
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c \
   "SELECT tipo, destinazione, subject, \"bodyPreview\" FROM notifiche_inviate WHERE payload->>'praticaId' = '<ID>' OR \"praticaId\" = '<ID>' ORDER BY \"createdAt\" DESC LIMIT 5;"
 ```
 

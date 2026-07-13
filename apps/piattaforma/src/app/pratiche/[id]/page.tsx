@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
+import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { prisma, type Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import {
@@ -22,6 +23,7 @@ import { SegnalaProblemaButton } from './segnala-button';
 import { StatoExtraInfo } from '../stato-extra-info';
 import { statoExtra } from '@/lib/pratiche/stato-extra';
 import { AnnullaPraticaButton } from './annulla-button';
+import { AttestaFirmaButton } from './attesta-firma-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
@@ -239,7 +241,10 @@ export default async function PraticaDetailPage({
     canFirmaPermesso &&
     companyType === 'AGENZIA' &&
     inScope(pratica.agenziaSedeId) &&
-    pratica.stato === 'PROCESSATA';
+    pratica.stato === 'PROCESSATA' &&
+    // Una segnalazione in verifica blocca la firma (il guard in
+    // firmaPraticaCore resta la difesa vera).
+    !pratica.flagSegnalata;
 
   const canAnnulla =
     canAnnullaPermesso &&
@@ -351,6 +356,18 @@ export default async function PraticaDetailPage({
               />
             )}
             {canAnnulla && <AnnullaPraticaButton praticaId={pratica.id} />}
+            {isAdminPiattaforma(session.user.role) &&
+              pratica.stato === 'PROCESSATA' &&
+              !pratica.flagSegnalata &&
+              pratica.agenziaAssegnata && (
+                <AttestaFirmaButton
+                  praticaId={pratica.id}
+                  feeAgenziaCent={pratica.feeAgenziaCent}
+                  creditoBrokerCent={pratica.creditoBrokerCent}
+                  nomeAgenzia={pratica.agenziaAssegnata.ragioneSociale}
+                  nomeBroker={pratica.broker.ragioneSociale}
+                />
+              )}
             {pratica.documenti.length > 0 && canDownload && (
               <DownloadDocumentiButton
                 href={`/api/pratiche/${pratica.id}/zip`}
@@ -857,7 +874,13 @@ function GatingBadge({ stato }: { stato: string }): React.ReactElement {
   );
 }
 
-type TimelineStep = { label: string; at: Date | null | undefined; active?: boolean };
+type TimelineStep = {
+  label: string;
+  at: Date | null | undefined;
+  active?: boolean;
+  /** Riga secondaria opzionale sotto lo step (es. attestazione admin). */
+  note?: string;
+};
 
 function Timeline({
   pratica,
@@ -873,6 +896,8 @@ function Timeline({
     accettataAt: Date | null;
     processataAt: Date | null;
     firmaAvvenutaAt: Date | null;
+    firmaForzataAt: Date | null;
+    firmaForzataMotivo: string | null;
     autoAddebitoAt: Date | null;
     scadutaAt: Date | null;
     annullataAt: Date | null;
@@ -880,7 +905,8 @@ function Timeline({
   /**
    * Lato broker e agenzia (item 02 release 2026-05) gli step di routing
    * (round/escalation) sono dettagli operativi interni: vanno mostrati solo
-   * all'admin platform.
+   * all'admin platform. Riusato anche per la motivazione dell'attestazione
+   * firma (Termini art. 11): stessa platea (isStaff), stesso criterio.
    */
   showInternals: boolean;
 }) {
@@ -897,7 +923,17 @@ function Timeline({
       : []),
     { label: 'Accettata', at: pratica.accettataAt },
     { label: 'Processata', at: pratica.processataAt },
-    { label: 'Firma avvenuta', at: pratica.firmaAvvenutaAt },
+    {
+      label: 'Firma avvenuta',
+      at: pratica.firmaAvvenutaAt,
+      // Trasparenza verso le parti (Termini art. 11): quando la firma è stata
+      // attestata dal Gestore invece che segnalata dall'agenzia, sia broker
+      // che agenzia lo vedono qui. La motivazione (perché) resta interna —
+      // mostrata solo allo staff, sotto, come blocco separato.
+      note: pratica.firmaForzataAt
+        ? `Firma attestata dal team Passaggio Veloce il ${formatDate(pratica.firmaForzataAt)}`
+        : undefined,
+    },
     { label: 'Fee addebitata', at: pratica.autoAddebitoAt },
     { label: 'Scaduta', at: pratica.scadutaAt },
     { label: 'Annullata', at: pratica.annullataAt },
@@ -908,15 +944,26 @@ function Timeline({
   }
 
   return (
-    <ol className="relative mt-4 space-y-3 pl-5">
-      <span className="absolute left-[5px] top-1 bottom-1 w-[2px] bg-pv-slate-200" aria-hidden />
-      {steps.map((s, i) => (
-        <li key={i} className="relative">
-          <span className="absolute left-[-20px] top-1.5 h-3 w-3 rounded-full border-2 border-pv-navy-700 bg-white" />
-          <p className="text-[13px] font-semibold text-pv-navy-800">{s.label}</p>
-          <p className="text-[11px] text-pv-slate-500">{formatDateTime(s.at)}</p>
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className="relative mt-4 space-y-3 pl-5">
+        <span className="absolute left-[5px] top-1 bottom-1 w-[2px] bg-pv-slate-200" aria-hidden />
+        {steps.map((s, i) => (
+          <li key={i} className="relative">
+            <span className="absolute left-[-20px] top-1.5 h-3 w-3 rounded-full border-2 border-pv-navy-700 bg-white" />
+            <p className="text-[13px] font-semibold text-pv-navy-800">{s.label}</p>
+            <p className="text-[11px] text-pv-slate-500">{formatDateTime(s.at)}</p>
+            {s.note && <p className="mt-0.5 text-[11px] text-pv-slate-500">{s.note}</p>}
+          </li>
+        ))}
+      </ol>
+      {showInternals && pratica.firmaForzataMotivo && (
+        <div className="mt-3 rounded-[10px] border border-pv-slate-200 bg-pv-slate-100 px-3 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-700">
+            Motivazione attestazione (interna)
+          </p>
+          <p className="mt-1 text-[12.5px] text-pv-slate-700">{pratica.firmaForzataMotivo}</p>
+        </div>
+      )}
+    </>
   );
 }

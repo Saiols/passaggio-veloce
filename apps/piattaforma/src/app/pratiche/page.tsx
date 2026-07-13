@@ -331,7 +331,13 @@ export default async function PratichePage({
                             {isAgenzia &&
                               canFirmaQuick &&
                               p.agenziaAssegnataId === companyId &&
-                              p.stato === 'PROCESSATA' && (
+                              p.stato === 'PROCESSATA' &&
+                              // Una segnalazione in verifica blocca la firma (il
+                              // server la rifiuta comunque, ma senza questa
+                              // condizione la lista offrirebbe un'azione che può
+                              // solo fallire — coerente col dettaglio pratica,
+                              // dove `canFirma` include la stessa condizione).
+                              !p.flagSegnalata && (
                                 <QuickActionButton praticaId={p.id} action="firma" />
                               )}
                           </span>

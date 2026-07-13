@@ -24,7 +24,7 @@ const {
   destinatariBrokerMock,
 } = vi.hoisted(() => ({
   prismaMock: {
-    pratica: { findUnique: vi.fn(), update: vi.fn() },
+    pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     commissioneAffiliazione: { findMany: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
@@ -147,6 +147,7 @@ beforeEach(() => {
   sendNotificationMock.mockImplementation(() => Promise.resolve());
   prismaMock.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(prismaMock));
   prismaMock.pratica.update.mockResolvedValue({});
+  prismaMock.pratica.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.commissioneAffiliazione.findMany.mockResolvedValue([]);
   // Due destinatari del risolutore, entrambi diversi dall'admin azienda: se la
   // N4 li usasse invece dell'admin, il test lo scoprirebbe subito.

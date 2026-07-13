@@ -17,7 +17,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted(() => ({
   prismaMock: {
-    pratica: { findUnique: vi.fn(), update: vi.fn() },
+    pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    feeAddebito: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),
@@ -92,6 +93,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(prismaMock));
   prismaMock.pratica.update.mockResolvedValue({});
+  // Default: la transizione di stato (compare-and-set) trova le precondizioni
+  // vere e scrive 1 riga. I test della race la sovrascrivono a { count: 0 }.
+  prismaMock.pratica.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
@@ -108,6 +112,7 @@ describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
     // dei mondi. Il gate deve stare prima di ogni apertura di transazione.
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
     expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+    expect(prismaMock.pratica.updateMany).not.toHaveBeenCalled();
   });
 
   it('ADMIN_AZIENDA (utente di un\'azienda cliente) → rifiutato, nessuna scrittura', async () => {
@@ -158,18 +163,39 @@ describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
       expect(res).toEqual({ ok: true });
     });
 
-    it("firmaForzataDaId scritto nell'update è l'id della SESSIONE, mai un valore passato dal chiamante", async () => {
+    it("firmaForzataDaId scritto nell'updateMany è l'id della SESSIONE, mai un valore passato dal chiamante", async () => {
       // `AttoreFirma` (tipo 'ADMIN') espone solo `motivo`, mai `userId`: è
       // impossibile per costruzione passare un autore falso. Questo test
       // documenta l'invariante e blinda che il motore legga sempre da
       // `session.user.id`, non da un campo futuro aggiunto per errore.
       await firmaPraticaCore(PID, { tipo: 'ADMIN', motivo: MOTIVO });
 
-      expect(prismaMock.pratica.update).toHaveBeenCalledTimes(1);
-      const data = prismaMock.pratica.update.mock.calls[0][0].data;
-      expect(data.firmaForzataDaId).toBe('admin-42');
-      expect(data.firmaForzataMotivo).toBe(MOTIVO);
-      expect(data.stato).toBe('FIRMATA');
+      expect(prismaMock.pratica.updateMany).toHaveBeenCalledTimes(1);
+      const call = prismaMock.pratica.updateMany.mock.calls[0][0];
+      expect(call.data.firmaForzataDaId).toBe('admin-42');
+      expect(call.data.firmaForzataMotivo).toBe(MOTIVO);
+      expect(call.data.stato).toBe('FIRMATA');
+      // Compare-and-set: le precondizioni stanno nel WHERE, non solo nel gate
+      // applicativo (`motivoBloccoFirma`) — è quello che rende la transizione
+      // atomica sotto race concorrente.
+      expect(call.where).toEqual({ id: PID, stato: 'PROCESSATA', flagSegnalata: false });
+    });
+
+    it('updateMany con count:0 (un\'altra transazione ha già vinto la corsa) → il motore fallisce e NON crea FeeAddebito', async () => {
+      // Simula la race del FIX 1: l'admin attesta mentre l'agenzia, nello
+      // stesso istante, ha già segnato "Firma avvenuta" — la SUA transazione
+      // ha già portato lo stato a FIRMATA. Questa transazione trova `count: 0`
+      // e deve fermarsi PRIMA di addebitare l'agenzia una seconda volta.
+      prismaMock.pratica.findUnique.mockResolvedValue({
+        ...praticaValida(),
+        feeAgenziaCent: 5000, // >0: se il motore procedesse comunque, l'addebito sarebbe visibile
+      });
+      prismaMock.pratica.updateMany.mockResolvedValue({ count: 0 });
+
+      const res = await firmaPraticaCore(PID, { tipo: 'ADMIN', motivo: MOTIVO });
+
+      expect(res).toEqual({ ok: false, error: 'Pratica già firmata o non più firmabile' });
+      expect(prismaMock.feeAddebito.create).not.toHaveBeenCalled();
     });
   });
 });

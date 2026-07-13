@@ -41,6 +41,13 @@ export type N4BrokerFirmaPayload = {
   nomeBroker: string;
   /** Firma attestata dal Gestore (Termini art. 11), non segnalata dall'agenzia. */
   attestataDaPv?: boolean;
+  /**
+   * Data dell'attestazione (Termini art. 11): "ne dà evidenza a Broker e
+   * Agenzia comunicando loro che la firma è stata attestata dal Gestore e
+   * la relativa data". È anche il punto da cui decorre la finestra di
+   * contestazione di 15 giorni.
+   */
+  attestataDaPvAt?: Date | null;
 };
 
 export type N6AgenziaNuovaPayload = {
@@ -62,6 +69,8 @@ export type N8AgenziaAddebitoPayload = {
   nomeAgenzia: string;
   /** Firma attestata dal Gestore (Termini art. 11), non segnalata dall'agenzia. */
   attestataDaPv?: boolean;
+  /** Data dell'attestazione (Termini art. 11) — v. N4BrokerFirmaPayload. */
+  attestataDaPvAt?: Date | null;
 };
 
 export type N9AgenziaAddebitoFallitoPayload = {
@@ -316,16 +325,25 @@ export function tplN4BrokerFirma(p: N4BrokerFirmaPayload): NotificaContent {
   // Se la firma l'abbiamo attestata noi (Termini art. 11), dire che "l'agenzia
   // ha confermato" è falso: la frase va sostituita, non integrata. Niente
   // motivazione interna: resta visibile solo in area admin.
+  //
+  // La data va riportata quando presente: l'art. 11 promette che la
+  // comunicazione dà evidenza "che la firma è stata attestata dal Gestore e
+  // la relativa data" — è anche il punto da cui decorrono i 15 giorni per
+  // contestare.
+  const dataAttestazioneText = p.attestataDaPvAt ? ` in data ${formatDate(p.attestataDaPvAt)}` : '';
   const chiHaConfermatoText = p.attestataDaPv
-    ? `Il team Passaggio Veloce ha registrato la firma della pratica ${p.codicePratica}, avendone avuto conferma.`
+    ? `Il team Passaggio Veloce ha registrato la firma della pratica ${p.codicePratica}${dataAttestazioneText}, avendone avuto conferma.`
     : `${p.agenziaNome} ha confermato la firma della pratica ${p.codicePratica}.`;
   const text =
     `Ciao ${p.nomeBroker},\n` +
     `${chiHaConfermatoText} ` +
     `Abbiamo accreditato ${formatCurrencyCent(p.creditoCent)} al tuo wallet. ` +
     `Saldo: ${formatCurrencyCent(p.saldoCent)}.`;
+  const dataAttestazioneHtml = p.attestataDaPvAt
+    ? ` in data <strong>${formatDate(p.attestataDaPvAt)}</strong>`
+    : '';
   const chiHaConfermatoHtml = p.attestataDaPv
-    ? `Il <strong>team Passaggio Veloce</strong> ha registrato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}, avendone avuto conferma.`
+    ? `Il <strong>team Passaggio Veloce</strong> ha registrato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}${dataAttestazioneHtml}, avendone avuto conferma.`
     : `<strong>${p.agenziaNome}</strong> ha confermato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Firma confermata</h1>
@@ -373,9 +391,11 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
   const subject = `Addebito pratica ${p.codicePratica} programmato per ${formatDate(p.autoAddebitoAt)}`;
   // Se la firma è stata attestata dal Gestore (Termini art. 11) anziché
   // segnalata dall'agenzia, questa deve sapere perché viene addebitata e
-  // che può contestare — senza esporre la motivazione interna.
+  // che può contestare — senza esporre la motivazione interna. La data va
+  // riportata quando presente: è il punto da cui decorrono i 15 giorni.
+  const dataAttestazioneN8Text = p.attestataDaPvAt ? ` il ${formatDate(p.attestataDaPvAt)}` : '';
   const attestazioneText = p.attestataDaPv
-    ? `\nLa firma è stata registrata dal team Passaggio Veloce sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all'assistenza.`
+    ? `\nLa firma è stata registrata dal team Passaggio Veloce${dataAttestazioneN8Text} sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all'assistenza.`
     : '';
   const text =
     `Ciao ${p.nomeAgenzia},\n` +
@@ -383,8 +403,11 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
     `sarà addebitato il ${formatDate(p.autoAddebitoAt)}. ` +
     `In caso di "firma avvenuta" anticipata l'addebito avviene al momento.` +
     attestazioneText;
+  const dataAttestazioneN8Html = p.attestataDaPvAt
+    ? ` il <strong>${formatDate(p.attestataDaPvAt)}</strong>`
+    : '';
   const attestazioneHtml = p.attestataDaPv
-    ? `<p style="margin:16px 0 0;font-size:12px;color:#64748b">La firma è stata registrata dal <strong>team Passaggio Veloce</strong> sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all&apos;assistenza.</p>`
+    ? `<p style="margin:16px 0 0;font-size:12px;color:#64748b">La firma è stata registrata dal <strong>team Passaggio Veloce</strong>${dataAttestazioneN8Html} sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all&apos;assistenza.</p>`
     : '';
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Fee pratica programmata</h1>

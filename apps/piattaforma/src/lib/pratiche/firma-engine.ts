@@ -231,8 +231,24 @@ export async function firmaPraticaCore(
       const autoAddebitoAt = now;
       feeAgenziaCentFattura = pratica.feeAgenziaCent;
 
-      await tx.pratica.update({
-        where: { id: praticaId },
+      // Compare-and-set, non leggi-poi-scrivi: a READ COMMITTED (default
+      // Postgres/Prisma) due transazioni concorrenti possono leggere entrambe
+      // PROCESSATA sopra, superare entrambe `motivoBloccoFirma` e — con un
+      // `update` semplice — scrivere entrambe FIRMATA. Scenario concreto di
+      // questa feature: l'admin telefona all'agenzia per attestare, e la
+      // telefonata stessa spinge l'agenzia a cliccare "Firma avvenuta" negli
+      // stessi secondi. Il risultato sarebbe un doppio `FeeAddebito` (agenzia
+      // addebitata due volte) e un doppio credito wallet al broker: non
+      // esiste un vincolo unique che lo impedisca a valle.
+      //
+      // Le precondizioni dello stato entrano nel WHERE: solo la transazione
+      // che le trova ancora vere scrive. `motivoBloccoFirma` resta comunque
+      // la difesa che sceglie IL messaggio (stato sbagliato vs segnalazione
+      // vs agenzia mancante); questo `updateMany` è la rete finale, non il
+      // sostituto — se arriva a `count === 0` è perché qualcun altro ha
+      // vinto la corsa tra la lettura sopra e questa scrittura.
+      const { count } = await tx.pratica.updateMany({
+        where: { id: praticaId, stato: 'PROCESSATA', flagSegnalata: false },
         data: {
           stato: 'FIRMATA',
           firmaAvvenutaAt: now,
@@ -249,6 +265,9 @@ export async function firmaPraticaCore(
             : {}),
         },
       });
+      if (count === 0) {
+        throw new Error('Pratica già firmata o non più firmabile');
+      }
 
       // Credito wallet broker (proventi pratica) — multi-sede: wallet della sede.
       if (pratica.creditoBrokerCent > 0 && pratica.brokerSedeId) {
@@ -391,6 +410,7 @@ export async function firmaPraticaCore(
             saldoCent: full.broker.wallet?.saldoCent ?? 0,
             nomeBroker,
             attestataDaPv: full.firmaForzataAt !== null,
+            attestataDaPvAt: full.firmaForzataAt,
           },
         }, { praticaId }).catch(() => undefined);
       }
@@ -439,6 +459,7 @@ export async function firmaPraticaCore(
               autoAddebitoAt: full.autoAddebitoAt,
               nomeAgenzia: full.agenziaAssegnata.ragioneSociale,
               attestataDaPv: full.firmaForzataAt !== null,
+              attestataDaPvAt: full.firmaForzataAt,
             },
           },
           { praticaId, ...(fatturaPdf ? { attachments: [fatturaPdf] } : {}) },

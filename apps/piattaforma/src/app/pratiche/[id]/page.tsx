@@ -139,6 +139,19 @@ export default async function PraticaDetailPage({
 
   if (!pratica) notFound();
 
+  // Attestazione firma (Termini art. 11): l'autore è scritto (`firmaForzataDaId`)
+  // ma — a differenza di `creatoDaUserId`/`accettataDaUserId` (relazioni
+  // `creatoDa`/`accettataDa`) — non ha una relazione Prisma che lo risolva a
+  // utente. Query minimale, solo per lo staff: in una contestazione un admin
+  // deve poter vedere CHI ha attestato senza aprire il database.
+  const firmaForzataDaUser =
+    isStaff && pratica.firmaForzataDaId
+      ? await prisma.user.findUnique({
+          where: { id: pratica.firmaForzataDaId },
+          select: { nome: true, cognome: true, email: true },
+        })
+      : null;
+
   // Mostra solo le fatture che il viewer può effettivamente aprire (admin / sua
   // emittente / sua destinataria / sua sede): un broker non deve vedere/cliccare
   // la FATTURA_PV PV→agenzia della pratica (darebbe 404 sul dettaglio).
@@ -717,6 +730,7 @@ export default async function PraticaDetailPage({
                   session.user.role === 'ADMIN_PIATTAFORMA' ||
                   session.user.role === 'ASSISTENTE'
                 }
+                firmaForzataDaUser={firmaForzataDaUser}
               />
             </Card>
 
@@ -885,6 +899,7 @@ type TimelineStep = {
 function Timeline({
   pratica,
   showInternals,
+  firmaForzataDaUser,
 }: {
   pratica: {
     createdAt: Date;
@@ -909,6 +924,12 @@ function Timeline({
    * firma (Termini art. 11): stessa platea (isStaff), stesso criterio.
    */
   showInternals: boolean;
+  /**
+   * Chi ha attestato la firma (Termini art. 11: "il Gestore registra
+   * internamente data, autore e motivazione"). Risolto dal chiamante da
+   * `firmaForzataDaId` — null se non attestata o se il viewer non è staff.
+   */
+  firmaForzataDaUser?: { nome: string; cognome: string; email: string } | null;
 }) {
   const steps: TimelineStep[] = [
     { label: 'Creazione pratica', at: pratica.createdAt },
@@ -961,6 +982,12 @@ function Timeline({
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-700">
             Motivazione attestazione (interna)
           </p>
+          {firmaForzataDaUser && (
+            <p className="text-[11px] text-pv-slate-500">
+              Attestata da {firmaForzataDaUser.nome} {firmaForzataDaUser.cognome} (
+              {firmaForzataDaUser.email})
+            </p>
+          )}
           <p className="mt-1 text-[12.5px] text-pv-slate-700">{pratica.firmaForzataMotivo}</p>
         </div>
       )}

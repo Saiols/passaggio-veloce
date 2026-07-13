@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
+import { formatDate } from '@/lib/format';
 
 describe('templates usano il nuovo layout', () => {
   it('N1 contiene header navy, logo, footer legale', () => {
@@ -204,6 +205,20 @@ describe('N4 — firma attestata dal Gestore (Termini art. 11)', () => {
     expect(out.text.toLowerCase()).not.toContain('motivo');
     expect(out.html.toLowerCase()).not.toContain('motivo');
   });
+
+  it('firma attestata con data: riporta la data dell\'attestazione (art. 11 — decorrenza contestazione)', () => {
+    const attestataDaPvAt = new Date('2026-07-13T10:00:00Z');
+    const out = tplN4BrokerFirma({ ...n4, attestataDaPv: true, attestataDaPvAt });
+    const dataAttesa = formatDate(attestataDaPvAt);
+    expect(out.text).toContain(dataAttesa);
+    expect(out.html).toContain(dataAttesa);
+  });
+
+  it('firma attestata senza data (retrocompatibilità): non rompe, semplicemente non la riporta', () => {
+    const out = tplN4BrokerFirma({ ...n4, attestataDaPv: true });
+    expect(out.text).toContain('avendone avuto conferma');
+    expect(out.html).toContain('avendone avuto conferma');
+  });
 });
 
 describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 11)', () => {
@@ -228,5 +243,13 @@ describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 
     expect(out.html).toContain('team Passaggio Veloce');
     expect(out.html).toContain('clausola 11');
     expect(out.html).toContain('15 giorni');
+  });
+
+  it('firma attestata con data: riporta la data dell\'attestazione (art. 11 — decorrenza contestazione)', () => {
+    const attestataDaPvAt = new Date('2026-07-13T10:00:00Z');
+    const out = tplN8AgenziaAddebito({ ...n8, attestataDaPv: true, attestataDaPvAt });
+    const dataAttesa = formatDate(attestataDaPvAt);
+    expect(out.text).toContain(dataAttesa);
+    expect(out.html).toContain(dataAttesa);
   });
 });

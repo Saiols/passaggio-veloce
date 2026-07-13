@@ -27,6 +27,7 @@ export const MAPPA_API: Record<string, Permesso | null> = {
   // Stesso dominio di autorizzazione escluso da mappa-pagine.ts/mappa-enforcement.ts
   // (src/app/admin/**): gate a ruolo, non al catalogo permessi azienda.
   'src/app/api/admin/affiliazioni/export/route.ts': null, // isAdminPiattaforma
+  'src/app/api/admin/companies/[id]/documenti-zip/route.ts': null, // isAdminPiattaforma
   'src/app/api/admin/contatti/export/route.ts': null, // isAdminOrAssistente
   'src/app/api/admin/dashboard/export/route.ts': null, // canViewAggregatedFinancials
   'src/app/api/admin/fatturazione/export/route.ts': null, // isAdminPiattaforma

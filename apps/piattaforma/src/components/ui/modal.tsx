@@ -37,6 +37,20 @@ export function Modal({
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
+  // `onClose` va letto da una ref, MAI messo nelle deps dell'effect qui
+  // sotto. I consumer passano quasi sempre un arrow inline
+  // (`onClose={() => setOpen(false)}`), quindi la sua identità cambia ad
+  // ogni render del consumer. Se `onClose` fosse nelle deps, un campo
+  // controllato dentro il modale (es. una <textarea> con value+onChange)
+  // farebbe ri-eseguire l'effect ad ogni tasto premuto, e l'effect rifà
+  // `firstFocusable.focus()` sul primo elemento focusabile del dialog —
+  // che è il bottone "✕" — strappando il focus dal campo che si sta
+  // scrivendo. Bug reale riprodotto in modal.test.tsx.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
@@ -44,7 +58,7 @@ export function Modal({
     const handleKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key === 'Tab' && dialogRef.current) {
@@ -76,7 +90,8 @@ export function Modal({
       document.documentElement.classList.remove('overflow-hidden');
       previouslyFocused.current?.focus?.();
     };
-  }, [open, onClose]);
+    // SOLO `open` in deps — vedi il commento su `onCloseRef` sopra.
+  }, [open]);
 
   if (!open) return null;
   if (typeof document === 'undefined') return null;

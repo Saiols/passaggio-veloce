@@ -409,8 +409,12 @@ export async function firmaPraticaCore(
             creditoCent: full.creditoBrokerCent,
             saldoCent: full.broker.wallet?.saldoCent ?? 0,
             nomeBroker,
-            attestataDaPv: full.firmaForzataAt !== null,
-            attestataDaPvAt: full.firmaForzataAt,
+            // `Boolean`, non `!== null`: se un domani questa findUnique passasse a
+            // `select` senza includere il campo, `undefined !== null` sarebbe TRUE e
+            // la N4 affermerebbe un'attestazione mai avvenuta — su una firma normale
+            // dell'agenzia, per iscritto, mentre le addebitiamo la fee.
+            attestataDaPv: Boolean(full.firmaForzataAt),
+            attestataDaPvAt: full.firmaForzataAt ?? null,
           },
         }, { praticaId }).catch(() => undefined);
       }
@@ -458,8 +462,9 @@ export async function firmaPraticaCore(
               feeCent: full.feeAgenziaCent,
               autoAddebitoAt: full.autoAddebitoAt,
               nomeAgenzia: full.agenziaAssegnata.ragioneSociale,
-              attestataDaPv: full.firmaForzataAt !== null,
-              attestataDaPvAt: full.firmaForzataAt,
+              // Vedi la N4 sopra: `Boolean`, non `!== null`.
+              attestataDaPv: Boolean(full.firmaForzataAt),
+              attestataDaPvAt: full.firmaForzataAt ?? null,
             },
           },
           { praticaId, ...(fatturaPdf ? { attachments: [fatturaPdf] } : {}) },

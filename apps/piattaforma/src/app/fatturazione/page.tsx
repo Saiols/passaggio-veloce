@@ -7,6 +7,7 @@ import { Card, StatoEmissioneChip } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
+import { BannerFatturazioneAutomatica } from '@/components/fatturazione/banner-fatturazione-automatica';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
@@ -115,15 +116,20 @@ export default async function FatturazionePage({
   // FiltriBar mostra solo le sedi accessibili, non l'intero elenco azienda.
   const ctx = await getSessionContext();
   const sedeScope = ctx ? toSedeScope(ctx) : NO_SEDE_SCOPE;
-  const sedi = await prisma.sede.findMany({
-    where: {
-      companyId,
-      deletedAt: null,
-      ...(sedeScope.aggregate ? {} : { id: { in: sedeScope.scopeIds } }),
-    },
-    select: { id: true, nome: true, citta: true },
-    orderBy: { createdAt: 'asc' },
-  });
+  const [sedi, company] = await Promise.all([
+    prisma.sede.findMany({
+      where: {
+        companyId,
+        deletedAt: null,
+        ...(sedeScope.aggregate ? {} : { id: { in: sedeScope.scopeIds } }),
+      },
+      select: { id: true, nome: true, citta: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    // Il regime fiscale sta sulla madre (P.IVA unica) e decide se il documento del
+    // broker vada o meno allo SdI: è quello che il banner può promettere o no.
+    prisma.company.findUnique({ where: { id: companyId }, select: { regimeFiscale: true } }),
+  ]);
   const scope = whereDocumentoFiscale(sedeScope, { companyId, ruolo: tipo });
   // NON usare `{ ...scope, ...fatturaWhereFiltri(filtri) }`: entrambi possono
   // restituire una chiave `AND`, e lo spread la sovrascriverebbe silenziosamente
@@ -152,6 +158,10 @@ export default async function FatturazionePage({
             />
           )}
         </header>
+
+        {/* Senza regime non sappiamo se il documento vada allo SdI: meglio nessun
+            banner che un banner che promette il cassetto fiscale a caso. */}
+        {company && <BannerFatturazioneAutomatica ruolo={tipo} regime={company.regimeFiscale} />}
 
         <FiltriBar filtri={filtri} sedi={sedi} />
 

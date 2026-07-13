@@ -4,6 +4,10 @@ import { SiteHeader } from '@/components/site-header';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { webPageJsonLd } from '@/lib/seo/jsonLd';
 import { siteUrl } from '@/lib/seo/brand';
+import {
+  ART_APPROVAZIONE_SPECIFICA,
+  CLAUSOLE_VESSATORIE,
+} from '@/lib/legal/clausole-vessatorie';
 
 export const metadata: Metadata = {
   title: 'Termini e Condizioni',
@@ -13,19 +17,34 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+/** Descrizione sintetica di ogni clausola vessatoria. Le CHIAVI devono coprire
+ *  esattamente CLAUSOLE_VESSATORIE: se aggiungi un numero là e non qui, il
+ *  render mostra `undefined` — il test di Task 1 non lo cattura, l'occhio sì. */
+const DESCRIZIONI_VESSATORIE: Record<number, string> = {
+  3: 'variazione del prezzo del servizio a discrezione del Gestore',
+  5: 'condizioni e soglia di prelievo del wallet (payout)',
+  7: 'determinazione differenziata del compenso in base al regime fiscale',
+  8: 'manleva in materia di visura camerale',
+  10: 'sistema di segnalazioni e penali',
+  11: 'potere di attestazione della firma da parte del Gestore',
+  12: 'limitazione operativa, sospensione e cancellazione dell’account',
+  13: 'limitazioni di responsabilità',
+  17: 'deroga alla competenza territoriale (foro esclusivo)',
+};
+
 /**
  * Termini e Condizioni di utilizzo (contratto B2B). Draft tecnico completo:
  * DA SOTTOPORRE A REVISIONE LEGALE prima del go-live, in particolare la clausola 3
  * (variazione prezzo a discrezione), le manleve (8) e le limitazioni di
- * responsabilità (12). Le clausole vessatorie ex artt. 1341-1342 c.c. sono
- * elencate alla clausola 17 e richiedono la seconda accettazione specifica
+ * responsabilità (13). Le clausole vessatorie ex artt. 1341-1342 c.c. sono
+ * elencate alla clausola 18 e richiedono la seconda accettazione specifica
  * raccolta in fase di registrazione.
  *
  * Revisione 2026-07-11: riscritte le clausole 5 (prelievo — un wallet per
  * sede + wallet madre affiliazione, soglia di accumulo per wallet, nessuna
  * decadenza, liquidazione del residuo alla cessazione), 10 (penali —
- * esaustiva e tassativa) e 11 (limitazione / sospensione / cancellazione —
- * quattro misure distinte, motivi tassativi, incl. 11.3-bis sospensione
+ * esaustiva e tassativa) e 12 (limitazione / sospensione / cancellazione —
+ * quattro misure distinte, motivi tassativi, incl. 12.3-bis sospensione
  * della singola utenza). Spec:
  * docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
  */
@@ -44,7 +63,7 @@ export default function TerminiPage() {
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Termini e Condizioni di Utilizzo
         </h1>
-        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-11</p>
+        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-13</p>
 
         <p className="mt-4">
           I presenti Termini e Condizioni (i &laquo;<strong>Termini</strong>&raquo;) disciplinano
@@ -105,7 +124,7 @@ export default function TerminiPage() {
             </strong>
             , anche in relazione alla tipologia di pratica, alla zona e alle condizioni di mercato.
             L&apos;agenzia accetta espressamente tale facoltà di variazione (clausola vessatoria: v.
-            clausola 17).
+            clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -142,7 +161,7 @@ export default function TerminiPage() {
             <strong>In ogni caso di cessazione del rapporto</strong> (recesso di una delle parti, chiusura o cancellazione dell&apos;account) <strong>il saldo residuo è liquidato integralmente all&apos;Utente anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce. Qualora un wallet dell&apos;Utente presenti saldo negativo, <strong>la liquidazione è sospesa fino alla regolarizzazione del debito</strong>.
           </p>
           <p>
-            In caso di penali (clausola 10) il saldo di un wallet può risultare negativo: in tale ipotesi <strong>i prelievi sono sospesi su tutti i wallet dell&apos;Utente</strong> (ogni sede e, ove presente, il wallet aziendale di affiliazione) <strong>e non soltanto su quello in negativo</strong>, fino al ripristino di un saldo non negativo su quest&apos;ultimo; nel frattempo i compensi successivi continuano ad accreditarsi liberamente su ciascun wallet, anche a compensazione del saldo negativo. <strong>L&apos;operatività dell&apos;Utente nella gestione delle pratiche resta invariata.</strong> L&apos;Utente accetta espressamente le presenti condizioni di prelievo, inclusa la soglia di richiesta del payout e la sospensione dei prelievi su tutti i wallet in caso di saldo negativo di uno solo di essi (clausola vessatoria: v. clausola 17).
+            In caso di penali (clausola 10) il saldo di un wallet può risultare negativo: in tale ipotesi <strong>i prelievi sono sospesi su tutti i wallet dell&apos;Utente</strong> (ogni sede e, ove presente, il wallet aziendale di affiliazione) <strong>e non soltanto su quello in negativo</strong>, fino al ripristino di un saldo non negativo su quest&apos;ultimo; nel frattempo i compensi successivi continuano ad accreditarsi liberamente su ciascun wallet, anche a compensazione del saldo negativo. <strong>L&apos;operatività dell&apos;Utente nella gestione delle pratiche resta invariata.</strong> L&apos;Utente accetta espressamente le presenti condizioni di prelievo, inclusa la soglia di richiesta del payout e la sospensione dei prelievi su tutti i wallet in caso di saldo negativo di uno solo di essi (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -175,7 +194,7 @@ export default function TerminiPage() {
             all&apos;IVA</strong> e l&apos;importo erogato all&apos;Utente sarà conseguentemente{' '}
             <strong>inferiore</strong> rispetto a quello riconosciuto ai soggetti che applicano
             l&apos;IVA. L&apos;Utente accetta espressamente tale meccanismo di determinazione
-            differenziata del compenso (clausola vessatoria: v. clausola 17).
+            differenziata del compenso (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -192,7 +211,7 @@ export default function TerminiPage() {
             aggiornati (inclusa la visura), affinché sia garantita una gestione corretta della
             fatturazione, anche nell&apos;ambito della fatturazione per conto terzi di cui alla
             clausola 6. L&apos;Utente accetta espressamente la presente manleva (clausola vessatoria:
-            v. clausola 17).
+            v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -235,25 +254,60 @@ export default function TerminiPage() {
             <strong>10.6 &mdash; Saldo negativo.</strong> L&apos;addebito può portare il wallet della sede a saldo negativo. In tal caso, come previsto dalla clausola 5, <strong>i prelievi sono sospesi su tutti i wallet dell&apos;Utente</strong> (non solo su quello addebitato) fino al ripristino di un saldo non negativo su quest&apos;ultimo; i compensi successivi si accreditano liberamente a compensazione, e <strong>l&apos;operatività resta invariata</strong>: il broker può continuare a caricare e gestire pratiche.
           </p>
           <p>
-            <strong>10.7 &mdash; Reiterazione.</strong> Al raggiungimento di <strong>2 penali confermate</strong>, la posizione del broker è sottoposta a valutazione ai fini della sospensione ai sensi della clausola 11.
+            <strong>10.7 &mdash; Reiterazione.</strong> Al raggiungimento di <strong>2 penali confermate</strong>, la posizione del broker è sottoposta a valutazione ai fini della sospensione ai sensi della clausola 12.
           </p>
           <p>
-            <strong>10.8 &mdash; Tassatività.</strong> La penale di cui al punto 10.4 è <strong>l&apos;unica penale</strong> applicata da Passaggio Veloce. Oltre ad essa e al corrispettivo di cui alla clausola 3, <strong>nessun altro importo è addebitato all&apos;Utente a titolo di penale, sanzione o costo</strong>. Restano salve le sole <strong>rettifiche contabili</strong> volte a correggere accrediti o addebiti erronei, prive di natura sanzionatoria e sempre motivate e tracciate nel wallet. L&apos;Utente accetta espressamente il presente sistema di segnalazioni e penali (clausola vessatoria: v. clausola 17).
+            <strong>10.8 &mdash; Tassatività.</strong> La penale di cui al punto 10.4 è <strong>l&apos;unica penale</strong> applicata da Passaggio Veloce. Oltre ad essa e al corrispettivo di cui alla clausola 3, <strong>nessun altro importo è addebitato all&apos;Utente a titolo di penale, sanzione o costo</strong>. Restano salve le sole <strong>rettifiche contabili</strong> volte a correggere accrediti o addebiti erronei, prive di natura sanzionatoria e sempre motivate e tracciate nel wallet. L&apos;Utente accetta espressamente il presente sistema di segnalazioni e penali (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
-        <Section title="11. Limitazione operativa, sospensione e cancellazione dell'account">
+        <Section title="11. Attestazione della firma da parte del Gestore">
+          <p>
+            Completata la lavorazione da parte dell&apos;Agenzia, la pratica resta in attesa che
+            venga segnalata sulla Piattaforma l&apos;avvenuta sottoscrizione da parte del cliente.
+            Il Gestore monitora le pratiche in attesa e può sollecitare Broker e Agenzia affinché
+            vi provvedano.
+          </p>
+          <p>
+            Qualora il Gestore acquisisca, per qualunque via (dichiarazione dell&apos;Agenzia o del
+            Broker, documentazione ricevuta, riscontro presso gli uffici competenti), la conoscenza
+            che la sottoscrizione è già intervenuta,{' '}
+            <strong>
+              può attestarla direttamente sulla Piattaforma in luogo dell&apos;Agenzia
+            </strong>
+            .
+          </p>
+          <p>
+            L&apos;attestazione produce <strong>tutti gli effetti della segnalazione ordinaria</strong>:
+            perfezionamento della pratica, maturazione del compenso del Broker, addebito della fee a
+            carico dell&apos;Agenzia ed emissione della relativa fattura.
+          </p>
+          <p>
+            Il Gestore registra data, autore e motivazione dell&apos;attestazione e ne dà evidenza a
+            Broker e Agenzia. L&apos;Agenzia che ritenga l&apos;attestazione erronea può contestarla,
+            con comunicazione motivata all&apos;indirizzo di assistenza,{' '}
+            <strong>entro 15 giorni</strong> dalla comunicazione della stessa; in caso di
+            contestazione fondata il Gestore procede allo storno dell&apos;addebito e
+            all&apos;emissione di nota di credito.
+          </p>
+          <p>
+            L&apos;Utente approva espressamente il presente potere di attestazione (clausola
+            vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+          </p>
+        </Section>
+
+        <Section title="12. Limitazione operativa, sospensione e cancellazione dell'account">
           <p>
             Passaggio Veloce adotta <strong>quattro misure distinte</strong>, di gravità crescente, di seguito elencate <strong>in modo tassativo</strong>.
           </p>
           <p>
-            <strong>11.1 &mdash; Limitazione operativa per mancato incasso della fee (solo agenzie).</strong> <em>Presupposto:</em> l&apos;addebito SEPA della fee (clausola 3) non va a buon fine. <em>Effetto:</em> l&apos;agenzia <strong>conserva l&apos;accesso alla Piattaforma</strong> &mdash; <strong>l&apos;account NON è sospeso</strong> &mdash; ma è esclusa dalla distribuzione di nuove pratiche e non può accettare, lavorare o portare a firma pratiche fino alla regolarizzazione. <em>Rimedio:</em> l&apos;agenzia può in ogni momento <strong>aggiornare l&apos;IBAN</strong> o <strong>richiedere un nuovo tentativo di addebito</strong> dall&apos;apposita sezione. <em>Revoca:</em> <strong>automatica</strong>, non appena non risultino più addebiti insoluti o in corso. Non è discrezionale.
+            <strong>12.1 &mdash; Limitazione operativa per mancato incasso della fee (solo agenzie).</strong> <em>Presupposto:</em> l&apos;addebito SEPA della fee (clausola 3) non va a buon fine. <em>Effetto:</em> l&apos;agenzia <strong>conserva l&apos;accesso alla Piattaforma</strong> &mdash; <strong>l&apos;account NON è sospeso</strong> &mdash; ma è esclusa dalla distribuzione di nuove pratiche e non può accettare, lavorare o portare a firma pratiche fino alla regolarizzazione. <em>Rimedio:</em> l&apos;agenzia può in ogni momento <strong>aggiornare l&apos;IBAN</strong> o <strong>richiedere un nuovo tentativo di addebito</strong> dall&apos;apposita sezione. <em>Revoca:</em> <strong>automatica</strong>, non appena non risultino più addebiti insoluti o in corso. Non è discrezionale.
           </p>
           <p>
-            <strong>11.2 &mdash; Sospensione automatica per mancate risposte reiterate (solo agenzie).</strong> <em>Presupposto:</em> <strong>5 assegnazioni consecutive lasciate scadere senza alcuna risposta</strong> (né accettazione né rifiuto). <em>Effetto:</em> è sospesa la <strong>singola sede</strong> interessata, esclusa dalla distribuzione. <strong>Le altre sedi restano attive e gli utenti non sono disabilitati.</strong> <em>Misura anti-elusione:</em> finché la sospensione della sede ai sensi del presente punto è in essere, l&apos;Utente <strong>non può aprire nuove sedi</strong> per aggirarla. <em>Precisazione:</em> il <strong>rifiuto espresso</strong> di una pratica <strong>non concorre</strong> a questa soglia &mdash; incide solo sull&apos;ordinamento in distribuzione. Rileva <strong>unicamente la mancata risposta</strong>. <em>Revoca:</em> la sospensione disposta dal sistema anti-abuso è revocata <strong>da Passaggio Veloce</strong>, su richiesta dell&apos;Utente e previa verifica. Resta ferma e impregiudicata la facoltà dell&apos;Utente di <strong>sospendere e riattivare autonomamente</strong> le proprie sedi per esigenze organizzative: tale facoltà <strong>non consente</strong> di revocare la sospensione disposta ai sensi del presente punto.
+            <strong>12.2 &mdash; Sospensione automatica per mancate risposte reiterate (solo agenzie).</strong> <em>Presupposto:</em> <strong>5 assegnazioni consecutive lasciate scadere senza alcuna risposta</strong> (né accettazione né rifiuto). <em>Effetto:</em> è sospesa la <strong>singola sede</strong> interessata, esclusa dalla distribuzione. <strong>Le altre sedi restano attive e gli utenti non sono disabilitati.</strong> <em>Misura anti-elusione:</em> finché la sospensione della sede ai sensi del presente punto è in essere, l&apos;Utente <strong>non può aprire nuove sedi</strong> per aggirarla. <em>Precisazione:</em> il <strong>rifiuto espresso</strong> di una pratica <strong>non concorre</strong> a questa soglia &mdash; incide solo sull&apos;ordinamento in distribuzione. Rileva <strong>unicamente la mancata risposta</strong>. <em>Revoca:</em> la sospensione disposta dal sistema anti-abuso è revocata <strong>da Passaggio Veloce</strong>, su richiesta dell&apos;Utente e previa verifica. Resta ferma e impregiudicata la facoltà dell&apos;Utente di <strong>sospendere e riattivare autonomamente</strong> le proprie sedi per esigenze organizzative: tale facoltà <strong>non consente</strong> di revocare la sospensione disposta ai sensi del presente punto.
           </p>
           <p>
-            <strong>11.3 &mdash; Sospensione dell&apos;account.</strong> <em>Effetto:</em> l&apos;accesso alla Piattaforma è inibito per l&apos;azienda e per tutte le sue utenze. La misura è <strong>reversibile</strong>. <em>Motivi tassativi</em> &mdash; la sospensione può essere disposta <strong>esclusivamente</strong> per uno dei seguenti motivi:
+            <strong>12.3 &mdash; Sospensione dell&apos;account.</strong> <em>Effetto:</em> l&apos;accesso alla Piattaforma è inibito per l&apos;azienda e per tutte le sue utenze. La misura è <strong>reversibile</strong>. <em>Motivi tassativi</em> &mdash; la sospensione può essere disposta <strong>esclusivamente</strong> per uno dei seguenti motivi:
           </p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
             <li>
@@ -269,7 +323,7 @@ export default function TerminiPage() {
               <strong>raggiungimento di 2 penali confermate</strong> ai sensi della clausola 10;
             </li>
             <li>
-              <strong>mancata regolarizzazione</strong> della limitazione di cui al punto 11.1 nonostante i solleciti;
+              <strong>mancata regolarizzazione</strong> della limitazione di cui al punto 12.1 nonostante i solleciti;
             </li>
             <li>
               <strong>violazione grave o reiterata</strong> dei presenti Termini;
@@ -301,24 +355,24 @@ export default function TerminiPage() {
             <em>Effetti economici:</em> <strong>la sospensione non comporta in alcun caso la perdita dei compensi già maturati</strong>, che restano accreditati sul wallet e sono liquidati ai sensi della clausola 5.
           </p>
           <p>
-            <strong>11.3-bis &mdash; Sospensione della singola utenza.</strong> Oltre alla sospensione dell&apos;intero account di cui al punto 11.3, Passaggio Veloce può sospendere una <strong>singola utenza</strong> associata all&apos;Utente (un dipendente o collaboratore autorizzato ad accedere alla Piattaforma), per uno dei <strong>motivi tassativi elencati al punto 11.3</strong>, quando la condotta contestata sia riferibile a quella specifica persona e non renda necessaria la sospensione dell&apos;intero account. <em>Effetto:</em> l&apos;utenza interessata <strong>non può più accedere</strong> alla Piattaforma; <strong>l&apos;account aziendale e le altre utenze dell&apos;Utente restano pienamente operativi</strong>. <em>Comunicazione e riesame:</em> la sospensione è <strong>comunicata via email all&apos;utenza interessata, con indicazione del motivo</strong>; l&apos;Utente (tramite il proprio account amministratore) e la persona interessata possono chiedere il <strong>riesame</strong> con le stesse modalità del punto 11.3. <em>Effetti economici:</em> restano fermi quelli del punto 11.3 &mdash; <strong>nessuna perdita dei compensi già maturati</strong>.
+            <strong>12.3-bis &mdash; Sospensione della singola utenza.</strong> Oltre alla sospensione dell&apos;intero account di cui al punto 12.3, Passaggio Veloce può sospendere una <strong>singola utenza</strong> associata all&apos;Utente (un dipendente o collaboratore autorizzato ad accedere alla Piattaforma), per uno dei <strong>motivi tassativi elencati al punto 12.3</strong>, quando la condotta contestata sia riferibile a quella specifica persona e non renda necessaria la sospensione dell&apos;intero account. <em>Effetto:</em> l&apos;utenza interessata <strong>non può più accedere</strong> alla Piattaforma; <strong>l&apos;account aziendale e le altre utenze dell&apos;Utente restano pienamente operativi</strong>. <em>Comunicazione e riesame:</em> la sospensione è <strong>comunicata via email all&apos;utenza interessata, con indicazione del motivo</strong>; l&apos;Utente (tramite il proprio account amministratore) e la persona interessata possono chiedere il <strong>riesame</strong> con le stesse modalità del punto 12.3. <em>Effetti economici:</em> restano fermi quelli del punto 12.3 &mdash; <strong>nessuna perdita dei compensi già maturati</strong>.
           </p>
           <p>
-            <strong>11.4 &mdash; Cancellazione dell&apos;account.</strong> <em>Su richiesta dell&apos;Utente:</em> scrivendo ad{' '}
+            <strong>12.4 &mdash; Cancellazione dell&apos;account.</strong> <em>Su richiesta dell&apos;Utente:</em> scrivendo ad{' '}
             <a
               href="mailto:assistenza@passaggioveloce.it"
               className="font-semibold text-pv-navy-700 hover:underline"
             >
               assistenza@passaggioveloce.it
             </a>
-            . <em>Su iniziativa di Passaggio Veloce:</em> <strong>solo</strong> nelle ipotesi di cui al punto 11.3 di <strong>particolare gravità</strong> (frode accertata, falsità documentale, illecito, ordine dell&apos;Autorità) <strong>oppure</strong> in caso di perdurante sospensione senza regolarizzazione. <em>Effetti:</em> disattivazione dell&apos;account e cancellazione dei dati secondo l&apos;Informativa Privacy, fatti salvi gli obblighi di conservazione di legge (in particolare fiscali e contabili) e le esigenze di audit sulle pratiche già eseguite. <em>Effetti economici:</em> restano dovuti gli importi maturati fino alla cessazione; <strong>il saldo residuo del wallet è liquidato integralmente all&apos;Utente, anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce.
+            . <em>Su iniziativa di Passaggio Veloce:</em> <strong>solo</strong> nelle ipotesi di cui al punto 12.3 di <strong>particolare gravità</strong> (frode accertata, falsità documentale, illecito, ordine dell&apos;Autorità) <strong>oppure</strong> in caso di perdurante sospensione senza regolarizzazione. <em>Effetti:</em> disattivazione dell&apos;account e cancellazione dei dati secondo l&apos;Informativa Privacy, fatti salvi gli obblighi di conservazione di legge (in particolare fiscali e contabili) e le esigenze di audit sulle pratiche già eseguite. <em>Effetti economici:</em> restano dovuti gli importi maturati fino alla cessazione; <strong>il saldo residuo del wallet è liquidato integralmente all&apos;Utente, anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce.
           </p>
           <p>
-            <strong>11.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account o delle singole utenze. Restano ferme le <strong>misure tecniche di sicurezza</strong> a protezione dell&apos;account, quali il blocco temporaneo dell&apos;accesso dopo ripetuti tentativi di login falliti: non hanno natura sanzionatoria e non costituiscono una misura ai sensi della presente clausola. <strong>In nessun caso</strong> la limitazione, la sospensione (dell&apos;account o della singola utenza) o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente. L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione dell&apos;account, sospensione della singola utenza e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola 17).
+            <strong>12.5 &mdash; Tassatività.</strong> Al di fuori delle ipotesi elencate nella presente clausola, Passaggio Veloce <strong>non adotta alcuna misura limitativa, sospensiva o interruttiva</strong> dell&apos;account o delle singole utenze. Restano ferme le <strong>misure tecniche di sicurezza</strong> a protezione dell&apos;account, quali il blocco temporaneo dell&apos;accesso dopo ripetuti tentativi di login falliti: non hanno natura sanzionatoria e non costituiscono una misura ai sensi della presente clausola. <strong>In nessun caso</strong> la limitazione, la sospensione (dell&apos;account o della singola utenza) o la cancellazione comportano <strong>la perdita dei compensi già maturati</strong> dall&apos;Utente. L&apos;Utente accetta espressamente le misure di limitazione operativa, sospensione dell&apos;account, sospensione della singola utenza e cancellazione dell&apos;account disciplinate dalla presente clausola (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
-        <Section title="12. Limitazioni di responsabilità">
+        <Section title="13. Limitazioni di responsabilità">
           <p>
             Passaggio Veloce risponde esclusivamente del corretto funzionamento tecnologico della
             Piattaforma e della corretta esecuzione delle transazioni economiche tracciate. Nei
@@ -329,11 +383,11 @@ export default function TerminiPage() {
             caso, ove una responsabilità fosse accertata, essa è limitata all&apos;importo delle fee
             corrisposte dall&apos;Utente a Passaggio Veloce nei dodici mesi precedenti l&apos;evento.
             L&apos;Utente accetta espressamente la presente limitazione (clausola vessatoria: v.
-            clausola 17).
+            clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
-        <Section title="13. Modifiche ai Termini">
+        <Section title="14. Modifiche ai Termini">
           <p>
             Passaggio Veloce può modificare i presenti Termini con <strong>preavviso di 30
             giorni</strong> notificato via email. Per le modifiche sostanziali (in particolare
@@ -344,7 +398,7 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="14. Durata e recesso">
+        <Section title="15. Durata e recesso">
           <p>
             Il rapporto è a <strong>tempo indeterminato</strong>. Ciascuna parte può recedere
             liberamente in qualsiasi momento con <strong>preavviso di 30 giorni</strong> comunicato
@@ -353,7 +407,7 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="15. Trattamento dei dati personali">
+        <Section title="16. Trattamento dei dati personali">
           <p>
             Il trattamento dei dati personali è disciplinato dall&apos;
             <Link href="/privacy" className="font-semibold text-pv-navy-700 hover:underline">
@@ -364,54 +418,28 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="16. Legge applicabile e foro competente">
+        <Section title="17. Legge applicabile e foro competente">
           <p>
             I presenti Termini sono regolati dalla <strong>legge italiana</strong>. Per ogni
             controversia relativa alla loro interpretazione ed esecuzione è competente in via
             esclusiva il foro del luogo in cui ha sede legale Passaggio Veloce S.r.l. L&apos;Utente
             accetta espressamente tale deroga alla competenza territoriale (clausola vessatoria: v.
-            clausola 17).
+            clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
-        <Section title="17. Approvazione specifica delle clausole (artt. 1341 e 1342 c.c.)">
+        <Section title="18. Approvazione specifica delle clausole (artt. 1341 e 1342 c.c.)">
           <p>
             Ai sensi e per gli effetti degli <strong>artt. 1341 e 1342 c.c.</strong>, l&apos;Utente
             dichiara di aver letto e di <strong>approvare specificamente</strong> le seguenti
             clausole:
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>
-              <strong>3</strong> (Prezzo del servizio e facoltà di variazione a discrezione, senza
-              limitazioni);
-            </li>
-            <li>
-              <strong>5</strong> (Wallet e condizioni di prelievo, inclusa la soglia di 500 € per
-              la richiesta di payout &mdash; senza decadenza del credito al di sotto di essa
-              &mdash; e la sospensione dei payout su tutti i wallet in caso di saldo negativo
-              anche di uno solo di essi);
-            </li>
-            <li>
-              <strong>7</strong> (Regime fiscale e determinazione differenziata del compenso, incluse
-              le trattenute per i soggetti forfettari);
-            </li>
-            <li>
-              <strong>8</strong> (Responsabilità sull&apos;aggiornamento della visura e manleva a
-              favore di Passaggio Veloce);
-            </li>
-            <li>
-              <strong>10</strong> (Sistema di segnalazioni e penali);
-            </li>
-            <li>
-              <strong>11</strong> (Limitazione operativa, sospensione e cancellazione
-              dell&apos;account);
-            </li>
-            <li>
-              <strong>12</strong> (Limitazioni di responsabilità);
-            </li>
-            <li>
-              <strong>16</strong> (Legge applicabile e foro competente).
-            </li>
+            {CLAUSOLE_VESSATORIE.map((n) => (
+              <li key={n}>
+                <strong>Clausola {n}</strong> — {DESCRIZIONI_VESSATORIE[n]}
+              </li>
+            ))}
           </ul>
           <p className="mt-3">
             L&apos;approvazione specifica delle predette clausole è raccolta, in fase di
@@ -423,7 +451,7 @@ export default function TerminiPage() {
         <p className="mt-8 text-[11px] text-pv-slate-500">
           Documento in versione tecnica completa, soggetto a revisione legale prima
           dell&apos;entrata in vigore definitiva. Eventuali aggiornamenti saranno comunicati via
-          email agli Utenti registrati con il preavviso di cui alla clausola 13.
+          email agli Utenti registrati con il preavviso di cui alla clausola 14.
         </p>
       </article>
     </main>

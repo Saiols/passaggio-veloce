@@ -20,6 +20,7 @@ import { registerAction, checkPromoCodeAction, verifyRegistrationDocumentsAction
 import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
+import { elencoClausoleVessatorie } from '@/lib/legal/clausole-vessatorie';
 import {
   REGISTER_DRAFT_KEY,
   parseRegisterDraft,
@@ -1055,8 +1056,8 @@ function PaymentStep({
       <label className="flex items-start gap-2.5 text-[13px] text-pv-slate-700">
         <Checkbox {...register('clausoleVessatorieAccepted')} className="mt-0.5" />
         <span>
-          Ai sensi degli artt. 1341-1342 c.c. approvo specificamente le clausole nn. 3, 5, 7, 8, 10,
-          11, 12, 16 dei{' '}
+          Ai sensi degli artt. 1341-1342 c.c. approvo specificamente le clausole nn.{' '}
+          {elencoClausoleVessatorie()} dei{' '}
           <a
             href="/termini"
             target="_blank"

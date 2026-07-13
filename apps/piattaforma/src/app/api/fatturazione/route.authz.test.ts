@@ -37,7 +37,7 @@ vi.mock('@/lib/fatturazione/xml-mapper', () => ({
 }));
 vi.mock('@/lib/fatturazione/xml-fatturapa', () => ({ buildFatturaPaXml: () => '<xml/>' }));
 vi.mock('@/lib/fatturazione/pv-emittente', () => ({ pvEmittente: () => ({}) }));
-vi.mock('@/lib/documenti/zip', () => ({ buildPraticaZip: buildZipMock }));
+vi.mock('@/lib/documenti/zip', () => ({ buildDocumentiZip: buildZipMock }));
 
 import { GET as pdfGET } from './[id]/pdf/route';
 import { GET as xmlGET } from './[id]/xml/route';

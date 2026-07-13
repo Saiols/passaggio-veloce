@@ -7,7 +7,7 @@ import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
 import { documentoPdfInclude, documentoPdfInput } from '@/lib/fatturazione/documento-pdf';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
-import { buildPraticaZip, type ZipEntry } from '@/lib/documenti/zip';
+import { buildDocumentiZip, type ZipEntry } from '@/lib/documenti/zip';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, whereDocumentoFiscale, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
@@ -113,7 +113,7 @@ export async function GET(req: Request): Promise<Response> {
     entries.push({ name, buffer: Buffer.from(pdfBytes) });
   }
 
-  const zipBuffer = await buildPraticaZip(entries);
+  const zipBuffer = await buildDocumentiZip(entries);
   const archive = `fatture_${new Date().toISOString().slice(0, 10)}.zip`;
   return new Response(new Uint8Array(zipBuffer), {
     status: 200,

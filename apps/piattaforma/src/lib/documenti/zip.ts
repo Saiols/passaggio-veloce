@@ -27,7 +27,7 @@ export function zipEntryName(
 }
 
 /** Costruisce uno zip in-memory dalle entry. Pura (no I/O). */
-export async function buildPraticaZip(entries: readonly ZipEntry[]): Promise<Buffer> {
+export async function buildDocumentiZip(entries: readonly ZipEntry[]): Promise<Buffer> {
   const zip = new JSZip();
   for (const e of entries) {
     zip.file(e.name, e.buffer);

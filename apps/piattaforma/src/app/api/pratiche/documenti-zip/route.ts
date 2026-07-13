@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma, type Prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
-import { buildPraticaZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
+import { buildDocumentiZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, wherePraticaAttiva, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { hasPermesso } from '@/lib/auth/permessi/guard';
@@ -101,7 +101,7 @@ export async function GET() {
     return NextResponse.json({ error: 'no_documents' }, { status: 404 });
   }
 
-  const zipBuffer = await buildPraticaZip(entries);
+  const zipBuffer = await buildDocumentiZip(entries);
   const today = new Date().toISOString().slice(0, 10);
   const filename = `documenti-pratiche-${today}.zip`;
   const headers = new Headers();

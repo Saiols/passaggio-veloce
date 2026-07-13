@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { getStorage, StorageNotFoundError } from '@/lib/providers/storage';
-import { buildPraticaZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
+import { buildDocumentiZip, streamToBuffer, zipEntryName, type ZipEntry } from '@/lib/documenti/zip';
 import { appendToFilename } from '@/lib/documenti/filename';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
@@ -101,7 +101,7 @@ export async function GET(
     return NextResponse.json({ error: 'no_files' }, { status: 404 });
   }
 
-  const zipBuffer = await buildPraticaZip(entries);
+  const zipBuffer = await buildDocumentiZip(entries);
   const filename = appendToFilename(
     `${pratica.codicePratica ?? pratica.id}.zip`,
     bundleTarga,

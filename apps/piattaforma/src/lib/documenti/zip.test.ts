@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Readable } from 'node:stream';
 import JSZip from 'jszip';
-import { buildPraticaZip, streamToBuffer, zipEntryName } from './zip';
+import { buildDocumentiZip, streamToBuffer, zipEntryName } from './zip';
 
 describe('streamToBuffer', () => {
   it('drains a Readable into a single Buffer', async () => {
@@ -45,14 +45,22 @@ describe('zipEntryName', () => {
   });
 });
 
-describe('buildPraticaZip', () => {
-  it('produces a zip containing all entries', async () => {
-    const buf = await buildPraticaZip([
-      { name: 'a.txt', buffer: Buffer.from('AAA') },
-      { name: 'b.txt', buffer: Buffer.from('BBB') },
+describe('buildDocumentiZip', () => {
+  it('impacchetta le entry con nome e contenuto', async () => {
+    const buf = await buildDocumentiZip([
+      { name: 'Rossi Srl - CI fronte.jpg', buffer: Buffer.from('aaa') },
+      { name: 'Rossi Srl - Visura camerale.pdf', buffer: Buffer.from('bbb') },
     ]);
-    const parsed = await JSZip.loadAsync(buf);
-    expect(Object.keys(parsed.files).sort()).toEqual(['a.txt', 'b.txt']);
-    expect(await parsed.files['a.txt'].async('string')).toBe('AAA');
+    const zip = await JSZip.loadAsync(buf);
+    expect(Object.keys(zip.files).sort()).toEqual([
+      'Rossi Srl - CI fronte.jpg',
+      'Rossi Srl - Visura camerale.pdf',
+    ]);
+    expect(await zip.file('Rossi Srl - CI fronte.jpg')!.async('string')).toBe('aaa');
+  });
+
+  it('uno zip senza entry non esplode', async () => {
+    const zip = await JSZip.loadAsync(await buildDocumentiZip([]));
+    expect(Object.keys(zip.files)).toEqual([]);
   });
 });

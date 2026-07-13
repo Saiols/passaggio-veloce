@@ -1,4 +1,5 @@
 import type { Prisma, DocumentoFiscaleTipo } from '@pv/db';
+import { whereEmissione, type StatoEmissione } from './emissione';
 
 /**
  * Filtri condivisi delle liste fatturazione (broker/agenzia/admin), riusati
@@ -19,6 +20,7 @@ export type FatturaFiltri = {
   dataDa: string | null; // 'YYYY-MM-DD'
   dataA: string | null; // 'YYYY-MM-DD'
   sedeId: string | null;
+  emissione: StatoEmissione | null;
 };
 
 function isYmd(s: string | undefined | null): s is string {
@@ -32,6 +34,7 @@ export function parseFatturaFiltri(sp: {
   dataDa?: string;
   dataA?: string;
   sede?: string;
+  emissione?: string;
 }): FatturaFiltri {
   return {
     q: (sp.q ?? '').trim(),
@@ -41,6 +44,10 @@ export function parseFatturaFiltri(sp: {
     dataDa: isYmd(sp.dataDa) ? sp.dataDa : null,
     dataA: isYmd(sp.dataA) ? sp.dataA : null,
     sedeId: sp.sede && sp.sede.trim() ? sp.sede.trim() : null,
+    emissione:
+      sp.emissione === 'DA_EMETTERE' || sp.emissione === 'EMESSA'
+        ? sp.emissione
+        : null,
   };
 }
 
@@ -57,6 +64,8 @@ export function parseFatturaFiltri(sp: {
 export function fatturaWhereFiltri(f: FatturaFiltri): Prisma.DocumentoFiscaleWhereInput {
   const and: Prisma.DocumentoFiscaleWhereInput[] = [];
   if (f.tipo) and.push({ tipo: f.tipo });
+  const wEmissione = whereEmissione(f.emissione ?? undefined);
+  if (wEmissione) and.push(wEmissione);
   if (f.q) {
     const numQ = /^\d+$/.test(f.q) ? Number(f.q) : null;
     and.push({
@@ -94,5 +103,6 @@ export function fatturaFiltriToQuery(f: FatturaFiltri): string {
   if (f.dataDa) p.set('dataDa', f.dataDa);
   if (f.dataA) p.set('dataA', f.dataA);
   if (f.sedeId) p.set('sede', f.sedeId);
+  if (f.emissione) p.set('emissione', f.emissione);
   return p.toString();
 }

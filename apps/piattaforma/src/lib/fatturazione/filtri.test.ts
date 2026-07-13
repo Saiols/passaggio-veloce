@@ -16,6 +16,7 @@ describe('parseFatturaFiltri', () => {
       dataDa: '2026-06-01',
       dataA: null,
       sedeId: 's1',
+      emissione: null,
     });
   });
 
@@ -74,5 +75,32 @@ describe('fatturaFiltriToQuery', () => {
   it('serializza solo i filtri attivi', () => {
     const qs = fatturaFiltriToQuery(parseFatturaFiltri({ q: 'PV', tipo: 'DOC_BROKER', dataDa: '2026-06-01' }));
     expect(qs).toBe('q=PV&tipo=DOC_BROKER&dataDa=2026-06-01');
+  });
+});
+
+describe('filtro emissione', () => {
+  it('parse legge ?emissione=', () => {
+    expect(parseFatturaFiltri({ emissione: 'DA_EMETTERE' }).emissione).toBe('DA_EMETTERE');
+    expect(parseFatturaFiltri({ emissione: 'PIPPO' }).emissione).toBeNull();
+    expect(parseFatturaFiltri({}).emissione).toBeNull();
+  });
+
+  it('il where esclude i documenti fuori campo SdI dai "da emettere"', () => {
+    const w = fatturaWhereFiltri(parseFatturaFiltri({ emissione: 'DA_EMETTERE' }));
+    expect(w).toEqual({
+      AND: [{ fatturaPaTipo: { not: null }, trasmessoSdiAt: null }],
+    });
+  });
+
+  // Il vincolo del modulo: filtri e scope si compongono con AND. Se il filtro
+  // emissione finisse fuori dall'array AND, un domani uno spread lo perderebbe.
+  it('si combina con gli altri filtri dentro lo stesso AND', () => {
+    const w = fatturaWhereFiltri(parseFatturaFiltri({ emissione: 'EMESSA', tipo: 'FATTURA_PV' }));
+    expect(w.AND).toHaveLength(2);
+  });
+
+  it('round-trip: query → parse → query', () => {
+    const f = parseFatturaFiltri({ emissione: 'DA_EMETTERE', q: 'PV-2026' });
+    expect(fatturaFiltriToQuery(f)).toContain('emissione=DA_EMETTERE');
   });
 });

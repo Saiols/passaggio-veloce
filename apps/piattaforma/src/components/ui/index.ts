@@ -22,4 +22,5 @@ export { StatCard } from './stat-card';
 export { StatusChip } from './status-chip';
 export type { PraticaStato } from './status-chip';
 export { TipoPraticaChip } from './tipo-pratica-chip';
+export { StatoEmissioneChip } from './stato-emissione-chip';
 export { cn } from './cn';

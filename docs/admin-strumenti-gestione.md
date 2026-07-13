@@ -55,19 +55,19 @@ DEFLATE e naming delle entry.
 
 ### Decisione: gli assistenti NON scaricano i documenti d'identità
 
-La pagina è oggi accessibile anche al ruolo Assistente (`isAdminOrAssistente`,
-`admin/companies/[id]/page.tsx:23`) e la route `/api/documenti/[id]` concede allo
-staff di piattaforma un bypass dei permessi (`api/documenti/[id]/route.ts:71`).
-Poiché si tratta di documenti d'identità dei legali rappresentanti:
+La pagina è accessibile anche al ruolo Assistente (`isAdminOrAssistente`,
+`admin/companies/[id]/page.tsx:23`), ma il backend **già oggi glieli nega**:
+`canAccessDocumento` riceve `isAdminPiattaforma`, calcolato come
+`role === 'ADMIN_PIATTAFORMA'` (`api/documenti/[id]/route.ts:50`), quindi un
+Assistente cade nel ramo "documento aziendale" e fallisce il confronto
+`doc.companyId === viewer.companyId` (non ha company). Il bypass dello staff a
+`route.ts:71` riguarda solo il check del permesso `pratiche.download`, che gira
+**dopo** ed è irrilevante.
 
-- la nuova sezione e la nuova route ZIP sono gated a **`isAdminPiattaforma`**;
-- `canAccessDocumento` (`lib/pratiche/access.ts`) viene ristretta: per i
-  documenti **aziendali** (`companyId` valorizzato) l'accesso è del solo
-  `ADMIN_PIATTAFORMA`, non dell'Assistente. I documenti di **pratica** restano
-  accessibili all'Assistente come oggi.
-
-Non è una regressione osservabile: nessuna UI esponeva quegli id, quindi
-l'assistente non poteva già arrivarci se non indovinando un UUID.
+Quindi `lib/pratiche/access.ts` **non va toccato**. Serve solo che la UI non
+prometta ciò che l'API nega: la nuova sezione e la nuova route ZIP sono gated a
+**`isAdminPiattaforma`**, così l'Assistente non vede bottoni che gli
+restituirebbero 403.
 
 ---
 

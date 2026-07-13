@@ -42,6 +42,15 @@ export function AdminPraticheFilters({ q, stato, sede, stati, sedi }: Props) {
         className="block w-full rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-[14px] py-2.5 text-sm font-medium text-pv-slate-900 placeholder:text-pv-slate-500 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
       />
       <select
+        // I tab sono <Link> (soft nav): il componente non si rimonta quando
+        // cambia `?stato=`, riceve solo la nuova prop. Una select uncontrolled
+        // applica `defaultValue` SOLO al mount (React ignora l'update se
+        // `value` è null), quindi senza questa `key` il DOM resterebbe fermo
+        // sul tab precedente finché non lo si tocca a mano — e a quel punto
+        // il form riparte con lo stato vecchio, non quello del tab cliccato.
+        // La `key` forza il remount della sola select (mai del form/input
+        // ricerca, che ha debounce e perderebbe il focus).
+        key={stato ?? ''}
         name="stato"
         defaultValue={stato ?? ''}
         onChange={submit}

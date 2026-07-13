@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { numeroDocumento, labelTipoDocumento } from './format';
+import { numeroDocumento, labelTipoDocumento, messaggioTroncamento } from './format';
 
 describe('numeroDocumento', () => {
   it('FATTURA_PV → PV-<anno>-<5cifre>', () => {
@@ -34,5 +34,24 @@ describe('labelTipoDocumento', () => {
     expect(labelTipoDocumento('DOC_BROKER')).toBe('Compenso intermediazione');
     expect(labelTipoDocumento('NOTA_VARIAZIONE')).toBe('Nota di credito');
     expect(labelTipoDocumento('PENALE_BROKER')).toBe('Penale');
+  });
+});
+
+describe('messaggioTroncamento (M-1)', () => {
+  // /admin/fatturazione mostra al massimo 100 righe (`take: 100`, senza
+  // paginazione) mentre i conteggi dei tab sono `count()` sul totale vero: con
+  // più di 100 documenti che rispettano i filtri correnti, il tab dice un
+  // numero e la tabella ne mostra 100 in silenzio — lo stesso difetto già
+  // corretto su /admin/pratiche. Fix minimo e onesto: dichiarare il
+  // troncamento, non aggiungere paginazione.
+  it('totale entro il limite mostrato → nessun messaggio', () => {
+    expect(messaggioTroncamento(12, 12)).toBeNull();
+    expect(messaggioTroncamento(0, 0)).toBeNull();
+  });
+
+  it('totale oltre il limite mostrato → messaggio con i due numeri', () => {
+    expect(messaggioTroncamento(100, 250)).toBe(
+      'Mostrati i primi 100 di 250 documenti — affina i filtri per vederli tutti.',
+    );
   });
 });

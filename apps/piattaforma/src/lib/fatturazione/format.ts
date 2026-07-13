@@ -46,3 +46,17 @@ const LABELS: Record<DocumentoFiscaleTipo, string> = {
 export function labelTipoDocumento(tipo: DocumentoFiscaleTipo): string {
   return LABELS[tipo];
 }
+
+/**
+ * Messaggio da mostrare quando la lista fatture (/admin/fatturazione) mostra
+ * meno righe di quante ne rispettano i filtri correnti: la `findMany` ha un
+ * `take` senza paginazione, mentre i conteggi dei tab sono `count()` sul
+ * totale vero — senza questo messaggio il tab direbbe un numero e la tabella
+ * ne mostrerebbe di meno in silenzio (lo stesso difetto già corretto su
+ * /admin/pratiche). `null` quando `mostrati` copre già tutto il `totale`: la
+ * tabella non sta mentendo, non c'è nulla da dire.
+ */
+export function messaggioTroncamento(mostrati: number, totale: number): string | null {
+  if (totale <= mostrati) return null;
+  return `Mostrati i primi ${mostrati} di ${totale} documenti — affina i filtri per vederli tutti.`;
+}

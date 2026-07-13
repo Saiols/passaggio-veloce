@@ -6,7 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard, StatoEmissioneChip } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
-import { labelTipoDocumento } from '@/lib/fatturazione/format';
+import { labelTipoDocumento, messaggioTroncamento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { whereEmissione } from '@/lib/fatturazione/emissione';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
@@ -68,7 +68,7 @@ export default async function AdminFatturazionePage({
     orderBy: [{ company: { ragioneSociale: 'asc' } }, { nome: 'asc' }],
   });
 
-  const [docs, kpi, countDaEmettere, countEmesse, countTutte] = await Promise.all([
+  const [docs, kpi, countDaEmettere, countEmesse, countTutte, countFiltrati] = await Promise.all([
     prisma.documentoFiscale.findMany({
       where,
       orderBy: { emessoAt: 'desc' },
@@ -92,7 +92,13 @@ export default async function AdminFatturazionePage({
       where: { AND: [whereBase, whereEmissione('EMESSA')!] },
     }),
     prisma.documentoFiscale.count({ where: whereBase }),
+    // Totale che rispetta `where` (filtri correnti, emissione inclusa): serve
+    // SOLO per sapere se `take: 100` sta troncando (M-1), non è un conteggio
+    // di tab. Senza questo, oltre le 100 righe la tabella mentirebbe in
+    // silenzio mentre i tab sopra mostrano il numero vero.
+    prisma.documentoFiscale.count({ where }),
   ]);
+  const truncMsg = messaggioTroncamento(docs.length, countFiltrati);
 
   const tabs: TabFattura[] = [
     { value: '', label: 'Tutte', count: countTutte },
@@ -226,6 +232,12 @@ export default async function AdminFatturazionePage({
             </Link>
           )}
         </form>
+
+        {truncMsg && (
+          <Alert variant="warning" className="mb-4">
+            {truncMsg}
+          </Alert>
+        )}
 
         {docs.length === 0 ? (
           <Card>

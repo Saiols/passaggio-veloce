@@ -40,6 +40,11 @@ export async function GET(
           codicePratica: true,
         },
       },
+      company: {
+        select: {
+          ragioneSociale: true,
+        },
+      },
     },
   });
 
@@ -75,9 +80,14 @@ export async function GET(
   try {
     const file = await getStorage().get(doc.storageKey);
     // Nome file = "<numero pratica> - <label documento>": non esponiamo mai il
-    // nome file originale caricato dall'utente.
+    // nome file originale caricato dall'utente. Documento AZIENDALE (nessuna
+    // pratica, CI/codice fiscale/visura del legale rappresentante): niente
+    // codicePratica da usare, si usa la ragione sociale al suo posto — senza
+    // questo, tutti i documenti aziendali di aziende diverse si chiamerebbero
+    // "documento - ..." e si sovrascriverebbero in Downloads. Il codicePratica
+    // ha sempre la precedenza quando esiste una pratica.
     const filename = documentoDownloadName(doc, {
-      codicePratica: doc.pratica?.codicePratica ?? null,
+      codicePratica: doc.pratica?.codicePratica ?? doc.company?.ragioneSociale ?? null,
     });
     const headers = new Headers();
     headers.set('Content-Type', doc.mimeType);

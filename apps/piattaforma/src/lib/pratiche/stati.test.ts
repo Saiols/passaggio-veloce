@@ -5,6 +5,7 @@ import {
   STATI_IN_CORSO,
   STATI_CONCLUSI,
   SINGOLI,
+  SINGOLI_ADMIN,
   isInCorso,
   whereStato,
   contaGruppi,
@@ -129,10 +130,55 @@ describe('contaGruppi', () => {
       { stato: 'FIRMATA' as PraticaStato, _count: { _all: 4 } },
       { stato: 'ANNULLATA' as PraticaStato, _count: { _all: 1 } },
     ];
-    expect(contaGruppi(rows)).toEqual({ tutte: 11, inCorso: 4, bozze: 2, concluse: 5 });
+    expect(contaGruppi(rows)).toEqual({ tutte: 11, inCorso: 4, escalation: 0, bozze: 2, concluse: 5 });
   });
 
   it('senza righe è tutto a zero', () => {
-    expect(contaGruppi([])).toEqual({ tutte: 0, inCorso: 0, bozze: 0, concluse: 0 });
+    expect(contaGruppi([])).toEqual({ tutte: 0, inCorso: 0, escalation: 0, bozze: 0, concluse: 0 });
+  });
+});
+
+describe('whereStato con insieme admin', () => {
+  // La regressione che questo test esiste per impedire: l'admin filtra oggi con
+  // un match esatto e quindi IN_ESCALATION funziona. Passando a whereStato con
+  // l'insieme di default (SINGOLI, pensato per il broker), tornerebbe undefined
+  // = nessun filtro: la select direbbe "Escalation" e la lista mostrerebbe
+  // tutto. Silenzioso, e quindi peggio di un errore.
+  it.each(['IN_ESCALATION', 'IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3'])(
+    '%s filtra davvero con SINGOLI_ADMIN (e non filtrerebbe con SINGOLI)',
+    (stato) => {
+      expect(whereStato(stato, SINGOLI_ADMIN)).toBe(stato);
+      expect(whereStato(stato)).toBeUndefined();
+    },
+  );
+
+  it('SINGOLI_ADMIN copre ogni valore dell’enum', () => {
+    for (const s of TUTTI) {
+      expect(SINGOLI_ADMIN).toContain(s);
+    }
+  });
+
+  it('gli aggregati continuano a funzionare con l’insieme admin', () => {
+    expect(whereStato('IN_CORSO', SINGOLI_ADMIN)).toEqual({ in: [...STATI_IN_CORSO] });
+  });
+
+  it('un valore non riconosciuto non filtra, nemmeno per l’admin', () => {
+    expect(whereStato('PIPPO', SINGOLI_ADMIN)).toBeUndefined();
+  });
+});
+
+describe('conteggio escalation', () => {
+  it('escalation è un sottoinsieme di inCorso e non è sommato due volte in tutte', () => {
+    const c = contaGruppi([
+      { stato: 'IN_ESCALATION', _count: { _all: 2 } },
+      { stato: 'ACCETTATA', _count: { _all: 3 } },
+      { stato: 'BOZZA', _count: { _all: 1 } },
+      { stato: 'FIRMATA', _count: { _all: 4 } },
+    ]);
+    expect(c.escalation).toBe(2);
+    expect(c.inCorso).toBe(5); // escalation + accettata
+    expect(c.bozze).toBe(1);
+    expect(c.concluse).toBe(4);
+    expect(c.tutte).toBe(10); // NON 12: l'escalation è già dentro inCorso
   });
 });

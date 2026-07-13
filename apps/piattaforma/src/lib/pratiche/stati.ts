@@ -55,14 +55,27 @@ export const SINGOLI = [
   'ANNULLATA',
 ] as const satisfies readonly PraticaStato[];
 
+/**
+ * Valori `?stato=` ammessi per l'ADMIN di piattaforma: tutti, inclusi i round
+ * di distribuzione e l'escalation, che al broker restano nascosti (dettagli
+ * interni del motore). L'unione con `STATI_IN_ATTESA` copre l'enum: lo garantisce
+ * il test "cade in esattamente uno tra SINGOLI e STATI_IN_ATTESA" in stati.test.ts,
+ * quindi un nuovo stato dell'enum entra qui automaticamente o rende rosso quel test.
+ */
+export const SINGOLI_ADMIN = [
+  ...SINGOLI,
+  ...STATI_IN_ATTESA,
+] as const satisfies readonly PraticaStato[];
+
 export function whereStato(
   param: string | undefined,
+  ammessi: readonly PraticaStato[] = SINGOLI,
 ): PraticaStato | { in: PraticaStato[] } | undefined {
   if (!param) return undefined;
   if (param === 'IN_CORSO') return { in: [...STATI_IN_CORSO] };
   if (param === 'CONCLUSE') return { in: [...STATI_CONCLUSI] };
   if (param === 'IN_ATTESA') return { in: [...STATI_IN_ATTESA] };
-  if ((SINGOLI as readonly string[]).includes(param)) return param as PraticaStato;
+  if ((ammessi as readonly string[]).includes(param)) return param as PraticaStato;
   // Valore non riconosciuto (URL manomesso): nessun filtro, come se non ci fosse.
   return undefined;
 }
@@ -70,21 +83,25 @@ export function whereStato(
 export type ConteggiTab = {
   tutte: number;
   inCorso: number;
+  /** Sottoinsieme di `inCorso`, non un gruppo a sé: non va sommato in `tutte`. */
+  escalation: number;
   bozze: number;
   concluse: number;
 };
 
-/** Riduce il risultato di `prisma.pratica.groupBy({ by: ['stato'] })` ai 4 gruppi dei tab. */
+/** Riduce il risultato di `prisma.pratica.groupBy({ by: ['stato'] })` ai gruppi dei tab. */
 export function contaGruppi(
   rows: { stato: PraticaStato; _count: { _all: number } }[],
 ): ConteggiTab {
-  const out: ConteggiTab = { tutte: 0, inCorso: 0, bozze: 0, concluse: 0 };
+  const out: ConteggiTab = { tutte: 0, inCorso: 0, escalation: 0, bozze: 0, concluse: 0 };
   for (const r of rows) {
     const n = r._count._all;
     out.tutte += n;
     if (r.stato === 'BOZZA') out.bozze += n;
     else if (isInCorso(r.stato)) out.inCorso += n;
     else out.concluse += n;
+    // Trasversale, non alternativo: l'escalation è già contata in `inCorso`.
+    if (r.stato === 'IN_ESCALATION') out.escalation += n;
   }
   return out;
 }

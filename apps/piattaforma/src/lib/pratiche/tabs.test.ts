@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { tabsPratiche, tabAttivo, hrefTab, opzioniStato, hrefPaginaPratiche } from './tabs';
 
-const conteggi = { tutte: 11, inCorso: 4, bozze: 2, concluse: 5 };
+const conteggi = { tutte: 11, inCorso: 4, escalation: 0, bozze: 2, concluse: 5 };
 
 describe('tabsPratiche', () => {
   it('il broker vede quattro tab, con i conteggi', () => {

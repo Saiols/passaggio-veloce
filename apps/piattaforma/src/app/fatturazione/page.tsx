@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, type Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Card } from '@/components/ui';
+import { Card, StatoEmissioneChip } from '@/components/ui';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
@@ -302,8 +302,8 @@ async function ListaBroker({ where }: { where: Prisma.DocumentoFiscaleWhereInput
                 >
                   {formatCurrencyCent(d.importoLordoCent)}
                 </td>
-                <td className={`${TD} text-[12px] text-pv-slate-500`}>
-                  {d.trasmessoSdiAt ? 'Gestito' : 'In attesa'}
+                <td className={TD}>
+                  <StatoEmissioneChip doc={d} />
                 </td>
               </tr>
             ))}

@@ -123,8 +123,10 @@ export default async function AffiliazionePage() {
           createdAt: true,
           stato: true,
           importoNettoCent: true,
+          // Niente `id` della pratica: è la pratica dell'affiliato e il referente
+          // non deve poterla aprire — non serve nemmeno caricarlo.
           pratica: {
-            select: { id: true, codicePratica: true, brokerId: true, agenziaAssegnataId: true },
+            select: { codicePratica: true, brokerId: true, agenziaAssegnataId: true },
           },
         },
       }),
@@ -161,7 +163,6 @@ export default async function AffiliazionePage() {
       importoNettoCent: c.importoNettoCent,
       stato: c.stato,
       codicePratica: c.pratica?.codicePratica ?? null,
-      praticaId: c.pratica?.id ?? null,
     });
     movimentiPerReferral.set(id, arr);
   };

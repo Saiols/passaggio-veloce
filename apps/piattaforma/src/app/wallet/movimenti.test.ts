@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
+import { labelTipoTx, isPenale, isAffiliazione, CLASSI_RIGA_PENALE } from './movimenti';
 
 /** I valori dell'enum Prisma `TransazioneWalletTipo`, al 2026-07-09. */
 const TIPI = [
@@ -33,6 +33,30 @@ describe('isPenale — si evidenzia solo la sanzione', () => {
 
   it('un tipo sconosciuto non viene evidenziato', () => {
     expect(isPenale('TIPO_CHE_NON_ESISTE')).toBe(false);
+  });
+});
+
+// La riga di una commissione di affiliazione parla di una pratica che NON è di
+// chi la sta guardando: è dell'affiliato. Da qui dipende se la UI mostra il link
+// al dettaglio e la targa (wallet/page.tsx) — sbagliare a dire "sì" su un tipo
+// qualsiasi significa esporre i dati di una pratica altrui.
+describe('isAffiliazione — la pratica collegata è di un altro soggetto', () => {
+  it('vero per CREDITO_AFFILIAZIONE', () => {
+    expect(isAffiliazione('CREDITO_AFFILIAZIONE')).toBe(true);
+  });
+
+  it.each(TIPI.filter((t) => t !== 'CREDITO_AFFILIAZIONE'))('falso per %s', (tipo) => {
+    expect(isAffiliazione(tipo)).toBe(false);
+  });
+
+  // Il credito della pratica PROPRIA è l'altra faccia della medaglia: lì il link
+  // al dettaglio ci deve stare, la pratica è di chi guarda.
+  it('CREDITO_PRATICA non è affiliazione: quella pratica è mia', () => {
+    expect(isAffiliazione('CREDITO_PRATICA')).toBe(false);
+  });
+
+  it('un tipo sconosciuto non è affiliazione', () => {
+    expect(isAffiliazione('TIPO_CHE_NON_ESISTE')).toBe(false);
   });
 });
 

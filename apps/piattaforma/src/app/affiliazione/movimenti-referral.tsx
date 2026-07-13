@@ -1,15 +1,20 @@
-import Link from 'next/link';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { labelTipoTx } from '@/app/wallet/movimenti';
 
-/** Riga movimento affiliazione: una CommissioneAffiliazione attribuita a un referral. */
+/**
+ * Riga movimento affiliazione: una CommissioneAffiliazione attribuita a un referral.
+ *
+ * Niente `praticaId`: la pratica è dell'affiliato, il referente ne vede il solo
+ * codice e non deve poterla aprire (`isAffiliazione` in wallet/movimenti.ts). Il
+ * campo è assente dal tipo, non solo inutilizzato: così non torna un link al
+ * primo che lo ritrova nei dati.
+ */
 export type RigaMovimentoAffiliazione = {
   id: string;
   createdAt: Date;
   importoNettoCent: number;
   stato: string;
   codicePratica: string | null;
-  praticaId: string | null;
 };
 
 // Solo gli stati non-accreditati portano un tag: l'accreditata è la riga
@@ -37,17 +42,8 @@ export function MovimentiReferral({ righe }: { righe: RigaMovimentoAffiliazione[
               <p className="font-semibold text-pv-navy-800">
                 {labelTipoTx('CREDITO_AFFILIAZIONE')}
                 {m.codicePratica && (
-                  <span className="ml-2 font-mono text-[12px] font-normal text-pv-slate-500">
-                    {m.praticaId ? (
-                      <Link
-                        href={`/pratiche/${m.praticaId}`}
-                        className="font-semibold text-pv-navy-600 hover:underline"
-                      >
-                        {m.codicePratica}
-                      </Link>
-                    ) : (
-                      m.codicePratica
-                    )}
+                  <span className="ml-2 font-mono text-[12px] font-semibold text-pv-slate-500">
+                    {m.codicePratica}
                   </span>
                 )}
                 {tag && (

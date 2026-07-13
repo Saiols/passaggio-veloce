@@ -11,7 +11,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { PayoutButton } from './payout-button';
 import type { WalletPreview } from './payout-confirm-modal';
-import { labelTipoTx, isPenale, CLASSI_RIGA_PENALE } from './movimenti';
+import { labelTipoTx, isPenale, isAffiliazione, CLASSI_RIGA_PENALE } from './movimenti';
 import { formatCurrencyCent, formatDateTime } from '@/lib/format';
 import { WALLET } from '@/lib/wallet/config';
 import { getWalletBreakdown } from '@/lib/wallet/breakdown';
@@ -562,23 +562,30 @@ export default async function WalletPage({
                   <div className="min-w-0">
                     <p className="font-semibold text-pv-navy-800">
                       {labelTipoTx(t.tipo)}
-                      {t.pratica?.codicePratica && (
-                        <span className="ml-2 font-mono text-[12px] font-normal text-pv-slate-500">
-                          <Link
-                            href={`/pratiche/${t.pratica.id}`}
-                            className="font-semibold text-pv-navy-600 hover:underline"
-                          >
+                      {t.pratica?.codicePratica &&
+                        (isAffiliazione(t.tipo) ? (
+                          // Pratica dell'affiliato: codice sì (riconcilia l'importo),
+                          // link e targa no. Vedi `isAffiliazione` in movimenti.ts.
+                          <span className="ml-2 font-mono text-[12px] font-semibold text-pv-slate-500">
                             {t.pratica.codicePratica}
-                          </Link>
-                          {t.pratica.veicoli[0]?.targa
-                            ? ` · ${t.pratica.veicoli[0].targa}${
-                                t.pratica.veicoli.length > 1
-                                  ? ` +${t.pratica.veicoli.length - 1}`
-                                  : ''
-                              }`
-                            : ''}
-                        </span>
-                      )}
+                          </span>
+                        ) : (
+                          <span className="ml-2 font-mono text-[12px] font-normal text-pv-slate-500">
+                            <Link
+                              href={`/pratiche/${t.pratica.id}`}
+                              className="font-semibold text-pv-navy-600 hover:underline"
+                            >
+                              {t.pratica.codicePratica}
+                            </Link>
+                            {t.pratica.veicoli[0]?.targa
+                              ? ` · ${t.pratica.veicoli[0].targa}${
+                                  t.pratica.veicoli.length > 1
+                                    ? ` +${t.pratica.veicoli.length - 1}`
+                                    : ''
+                                }`
+                              : ''}
+                          </span>
+                        ))}
                     </p>
                     {motivo && (
                       <p className="mt-0.5 text-[11.5px] font-medium text-pv-slate-600">

@@ -33,6 +33,23 @@ export function isPenale(tipo: string): boolean {
 }
 
 /**
+ * La pratica collegata è di un ALTRO soggetto: quella dell'affiliato.
+ *
+ * Una `CREDITO_AFFILIAZIONE` porta il `praticaId` della pratica che ha generato
+ * la commissione, cioè una pratica del referral — non del referente che la vede
+ * nel wallet. Chi legge questa riga è, per definizione, fuori da quella pratica:
+ * ne mostriamo il codice (serve a riconciliare l'importo) ma non i dati (targa)
+ * né un link al dettaglio.
+ *
+ * Il link, oltretutto, non ha mai funzionato: `/pratiche/[id]` è scopato alla
+ * propria company e rispondeva `notFound()`. Toglierlo non perde una funzione,
+ * chiude un'esposizione.
+ */
+export function isAffiliazione(tipo: string): boolean {
+  return tipo === 'CREDITO_AFFILIAZIONE';
+}
+
+/**
  * Classi della riga di una penale.
  *
  * L'importo è già rosso per OGNI movimento negativo, payout compresi: senza un

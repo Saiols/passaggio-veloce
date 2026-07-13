@@ -52,6 +52,15 @@ export async function GET(
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
+  // ⚠️ SOLO ADMIN_PIATTAFORMA, MAI `isAdminOrAssistente` (usata invece 21 righe
+  // sotto per un gate diverso): questa è l'unica cosa che nega all'ASSISTENTE i
+  // documenti aziendali (CI/visura del legale rappresentante) di TUTTE le
+  // aziende. `canAccessDocumento` concede l'accesso incondizionato quando
+  // `isAdminPiattaforma` è true (bypassa anche il match su `companyId`), quindi
+  // "uniformare" questa riga a `isAdminOrAssistente` — le due righe sembrano
+  // un'incoerenza da sistemare, ma non lo sono — aprirebbe la carta d'identità
+  // di ogni azienda della piattaforma all'ASSISTENTE. Regressione blindata da
+  // route.authz.test.ts (mutation-tested: verificato rosso→verde a mano).
   const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
   const userCompanyId = session.user.companyId;
   const ctx = await getSessionContext();
@@ -72,7 +81,13 @@ export async function GET(
 
   // Il permesso non sostituisce `canAccessDocumento` (scope): decide SE
   // l'utente può scaricare. Bypass esplicito per lo staff di piattaforma
-  // (companyId null → nessun permesso azienda).
+  // (companyId null → nessun permesso azienda). Qui `isAdminOrAssistente` è
+  // corretto (a differenza di `isAdmin` sopra): questo gate NON decide QUALE
+  // documento è visibile (lo ha già deciso `canAccessDocumento`, che nega
+  // sempre l'ASSISTENTE sui documenti aziendali), decide solo SE chi ha già il
+  // via libera deve avere anche il permesso `pratiche.download` — e l'ASSISTENTE,
+  // come l'admin, lo ha sempre implicitamente (non ha un'azienda su cui
+  // verificare un permesso). Le due righe restano diverse di proposito.
   if (!isAdminOrAssistente(session.user.role) && !(await hasPermesso('pratiche.download'))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }

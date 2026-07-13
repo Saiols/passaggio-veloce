@@ -108,3 +108,43 @@ describe('GET /api/documenti/[id] — gate pratiche.download', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('GET /api/documenti/[id] — invariante I-3: ASSISTENTE mai sui documenti aziendali', () => {
+  // Documento AZIENDALE (companyId valorizzato, nessuna pratica): visura
+  // camerale / CI del legale rappresentante, caricati in registrazione.
+  const documentoAziendale = {
+    id: 'd2',
+    praticaId: null,
+    companyId: 'c9',
+    storageKey: 'k9',
+    mimeType: 'image/jpeg',
+    tipo: 'CI_FRONTE',
+    owner: 'AMMINISTRATORE',
+    originalFilename: 'ci.jpg',
+    pratica: null,
+    company: { ragioneSociale: 'Bianchi Srl' },
+  };
+
+  // La riga `const isAdmin = session.user.role === 'ADMIN_PIATTAFORMA'`
+  // (route.ts) è l'UNICA cosa che nega questo documento all'ASSISTENTE: se un
+  // domani venisse "uniformata" a `isAdminOrAssistente(session.user.role)` (le
+  // due righe sembrano un'incoerenza da sistemare, sono a 21 righe di distanza
+  // nello stesso file), `canAccessDocumento` riceverebbe `isAdminPiattaforma:
+  // true` per l'ASSISTENTE e tornerebbe true al suo primo `if`, bypassando
+  // anche il match su `companyId` — aprendo la carta d'identità del legale
+  // rappresentante di QUALUNQUE azienda della piattaforma. Questo test è
+  // pensato per intercettare esattamente quella regressione (vedi il commento
+  // gemello sulla riga 55 di route.ts).
+  it('ASSISTENTE + documento aziendale (CI del legale rappresentante) → 403, nessun file letto', async () => {
+    authMock.mockResolvedValue({
+      user: { id: 'u2', role: 'ASSISTENTE', companyType: undefined, companyId: undefined },
+    });
+    getSessionContextMock.mockResolvedValue(null);
+    prismaMock.documento.findUnique.mockResolvedValue(documentoAziendale);
+
+    const res = await GET(new Request('http://x'), params('d2'));
+
+    expect(res.status).toBe(403);
+    expect(storageGetMock).not.toHaveBeenCalled();
+  });
+});

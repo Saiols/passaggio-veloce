@@ -310,6 +310,26 @@ describe('canAccessDocumento', () => {
     ).toBe(false);
   });
 
+  it('documento aziendale: viewer SENZA companyId (staff non-admin, es. ASSISTENTE) → negato (I-3)', () => {
+    // Invariante di sicurezza dell'ASSISTENTE (api/documenti/[id]/route.ts:
+    // `isAdmin` è calcolato SOLO su `role === 'ADMIN_PIATTAFORMA'`, MAI su
+    // `isAdminOrAssistente`). Un futuro "cleanup" che unificasse le due
+    // funzioni passerebbe `isAdminPiattaforma: true` per l'ASSISTENTE e questo
+    // test diventerebbe rosso: `canAccessDocumento` tornerebbe true per QUALUNQUE
+    // documento aziendale (carta d'identità del legale rappresentante) di
+    // QUALUNQUE azienda della piattaforma, bypassando anche il match su
+    // `companyId`. Qui isAdminPiattaforma è correttamente `false`: lo staff
+    // senza company non può mai combaciare col `companyId` di un documento
+    // aziendale reale (non è `null === null`, è `undefined !== 'c9'`).
+    expect(
+      canAccessDocumento(docAziendale({ companyId: 'c9' }), {
+        companyId: undefined,
+        isAdminPiattaforma: false,
+        scope: NESSUNA_SEDE,
+      }),
+    ).toBe(false);
+  });
+
   it('documento di pratica della propria company ma con relazione non caricata → negato', () => {
     // `praticaId` valorizzato ⇒ non è un documento aziendale; senza `pratica`
     // non c'è nulla da valutare: fail-closed, mai un grant silenzioso.

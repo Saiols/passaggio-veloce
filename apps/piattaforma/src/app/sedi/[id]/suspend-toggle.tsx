@@ -11,7 +11,7 @@ import { suspendSedeAction, reactivateSedeAction } from '../actions';
  * scartarlo: quando `ok: false` (es. sanzione anti-abuso non revocabile dal
  * sanzionato — vedi `setSedeSuspended` in `../actions.ts`) l'errore va
  * mostrato, non ignorato, altrimenti l'utente sanzionato clicca "Riattiva" e
- * non succede nulla, senza sapere perché né cosa fare (clausola 11.2 dei
+ * non succede nulla, senza sapere perché né cosa fare (clausola 12.2 dei
  * Termini promette il rimedio "scrivi ad assistenza@").
  */
 export function SuspendToggle({

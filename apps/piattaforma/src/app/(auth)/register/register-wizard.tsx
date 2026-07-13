@@ -1067,8 +1067,8 @@ function PaymentStep({
             Termini e Condizioni
           </a>{' '}
           (prezzo del servizio e sue variazioni, condizioni di prelievo, regime fiscale e trattenute,
-          manleva sull&apos;aggiornamento della visura, penali, sospensione, limitazioni di
-          responsabilità, foro competente).
+          manleva sull&apos;aggiornamento della visura, penali, attestazione della firma da parte del
+          Gestore, sospensione, limitazioni di responsabilità, foro competente).
           <span className="ml-1 text-pv-orange-500" aria-hidden="true">
             •
           </span>

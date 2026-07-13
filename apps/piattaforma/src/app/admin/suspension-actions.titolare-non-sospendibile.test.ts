@@ -8,12 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * dell'azienda. Sospenderlo lasciava l'azienda senza alcun accesso mentre
  * `Company.suspendedAt` restava `null`: la sede continuava a ricevere
  * assegnazioni, portando a 5 timeout e quindi all'auto-sospensione
- * anti-abuso (clausola 11.2) per un lockout causato da noi. La clausola
- * 11.3-bis promette invece che "l'account aziendale e le altre utenze
+ * anti-abuso (clausola 12.2) per un lockout causato da noi. La clausola
+ * 12.3-bis promette invece che "l'account aziendale e le altre utenze
  * restano pienamente operativi".
  *
  * Fix: il target ADMIN_AZIENDA è ora rifiutato con un messaggio che rimanda
- * alla sospensione dell'intero account (clausola 11.3).
+ * alla sospensione dell'intero account (clausola 12.3).
  */
 
 const USER_ID = 'user-1';
@@ -59,7 +59,7 @@ describe('suspendUserAction — il titolare (ADMIN_AZIENDA) non è sospendibile 
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error).toMatch(/titolare/i);
-      expect(res.error).toMatch(/11\.3/);
+      expect(res.error).toMatch(/12\.3/);
     }
     expect(prismaMock.user.update).not.toHaveBeenCalled();
     expect(sendNotificationMock).not.toHaveBeenCalled();

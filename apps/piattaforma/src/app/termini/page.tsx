@@ -7,6 +7,7 @@ import { siteUrl } from '@/lib/seo/brand';
 import {
   ART_APPROVAZIONE_SPECIFICA,
   CLAUSOLE_VESSATORIE,
+  DESCRIZIONI_VESSATORIE,
 } from '@/lib/legal/clausole-vessatorie';
 
 export const metadata: Metadata = {
@@ -15,21 +16,6 @@ export const metadata: Metadata = {
     'Termini e Condizioni di utilizzo della piattaforma Passaggio Veloce: prezzo del servizio, affiliazione, wallet e payout, fatturazione conto terzi, regime fiscale, responsabilità, foro competente.',
   alternates: { canonical: '/termini' },
   robots: { index: true, follow: true },
-};
-
-/** Descrizione sintetica di ogni clausola vessatoria. Le CHIAVI devono coprire
- *  esattamente CLAUSOLE_VESSATORIE: se aggiungi un numero là e non qui, il
- *  render mostra `undefined` — il test di Task 1 non lo cattura, l'occhio sì. */
-const DESCRIZIONI_VESSATORIE: Record<number, string> = {
-  3: 'variazione del prezzo del servizio a discrezione del Gestore',
-  5: 'condizioni e soglia di prelievo del wallet (payout)',
-  7: 'determinazione differenziata del compenso in base al regime fiscale',
-  8: 'manleva in materia di visura camerale',
-  10: 'sistema di segnalazioni e penali',
-  11: 'potere di attestazione della firma da parte del Gestore',
-  12: 'limitazione operativa, sospensione e cancellazione dell’account',
-  13: 'limitazioni di responsabilità',
-  17: 'deroga alla competenza territoriale (foro esclusivo)',
 };
 
 /**

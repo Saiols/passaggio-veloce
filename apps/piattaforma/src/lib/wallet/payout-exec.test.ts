@@ -180,7 +180,7 @@ describe('eseguiPayoutImmediato', () => {
  * veniva comunque pagato, lasciando il debito a registro indefinitamente e
  * contraddicendo il banner "payout bloccati" di /wallet. Fix: blocca OGNI
  * payout dell'azienda finché uno qualsiasi dei suoi wallet è negativo,
- * eccetto la liquidazione alla cessazione (`ignoraSoglia`, clausola 11.4),
+ * eccetto la liquidazione alla cessazione (`ignoraSoglia`, clausola 12.4),
  * che deve poter svuotare il residuo positivo a prescindere.
  */
 describe('eseguiPayoutImmediato — guard saldo negativo aziendale (clausola 5)', () => {

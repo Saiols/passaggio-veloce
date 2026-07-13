@@ -144,7 +144,7 @@ export type N16AccountEliminatoPayload = {
 };
 
 /**
- * Clausola 11.3-bis dei Termini: sospensione della SINGOLA utenza (distinta
+ * Clausola 12.3-bis dei Termini: sospensione della SINGOLA utenza (distinta
  * dalla sospensione dell'intera azienda, N14). Il motivo è sempre presente
  * (obbligatorio in `suspendUserAction`), a differenza di N14 dov'è opzionale.
  */
@@ -707,10 +707,10 @@ export function tplN16AccountEliminato(
 }
 
 /**
- * Clausola 11.3-bis: sospensione della singola utenza (non dell'intera
+ * Clausola 12.3-bis: sospensione della singola utenza (non dell'intera
  * azienda — v. N14/tplN14AccountSospeso). L'account aziendale e le altre
  * utenze restano operativi: il testo lo dichiara esplicitamente perché è
- * il punto che distingue questa misura dalla sospensione dell'account (11.3).
+ * il punto che distingue questa misura dalla sospensione dell'account (12.3).
  */
 export function tplN45UtenteSospeso(
   p: N45UtenteSospesoPayload,

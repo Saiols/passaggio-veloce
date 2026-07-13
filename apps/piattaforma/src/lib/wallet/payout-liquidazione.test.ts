@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Clausole 5 e 11.4 dei Termini: alla cessazione del rapporto il saldo residuo
+ * Clausole 5 e 12.4 dei Termini: alla cessazione del rapporto il saldo residuo
  * è liquidato integralmente ANCHE se inferiore a 500 €. Oggi MIN_PAYOUT_CENT
  * gatea anche l'admin, quindi la promessa contrattuale sarebbe ineseguibile.
  * `ignoraSoglia` è il solo modo di onorarla — e NON deve essere raggiungibile

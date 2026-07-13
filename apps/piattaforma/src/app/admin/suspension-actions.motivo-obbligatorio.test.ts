@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Rilievo N2 (review finale pre-merge): la clausola 11.3 dei Termini dice
+ * Rilievo N2 (review finale pre-merge): la clausola 12.3 dei Termini dice
  * "la sospensione è comunicata via email con indicazione del motivo", ma la
  * nota era etichettata "opzionale" e `sanitizeNote` restituiva `null` se
  * vuota → il template N14 ometteva il blocco "Motivo:" e il diritto di
@@ -49,7 +49,7 @@ beforeEach(() => {
   });
 });
 
-describe('suspendCompanyAction — motivo obbligatorio (clausola 11.3)', () => {
+describe('suspendCompanyAction — motivo obbligatorio (clausola 12.3)', () => {
   it('nota assente (undefined) → rifiutata, nessuna scrittura DB, nessuna email', async () => {
     const res = await suspendCompanyAction(COMPANY_ID, undefined);
 

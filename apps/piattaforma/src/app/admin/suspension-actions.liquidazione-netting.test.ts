@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * pagava tutti i wallet con `saldoCent > 0` e non compensava quelli
  * negativi. Un'azienda con sede A a -25€ (penale non ripianata) e sede B a
  * +600€ veniva liquidata di 600€ e il debito di 25€ semplicemente spariva —
- * in contrasto con la clausola 11.4 dei Termini, che liquida il residuo
+ * in contrasto con la clausola 12.4 dei Termini, che liquida il residuo
  * "previa... regolarizzazione di quanto eventualmente dovuto a Passaggio
  * Veloce".
  *
@@ -62,7 +62,7 @@ beforeEach(() => {
   eseguiPayoutImmediatoMock.mockResolvedValue({ ok: true, payoutId: 'p1', importoCent: 1 });
 });
 
-describe('deleteCompanyAction — blocco liquidazione con wallet misti (clausola 11.4)', () => {
+describe('deleteCompanyAction — blocco liquidazione con wallet misti (clausola 12.4)', () => {
   it('sede A a -25€, sede B a +600€ → nessun payout eseguito (il debito blocca la liquidazione automatica)', async () => {
     // hasNegativeCompanyWallet trova il wallet negativo → true.
     prismaMock.wallet.findFirst.mockResolvedValue({ id: 'wallet-sede-a' });

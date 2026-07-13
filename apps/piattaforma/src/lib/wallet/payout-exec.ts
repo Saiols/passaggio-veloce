@@ -138,7 +138,7 @@ export async function eseguiPayoutImmediato(
 ): Promise<EseguiPayoutResult> {
   const automatico = opts.automatico ?? false;
   // Solo per la liquidazione del residuo alla cessazione del rapporto
-  // (clausole 5 e 11.4 dei Termini). NON raggiungibile dal path utente.
+  // (clausole 5 e 12.4 dei Termini). NON raggiungibile dal path utente.
   const ignoraSoglia = opts.ignoraSoglia ?? false;
 
   const reserve = await prisma.$transaction(
@@ -164,7 +164,7 @@ export async function eseguiPayoutImmediato(
       // sede, o il wallet madre) è in saldo negativo — tipicamente per una
       // penale, clausola 10.6 — TUTTI i payout dell'azienda sono sospesi, non
       // solo quelli del wallet in negativo. Il controllo qui sotto è saltato
-      // per la liquidazione di cessazione (`ignoraSoglia`, clausola 11.4), ma
+      // per la liquidazione di cessazione (`ignoraSoglia`, clausola 12.4), ma
       // il debito NON viene ignorato in quel flusso: per la cessazione il
       // blocco è imposto a monte, a livello di intera azienda, dal chiamante
       // (`deleteCompanyAction`, cfr. negative-wallet-guard.ts), che non

@@ -4,12 +4,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Rilievo CRITICAL 2 (review finale pre-merge, ultima ondata prima del
  * merge): `suspendUserAction` sospende la SINGOLA utenza di un'azienda
  * cliente ma non inviava alcuna email né richiedeva un motivo — una quarta
- * misura limitativa non prevista dalla clausola 11 dei Termini, che
+ * misura limitativa non prevista dalla clausola 12 dei Termini, che
  * dichiarava "tre misure... elencate in modo tassativo". Decisione del
  * titolare: la misura resta nel prodotto e viene descritta nel contratto
- * (clausola 11.3-bis) come misura VERA — quindi il codice deve onorarla:
+ * (clausola 12.3-bis) come misura VERA — quindi il codice deve onorarla:
  * motivo obbligatorio + email all'utente sospeso con indicazione del motivo,
- * stesso pattern già applicato a `suspendCompanyAction` (N14/clausola 11.3).
+ * stesso pattern già applicato a `suspendCompanyAction` (N14/clausola 12.3).
  */
 
 const USER_ID = 'user-1';
@@ -45,7 +45,7 @@ beforeEach(() => {
   prismaMock.user.update.mockResolvedValue({});
 });
 
-describe('suspendUserAction — motivo obbligatorio (clausola 11.3-bis)', () => {
+describe('suspendUserAction — motivo obbligatorio (clausola 12.3-bis)', () => {
   it('nota assente (undefined) → rifiutata, nessuna scrittura DB, nessuna email', async () => {
     const res = await suspendUserAction(USER_ID, undefined);
 

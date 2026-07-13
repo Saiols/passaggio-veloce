@@ -19,6 +19,26 @@ export const ART_APPROVAZIONE_SPECIFICA = 18;
 export const CLAUSOLE_VESSATORIE = [3, 5, 7, 8, 10, 11, 12, 13, 17] as const;
 
 /**
+ * Descrizione sintetica di ogni clausola vessatoria, per il render dell'art. 18
+ * (`app/termini/page.tsx`). Le CHIAVI devono coprire esattamente
+ * CLAUSOLE_VESSATORIE: se manca una chiave il render mostra `undefined`, se ne
+ * avanza una è una descrizione orfana di una clausola non più vessatoria.
+ * `clausole-vessatorie.test.ts` blinda questa invariante confrontando le due
+ * chiavi — non fidarsi solo dell'occhio.
+ */
+export const DESCRIZIONI_VESSATORIE: Record<(typeof CLAUSOLE_VESSATORIE)[number], string> = {
+  3: 'variazione del prezzo del servizio a discrezione del Gestore',
+  5: 'condizioni e soglia di prelievo del wallet (payout)',
+  7: 'determinazione differenziata del compenso in base al regime fiscale',
+  8: 'manleva in materia di visura camerale',
+  10: 'sistema di segnalazioni e penali',
+  11: 'potere di attestazione della firma da parte del Gestore',
+  12: 'limitazione operativa, sospensione e cancellazione dell’account',
+  13: 'limitazioni di responsabilità',
+  17: 'deroga alla competenza territoriale (foro esclusivo)',
+};
+
+/**
  * Versione dei Termini in vigore, persistita su `Company.termsVersion` al
  * momento dell'accettazione: senza, non sappiamo QUALE testo l'utente ha
  * accettato. Aggiornare a ogni modifica sostanziale della pagina /termini.

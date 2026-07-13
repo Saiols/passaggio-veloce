@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Clausola 11.4 dei Termini: alla cancellazione dell'account
+ * Clausola 12.4 dei Termini: alla cancellazione dell'account
  * (`deleteCompanyAction`) il saldo residuo del wallet è liquidato
  * integralmente, ANCHE sotto la soglia dei 500 € (`ignoraSoglia: true`).
  *
@@ -71,12 +71,12 @@ beforeEach(() => {
   eseguiPayoutImmediatoMock.mockResolvedValue({ ok: true, payoutId: 'p1', importoCent: 1 });
 });
 
-describe('deleteCompanyAction — liquidazione wallet alla cessazione (clausola 11.4)', () => {
+describe('deleteCompanyAction — liquidazione wallet alla cessazione (clausola 12.4)', () => {
   it('wallet madre sotto soglia (12.000 cent = 120€) → eseguiPayoutImmediato chiamato con { ignoraSoglia: true }', async () => {
     // La select di findMany è solo `{ id: true }`: il saldo non è visibile
     // qui (lo filtra la query, vedi test "filtra saldoCent > 0" sotto). Quel
     // che va provato è che il wallet trovato viene liquidato ignorando la
-    // soglia dei 500€ — è l'adempimento della clausola 11.4.
+    // soglia dei 500€ — è l'adempimento della clausola 12.4.
     prismaMock.wallet.findMany.mockResolvedValue([{ id: 'wallet-madre' }]);
 
     const res = await deleteCompanyAction(COMPANY_ID, RAGIONE_SOCIALE);

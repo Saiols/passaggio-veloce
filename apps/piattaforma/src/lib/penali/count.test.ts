@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
  * IMPORTANT (review finale branch): l'alert "N penali confermate" (admin
- * broker list, clausole 10.7 e 11.3 n.4 dei Termini) non scattava mai. Il
+ * broker list, clausole 10.7 e 12.3 n.4 dei Termini) non scattava mai. Il
  * conteggio filtrava solo i wallet MADRE (`wallet.companyId`), ma la penale
  * è addebitata sul wallet di SEDE (`walletBrokerDellaPratica`, dal 24 giugno
  * / migration `20260624013750_multi_sede_expand`). Verificato sul DB reale:

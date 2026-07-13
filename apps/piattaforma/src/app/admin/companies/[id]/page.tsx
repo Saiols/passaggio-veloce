@@ -262,7 +262,7 @@ export default async function AdminCompanyDetailPage({
                   </div>
                   {u.role !== 'ADMIN_AZIENDA' && (
                     // Il titolare non è sospendibile singolarmente (clausola
-                    // 11.3-bis dei Termini, guard server in
+                    // 12.3-bis dei Termini, guard server in
                     // suspendUserAction): usa il bottone "Sospendi" in testata,
                     // che sospende l'intero account.
                     <SuspendButton

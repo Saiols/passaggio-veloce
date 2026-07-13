@@ -156,8 +156,8 @@ export function SuspendButton({
                   {dialog === 'reactivate'
                     ? "Salvata sull'audit trail e inclusa nell'email."
                     : target.kind === 'company'
-                      ? "Obbligatoria (clausola 11.3 dei Termini): salvata sull'audit trail della company e inclusa nell'email di sospensione."
-                      : "Obbligatoria (clausola 11.3-bis dei Termini): salvata sull'audit trail e inclusa nell'email di sospensione inviata all'utente."}
+                      ? "Obbligatoria (clausola 12.3 dei Termini): salvata sull'audit trail della company e inclusa nell'email di sospensione."
+                      : "Obbligatoria (clausola 12.3-bis dei Termini): salvata sull'audit trail e inclusa nell'email di sospensione inviata all'utente."}
                 </p>
               </label>
 

@@ -10,7 +10,7 @@ import { prisma } from '@pv/db';
  * (`walletBrokerDellaPratica`, dal 24 giugno / migration
  * `20260624013750_multi_sede_expand`), non quello della company. Filtrare le
  * penali solo su `wallet.companyId` ritorna 0 per ogni broker con wallet di
- * sede — il badge "⚠️ N penali" e l'alert (clausole 10.7 e 11.3 n.4 dei
+ * sede — il badge "⚠️ N penali" e l'alert (clausole 10.7 e 12.3 n.4 dei
  * Termini) restano codice morto. Stesso pattern OR di
  * `app/admin/suspension-actions.ts` (`deleteCompanyAction`).
  */

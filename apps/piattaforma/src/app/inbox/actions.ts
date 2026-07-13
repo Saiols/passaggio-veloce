@@ -31,7 +31,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
   if (!agenziaId) return { ok: false, error: 'Azienda non associata' };
 
   if (await isAgenziaBloccata(agenziaId)) {
-    // Clausola 11.1 dei Termini: questa è una limitazione OPERATIVA, non una
+    // Clausola 12.1 dei Termini: questa è una limitazione OPERATIVA, non una
     // sospensione — l'account resta accessibile, è solo esclusa la gestione
     // delle pratiche. Il messaggio non deve dire "sospeso" (contraddirebbe
     // esplicitamente la clausola, che lo nega).

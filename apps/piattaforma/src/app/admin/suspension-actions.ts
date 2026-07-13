@@ -75,8 +75,8 @@ export type SuspensionResult = { ok: true } | { ok: false; error: string };
  * F-01: sospende un singolo utente. Visibile a ADMIN_PIATTAFORMA + ASSISTENTE.
  * L'utente sospeso non può fare login (auth.ts esce a null su SUSPENDED).
  *
- * Clausola 11.3-bis dei Termini (quarta misura, distinta dalla sospensione
- * dell'intera azienda al punto 11.3): "la sospensione è comunicata via email
+ * Clausola 12.3-bis dei Termini (quarta misura, distinta dalla sospensione
+ * dell'intera azienda al punto 12.3): "la sospensione è comunicata via email
  * con indicazione del motivo" e "l'account aziendale e le altre utenze
  * dell'Utente restano pienamente operativi". Come `suspendCompanyAction`, il
  * motivo NON è opzionale: senza di esso il diritto di riesame previsto dalla
@@ -89,10 +89,10 @@ export type SuspensionResult = { ok: true } | { ok: false; error: string };
  * `Company.suspendedAt` resta `null` — la sede continuerebbe a ricevere
  * assegnazioni (lib/distribuzione/tick.ts) senza che nessuno possa
  * rispondere, portando a 5 timeout e quindi all'auto-sospensione anti-abuso
- * (clausola 11.2) per un lockout causato da noi. La clausola 11.3-bis
+ * (clausola 12.2) per un lockout causato da noi. La clausola 12.3-bis
  * promette invece che "l'account aziendale e le altre utenze restano
  * pienamente operativi": per il titolare l'unica misura individuale
- * disponibile è sospendere l'intero account (clausola 11.3).
+ * disponibile è sospendere l'intero account (clausola 12.3).
  */
 export async function suspendUserAction(
   userId: string,
@@ -111,7 +111,7 @@ export async function suspendUserAction(
     return {
       ok: false,
       error:
-        'Indica il motivo della sospensione: è obbligatorio (clausola 11.3-bis dei Termini) e viene incluso nell\'email inviata all\'utente.',
+        'Indica il motivo della sospensione: è obbligatorio (clausola 12.3-bis dei Termini) e viene incluso nell\'email inviata all\'utente.',
     };
   }
 
@@ -128,7 +128,7 @@ export async function suspendUserAction(
     return {
       ok: false,
       error:
-        "Il titolare (ADMIN_AZIENDA) non è sospendibile singolarmente: per sospendere il titolare occorre sospendere l'intero account (clausola 11.3 dei Termini).",
+        "Il titolare (ADMIN_AZIENDA) non è sospendibile singolarmente: per sospendere il titolare occorre sospendere l'intero account (clausola 12.3 dei Termini).",
     };
   }
 
@@ -137,7 +137,7 @@ export async function suspendUserAction(
     data: { status: 'SUSPENDED', suspensionLastNote: note },
   });
 
-  // Email best-effort all'utente sospeso, con il motivo (clausola 11.3-bis).
+  // Email best-effort all'utente sospeso, con il motivo (clausola 12.3-bis).
   // L'account aziendale e le altre utenze NON sono toccati da questa azione:
   // il payload lo dichiara esplicitamente nel template N45.
   try {
@@ -180,7 +180,7 @@ export async function reactivateUserAction(
  * F-01: sospende un'azienda intera (broker o agenzia). Setta suspendedAt
  * e sospende tutti i suoi utenti in cascata. Reversibile via reactivate.
  *
- * Clausola 11.3 dei Termini: "la sospensione è comunicata via email con
+ * Clausola 12.3 dei Termini: "la sospensione è comunicata via email con
  * indicazione del motivo". Il motivo NON è più opzionale: senza di esso il
  * diritto di riesame previsto dalla stessa clausola sarebbe svuotato (l'utente
  * non saprebbe cosa contestare). Rifiutata se vuoto dopo il trim.
@@ -199,7 +199,7 @@ export async function suspendCompanyAction(
     return {
       ok: false,
       error:
-        'Indica il motivo della sospensione: è obbligatorio (clausola 11.3 dei Termini) e viene incluso nell\'email inviata all\'azienda.',
+        'Indica il motivo della sospensione: è obbligatorio (clausola 12.3 dei Termini) e viene incluso nell\'email inviata all\'azienda.',
     };
   }
   await prisma.$transaction([
@@ -223,7 +223,7 @@ export async function suspendCompanyAction(
  * MINOR non risolto (review finale pre-merge, ultima ondata — follow-up
  * deliberato, NON dimenticato): riattiva TUTTI gli utenti SUSPENDED della
  * company, incluso chi era stato sospeso individualmente da
- * `suspendUserAction` (clausola 11.3-bis) prima della sospensione aziendale
+ * `suspendUserAction` (clausola 12.3-bis) prima della sospensione aziendale
  * — la riattivazione dell'account revoca così, silenziosamente, anche una
  * sospensione individuale motivata e distinta.
  *
@@ -314,7 +314,7 @@ export async function deleteCompanyAction(
   // della chiamata (il suspension non azzera deletedAt).
   await notifyCompanyLifecycle(companyId, 'N16_ACCOUNT_ELIMINATO');
 
-  // Clausola 11.4 dei Termini: alla cessazione il saldo residuo è liquidato
+  // Clausola 12.4 dei Termini: alla cessazione il saldo residuo è liquidato
   // integralmente, ANCHE se inferiore a 500 €, "previa... regolarizzazione di
   // quanto eventualmente dovuto a Passaggio Veloce". Se un wallet qualsiasi
   // dell'azienda (madre o di sede) è in saldo negativo — es. penale non
@@ -373,7 +373,7 @@ export async function deleteCompanyAction(
 /**
  * Revoca la sospensione anti-abuso di una SEDE (5 no-show consecutivi).
  * È l'unico modo per riattivarla: `setSedeSuspended` la rifiuta al titolare.
- * Cfr. clausola 11.2 dei Termini (revoca previa verifica di Passaggio Veloce).
+ * Cfr. clausola 12.2 dei Termini (revoca previa verifica di Passaggio Veloce).
  */
 export async function reactivateSedeAntiAbusoAction(
   sedeId: string,

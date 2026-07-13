@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita } from './templates';
+import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 
 describe('templates usano il nuovo layout', () => {
@@ -171,5 +171,62 @@ describe('N42 broker segnalazione gestita', () => {
   it('include la nota di risposta', () => {
     const out = tplN42BrokerSegnalazioneGestita({ nota: 'La targa corretta è AB123CD', nomeBroker: 'Mario' });
     expect(out.html).toContain('La targa corretta è AB123CD');
+  });
+});
+
+describe('N4 — firma attestata dal Gestore (Termini art. 11)', () => {
+  const n4 = {
+    codicePratica: 'PV-001',
+    targa: 'AB123CD',
+    agenziaNome: 'Agenzia Rossi',
+    creditoCent: 5000,
+    saldoCent: 12000,
+    nomeBroker: 'Mario',
+  };
+
+  it('firma normale: dice che l\'agenzia ha confermato (retrocompatibilità)', () => {
+    const out = tplN4BrokerFirma(n4);
+    expect(out.text).toContain('Agenzia Rossi ha confermato la firma');
+    expect(out.text).not.toContain('team Passaggio Veloce');
+    expect(out.html).not.toContain('team Passaggio Veloce');
+  });
+
+  it('firma attestata: NON dice più che l\'agenzia ha confermato (sarebbe falso)', () => {
+    const out = tplN4BrokerFirma({ ...n4, attestataDaPv: true });
+    expect(out.text).not.toContain('Agenzia Rossi ha confermato');
+    expect(out.text).toContain('team Passaggio Veloce');
+    expect(out.html).not.toContain('Agenzia Rossi</strong> ha confermato');
+    expect(out.html).toContain('team Passaggio Veloce');
+  });
+
+  it('firma attestata: non espone la motivazione interna dell\'attestazione', () => {
+    const out = tplN4BrokerFirma({ ...n4, attestataDaPv: true });
+    expect(out.text.toLowerCase()).not.toContain('motivo');
+    expect(out.html.toLowerCase()).not.toContain('motivo');
+  });
+});
+
+describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 11)', () => {
+  const n8 = {
+    codicePratica: 'PV-001',
+    feeCent: 3000,
+    autoAddebitoAt: new Date('2026-07-13T10:00:00Z'),
+    nomeAgenzia: 'Agenzia Rossi',
+  };
+
+  it('firma normale: nessuna menzione dell\'attestazione (retrocompatibilità)', () => {
+    const out = tplN8AgenziaAddebito(n8);
+    expect(out.text).not.toContain('team Passaggio Veloce');
+    expect(out.html).not.toContain('team Passaggio Veloce');
+  });
+
+  it('firma attestata: informa l\'agenzia di chi ha registrato la firma, cita la clausola 11 e i 15 giorni per contestare', () => {
+    const out = tplN8AgenziaAddebito({ ...n8, attestataDaPv: true });
+    expect(out.text).toContain('team Passaggio Veloce');
+    expect(out.text).toContain('clausola 11');
+    expect(out.text).toContain('15 giorni');
+    expect(out.html).toContain('team Passaggio Veloce');
+    expect(out.html).toContain('clausola 11');
+    expect(out.html).toContain('15 giorni');
   });
 });

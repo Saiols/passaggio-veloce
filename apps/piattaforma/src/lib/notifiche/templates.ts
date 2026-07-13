@@ -39,6 +39,8 @@ export type N4BrokerFirmaPayload = {
   creditoCent: number;
   saldoCent: number;
   nomeBroker: string;
+  /** Firma attestata dal Gestore (Termini art. 11), non segnalata dall'agenzia. */
+  attestataDaPv?: boolean;
 };
 
 export type N6AgenziaNuovaPayload = {
@@ -58,6 +60,8 @@ export type N8AgenziaAddebitoPayload = {
   feeCent: number;
   autoAddebitoAt: Date;
   nomeAgenzia: string;
+  /** Firma attestata dal Gestore (Termini art. 11), non segnalata dall'agenzia. */
+  attestataDaPv?: boolean;
 };
 
 export type N9AgenziaAddebitoFallitoPayload = {
@@ -309,18 +313,24 @@ export function tplN2BrokerAccettata(p: N2BrokerAccettataPayload): NotificaConte
 
 export function tplN4BrokerFirma(p: N4BrokerFirmaPayload): NotificaContent {
   const subject = `Firma avvenuta — pratica ${p.codicePratica} · +${formatCurrencyCent(p.creditoCent)}`;
+  // Se la firma l'abbiamo attestata noi (Termini art. 11), dire che "l'agenzia
+  // ha confermato" è falso: la frase va sostituita, non integrata. Niente
+  // motivazione interna: resta visibile solo in area admin.
+  const chiHaConfermatoText = p.attestataDaPv
+    ? `Il team Passaggio Veloce ha registrato la firma della pratica ${p.codicePratica}, avendone avuto conferma.`
+    : `${p.agenziaNome} ha confermato la firma della pratica ${p.codicePratica}.`;
   const text =
     `Ciao ${p.nomeBroker},\n` +
-    `${p.agenziaNome} ha confermato la firma della pratica ${p.codicePratica}. ` +
+    `${chiHaConfermatoText} ` +
     `Abbiamo accreditato ${formatCurrencyCent(p.creditoCent)} al tuo wallet. ` +
     `Saldo: ${formatCurrencyCent(p.saldoCent)}.`;
+  const chiHaConfermatoHtml = p.attestataDaPv
+    ? `Il <strong>team Passaggio Veloce</strong> ha registrato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}, avendone avuto conferma.`
+    : `<strong>${p.agenziaNome}</strong> ha confermato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Firma confermata</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
-    <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      <strong>${p.agenziaNome}</strong> ha confermato la firma della pratica
-      <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.
-    </p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">${chiHaConfermatoHtml}</p>
     <div style="background:#ecfdf5;border:1px solid #16a34a33;border-radius:10px;padding:14px;font-size:14px;color:#0a2540">
       <strong style="color:#16a34a">+${formatCurrencyCent(p.creditoCent)}</strong> accreditati sul tuo wallet.<br>
       Saldo attuale: <strong>${formatCurrencyCent(p.saldoCent)}</strong>
@@ -361,11 +371,21 @@ export function tplN6AgenziaNuova(p: N6AgenziaNuovaPayload): NotificaContent {
 
 export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaContent {
   const subject = `Addebito pratica ${p.codicePratica} programmato per ${formatDate(p.autoAddebitoAt)}`;
+  // Se la firma è stata attestata dal Gestore (Termini art. 11) anziché
+  // segnalata dall'agenzia, questa deve sapere perché viene addebitata e
+  // che può contestare — senza esporre la motivazione interna.
+  const attestazioneText = p.attestataDaPv
+    ? `\nLa firma è stata registrata dal team Passaggio Veloce sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all'assistenza.`
+    : '';
   const text =
     `Ciao ${p.nomeAgenzia},\n` +
     `il fee di ${formatCurrencyCent(p.feeCent)} per la pratica ${p.codicePratica} ` +
     `sarà addebitato il ${formatDate(p.autoAddebitoAt)}. ` +
-    `In caso di "firma avvenuta" anticipata l'addebito avviene al momento.`;
+    `In caso di "firma avvenuta" anticipata l'addebito avviene al momento.` +
+    attestazioneText;
+  const attestazioneHtml = p.attestataDaPv
+    ? `<p style="margin:16px 0 0;font-size:12px;color:#64748b">La firma è stata registrata dal <strong>team Passaggio Veloce</strong> sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all&apos;assistenza.</p>`
+    : '';
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Fee pratica programmata</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
@@ -377,6 +397,7 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
       Auto-addebito: <strong>${formatDate(p.autoAddebitoAt)}</strong>
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">L'integrazione pagamenti SEPA sarà attiva in una fase successiva.</p>
+    ${attestazioneHtml}
   `);
   return { subject, html, text };
 }

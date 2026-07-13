@@ -269,12 +269,14 @@ export default function TerminiPage() {
             carico dell&apos;Agenzia ed emissione della relativa fattura.
           </p>
           <p>
-            Il Gestore registra data, autore e motivazione dell&apos;attestazione e ne dà evidenza a
-            Broker e Agenzia. L&apos;Agenzia che ritenga l&apos;attestazione erronea può contestarla,
-            con comunicazione motivata all&apos;indirizzo di assistenza,{' '}
-            <strong>entro 15 giorni</strong> dalla comunicazione della stessa; in caso di
-            contestazione fondata il Gestore procede allo storno dell&apos;addebito e
-            all&apos;emissione di nota di credito.
+            Il Gestore registra internamente data, autore e motivazione dell&apos;attestazione, e ne
+            dà evidenza a Broker e Agenzia comunicando loro che la firma è stata attestata dal
+            Gestore e la relativa data. L&apos;Agenzia che ritenga l&apos;attestazione erronea può
+            contestarla, con comunicazione motivata all&apos;indirizzo di assistenza,{' '}
+            <strong>entro 15 giorni</strong> dalla comunicazione della stessa; in tale sede il
+            Gestore rende nota la motivazione dell&apos;attestazione. In caso di contestazione
+            fondata il Gestore procede allo storno dell&apos;addebito e all&apos;emissione di nota di
+            credito.
           </p>
           <p>
             L&apos;Utente approva espressamente il presente potere di attestazione (clausola

@@ -5,12 +5,13 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { CompanyEditForm } from '@/components/company-edit-form';
-import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { isAdminOrAssistente, isAdminPiattaforma } from '@/lib/auth/permissions';
 import { RANKING } from '@/lib/distribuzione';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
 import { updateCompanyAdminAction } from '../actions';
 import { SuspendButton } from '../../suspend-button';
 import { DeleteCompanyButton } from './delete-button';
+import { DocumentiAziendali } from './documenti-aziendali';
 
 export default async function AdminCompanyDetailPage({
   params,
@@ -33,6 +34,11 @@ export default async function AdminCompanyDetailPage({
       referente: { select: { id: true, ragioneSociale: true } },
       mandatoFatturazione: {
         include: { firmatario: { select: { nome: true, cognome: true, email: true } } },
+      },
+      documenti: {
+        where: { deletedAt: null, praticaId: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, tipo: true, sizeBytes: true, createdAt: true },
       },
       _count: {
         select: {
@@ -211,6 +217,12 @@ export default async function AdminCompanyDetailPage({
             <p className="mt-3 text-[13px] text-pv-slate-500">Non ancora firmato.</p>
           )}
         </section>
+
+        {isAdminPiattaforma(session.user.role) && (
+          <div className="mb-6">
+            <DocumentiAziendali companyId={company.id} documenti={company.documenti} />
+          </div>
+        )}
 
         <Card>
           <h2 className="text-[15px] font-bold text-pv-navy-800">

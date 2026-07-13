@@ -3,11 +3,12 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, type Prisma, type DocumentoFiscaleTipo } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
-import { Alert, Card, StatCard } from '@/components/ui';
+import { Alert, Card, StatCard, StatoEmissioneChip } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { whereEmissione } from '@/lib/fatturazione/emissione';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 import {
@@ -16,6 +17,7 @@ import {
   fatturaWhereFiltri,
   fatturaFiltriToQuery,
 } from '@/lib/fatturazione/filtri';
+import { FattureTabs, type TabFattura } from './tabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +32,7 @@ export default async function AdminFatturazionePage({
     dataDa?: string;
     dataA?: string;
     sede?: string;
+    emissione?: string;
   }>;
 }) {
   const session = await auth();
@@ -50,6 +53,14 @@ export default async function AdminFatturazionePage({
   const filtri = parseFatturaFiltri(sp);
   const where: Prisma.DocumentoFiscaleWhereInput = fatturaWhereFiltri(filtri);
 
+  // I conteggi dei tab usano gli STESSI filtri della lista MENO l'emissione: il
+  // numero sul tab è esattamente quello che ottieni cliccandolo. Con `where`
+  // (che include l'emissione) ogni tab mostrerebbe il proprio numero.
+  const whereBase: Prisma.DocumentoFiscaleWhereInput = fatturaWhereFiltri({
+    ...filtri,
+    emissione: null,
+  });
+
   // Opzioni del filtro "Sede" (tutte le sedi attive, con azienda madre).
   const sediOpzioni = await prisma.sede.findMany({
     where: { deletedAt: null },
@@ -57,23 +68,40 @@ export default async function AdminFatturazionePage({
     orderBy: [{ company: { ragioneSociale: 'asc' } }, { nome: 'asc' }],
   });
 
-  const docs = await prisma.documentoFiscale.findMany({
-    where,
-    orderBy: { emessoAt: 'desc' },
-    take: 100,
-    include: {
-      pratica: { select: { id: true, codicePratica: true, agenziaSede: sedeSelect, brokerSede: sedeSelect } },
-      payout: { select: { wallet: { select: { sede: sedeSelect } } } },
-    },
-  });
+  const [docs, kpi, countDaEmettere, countEmesse, countTutte] = await Promise.all([
+    prisma.documentoFiscale.findMany({
+      where,
+      orderBy: { emessoAt: 'desc' },
+      take: 100,
+      include: {
+        pratica: { select: { id: true, codicePratica: true, agenziaSede: sedeSelect, brokerSede: sedeSelect } },
+        payout: { select: { wallet: { select: { sede: sedeSelect } } } },
+      },
+    }),
+    // KPI (rispetta i filtri correnti). Dati documentali; la P&L definitiva è del commercialista.
+    prisma.documentoFiscale.groupBy({
+      by: ['tipo'],
+      where,
+      _count: { _all: true },
+      _sum: { imponibileCent: true, ivaCent: true, importoLordoCent: true },
+    }),
+    prisma.documentoFiscale.count({
+      where: { AND: [whereBase, whereEmissione('DA_EMETTERE')!] },
+    }),
+    prisma.documentoFiscale.count({
+      where: { AND: [whereBase, whereEmissione('EMESSA')!] },
+    }),
+    prisma.documentoFiscale.count({ where: whereBase }),
+  ]);
 
-  // KPI (rispetta i filtri correnti). Dati documentali; la P&L definitiva è del commercialista.
-  const kpi = await prisma.documentoFiscale.groupBy({
-    by: ['tipo'],
-    where,
-    _count: { _all: true },
-    _sum: { imponibileCent: true, ivaCent: true, importoLordoCent: true },
-  });
+  const tabs: TabFattura[] = [
+    { value: '', label: 'Tutte', count: countTutte },
+    { value: 'DA_EMETTERE', label: 'Da emettere', count: countDaEmettere },
+    { value: 'EMESSA', label: 'Emesse', count: countEmesse },
+  ];
+  // Query-string degli altri filtri, per i link dei tab.
+  const queryBase = fatturaFiltriToQuery({ ...filtri, emissione: null });
+
   const byTipo = (t: DocumentoFiscaleTipo) => kpi.find((k) => k.tipo === t);
   const fpv = byTipo('FATTURA_PV');
   const dbk = byTipo('DOC_BROKER');
@@ -129,7 +157,10 @@ export default async function AdminFatturazionePage({
           </a>
         </div>
 
+        <FattureTabs tabs={tabs} attivo={filtri.emissione ?? ''} queryBase={queryBase} />
+
         <form className="mb-5 flex flex-wrap items-end gap-2" action="/admin/fatturazione" method="get">
+          {filtri.emissione && <input type="hidden" name="emissione" value={filtri.emissione} />}
           <input
             type="text"
             name="q"
@@ -186,7 +217,7 @@ export default async function AdminFatturazionePage({
           >
             Filtra
           </button>
-          {(filtri.q || filtri.tipo || filtri.sedeId || filtri.dataDa || filtri.dataA) && (
+          {(filtri.q || filtri.tipo || filtri.sedeId || filtri.dataDa || filtri.dataA || filtri.emissione) && (
             <Link
               href="/admin/fatturazione"
               className="rounded-[10px] border border-pv-slate-300 bg-white px-3 py-2 text-[13px] font-semibold text-pv-slate-600 hover:bg-pv-slate-50"
@@ -209,6 +240,7 @@ export default async function AdminFatturazionePage({
                     <th className="whitespace-nowrap px-3 py-2.5">Data</th>
                     <th className="whitespace-nowrap px-3 py-2.5">N°</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Tipo</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Stato</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Emittente</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Destinatario</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Pratica</th>
@@ -229,6 +261,9 @@ export default async function AdminFatturazionePage({
                           </Link>
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5">{labelTipoDocumento(d.tipo)}</td>
+                        <td className="whitespace-nowrap px-3 py-2.5">
+                          <StatoEmissioneChip doc={d} />
+                        </td>
                         <td className="px-3 py-2.5">
                           <div className="max-w-[180px] truncate" title={em?.ragioneSociale ?? ''}>
                             {em?.ragioneSociale ?? '—'}

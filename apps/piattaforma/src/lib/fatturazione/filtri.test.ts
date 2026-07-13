@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseFatturaFiltri, fatturaWhereFiltri, fatturaFiltriToQuery } from './filtri';
+import {
+  parseFatturaFiltri,
+  parseFatturaFiltriFromUrl,
+  fatturaWhereFiltri,
+  fatturaFiltriToQuery,
+} from './filtri';
 
 describe('parseFatturaFiltri', () => {
   it('normalizza tipo/date valide, scarta quelle invalide', () => {
@@ -102,5 +107,35 @@ describe('filtro emissione', () => {
   it('round-trip: query → parse → query', () => {
     const f = parseFatturaFiltri({ emissione: 'DA_EMETTERE', q: 'PV-2026' });
     expect(fatturaFiltriToQuery(f)).toContain('emissione=DA_EMETTERE');
+  });
+});
+
+describe('parseFatturaFiltriFromUrl (C-1)', () => {
+  // Entry point unico per i consumer che partono da un URL (export CSV, ZIP):
+  // legge TUTTE le chiavi note da sé, invece di farsele elencare a mano dal
+  // chiamante — è esattamente l'elenco a mano che aveva "dimenticato" `emissione`.
+  it('legge tutte le chiavi, compresa emissione, da un URL reale', () => {
+    const url = new URL(
+      'http://x/api/admin/fatturazione/export?q=PV-1&tipo=FATTURA_PV&dataDa=2026-06-01&sede=s1&emissione=DA_EMETTERE',
+    );
+    expect(parseFatturaFiltriFromUrl(url)).toEqual({
+      q: 'PV-1',
+      tipo: 'FATTURA_PV',
+      dataDa: '2026-06-01',
+      dataA: null,
+      sedeId: 's1',
+      emissione: 'DA_EMETTERE',
+    });
+  });
+
+  it('senza query string → nessun filtro attivo', () => {
+    expect(parseFatturaFiltriFromUrl(new URL('http://x/api/admin/fatturazione/export'))).toEqual(
+      parseFatturaFiltri({}),
+    );
+  });
+
+  it('chiavi sconosciute nell’URL sono ignorate (validate da parseFatturaFiltri)', () => {
+    const url = new URL('http://x/api/admin/fatturazione/export?pippo=1&emissione=EMESSA');
+    expect(parseFatturaFiltriFromUrl(url).emissione).toBe('EMESSA');
   });
 });

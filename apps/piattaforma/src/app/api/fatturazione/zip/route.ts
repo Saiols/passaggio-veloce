@@ -6,7 +6,7 @@ import { hasPermesso } from '@/lib/auth/permessi/guard';
 import { buildDocumentoPdf } from '@/lib/fatturazione/pdf';
 import { documentoPdfInclude, documentoPdfInput } from '@/lib/fatturazione/documento-pdf';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
-import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
+import { parseFatturaFiltriFromUrl, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import { buildDocumentiZip, type ZipEntry } from '@/lib/documenti/zip';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
 import { getSessionContext } from '@/lib/auth/session-context';
@@ -50,13 +50,10 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const filtri = parseFatturaFiltri({
-    q: url.searchParams.get('q') ?? undefined,
-    tipo: url.searchParams.get('tipo') ?? undefined,
-    dataDa: url.searchParams.get('dataDa') ?? undefined,
-    dataA: url.searchParams.get('dataA') ?? undefined,
-    sede: url.searchParams.get('sede') ?? undefined,
-  });
+  // Legge TUTTE le chiavi note (compresa `emissione`) dall'URL, invece di
+  // elencarle a mano: vedi il commento su `parseFatturaFiltriFromUrl` — un
+  // filtro dimenticato qui veniva scartato in silenzio (C-1).
+  const filtri = parseFatturaFiltriFromUrl(url);
 
   const companyId = session.user.companyId;
   const companyType = session.user.companyType;

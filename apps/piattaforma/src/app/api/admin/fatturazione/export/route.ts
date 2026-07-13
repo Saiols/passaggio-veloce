@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import { prisma, type Prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
-import { parseFatturaFiltri, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
+import { parseFatturaFiltriFromUrl, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 
 export const runtime = 'nodejs';
@@ -22,13 +22,10 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url);
-  const filtri = parseFatturaFiltri({
-    q: url.searchParams.get('q') ?? undefined,
-    tipo: url.searchParams.get('tipo') ?? undefined,
-    dataDa: url.searchParams.get('dataDa') ?? undefined,
-    dataA: url.searchParams.get('dataA') ?? undefined,
-    sede: url.searchParams.get('sede') ?? undefined,
-  });
+  // Legge TUTTE le chiavi note (compresa `emissione`) dall'URL, invece di
+  // elencarle a mano: vedi il commento su `parseFatturaFiltriFromUrl` — un
+  // filtro dimenticato qui veniva scartato in silenzio (C-1).
+  const filtri = parseFatturaFiltriFromUrl(url);
   const where: Prisma.DocumentoFiscaleWhereInput = fatturaWhereFiltri(filtri);
 
   const docs = await prisma.documentoFiscale.findMany({

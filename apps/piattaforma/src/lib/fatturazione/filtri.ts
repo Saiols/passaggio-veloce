@@ -52,6 +52,24 @@ export function parseFatturaFiltri(sp: {
 }
 
 /**
+ * Entry point da usare in QUALUNQUE route che riceva un URL/`URLSearchParams`
+ * (export CSV, ZIP, …): estrae da sé tutte le chiavi note a `parseFatturaFiltri`,
+ * invece di farsele elencare a mano dal chiamante. `parseFatturaFiltri` valida
+ * e ignora già le chiavi sconosciute, quindi passare l'intero oggetto è sicuro.
+ *
+ * Ragione d'essere: due route (export CSV e ZIP) costruivano l'input elencando
+ * cinque chiavi a mano e "dimenticavano" `emissione`, che veniva scartato in
+ * silenzio — l'admin filtrava per "Da emettere" ma scaricava TUTTO, comprese
+ * fatture già emesse e documenti fuori campo IVA (rischio: doppia emissione /
+ * emissione indebita da parte del commercialista). Un filtro nuovo aggiunto
+ * domani a `parseFatturaFiltri` raggiunge automaticamente ogni consumer che
+ * passa da qui, senza che nessuno debba ricordarsi di elencarlo.
+ */
+export function parseFatturaFiltriFromUrl(url: URL): FatturaFiltri {
+  return parseFatturaFiltri(Object.fromEntries(url.searchParams));
+}
+
+/**
  * Clausole Prisma dei filtri (q/tipo/intervallo date/sede), da combinare con lo
  * scope del ruolo. Entrambi possono restituire una chiave `AND`: comporli con
  * `{ AND: [scope, fatturaWhereFiltri(f)] }`, MAI con lo spread

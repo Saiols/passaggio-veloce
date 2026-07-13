@@ -174,3 +174,37 @@ describe('GET /api/fatturazione/zip — gate fatture.download', () => {
     expect(buildZipMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('GET /api/fatturazione/zip — il filtro ?emissione= arriva al where (C-1)', () => {
+  // Prima del fix la route costruiva l'input di `parseFatturaFiltri` elencando
+  // a mano q/tipo/dataDa/dataA/sede: `emissione` non era nella lista e veniva
+  // scartato in silenzio. L'admin sul tab "Da emettere" che scarica lo ZIP
+  // otteneva TUTTI i PDF, comprese fatture già emesse e documenti fuori campo
+  // IVA — esattamente il difetto che l'export CSV aveva in parallelo.
+  it('?emissione=EMESSA (ADMIN_PIATTAFORMA) restringe il where ai documenti già emessi', async () => {
+    authMock.mockResolvedValue(sessione('ADMIN_PIATTAFORMA', undefined as unknown as string, undefined));
+    getSessionContextMock.mockResolvedValue(null);
+
+    await zipGET(new Request('http://x/api/fatturazione/zip?emissione=EMESSA'));
+
+    expect(prismaMock.documentoFiscale.findMany).toHaveBeenCalledTimes(1);
+    const { where } = prismaMock.documentoFiscale.findMany.mock.calls[0][0];
+    // Scope admin = {}, ANDato coi filtri: la clausola emissione deve comparire.
+    expect(where).toEqual({
+      AND: [{}, { AND: [{ trasmessoSdiAt: { not: null } }] }],
+    });
+  });
+
+  it('?emissione=DA_EMETTERE (agenzia) si combina con lo scope sede nello stesso AND', async () => {
+    authMock.mockResolvedValue(sessione('UTENTE_AZIENDA', 'AGENZIA'));
+    getSessionContextMock.mockResolvedValue(ctx({ permessi: ['fatture.view', 'fatture.download'] }));
+
+    await zipGET(new Request('http://x/api/fatturazione/zip?emissione=DA_EMETTERE'));
+
+    const { where } = prismaMock.documentoFiscale.findMany.mock.calls[0][0];
+    expect(where.AND).toHaveLength(2);
+    expect(where.AND[1]).toEqual({
+      AND: [{ fatturaPaTipo: { not: null }, trasmessoSdiAt: null }],
+    });
+  });
+});

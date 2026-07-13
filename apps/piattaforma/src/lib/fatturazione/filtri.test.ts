@@ -4,6 +4,7 @@ import {
   parseFatturaFiltriFromUrl,
   fatturaWhereFiltri,
   fatturaFiltriToQuery,
+  type FatturaFiltri,
 } from './filtri';
 
 describe('parseFatturaFiltri', () => {
@@ -137,5 +138,38 @@ describe('parseFatturaFiltriFromUrl (C-1)', () => {
   it('chiavi sconosciute nell’URL sono ignorate (validate da parseFatturaFiltri)', () => {
     const url = new URL('http://x/api/admin/fatturazione/export?pippo=1&emissione=EMESSA');
     expect(parseFatturaFiltriFromUrl(url).emissione).toBe('EMESSA');
+  });
+});
+
+describe('FatturaFiltri.emissione — stato non rappresentabile (M-2)', () => {
+  // `StatoEmissione` ammette anche 'FUORI_SDI' (statoEmissione() in emissione.ts
+  // lo produce), ma `parseFatturaFiltri` non lo produce MAI e `whereEmissione`
+  // lo ignora (nessun filtro). Prima del fix il campo era tipizzato
+  // `StatoEmissione | null`: costruendo un `FatturaFiltri` a mano si poteva
+  // scrivere `emissione: 'FUORI_SDI'` e ottenere una lista che mostra tutto
+  // senza segnalarlo. Il tipo ora esclude 'FUORI_SDI': non è più rappresentabile.
+  it("'FUORI_SDI' non è assegnabile a FatturaFiltri.emissione (verificato da typecheck, non da vitest)", () => {
+    const f: FatturaFiltri = {
+      q: '',
+      tipo: null,
+      dataDa: null,
+      dataA: null,
+      sedeId: null,
+      // @ts-expect-error 'FUORI_SDI' non è un valore ammesso per `emissione`: se
+      // questa riga smette di essere un errore (il tipo si allarga di nuovo),
+      // `pnpm typecheck` fallisce con "Unused '@ts-expect-error' directive".
+      // vitest (esbuild) non typecheck-a: questa riga morde solo su `pnpm typecheck`.
+      emissione: 'FUORI_SDI',
+    };
+    // A runtime (esbuild, niente tipi) l'assegnazione avviene comunque: la
+    // protezione è solo a compile-time, coerente col commento sopra.
+    expect(f.emissione).toBe('FUORI_SDI');
+  });
+
+  it("'DA_EMETTERE' ed 'EMESSA' restano assegnabili", () => {
+    const a: FatturaFiltri = { q: '', tipo: null, dataDa: null, dataA: null, sedeId: null, emissione: 'DA_EMETTERE' };
+    const b: FatturaFiltri = { q: '', tipo: null, dataDa: null, dataA: null, sedeId: null, emissione: 'EMESSA' };
+    expect(a.emissione).toBe('DA_EMETTERE');
+    expect(b.emissione).toBe('EMESSA');
   });
 });

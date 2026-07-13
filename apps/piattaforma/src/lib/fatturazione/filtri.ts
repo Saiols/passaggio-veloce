@@ -14,13 +14,22 @@ export const TIPI_DOC: DocumentoFiscaleTipo[] = [
   'PENALE_BROKER',
 ];
 
+/**
+ * Sottoinsieme filtrabile di `StatoEmissione`. `FUORI_SDI` non è una coda di
+ * lavoro (vedi il commento su `whereEmissione` in emissione.ts: quei documenti
+ * restano visibili in "Tutte", col loro chip) — quindi non è un valore valido
+ * per `?emissione=`. Il tipo lo esclude, non solo il parsing: costruire un
+ * `FatturaFiltri` a mano con `emissione: 'FUORI_SDI'` non deve compilare.
+ */
+export type StatoEmissioneFiltro = Extract<StatoEmissione, 'DA_EMETTERE' | 'EMESSA'>;
+
 export type FatturaFiltri = {
   q: string;
   tipo: DocumentoFiscaleTipo | null;
   dataDa: string | null; // 'YYYY-MM-DD'
   dataA: string | null; // 'YYYY-MM-DD'
   sedeId: string | null;
-  emissione: StatoEmissione | null;
+  emissione: StatoEmissioneFiltro | null;
 };
 
 function isYmd(s: string | undefined | null): s is string {

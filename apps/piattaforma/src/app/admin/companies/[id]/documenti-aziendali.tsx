@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { Card } from '@/components/ui';
 import { labelDocumentoTipo } from '@/lib/documenti/labels';
 import { formatDate } from '@/lib/format';
@@ -68,12 +67,20 @@ export function DocumentiAziendali({
                   {formatDate(d.createdAt)} · {formatKb(d.sizeBytes)}
                 </p>
               </div>
-              <Link
+              {/* <a>, non <Link>: è una route API (autentica, autorizza, legge
+                  il blob dallo storage), non una pagina. In Next 16 il
+                  prefetch di <Link> parte quando il link entra nel viewport
+                  (in produzione; in dev è disattivo) — con <Link> le carte
+                  d'identità/visure verrebbero lette dallo storage solo aprendo
+                  la scheda azienda, senza che nessuno clicchi. Stesso pattern
+                  usato altrove per questa route: app/pratiche/[id]/page.tsx e
+                  app/admin/segnalazioni-creazione/page.tsx. */}
+              <a
                 href={`/api/documenti/${d.id}`}
                 className="shrink-0 rounded-[10px] border border-pv-slate-300 bg-white px-3 py-1.5 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
               >
                 Scarica
-              </Link>
+              </a>
             </li>
           ))}
         </ul>

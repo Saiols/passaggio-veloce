@@ -1,4 +1,4 @@
-import type { PraticaStato } from '@pv/db';
+import type { PraticaStato, Prisma } from '@pv/db';
 
 /**
  * Classificazione degli stati pratica per la UI. FONTE UNICA: la usano sia i tab
@@ -104,4 +104,34 @@ export function contaGruppi(
     if (r.stato === 'IN_ESCALATION') out.escalation += n;
   }
   return out;
+}
+
+/**
+ * Il criterio del tab "In attesa di firma": lavorata dall'agenzia, non ferma
+ * per una segnalazione, in attesa della sola firma del cliente.
+ *
+ * `flagSegnalata` basta da solo: sul write path, una PROCESSATA con
+ * `flagSegnalata = true` ha sempre `segnalazioneStato = 'RICEVUTA'` (la conferma
+ * porta ad ANNULLATA, il respingimento rimette flagSegnalata a false).
+ */
+export const WHERE_ATTESA_FIRMA = {
+  stato: 'PROCESSATA',
+  flagSegnalata: false,
+} as const satisfies Prisma.PraticaWhereInput;
+
+/**
+ * Filtro Prisma di un tab. Superset di `whereStato`: i tab il cui criterio è il
+ * solo stato delegano a lei; ATTESA_FIRMA aggiunge la condizione sulla
+ * segnalazione, che `whereStato` non sa esprimere (filtra solo `stato`).
+ *
+ * Senza questa funzione, `whereStato('ATTESA_FIRMA')` tornerebbe `undefined` =
+ * NESSUN filtro: il tab mostrerebbe tutte le pratiche, in silenzio.
+ */
+export function whereTabPratiche(
+  param: string | undefined,
+  ammessi: readonly PraticaStato[] = SINGOLI,
+): Prisma.PraticaWhereInput {
+  if (param === 'ATTESA_FIRMA') return { ...WHERE_ATTESA_FIRMA };
+  const stato = whereStato(param, ammessi);
+  return stato ? { stato } : {};
 }

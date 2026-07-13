@@ -9,6 +9,8 @@ import {
   isInCorso,
   whereStato,
   contaGruppi,
+  whereTabPratiche,
+  WHERE_ATTESA_FIRMA,
 } from './stati';
 
 // Tutti i valori dell'enum Prisma, presi dall'enum stesso: se domani ne viene
@@ -164,6 +166,45 @@ describe('whereStato con insieme admin', () => {
 
   it('un valore non riconosciuto non filtra, nemmeno per l’admin', () => {
     expect(whereStato('PIPPO', SINGOLI_ADMIN)).toBeUndefined();
+  });
+});
+
+describe('whereTabPratiche', () => {
+  it('ATTESA_FIRMA = processata E non segnalata', () => {
+    // Non basta lo stato: una PROCESSATA con segnalazione aperta è ferma in
+    // coda admin, non in attesa di firma.
+    expect(whereTabPratiche('ATTESA_FIRMA', SINGOLI_ADMIN)).toEqual({
+      stato: 'PROCESSATA',
+      flagSegnalata: false,
+    });
+  });
+
+  it('delega a whereStato per gli aggregati', () => {
+    expect(whereTabPratiche('IN_CORSO', SINGOLI_ADMIN)).toEqual({
+      stato: { in: [...STATI_IN_CORSO] },
+    });
+  });
+
+  it('delega a whereStato per gli stati singoli', () => {
+    expect(whereTabPratiche('PROCESSATA', SINGOLI_ADMIN)).toEqual({ stato: 'PROCESSATA' });
+  });
+
+  it('nessun parametro → nessun filtro', () => {
+    expect(whereTabPratiche(undefined, SINGOLI_ADMIN)).toEqual({});
+  });
+
+  it('valore ignoto → nessun filtro (come whereStato)', () => {
+    expect(whereTabPratiche('PIPPO', SINGOLI_ADMIN)).toEqual({});
+  });
+
+  it('ATTESA_FIRMA non è uno stato: whereStato da sola non lo filtrerebbe', () => {
+    // Questo è il motivo per cui whereTabPratiche esiste. Se qualcuno usasse
+    // whereStato per il tab, vedrebbe TUTTE le pratiche senza alcun errore.
+    expect(whereStato('ATTESA_FIRMA', SINGOLI_ADMIN)).toBeUndefined();
+  });
+
+  it('WHERE_ATTESA_FIRMA è il criterio grezzo usato dal chiamante per il conteggio', () => {
+    expect(WHERE_ATTESA_FIRMA).toEqual({ stato: 'PROCESSATA', flagSegnalata: false });
   });
 });
 

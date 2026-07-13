@@ -151,10 +151,11 @@ describe('basePath', () => {
 describe('tabsPraticheAdmin', () => {
   const conteggi = { tutte: 10, inCorso: 5, escalation: 2, bozze: 1, concluse: 4 };
 
-  it('ha i cinque tab, con escalation dopo In corso', () => {
-    expect(tabsPraticheAdmin(conteggi).map((t) => t.value)).toEqual([
+  it('ha i sei tab, con attesa firma ed escalation dopo In corso', () => {
+    expect(tabsPraticheAdmin(conteggi, 3).map((t) => t.value)).toEqual([
       '',
       'IN_CORSO',
+      'ATTESA_FIRMA',
       'IN_ESCALATION',
       'BOZZA',
       'CONCLUSE',
@@ -162,7 +163,7 @@ describe('tabsPraticheAdmin', () => {
   });
 
   it('il tab escalation mostra il suo conteggio, non quello di In corso', () => {
-    const t = tabsPraticheAdmin(conteggi).find((x) => x.value === 'IN_ESCALATION');
+    const t = tabsPraticheAdmin(conteggi, 3).find((x) => x.value === 'IN_ESCALATION');
     expect(t?.count).toBe(2);
   });
 
@@ -174,6 +175,24 @@ describe('tabsPraticheAdmin', () => {
   // corso" attivo mentre vedi solo le R2 sarebbe fuorviante.
   it('un filtro fine non accende nessun tab', () => {
     expect(tabAttivo('IN_ATTESA_ROUND_2')).toBeNull();
+  });
+
+  it('include il tab In attesa di firma col suo conteggio', () => {
+    const conteggi = { tutte: 20, inCorso: 8, escalation: 1, bozze: 2, concluse: 10 };
+    const tabs = tabsPraticheAdmin(conteggi, 5);
+    expect(tabs.map((t) => t.value)).toEqual([
+      '',
+      'IN_CORSO',
+      'ATTESA_FIRMA',
+      'IN_ESCALATION',
+      'BOZZA',
+      'CONCLUSE',
+    ]);
+    expect(tabs.find((t) => t.value === 'ATTESA_FIRMA')?.count).toBe(5);
+  });
+
+  it('tabAttivo riconosce ATTESA_FIRMA', () => {
+    expect(tabAttivo('ATTESA_FIRMA')).toBe('ATTESA_FIRMA');
   });
 });
 
@@ -187,7 +206,7 @@ describe('opzioniStatoAdmin (I-1)', () => {
   // ripresenta esattamente questo difetto.
   it('ogni valore dei tab admin ha una option corrispondente nella select', () => {
     const conteggi = { tutte: 1, inCorso: 1, escalation: 1, bozze: 1, concluse: 1 };
-    const valoriTab = tabsPraticheAdmin(conteggi).map((t) => t.value);
+    const valoriTab = tabsPraticheAdmin(conteggi, 1).map((t) => t.value);
     const valoriOpzioni = opzioniStatoAdmin().map((o) => o.value);
     for (const v of valoriTab) {
       expect(valoriOpzioni).toContain(v);

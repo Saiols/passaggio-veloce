@@ -6,7 +6,13 @@ import type { ConteggiTab } from './stati';
  * CONCLUSE (stesso meccanismo di IN_ATTESA, già in uso). Un solo parametro ⇒
  * tab e select non possono entrare in conflitto e gli URL restano condivisibili.
  */
-export type ValoreTab = '' | 'IN_CORSO' | 'IN_ESCALATION' | 'BOZZA' | 'CONCLUSE';
+export type ValoreTab =
+  | ''
+  | 'IN_CORSO'
+  | 'ATTESA_FIRMA'
+  | 'IN_ESCALATION'
+  | 'BOZZA'
+  | 'CONCLUSE';
 
 export type TabPratiche = { value: ValoreTab; label: string; count: number };
 
@@ -36,13 +42,21 @@ export function tabsPratiche({
  * Tab della lista admin. Come quelli di broker/agenzia, più "In escalation":
  * è l'unica coda su cui l'admin deve davvero agire, e per il broker non esiste.
  *
- * `escalation` è un SOTTOINSIEME di `inCorso` (vedi ConteggiTab): i due tab si
- * sovrappongono di proposito — cliccando "In corso" vedi anche le escalation.
+ * `escalation` e `attesaFirma` sono SOTTOINSIEMI di `inCorso`: i tab si
+ * sovrappongono di proposito — cliccando "In corso" vedi anche quelle.
+ *
+ * @param attesaFirma conteggio delle PROCESSATA non segnalate. Non deriva da
+ *   `conteggi` perché il criterio non è solo lo stato: lo calcola il chiamante
+ *   con un count su WHERE_ATTESA_FIRMA.
  */
-export function tabsPraticheAdmin(conteggi: ConteggiTab): TabPratiche[] {
+export function tabsPraticheAdmin(
+  conteggi: ConteggiTab,
+  attesaFirma: number,
+): TabPratiche[] {
   return [
     { value: '', label: 'Tutte', count: conteggi.tutte },
     { value: 'IN_CORSO', label: 'In corso', count: conteggi.inCorso },
+    { value: 'ATTESA_FIRMA', label: 'In attesa di firma', count: attesaFirma },
     { value: 'IN_ESCALATION', label: 'In escalation', count: conteggi.escalation },
     { value: 'BOZZA', label: 'Bozze', count: conteggi.bozze },
     { value: 'CONCLUSE', label: 'Concluse', count: conteggi.concluse },
@@ -58,6 +72,7 @@ export function tabAttivo(stato: string | undefined): ValoreTab | null {
   if (!stato) return '';
   if (
     stato === 'IN_CORSO' ||
+    stato === 'ATTESA_FIRMA' ||
     stato === 'IN_ESCALATION' ||
     stato === 'BOZZA' ||
     stato === 'CONCLUSE'
@@ -125,6 +140,7 @@ export function opzioniStatoAdmin(): { value: string; label: string }[] {
     { value: '', label: 'Tutti gli stati' },
     { value: 'IN_CORSO', label: 'In corso' },
     { value: 'CONCLUSE', label: 'Concluse' },
+    { value: 'ATTESA_FIRMA', label: 'In attesa di firma' },
     { value: 'IN_ESCALATION', label: 'Escalation' },
     { value: 'IN_ATTESA_ROUND_1', label: 'In attesa · R1' },
     { value: 'IN_ATTESA_ROUND_2', label: 'In attesa · R2' },

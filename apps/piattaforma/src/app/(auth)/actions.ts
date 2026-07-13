@@ -29,6 +29,7 @@ import { evaluatePromoCode, normalizePromoCode, type PromoCheckResult } from '@/
 import { redeemPromoCode, type PromoRedeemResult } from '@/lib/promo/redeem';
 import { verifyRegistrationKyc } from '@/lib/kyc/verify';
 import { signKycToken, verifyKycToken, hashDocs } from '@/lib/kyc/token';
+import { TERMS_VERSION } from '@/lib/legal/clausole-vessatorie';
 
 // ============================================================
 // LOGIN
@@ -457,6 +458,11 @@ export async function registerAction(
           sepaMandateAccepted: true,
           sepaMandateAcceptedAt: new Date(),
           termsAcceptedAt: new Date(),
+          // La seconda spunta (artt. 1341-1342) è validata da
+          // registerStep4PaymentSchema come z.literal(true): se siamo qui,
+          // l'utente l'ha messa. Prima veniva scartata e non lasciava traccia.
+          clausoleVessatorieAcceptedAt: new Date(),
+          termsVersion: TERMS_VERSION,
           // referralCode deprecato sulla Company: il codice vive sulla Sede.
           referenteId,
           referenteSedeId,

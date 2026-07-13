@@ -375,6 +375,11 @@ model Company {
 
   termsAcceptedAt DateTime?
 
+  /// Approvazione specifica ex artt. 1341-1342 c.c. (seconda spunta, separata).
+  clausoleVessatorieAcceptedAt DateTime?
+  /// Versione dei Termini accettata (lib/legal/clausole-vessatorie.ts TERMS_VERSION).
+  termsVersion                 String?
+
   /// AF-AC: IP di signup (truncato 3 ottetti) — usato per il check
   /// anti-collusione "stesso IP signup tra referente e referral".
   signupIp String?

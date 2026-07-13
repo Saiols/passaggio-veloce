@@ -12,12 +12,23 @@
 
 ## Global Constraints
 
-- **Node 22**: se la shell è appena stata riavviata, `nvm use 22.15.0` prima di qualunque `pnpm` (pnpm richiede ≥18, il default post-riavvio è Node 16).
-- **Test**: `pnpm --filter piattaforma test <path>` (vitest run). Nessun test va dichiarato verde senza averlo visto **prima rosso**.
-- **Typecheck**: `pnpm --filter piattaforma typecheck`. A cache fredda `tsc` è inaffidabile (stack overflow / falsi errori Prisma): se esplode, non è il tuo codice — rilancia dopo un build.
+- ⚠️ **Node NON gira su Git Bash in questo ambiente.** Test, typecheck, lint e build vanno lanciati **da PowerShell**, col PATH nvm in testa:
+  ```powershell
+  $env:Path = "C:\Users\fsiol\AppData\Local\nvm\v22.15.0;" + $env:Path; pnpm --filter piattaforma test src/lib/...
+  ```
+  Il package si chiama **`piattaforma`**. Un comando lanciato da Bash fallisce con "node not found" — non è il tuo codice.
+- ⚠️ **PowerShell 5.1 corrompe le lettere accentate** quando riscrive un file: usare **Edit/Write**, mai `Set-Content`/`Out-File` per il sorgente. (Questo repo è pieno di italiano accentato.)
+- **Test verdi NON implicano typecheck verde** (vitest non typecheck-a): lanciare **sempre entrambi**. Nessun test va dichiarato verde senza averlo visto **prima rosso**.
+- **Typecheck**: a cache fredda `tsc` è inaffidabile (stack overflow / falsi errori Prisma). Se esplode senza che tu abbia toccato i tipi, rilancialo — non inseguire un fantasma.
 - **MAI `pnpm db:migrate`** (`prisma migrate dev`): propone DROP SEQUENCE ed è distruttivo. Le migration si scrivono **a mano** e si applicano con `pnpm --filter @pv/db db:deploy`, poi `pnpm db:generate`.
 - **Convenzione nome migration**: `packages/db/prisma/migrations/YYYYMMDDHHMMSS_snake_case_name/migration.sql`.
-- **Colori**: mai hardcodare hex nel JSX. Usare i token del design system (`pv-slate-*`, `pv-navy-*`, `pv-red-*`, ecc.).
+- ⚠️ **Token colore realmente esistenti** (verificati in `globals.css` — le altre tonalità NON esistono e non colorano nulla):
+  - `pv-amber`: solo **50** e **500**
+  - `pv-green`: solo **50** e **500**
+  - `pv-red`: solo **50** e **500**
+  - `pv-slate`: **50, 100, 200, 300, 500, 700, 900** — **NON esiste `slate-600`**
+  Coppie canoniche, come le usa `StatusChip`: `bg-pv-red-50 text-pv-red-500`, `bg-pv-amber-50 text-pv-amber-500`, `bg-pv-green-50 text-pv-green-500`, `bg-pv-slate-100 text-pv-slate-700`.
+  Mai hardcodare un hex nel JSX.
 - **Nessuna email di sollecito**: fuori perimetro per decisione esplicita. Non aggiungere template N-nuovi.
 - **Solo `ADMIN_PIATTAFORMA`** può attestare la firma. `ASSISTENTE` vede la lista ma non attesta.
 
@@ -975,12 +986,14 @@ function AttesaCell({ from, now }: { from: Date | null; now: Date }) {
   const giorni = giorniTrascorsi(from, now);
   if (giorni === null) return <span>—</span>;
   const level = attesaLevel(giorni);
+  // Stesse coppie di StatusChip. NON usare -600/-700 su amber/red né slate-600:
+  // quelle tonalità non esistono in globals.css e non colorano nulla.
   const tone =
     level === 'urgent'
-      ? 'bg-pv-red-50 text-pv-red-700'
+      ? 'bg-pv-red-50 text-pv-red-500'
       : level === 'warn'
-        ? 'bg-pv-amber-50 text-pv-amber-700'
-        : 'bg-pv-slate-100 text-pv-slate-600';
+        ? 'bg-pv-amber-50 text-pv-amber-500'
+        : 'bg-pv-slate-100 text-pv-slate-700';
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-semibold ${tone}`}>
       {giorni === 0 ? 'oggi' : `${giorni} g`}
@@ -988,8 +1001,6 @@ function AttesaCell({ from, now }: { from: Date | null; now: Date }) {
   );
 }
 ```
-
-⚠️ Verifica che i token `pv-amber-*` e `pv-red-*` esistano davvero nel design system (`tailwind.config` / `globals.css`). Se `pv-amber` non esiste, usa il token warning realmente presente — **non inventare un hex**.
 
 - [ ] **Step 5: Recapiti nelle celle Broker e Agenzia (solo in questo tab)**
 

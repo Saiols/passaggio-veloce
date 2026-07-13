@@ -26,7 +26,7 @@ import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { motivoBloccoFirma } from '@/lib/pratiche/firma-gate';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { env } from '@/env';
-import type { QuickActionResult } from '@/app/pratiche/actions';
+import type { QuickActionResult } from '@/lib/pratiche/quick-action';
 
 /**
  * Scope sede della sessione corrente.
@@ -128,9 +128,13 @@ async function notifyAffiliationPostFirma(
  * significherebbe, prima o poi, una fattura che non parte o un payout che non
  * scatta. Cambiano solo i gate e ciò che si scrive in più.
  */
-export type AttoreFirma =
-  | { tipo: 'AGENZIA' }
-  | { tipo: 'ADMIN'; userId: string; motivo: string };
+// Niente `userId` qui: l'autore di un'attestazione ADMIN (Termini art. 11, che
+// muove denaro vero) DEVE venire dalla sessione autenticata, mai da un campo
+// dichiarato dal chiamante — altrimenti un'action futura che leggesse lo
+// userId da un form scriverebbe un'attribuzione falsa e il motore non se ne
+// accorgerebbe (due fonti di verità che possono divergere). Stesso pattern di
+// `lib/penali/segnalazione.ts` (`const adminId = session.user.id`).
+export type AttoreFirma = { tipo: 'AGENZIA' } | { tipo: 'ADMIN'; motivo: string };
 
 export async function firmaPraticaCore(
   praticaId: string,
@@ -143,6 +147,9 @@ export async function firmaPraticaCore(
   // companyId, non ha permessi azienda e non ha scope sede.
   let agenziaSessione: string | null = null;
   let scope: Awaited<ReturnType<typeof sedeScopeCorrente>> | null = null;
+  // Autore dell'attestazione ADMIN: SEMPRE da `session.user.id`, MAI da
+  // `attore` (il tipo non lo espone più — vedi commento su AttoreFirma sopra).
+  let adminId: string | null = null;
 
   if (attore.tipo === 'AGENZIA') {
     // Autenticazione → permesso → scope. Copre entrambi i wrapper (dettaglio e
@@ -163,6 +170,7 @@ export async function firmaPraticaCore(
     if (!attore.motivo.trim()) {
       return { ok: false, error: 'La motivazione è obbligatoria' };
     }
+    adminId = session.user.id;
   }
 
   let accreditiResult: AccreditoEseguito[] = [];
@@ -194,6 +202,20 @@ export async function firmaPraticaCore(
       });
       if (!pratica) throw new Error('Pratica non trovata');
 
+      // Appartenenza PRIMA dello stato: è una difesa, non estetica. Se
+      // `motivoBloccoFirma` girasse per primo, un'agenzia che passa l'UUID di
+      // una pratica altrui riceverebbe messaggi distinguibili ("deve essere
+      // prima processata", "segnalazione in verifica", ...) e da quelli
+      // dedurrebbe lo stato di lavorazione di una pratica che non è sua. Con
+      // l'appartenenza per prima, riceve sempre e solo "non assegnata a
+      // questa agenzia", qualunque sia lo stato reale.
+      if (attore.tipo === 'AGENZIA') {
+        if (pratica.agenziaAssegnataId !== agenziaSessione) {
+          throw new Error('Pratica non assegnata a questa agenzia');
+        }
+        assertSedeInScope(pratica, agenziaSessione!, scope!);
+      }
+
       // Gate COMUNI ai due percorsi (stato, segnalazione, agenzia assegnata).
       const blocco = motivoBloccoFirma({
         stato: pratica.stato,
@@ -201,13 +223,6 @@ export async function firmaPraticaCore(
         agenziaAssegnataId: pratica.agenziaAssegnataId,
       });
       if (blocco) throw new Error(blocco);
-
-      if (attore.tipo === 'AGENZIA') {
-        if (pratica.agenziaAssegnataId !== agenziaSessione) {
-          throw new Error('Pratica non assegnata a questa agenzia');
-        }
-        assertSedeInScope(pratica, agenziaSessione!, scope!);
-      }
 
       agenziaIdEffettivo = pratica.agenziaAssegnataId!; // garantito da motivoBloccoFirma
 
@@ -224,7 +239,10 @@ export async function firmaPraticaCore(
           autoAddebitoAt,
           ...(attore.tipo === 'ADMIN'
             ? {
-                firmaForzataDaId: attore.userId,
+                // adminId è garantito non-null qui: è impostato nell'unico
+                // ramo (attore.tipo === 'ADMIN' sopra) che porta a questo
+                // punto, subito dopo la verifica del ruolo — mai dal parametro.
+                firmaForzataDaId: adminId!,
                 firmaForzataAt: now,
                 firmaForzataMotivo: attore.motivo.trim().slice(0, 500),
               }

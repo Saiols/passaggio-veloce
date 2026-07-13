@@ -12,9 +12,11 @@ import { emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoPraticaLavorata, eventoPraticaAnnullata } from '@/lib/eventi/pratica-eventi';
 import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { firmaPraticaCore, sedeScopeCorrente, assertSedeInScope } from '@/lib/pratiche/firma-engine';
+import type { QuickActionResult } from '@/lib/pratiche/quick-action';
 
-/** Esito delle quick-action usate dalla lista pratiche (nessuna navigazione). */
-export type QuickActionResult = { ok: true } | { ok: false; error: string };
+// Ri-esportato per i consumer esistenti (il tipo vive in lib/pratiche/quick-action.ts:
+// vedi il commento lì per il perché non sta più qui).
+export type { QuickActionResult };
 
 /**
  * Step intermedio del workflow (item 11 release 2026-05): l'agenzia segna la

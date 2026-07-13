@@ -11,6 +11,7 @@ import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeAgenziaTutte } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
 import { whereTabPratiche, WHERE_ATTESA_FIRMA, SINGOLI_ADMIN, contaGruppi } from '@/lib/pratiche/stati';
+import { giorniTrascorsi, attesaLevel } from '@/lib/pratiche/countdown';
 import {
   tabsPraticheAdmin,
   tabAttivo,
@@ -74,16 +75,24 @@ export default async function AdminPratichePage({
   const whereBase: Prisma.PraticaWhereInput = { ...where };
   Object.assign(where, filtroTab);
 
+  const isTabAttesaFirma = sp.stato === 'ATTESA_FIRMA';
+
+  // In attesa di firma: le più marce in cima (processataAt crescente). Negli
+  // altri tab resta l'ordine cronologico inverso di invio.
+  const orderBy: Prisma.PraticaOrderByWithRelationInput[] = isTabAttesaFirma
+    ? [{ processataAt: { sort: 'asc', nulls: 'last' } }]
+    : [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }];
+
   const [pratiche, total, gruppi, attesaFirmaCount] = await Promise.all([
     prisma.pratica.findMany({
       where,
-      orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: {
-        broker: { select: { ragioneSociale: true } },
-        agenziaAssegnata: { select: { ragioneSociale: true } },
-        agenziaSede: { select: { nome: true, citta: true } },
+        broker: { select: { ragioneSociale: true, telefono: true } },
+        agenziaAssegnata: { select: { ragioneSociale: true, telefono: true } },
+        agenziaSede: { select: { nome: true, citta: true, telefono: true } },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
       },
     }),
@@ -106,6 +115,10 @@ export default async function AdminPratichePage({
   if (page > totalPages) {
     redirect(hrefPaginaPratiche(totalPages, { stato: sp.stato, q: sp.q, sede: sp.sede }, BASE_PATH));
   }
+
+  // Stabile per l'intero render: se fosse calcolato dentro il `map`, ogni riga
+  // userebbe un istante diverso e i giorni mostrati non sarebbero coerenti.
+  const now = new Date();
 
   return (
     <AppShell session={session!} activePath="/admin/pratiche">
@@ -151,7 +164,9 @@ export default async function AdminPratichePage({
                   <div className="hidden px-3 py-3 lg:block">Sede</div>
                   <div className="px-3 py-3">Stato</div>
                   <div className="hidden px-3 py-3 lg:block">Fee</div>
-                  <div className="py-3 pl-3 pr-5 text-right">Quando</div>
+                  <div className="py-3 pl-3 pr-5 text-right">
+                    {isTabAttesaFirma ? 'In attesa da' : 'Quando'}
+                  </div>
                 </div>
                 <div className="divide-y divide-pv-slate-200">
                   {pratiche.map((p) => (
@@ -179,11 +194,21 @@ export default async function AdminPratichePage({
                             : p.veicoli[0].targa
                           : '—'}
                       </div>
-                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 md:block">
-                        {p.broker.ragioneSociale}
+                      <div className="hidden min-w-0 px-3 py-3 text-pv-slate-700 md:block">
+                        <div className="truncate">{p.broker.ragioneSociale}</div>
+                        {isTabAttesaFirma && p.broker.telefono && (
+                          <div className="truncate font-mono text-[11px] text-pv-slate-500">
+                            {p.broker.telefono}
+                          </div>
+                        )}
                       </div>
-                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 md:block">
-                        {p.agenziaAssegnata?.ragioneSociale ?? '—'}
+                      <div className="hidden min-w-0 px-3 py-3 text-pv-slate-700 md:block">
+                        <div className="truncate">{p.agenziaAssegnata?.ragioneSociale ?? '—'}</div>
+                        {isTabAttesaFirma && (p.agenziaSede?.telefono ?? p.agenziaAssegnata?.telefono) && (
+                          <div className="truncate font-mono text-[11px] text-pv-slate-500">
+                            {p.agenziaSede?.telefono ?? p.agenziaAssegnata?.telefono}
+                          </div>
+                        )}
                       </div>
                       <div className="hidden min-w-0 px-3 py-3 lg:block">
                         <SedeCell sede={p.agenziaSede} agenzia={p.agenziaAssegnata?.ragioneSociale} />
@@ -197,7 +222,11 @@ export default async function AdminPratichePage({
                         {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
                       </div>
                       <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
-                        {formatRelative(p.submittedAt ?? p.createdAt)}
+                        {isTabAttesaFirma ? (
+                          <AttesaCell from={p.processataAt} now={now} />
+                        ) : (
+                          formatRelative(p.submittedAt ?? p.createdAt)
+                        )}
                       </div>
                     </div>
                   ))}
@@ -234,5 +263,25 @@ export default async function AdminPratichePage({
         )}
       </div>
     </AppShell>
+  );
+}
+
+/** Da quanto la pratica aspetta la firma. Più tempo passa, più è grave. */
+function AttesaCell({ from, now }: { from: Date | null; now: Date }) {
+  const giorni = giorniTrascorsi(from, now);
+  if (giorni === null) return <span>—</span>;
+  const level = attesaLevel(giorni);
+  // Stesse coppie di StatusChip. NON usare -600/-700 su amber/red né slate-600:
+  // quelle tonalità non esistono in globals.css e non colorano nulla.
+  const tone =
+    level === 'urgent'
+      ? 'bg-pv-red-50 text-pv-red-500'
+      : level === 'warn'
+        ? 'bg-pv-amber-50 text-pv-amber-500'
+        : 'bg-pv-slate-100 text-pv-slate-700';
+  return (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-[12px] font-semibold ${tone}`}>
+      {giorni === 0 ? 'oggi' : `${giorni} g`}
+    </span>
   );
 }

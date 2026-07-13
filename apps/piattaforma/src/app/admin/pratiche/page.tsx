@@ -10,7 +10,7 @@ import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeAgenziaTutte } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
-import { whereStato, SINGOLI_ADMIN, contaGruppi } from '@/lib/pratiche/stati';
+import { whereTabPratiche, WHERE_ATTESA_FIRMA, SINGOLI_ADMIN, contaGruppi } from '@/lib/pratiche/stati';
 import {
   tabsPraticheAdmin,
   tabAttivo,
@@ -65,17 +65,16 @@ export default async function AdminPratichePage({
     ...sediDisponibili,
   ];
 
-  // `SINGOLI_ADMIN` (non il default): l'admin filtra anche per R1/R2/R3 ed
-  // escalation. Col default, quei valori tornerebbero `undefined` = nessun
-  // filtro, e la select mentirebbe in silenzio.
-  const filtroStato = whereStato(sp.stato, SINGOLI_ADMIN);
+  // `whereTabPratiche` (non `whereStato`): il tab "In attesa di firma" filtra
+  // anche sulla segnalazione, che `whereStato` non sa esprimere.
+  const filtroTab = whereTabPratiche(sp.stato, SINGOLI_ADMIN);
 
   // I conteggi dei tab usano gli STESSI filtri della lista MENO lo stato: il
   // numero sul tab è esattamente quello che ottieni cliccandolo.
   const whereBase: Prisma.PraticaWhereInput = { ...where };
-  if (filtroStato !== undefined) where.stato = filtroStato;
+  Object.assign(where, filtroTab);
 
-  const [pratiche, total, gruppi] = await Promise.all([
+  const [pratiche, total, gruppi, attesaFirmaCount] = await Promise.all([
     prisma.pratica.findMany({
       where,
       orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
@@ -90,10 +89,14 @@ export default async function AdminPratichePage({
     }),
     prisma.pratica.count({ where }),
     prisma.pratica.groupBy({ by: ['stato'], where: whereBase, _count: { _all: true } }),
+    // Il conteggio del tab "In attesa di firma" non deriva dal groupBy per stato:
+    // il criterio include la segnalazione. Stessi filtri della lista MENO lo stato
+    // (whereBase), come gli altri badge.
+    prisma.pratica.count({ where: { ...whereBase, ...WHERE_ATTESA_FIRMA } }),
   ]);
 
   const conteggi = contaGruppi(gruppi);
-  const tabs = tabsPraticheAdmin(conteggi);
+  const tabs = tabsPraticheAdmin(conteggi, attesaFirmaCount);
   const attivo = tabAttivo(sp.stato);
   const filtriTab = { q, sede: sp.sede };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

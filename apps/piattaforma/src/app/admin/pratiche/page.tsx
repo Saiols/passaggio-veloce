@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
@@ -9,7 +10,18 @@ import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeAgenziaTutte } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
+import { whereStato, SINGOLI_ADMIN, contaGruppi } from '@/lib/pratiche/stati';
+import { tabsPraticheAdmin, tabAttivo, hrefPaginaPratiche } from '@/lib/pratiche/tabs';
+import { PraticheTabs } from '@/app/pratiche/tabs';
 
+const BASE_PATH = '/admin/pratiche';
+const PAGE_SIZE = 15;
+
+/**
+ * Stati selezionabili dalla select. Più fini dei tab: l'admin è l'unico a vedere
+ * i round di distribuzione (il broker no, sono dettagli interni del motore).
+ * `whereStato` li accetta solo passando `SINGOLI_ADMIN`.
+ */
 const STATI: { value: string; label: string }[] = [
   { value: '', label: 'Tutti gli stati' },
   { value: 'IN_ESCALATION', label: 'Escalation' },
@@ -24,22 +36,7 @@ const STATI: { value: string; label: string }[] = [
   { value: 'ANNULLATA', label: 'Annullata' },
 ];
 
-// Priorità per ordinamento "rosse / in accettazione in cima" (Q-12).
-// Più alto = mostrato prima.
-const PRIORITY: Record<string, number> = {
-  IN_ESCALATION: 100,
-  IN_ATTESA_ROUND_1: 80,
-  IN_ATTESA_ROUND_2: 80,
-  IN_ATTESA_ROUND_3: 80,
-  ACCETTATA: 60,
-  PROCESSATA: 50,
-  FIRMATA: 30,
-  BOZZA: 10,
-  SCADUTA: 5,
-  ANNULLATA: 5,
-};
-
-type SearchParams = { q?: string; stato?: string; sede?: string };
+type SearchParams = { q?: string; stato?: string; sede?: string; page?: string };
 
 export default async function AdminPratichePage({
   searchParams,
@@ -48,12 +45,9 @@ export default async function AdminPratichePage({
 }) {
   const session = await auth();
   const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
 
   const where: Prisma.PraticaWhereInput = { deletedAt: null };
-
-  if (sp.stato && STATI.some((s) => s.value === sp.stato)) {
-    where.stato = sp.stato as PraticaStato;
-  }
 
   const q = sp.q?.trim();
   if (q) {
@@ -85,27 +79,44 @@ export default async function AdminPratichePage({
     ...sediDisponibili,
   ];
 
-  const pratiche = await prisma.pratica.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: 100,
-    include: {
-      broker: { select: { ragioneSociale: true } },
-      agenziaAssegnata: { select: { ragioneSociale: true } },
-      agenziaSede: { select: { nome: true, citta: true } },
-      veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
-    },
-  });
+  // `SINGOLI_ADMIN` (non il default): l'admin filtra anche per R1/R2/R3 ed
+  // escalation. Col default, quei valori tornerebbero `undefined` = nessun
+  // filtro, e la select mentirebbe in silenzio.
+  const filtroStato = whereStato(sp.stato, SINGOLI_ADMIN);
 
-  // Ordinamento secondario in memoria: priorità stato, poi data desc.
-  const sorted = [...pratiche].sort((a, b) => {
-    const pa = PRIORITY[a.stato] ?? 0;
-    const pb = PRIORITY[b.stato] ?? 0;
-    if (pa !== pb) return pb - pa;
-    const da = (a.submittedAt ?? a.createdAt).getTime();
-    const db = (b.submittedAt ?? b.createdAt).getTime();
-    return db - da;
-  });
+  // I conteggi dei tab usano gli STESSI filtri della lista MENO lo stato: il
+  // numero sul tab è esattamente quello che ottieni cliccandolo.
+  const whereBase: Prisma.PraticaWhereInput = { ...where };
+  if (filtroStato !== undefined) where.stato = filtroStato;
+
+  const [pratiche, total, gruppi] = await Promise.all([
+    prisma.pratica.findMany({
+      where,
+      orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: {
+        broker: { select: { ragioneSociale: true } },
+        agenziaAssegnata: { select: { ragioneSociale: true } },
+        agenziaSede: { select: { nome: true, citta: true } },
+        veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+      },
+    }),
+    prisma.pratica.count({ where }),
+    prisma.pratica.groupBy({ by: ['stato'], where: whereBase, _count: { _all: true } }),
+  ]);
+
+  const conteggi = contaGruppi(gruppi);
+  const tabs = tabsPraticheAdmin(conteggi);
+  const attivo = tabAttivo(sp.stato);
+  const filtriTab = { q, sede: sp.sede };
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // `?page=` fuori range: senza redirect la lista è vuota mentre intestazione e
+  // pager riportano ancora i totali reali — una schermata che si contraddice.
+  if (page > totalPages) {
+    redirect(hrefPaginaPratiche(totalPages, { stato: sp.stato, q: sp.q, sede: sp.sede }, BASE_PATH));
+  }
 
   return (
     <AppShell session={session!} activePath="/admin/pratiche">
@@ -118,15 +129,17 @@ export default async function AdminPratichePage({
             Gestione pratiche
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            {sorted.length} pratic{sorted.length === 1 ? 'a' : 'he'}
-            {q || sp.stato || sp.sede ? ' (filtri attivi)' : ' (più recenti, escalation in cima)'}
+            {total} pratic{total === 1 ? 'a' : 'he'}
+            {q || sp.stato || sp.sede ? ' · filtri attivi' : ''}
           </p>
         </header>
+
+        <PraticheTabs tabs={tabs} attivo={attivo} filtri={filtriTab} basePath={BASE_PATH} />
 
         <AdminPraticheFilters q={q} stato={sp.stato} sede={sp.sede} stati={STATI} sedi={sediSelect} />
 
         <div className="overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
-          {sorted.length === 0 ? (
+          {pratiche.length === 0 ? (
             <div className="px-5 py-16 text-center">
               <p className="text-[14px] text-pv-slate-500">Nessuna pratica trovata.</p>
             </div>
@@ -146,7 +159,7 @@ export default async function AdminPratichePage({
                   <div className="py-3 pl-3 pr-5 text-right">Quando</div>
                 </div>
                 <div className="divide-y divide-pv-slate-200">
-                  {sorted.map((p) => (
+                  {pratiche.map((p) => (
                     <div
                       key={p.id}
                       className={`relative grid ${PRATICHE_GRID.admin} items-center transition-colors hover:bg-pv-slate-50 focus-within:bg-pv-slate-50`}
@@ -198,6 +211,32 @@ export default async function AdminPratichePage({
             </div>
           )}
         </div>
+
+        {totalPages > 1 && (
+          <nav className="mt-5 flex items-center justify-between">
+            <p className="text-[12px] text-pv-slate-500">
+              Pagina {page} di {totalPages}
+            </p>
+            <div className="flex gap-2">
+              {page > 1 && (
+                <Link
+                  href={hrefPaginaPratiche(page - 1, { stato: sp.stato, q: sp.q, sede: sp.sede }, BASE_PATH)}
+                  className="rounded-[10px] border border-pv-slate-300 bg-white px-3 py-1.5 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                >
+                  ← Indietro
+                </Link>
+              )}
+              {page < totalPages && (
+                <Link
+                  href={hrefPaginaPratiche(page + 1, { stato: sp.stato, q: sp.q, sede: sp.sede }, BASE_PATH)}
+                  className="rounded-[10px] border border-pv-slate-300 bg-white px-3 py-1.5 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+                >
+                  Avanti →
+                </Link>
+              )}
+            </div>
+          </nav>
+        )}
       </div>
     </AppShell>
   );

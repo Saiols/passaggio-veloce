@@ -34,3 +34,54 @@ Residenza MILANO`;
     expect(r.nome).toBeUndefined();
   });
 });
+
+// Fixture fedeli al TESTO REALE estratto da Google Document AI da una CIE
+// fotografata con un riflesso sulla riga anagrafica. Quirk del layout reale:
+// l'etichetta è BILINGUE ("NOME / NAME") e quando la barra si perde — glifo
+// sottile, ancor più fragile sotto il riflesso — le due parole restano sulla
+// stessa riga, separate da uno spazio o addirittura fuse. Il valore è sempre
+// sulla riga successiva. Servono da test di regressione anti-rottura.
+const CIE_RIFLESSO_RITAGLIO = [
+  'REPUBBLICA ITALIANA', "MINISTERO DELL'INTERNO",
+  'CARTA DI IDENTITA / IDENTITY CARD', 'COMUNE DI / MUNICIPALITY', 'SPOLETO',
+  'COGNOME/SURNAME', 'VARDARO',
+  'NOME NAME', 'GIUSEPPE',
+  'LUOGO E DATA DI NASCITA', 'PLACE AND DATE OF BIRTH', 'SPOLETO (PG) 02.01.1985',
+  'SESSO', 'SEX', 'M', 'STATURA', 'HEIGHT', '179',
+].join('\n');
+
+// Stessa carta, foto non ritagliata: qui l'OCR fonde le due parole.
+const CIE_RIFLESSO_FOTO = CIE_RIFLESSO_RITAGLIO.replace('NOME NAME', 'NOMENAME');
+
+// Etichetta bilingue spezzata su due righe dalla segmentazione dell'OCR.
+const CIE_ETICHETTA_SU_DUE_RIGHE = [
+  'COGNOME', 'SURNAME', 'VARDARO',
+  'NOME', 'NAME', 'GIUSEPPE',
+  'CODICE FISCALE',
+].join('\n');
+
+describe('extractCi su layout OCR reale (Document AI)', () => {
+  it('CIE con riflesso: "NOME NAME" è etichetta, non valore', () => {
+    const r = extractCi(CIE_RIFLESSO_RITAGLIO);
+    expect(r.cognome).toBe('VARDARO');
+    expect(r.nome).toBe('GIUSEPPE');
+  });
+
+  it('CIE con riflesso, etichetta fusa ("NOMENAME")', () => {
+    const r = extractCi(CIE_RIFLESSO_FOTO);
+    expect(r.cognome).toBe('VARDARO');
+    expect(r.nome).toBe('GIUSEPPE');
+  });
+
+  it('etichetta bilingue spezzata su due righe: salta la traduzione inglese', () => {
+    const r = extractCi(CIE_ETICHETTA_SU_DUE_RIGHE);
+    expect(r.cognome).toBe('VARDARO');
+    expect(r.nome).toBe('GIUSEPPE');
+  });
+
+  it('anche il cognome è al riparo se l\'OCR perde la barra', () => {
+    const r = extractCi('COGNOME SURNAME\nVARDARO\nNOME NAME\nGIUSEPPE');
+    expect(r.cognome).toBe('VARDARO');
+    expect(r.nome).toBe('GIUSEPPE');
+  });
+});

@@ -82,6 +82,14 @@ export function DichiarazionePopup({
               veicolo
             </span>
           </li>
+          <li className="flex items-start gap-2">
+            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-pv-slate-400" />
+            <span>
+              Hai <strong>informato venditore e acquirente</strong> che i loro
+              dati e documenti sono trasmessi a Passaggio Veloce per la gestione
+              della pratica
+            </span>
+          </li>
         </ul>
 
         <p className="mb-4 text-[12.5px] leading-relaxed text-pv-slate-700">
@@ -126,8 +134,9 @@ export function DichiarazionePopup({
             className="mt-0.5 h-4 w-4 shrink-0 accent-pv-navy-700"
           />
           <span className="text-[13px] font-semibold text-pv-navy-800">
-            Confermo di aver verificato quanto sopra e mi assumo piena
-            responsabilità
+            Confermo di aver verificato quanto sopra, di aver informato
+            venditore e acquirente sul trattamento dei loro dati (clausola 17
+            dei Termini) e mi assumo piena responsabilità
           </span>
         </label>
 

@@ -36,8 +36,14 @@ export const PENALI = {
    * v2.0 (2026-07-11): la penale è €25 per ciascun VEICOLO SEGNALATO (non per
    * pratica) e non è soggetta a IVA — rimosso «lordi», che non corrispondeva
    * ad alcun calcolo. Vedi docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
+   *
+   * v3.0 (2026-07-14): aggiunta la conferma che il broker ha informato
+   * venditore e acquirente del trattamento dei loro dati (clausola 17 dei
+   * Termini) — rende azionabile la manleva della 17.5 registrando la
+   * garanzia ad ogni invio pratica, non solo una volta in registrazione.
+   * Vedi docs/superpowers/plans/2026-07-14-gdpr-dati-terzi.md
    */
-  POPUP_VERSION: 'v2.0',
+  POPUP_VERSION: 'v3.0',
 } as const;
 
 /**

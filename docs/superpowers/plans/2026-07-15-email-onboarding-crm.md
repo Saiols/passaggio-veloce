@@ -12,7 +12,9 @@
 
 - **Node:** usare `nvm use 22.15.0` prima di qualunque comando pnpm (post-riavvio la shell torna a Node 16).
 - **Migration:** SEMPRE a mano + `pnpm --filter @pv/db db:deploy`. MAI `db:migrate` (`prisma migrate dev` è distruttivo: propone DROP SEQUENCE). Naming cartella: `packages/db/prisma/migrations/YYYYMMDDHHMMSS_<slug>/migration.sql`.
-- **Test runner:** `pnpm --filter piattaforma test` (vitest run). Singolo file: `pnpm --filter piattaforma test -- <path>`.
+- **Ambiente comandi:** i comandi `pnpm`/`node` vanno lanciati da **PowerShell** (in Git Bash `node` NON è sul PATH: un `pnpm` da bash non parte e il suo silenzio somiglia a un successo). `nvm use 22.15.0` è già attivo a livello di sistema (symlink globale, persiste finché non si riavvia). I comandi `docker`/`psql` invece funzionano anche da Bash.
+- **Test runner (da PowerShell):** `pnpm --filter piattaforma test` (vitest run). Singolo file: `pnpm --filter piattaforma test -- <path>`.
+- **psql locale (da Bash o PowerShell):** `docker exec -i pv-postgres psql -U pv -d passaggio_veloce` — utente `pv`, db `passaggio_veloce` (con underscore), container `pv-postgres`.
 - **Notifica N26:** riusa il numero libero N26 (N26–N30 sono liberi nell'enum). 4 tocchi per una notifica: enum `schema.prisma` → `type`+`tpl` in `templates.ts` → variante `SendInput` in `send.ts` → `case` nello `switch render()` in `send.ts`.
 - **Nessun dato commerciale nell'email** oltre al credito welcome: niente prezzi pratica, niente soglie payout (landing e Termini oggi si contraddicono su quel numero).
 - **`sendNotification` non blocca mai il chiamante**: fire-and-log. L'esito email si legge dal ritorno solo se serve gate-are le mutazioni (vedi Task 6).
@@ -135,7 +137,7 @@ Expected: "1 migration applied" (o "following migration(s) have been applied"). 
 
 Run:
 ```bash
-docker exec -i <container-postgres> psql -U postgres -d passaggioveloce -c "\d crm_contacts" | grep -E "invitoToken|emailUnsubToken|emailOptOutAt|promoCodeInviatoId"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "\d crm_contacts" | grep -E "invitoToken|emailUnsubToken|emailOptOutAt|promoCodeInviatoId"
 ```
 Expected: 4 righe con le colonne. (Nome container/db: vedi setup locale — memoria "copia locale DB prod". In alternativa `pnpm --filter @pv/db db:studio` e ispezionare il modello.)
 
@@ -857,7 +859,7 @@ Expected: PASS (4/4).
 
 Da memoria "query su DB reale": eseguire la `findMany` dei promo in read-only per verificare che `_count.redemptions` e i campi esistano:
 ```bash
-docker exec -i <container> psql -U postgres -d passaggioveloce -c "SELECT code, \"amountCent\", active, \"expiresAt\", \"maxRedemptions\" FROM promo_codes ORDER BY \"createdAt\" DESC LIMIT 5;"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "SELECT code, \"amountCent\", active, \"expiresAt\", \"maxRedemptions\" FROM promo_codes ORDER BY \"createdAt\" DESC LIMIT 5;"
 ```
 Expected: righe coerenti (o vuoto se nessun codice) — nessun errore di colonna.
 
@@ -1186,7 +1188,7 @@ In `apps/piattaforma/src/app/unsubscribe/page.tsx`, dopo il blocco che cerca `Us
 
 Con un `emailUnsubToken` reale (da un contatto a cui è stata inviata l'email nel Task 7), aprire `/unsubscribe?token=<emailUnsubToken>` → pagina "Preferenze aggiornate". Verificare sul DB che `crm_contacts.emailOptOutAt` sia valorizzato:
 ```bash
-docker exec -i <container> psql -U postgres -d passaggioveloce -c "SELECT nome, \"emailOptOutAt\" FROM crm_contacts WHERE \"emailUnsubToken\" = '<token>';"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "SELECT nome, \"emailOptOutAt\" FROM crm_contacts WHERE \"emailUnsubToken\" = '<token>';"
 ```
 Poi tornare su `/admin/crm/contatti` e verificare che il bottone "Invia email" per quel contatto sia disabilitato (tooltip "Contatto disiscritto").
 
@@ -1222,7 +1224,7 @@ Con app in dev + provider email console:
 
 Query read-only:
 ```bash
-docker exec -i <container> psql -U postgres -d passaggioveloce -c "SELECT tipo, stato, destinazione, subject FROM notifiche_inviate WHERE tipo = 'N26_EMAIL_PARTENZA' ORDER BY \"createdAt\" DESC LIMIT 3;"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "SELECT tipo, stato, destinazione, subject FROM notifiche_inviate WHERE tipo = 'N26_EMAIL_PARTENZA' ORDER BY \"createdAt\" DESC LIMIT 3;"
 ```
 Expected: una riga N26 con destinazione = email del contatto.
 

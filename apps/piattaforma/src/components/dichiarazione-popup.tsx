@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui';
 import { PENALI } from '@/lib/penali/config';
+import { ART_DATI_TERZI } from '@/lib/legal/clausole-vessatorie';
 
 /**
  * Popup di responsabilità broker (Sistema Penali Broker — SP-A release 2026-05).
@@ -134,9 +135,9 @@ export function DichiarazionePopup({
             className="mt-0.5 h-4 w-4 shrink-0 accent-pv-navy-700"
           />
           <span className="text-[13px] font-semibold text-pv-navy-800">
-            Confermo di aver verificato quanto sopra, di aver informato
-            venditore e acquirente sul trattamento dei loro dati (clausola 17
-            dei Termini) e mi assumo piena responsabilità
+            Confermo di aver verificato quanto sopra, di aver informato venditore
+            e acquirente sul trattamento dei loro dati (clausola {ART_DATI_TERZI} dei
+            Termini) e mi assumo piena responsabilità
           </span>
         </label>
 

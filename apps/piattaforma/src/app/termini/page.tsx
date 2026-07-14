@@ -426,7 +426,8 @@ export default function TerminiPage() {
             l&apos;Utente agisce quale <strong>titolare del trattamento</strong>{' '}nei confronti dei
             propri clienti. Passaggio Veloce tratta i dati dei Terzi quale{' '}
             <strong>titolare autonomo</strong>, per le proprie finalità (erogazione del servizio,
-            prevenzione delle frodi, adempimenti fiscali e di legge), e{' '}
+            prevenzione delle frodi, adempimenti fiscali e di legge, sviluppo e finalità
+            commerciali proprie), e{' '}
             <strong>non</strong>{' '}in qualità di responsabile del trattamento ai sensi
             dell&apos;art. 28 GDPR.
           </p>

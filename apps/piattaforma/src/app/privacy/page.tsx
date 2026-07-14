@@ -118,6 +118,11 @@ export default function PrivacyPage() {
               Comunicazioni di servizio sul ciclo di vita della pratica
               (esecuzione del contratto).
             </li>
+            <li>
+              Sviluppo e miglioramento del servizio, e finalità commerciali, tramite un elenco
+              aggregato dei contatti (nome, contatti, identificativo fiscale, numero di
+              pratiche) emersi dalle pratiche gestite (legittimo interesse, art. 6.1.f GDPR).
+            </li>
           </ul>
         </Section>
 
@@ -191,8 +196,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Vercel Blob</strong>: archiviazione dei documenti
-              caricati (libretti, documenti di identità, visure), regione
-              Unione Europea.
+              caricati (libretti, documenti di identità, visure).
             </li>
           </ul>
         </Section>

@@ -13,6 +13,20 @@
 export const ART_APPROVAZIONE_SPECIFICA = 19;
 
 /**
+ * Numero della clausola che disciplina i dati di venditori, acquirenti e
+ * altri terzi (ruoli, garanzia dell'Utente, informativa di Passaggio Veloce,
+ * minimizzazione, manleva). Citata testualmente nella label della checkbox
+ * del popup di responsabilità broker (components/dichiarazione-popup.tsx) —
+ * una dichiarazione che viene REGISTRATA su DB (`BrokerDichiarazione`) a ogni
+ * invio pratica. Un numero scritto a mano dentro un record persistito non si
+ * corregge retroattivamente: alla prossima rinumerazione dei Termini (è già
+ * successo una volta, foro 17→18 e approvazione 18→19), le dichiarazioni
+ * pregresse citerebbero per sempre la clausola sbagliata se non leggessero
+ * questa costante.
+ */
+export const ART_DATI_TERZI = 17;
+
+/**
  * Clausole che l'Utente approva specificamente con la seconda spunta in
  * registrazione. Ordinate, senza duplicati, tutte < ART_APPROVAZIONE_SPECIFICA.
  */

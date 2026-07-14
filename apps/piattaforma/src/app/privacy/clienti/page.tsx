@@ -130,6 +130,20 @@ export default function PrivacyClientiPage() {
               e quelli connessi agli adempimenti presso il Pubblico Registro Automobilistico
               (art. 6.1.c GDPR).
             </li>
+            <li>
+              <strong>Per sviluppare e migliorare il servizio, e per finalità commerciali</strong>
+              {' '}conserviamo un elenco dei contatti emersi dalle pratiche (nome, contatti,
+              identificativo fiscale, numero di pratiche) — nostro{' '}
+              <strong>legittimo interesse</strong>{' '}(art. 6.1.f GDPR). Puoi opporti in ogni
+              momento (art. 21 GDPR) scrivendo a{' '}
+              <a
+                href="mailto:privacy@passaggioveloce.it"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                privacy@passaggioveloce.it
+              </a>
+              .
+            </li>
           </ul>
           <p>
             <strong>Non ti chiediamo un consenso</strong>{' '}perché non è su questo che si fonda il
@@ -158,7 +172,20 @@ export default function PrivacyClientiPage() {
             </li>
           </ul>
           <p>
-            <strong>Non vendiamo i tuoi dati</strong>{' '}e non li usiamo per inviarti pubblicità.
+            <strong>Non vendiamo i tuoi dati</strong>{' '}e non li cediamo a terzi perché li usino
+            per proprie finalità di marketing. Li trattiamo noi stessi anche per le finalità
+            commerciali indicate sopra, alla sezione &laquo;Perché li trattiamo e su quale
+            base&raquo;.
+          </p>
+        </Section>
+
+        <Section title="Trasferimenti fuori dall'Unione Europea">
+          <p>
+            La maggior parte dei trattamenti sui tuoi dati avviene su server nell&apos;Unione
+            Europea. Alcuni servizi accessori che usiamo per far funzionare la piattaforma (ad
+            esempio Sentry, per individuare gli errori tecnici) potrebbero comportare un
+            trasferimento dei dati fuori dall&apos;Unione Europea: quando succede, è protetto
+            dalle clausole contrattuali standard previste dal GDPR.
           </p>
         </Section>
 

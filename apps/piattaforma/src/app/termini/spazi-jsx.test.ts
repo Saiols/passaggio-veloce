@@ -9,32 +9,48 @@ const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..'); // src/a
 /**
  * PERCHÉ QUESTO TEST ESISTE
  * =========================
- * Il compilatore JSX/SWC di Next.js mangia lo spazio letterale che segue
- * immediatamente un tag inline di chiusura (`</strong>`, `</em>`, `</a>`,
- * `</code>`) quando il nodo di testo che lo contiene va a capo (contiene un
- * `\n`) prima di raggiungere il tag successivo. Se invece l'intero testo
- * resta su una sola riga, lo spazio sopravvive: non è un bug "sempre", è un
- * bug "quando Prettier va a capo", il che lo rende silenzioso e invisibile
- * a chi legge il sorgente con l'occhio.
- *
- * Caso reale accertato (clausola 10.3 di /termini, prima della correzione):
- *   sorgente:  <strong>respingerla</strong> (pratica prosegue, nessun
- *              addebito). L'esito è comunicato via email a entrambe le
- *              parti.
- *   DOM SSR:   "...respingerla(pratica prosegue, nessun addebito)..."
+ * Il difetto è REALE e OSSERVATO sul DOM renderizzato (SSR) di /termini: in
+ * produzione sono state trovate **21 parole incollate** dove il sorgente
+ * aveva uno spazio letterale subito dopo un tag inline di chiusura
+ * (`</strong>`, `</em>`, `</a>`, `</code>`) e il nodo di testo che lo
+ * conteneva andava a capo prima del tag successivo. Esempi reali:
+ * "non è partedel contratto" (clausola 1) e
+ * "respingerla(pratica prosegue, nessun addebito)" (clausola 10.3, sorgente:
+ * `<strong>respingerla</strong> (pratica prosegue, nessun\naddebito)...`).
  * Verificato con `.next` cancellato e ricompilato: deterministico, non un
- * artefatto di cache. In produzione questo produce testo contrattuale
- * incollato (es. "non è partedel contratto", "tra 1 € e 200 €per pratica")
- * in un contratto che gli utenti accettano in fase di registrazione.
+ * artefatto di cache.
+ *
+ * QUELLO CHE NON SAPPIAMO: la review ha dimostrato che "tag di chiusura +
+ * spazio letterale + testo che va a capo" NON è una regola generale — sono
+ * stati trovati due casi con esattamente quella forma che danno esito
+ * opposto (in uno lo spazio sparisce, nell'altro sopravvive). La condizione
+ * esatta che fa scattare il difetto non è stata ridotta a una regola
+ * precisa, e non vale la pena inseguirla: costerebbe più di quel che vale.
+ *
+ * Per questo il pattern qui sotto è VOLUTAMENTE CONSERVATIVO (una
+ * sovra-approssimazione in direzione sicura): segnala OGNI occorrenza con
+ * quella forma, anche quelle che di per sé renderebbero correttamente. Va
+ * bene così, perché il rimedio è innocuo in entrambi i casi: rendere lo
+ * spazio esplicito con `{' '}` produce lo stesso identico output di uno
+ * spazio letterale che sarebbe comunque sopravvissuto. Un falso positivo qui
+ * non costa nulla; un falso negativo costerebbe un contratto pubblico con
+ * parole incollate.
  *
  * Il rimedio (già in uso altrove nel file) è rendere lo spazio esplicito:
  * `</strong>{' '}` invece di `</strong> `. La forma corretta non fa match
  * col pattern sotto, perché dopo `>` non c'è più uno spazio letterale.
  *
+ * ATTENZIONE — non far girare Prettier (né altri formatter automatici) sulle
+ * pagine elencate in PAGINE_LEGALI: il reflow automatico sposta gli a-capo
+ * dentro i nodi di testo e può reintrodurre il difetto in un punto diverso
+ * da quello corretto qui. Le pagine legali si editano a mano, riga per riga,
+ * verificando poi il DOM renderizzato — non basta guardare il sorgente.
+ *
  * Se questo test torna rosso in futuro: NON cancellarlo. Vuol dire che
- * qualcuno ha riscritto un paragrafo e Prettier ha spostato un a-capo
- * dentro un nodo di testo che segue un tag inline — applica lo stesso
- * rimedio (`{' '}`) al nuovo punto, senza toccare il testo legale.
+ * qualcuno ha riscritto un paragrafo e ha introdotto (a mano o via
+ * formatter) un a-capo dentro un nodo di testo che segue un tag inline —
+ * applica lo stesso rimedio (`{' '}`) al nuovo punto, senza toccare il testo
+ * legale, e verifica di nuovo il DOM reale.
  */
 const PAGINE_LEGALI = [
   'termini/page.tsx',

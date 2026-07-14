@@ -15,10 +15,13 @@
  *  - Pagine pubbliche raggiungibili SENZA sessione (nessuna chiamata ad
  *    `auth()`/redirect di login nel sorgente): `guide/**`, `r/[code]`
  *    (route.ts, non page.tsx — comunque fuori perimetro), `invito/[token]`,
- *    `unsubscribe`, `termini`, `privacy`, `cookie`, e la landing
- *    (`src/app/page.tsx`). Privacy/cookie non erano nell'elenco d'esempio del
- *    brief ma sono lo stesso pattern esatto di termini — `SiteHeader` +
- *    contenuto statico, zero `auth()` — quindi stesso bucket "pubbliche".
+ *    `unsubscribe`, `termini`, `privacy`, `privacy/clienti`, `cookie`, e la
+ *    landing (`src/app/page.tsx`). Privacy/cookie non erano nell'elenco
+ *    d'esempio del brief ma sono lo stesso pattern esatto di termini —
+ *    `SiteHeader` + contenuto statico, zero `auth()` — quindi stesso bucket
+ *    "pubbliche". `privacy/clienti` è l'informativa ex art. 14 GDPR per
+ *    venditori/acquirenti che non hanno un account: per definizione deve
+ *    essere raggiungibile senza login (vedi anche `landing-gate.ts`).
  *  - `layout.tsx`: non è un `page.tsx`, escluso per costruzione dall'enumerazione
  *    del test (non serve escluderlo esplicitamente).
  *

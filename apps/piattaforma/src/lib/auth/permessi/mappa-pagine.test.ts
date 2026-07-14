@@ -20,6 +20,7 @@ const PATH_ESCLUSI_ESATTI = [
   'unsubscribe/page.tsx',
   'termini/page.tsx',
   'privacy/page.tsx',
+  'privacy/clienti/page.tsx', // informativa ex art. 14 GDPR per venditori/acquirenti senza account: pubblica per costruzione
   'cookie/page.tsx',
 ];
 

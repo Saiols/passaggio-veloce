@@ -22,6 +22,7 @@ export const GATED_HOSTS: ReadonlySet<string> = new Set([
 export const PUBLIC_PATHS: ReadonlySet<string> = new Set([
   '/',
   '/privacy',
+  '/privacy/clienti',
   '/cookie',
   '/termini',
   '/unsubscribe',

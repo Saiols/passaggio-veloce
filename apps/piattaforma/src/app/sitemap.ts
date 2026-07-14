@@ -28,8 +28,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly' as const,
       priority: 0.8,
     })),
-    { url: `${BRAND.url}/privacy`, lastModified, changeFrequency: 'yearly',  priority: 0.3 },
-    { url: `${BRAND.url}/cookie`,  lastModified, changeFrequency: 'yearly',  priority: 0.3 },
-    { url: `${BRAND.url}/termini`, lastModified, changeFrequency: 'yearly',  priority: 0.3 },
+    { url: `${BRAND.url}/privacy`,         lastModified, changeFrequency: 'yearly',  priority: 0.3 },
+    { url: `${BRAND.url}/privacy/clienti`, lastModified, changeFrequency: 'yearly',  priority: 0.3 },
+    { url: `${BRAND.url}/cookie`,          lastModified, changeFrequency: 'yearly',  priority: 0.3 },
+    { url: `${BRAND.url}/termini`,         lastModified, changeFrequency: 'yearly',  priority: 0.3 },
   ];
 }

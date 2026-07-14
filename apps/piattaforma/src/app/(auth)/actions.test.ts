@@ -18,7 +18,9 @@ vi.mock('@/auth', () => ({ signIn: vi.fn(), signOut: vi.fn() }));
 vi.mock('@/env', () => ({ env: { DEMO_MODE: true } }));
 vi.mock('next/headers', () => ({
   headers: async () => new Map(),
-  cookies: async () => ({ get: () => undefined }),
+  // `delete`: loginAction cancella il cookie della modale affiliazione prima di
+  // signIn(), così ogni login la ripropone a chi non ha spuntato "non mostrare più".
+  cookies: async () => ({ get: () => undefined, delete: () => undefined }),
 }));
 vi.mock('@/lib/crm/sync', () => ({ tryMatchCrmContact: vi.fn() }));
 vi.mock('@/lib/affiliazione/notifications', () => ({ notifyReferralSignup: vi.fn() }));

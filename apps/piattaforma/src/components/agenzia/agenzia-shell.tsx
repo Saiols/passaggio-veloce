@@ -4,6 +4,7 @@ import { type ReactNode } from 'react';
 import { ToastProvider } from '@/components/ui';
 import { NavBadge } from '@/components/nav-badge';
 import { EventoPraticaWatcher } from '@/components/eventi/evento-pratica-watcher';
+import { AffiliazioneSpot } from '@/components/affiliazione/affiliazione-spot';
 import { gruppiAgenzia } from '@/components/permessi/nav-voci';
 import { iconaComponente } from '@/components/permessi/nav-icone';
 import { SidebarShell, type SidebarNavGroup } from '@/components/sidebar-shell';
@@ -87,6 +88,7 @@ export function AgenziaShell({
     >
       <ToastProvider>
         <EventoPraticaWatcher />
+        <AffiliazioneSpot />
         {children}
       </ToastProvider>
     </SidebarShell>

@@ -13,6 +13,7 @@ import { headers, cookies } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
 import { parseUtmCookie } from '@/lib/crm/utm';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
+import { AFF_SPOT_COOKIE } from '@/lib/affiliazione/spot-cookie';
 import { anonymizeIp, clientIp } from '@/lib/net/ip';
 import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
 import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
@@ -90,6 +91,12 @@ export async function loginAction(
   if (matched.twoFactorEnabled && !totp) {
     return { needTotp: true };
   }
+
+  // Ogni login ripropone la modale di lancio dell'affiliazione a chi non ha
+  // spuntato "non mostrare più" (quello è un flag su User, e sta altrove).
+  // Va cancellato PRIMA di signIn(): con `redirectTo` signIn lancia un
+  // NEXT_REDIRECT e non torna mai.
+  (await cookies()).delete(AFF_SPOT_COOKIE);
 
   try {
     await signIn('credentials', {

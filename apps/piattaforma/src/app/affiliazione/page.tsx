@@ -2,8 +2,9 @@ import { redirect } from 'next/navigation';
 import QRCode from 'qrcode';
 import { auth } from '@/auth';
 import { assertPermesso } from '@/lib/auth/permessi/guard';
-import { getSessionContext, getOperatingSede } from '@/lib/auth/session-context';
+import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope } from '@/lib/sedi/scope-filters';
+import { resolveReferralLink } from '@/lib/affiliazione/link';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
@@ -56,30 +57,17 @@ export default async function AffiliazionePage() {
   const ctx = await getSessionContext();
   if (!ctx?.companyId) redirect('/login');
   const scope = toSedeScope(ctx);
-  const operatingSede = await getOperatingSede();
-
-  // Per il proprietario in vista aggregata con PIÙ sedi `getOperatingSede()`
-  // ritorna null (per una scrittura dovrebbe prima sceglierne una). Il link
-  // affiliazione però è una lettura e deve esserci sempre: ricadiamo sulla prima
-  // sede accessibile e diciamo nella card di quale sede è il link (gli altri li
-  // elenca la classifica sedi più sotto). Senza questo fallback si ripiegava su
-  // `Company.referralCode`, colonna deprecata mai valorizzata per le aziende
-  // registrate dopo il multi-sede: il proprietario vedeva "Codice referral non
-  // disponibile" sul PROPRIO link.
-  const sedeLink = operatingSede ?? ctx.accessibleSedi[0] ?? null;
-  const sedeLinkNome = !operatingSede && sedeLink ? sedeLink.nome : null;
 
   const filtroSede = scope.aggregate ? {} : { referenteSedeId: { in: scope.scopeIds } };
   const filtroClick = scope.aggregate ? {} : { sedeId: { in: scope.scopeIds } };
 
-  const [company, affWallet, sedeRow, referrals, commissioni, clickCount, mieCommissioni] =
+  const [company, affWallet, referrals, commissioni, clickCount, mieCommissioni] =
     await Promise.all([
       prisma.company.findUnique({
         where: { id: companyId },
         select: {
           id: true,
           ragioneSociale: true,
-          referralCode: true,
         },
       }),
       // Il wallet affiliazione è della madre (companyId, sedeId null): il suo
@@ -87,9 +75,6 @@ export default async function AffiliazionePage() {
       // aggregate — vedi nota nel blocco JSX più sotto).
       scope.isOwner
         ? prisma.wallet.findUnique({ where: { companyId }, select: { id: true } })
-        : Promise.resolve(null),
-      sedeLink
-        ? prisma.sede.findUnique({ where: { id: sedeLink.id }, select: { referralCode: true } })
         : Promise.resolve(null),
       prisma.company.findMany({
         where: { referenteId: companyId, deletedAt: null, ...filtroSede },
@@ -135,6 +120,14 @@ export default async function AffiliazionePage() {
   if (!company) redirect('/profilo');
 
   const tariffario = await getTariffarioCorrente();
+  const affiliazioneSempliceCent = computeFees(
+    { tipo: 'SEMPLICE', numeroVeicoli: 1 },
+    tariffario,
+  ).costoAffiliazioneTotaleCent;
+  const affiliazioneMinivolturaCent = computeFees(
+    { tipo: 'MINIVOLTURA', numeroVeicoli: 1 },
+    tariffario,
+  ).costoAffiliazioneTotaleCent;
 
   // Aggregato commissioni PER REFERRAL. Una commissione (referente = io) nasce
   // dalla pratica del referral, lato broker o agenzia: la attribuisco alla/e
@@ -184,14 +177,18 @@ export default async function AffiliazionePage() {
     ? await getRendimento(affWallet.id, '12m', ['CREDITO_AFFILIAZIONE'])
     : null;
 
-  // Base URL per il link di affiliazione: priorità env, fallback host attuale.
-  // Punta a /r/<code> (non /register?ref=) per fare pixel tracking del click
-  // prima del redirect al wizard.
+  // Link di affiliazione: fonte unica in lib/affiliazione/link.ts, condivisa con
+  // la modale post-login. Non ricopiare qui la risoluzione (sede operativa →
+  // prima sede accessibile → Company.referralCode legacy): pagina e modale
+  // devono mostrare lo STESSO link.
+  const {
+    link,
+    code: referralCode,
+    sedeNomeFallback: sedeLinkNome,
+  } = await resolveReferralLink();
+
+  // Base URL per i link delle ALTRE sedi nella classifica qui sotto.
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  // Codice referral della sede del link (operativa, o la prima accessibile per il
-  // proprietario in vista aggregata). Fallback: legacy Company.referralCode.
-  const referralCode = sedeRow?.referralCode ?? company.referralCode ?? null;
-  const link = referralCode ? `${appUrl}/r/${referralCode}` : null;
 
   // QR code generato server-side come data URL (no dipendenza da servizi esterni).
   const qrDataUrl = link
@@ -447,9 +444,14 @@ export default async function AffiliazionePage() {
               })}
             </tbody>
           </table>
+          {/* Gli importi vengono dal tariffario, come la tabella qui sopra: erano
+              scritti a mano ("max 10€ / 5€") e il listino attivo li ha già
+              smentiti una volta — la nota contraddiceva la tabella che le stava
+              sopra. */}
           <p className="mt-3 text-[11.5px] text-pv-slate-500">
-            La commissione è per veicolo. Il bonus di una pratica è fisso (max
-            10€ per il passaggio semplice, 5€ per la minivoltura): lo prendi
+            La commissione è per veicolo. Il bonus di una pratica è fisso (max{' '}
+            {formatCurrencyCent(affiliazioneSempliceCent)} per il passaggio semplice,{' '}
+            {formatCurrencyCent(affiliazioneMinivolturaCent)} per la minivoltura): lo prendi
             intero se sei l&apos;unico affiliante coinvolto, oppure diviso 50/50
             con un altro affiliante se il broker e l&apos;agenzia della pratica
             sono stati portati da due affilianti diversi.

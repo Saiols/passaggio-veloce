@@ -71,6 +71,11 @@ export const MAPPA_API: Record<string, Permesso | null> = {
   'src/app/api/wallet/rendiconto/route.ts': null, // owner-only via ctx.isOwner (rendiconto della madre, non di una sede — vedi commento nel file)
   'src/app/api/mandato/pdf/route.ts': null, // DA VALUTARE: richiede solo companyId di sessione (nessun ruolo/permesso); espone la stessa identità fiscale che altrove (profilo/azienda) è owner-only
 
+  // --- Modale di lancio affiliazione (post-login) ---
+  // GET espone il link referral dell'azienda ⇒ gate `affiliazione.view`.
+  // POST è il "non mostrare più": scrive solo il flag dell'utente di sessione.
+  'src/app/api/affiliazione/spot/route.ts': 'affiliazione.view',
+
   // --- Download gatati (le 7 "gatate a mano") ---
   'src/app/api/documenti/[id]/route.ts': 'pratiche.download',
   'src/app/api/fatturazione/[id]/pdf/route.ts': 'fatture.download',

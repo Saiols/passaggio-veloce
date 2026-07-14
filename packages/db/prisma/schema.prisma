@@ -546,6 +546,12 @@ model User {
   /// Token per unsubscribe one-click via link email (generato lazy al primo invio opzionale).
   unsubscribeToken String? @unique
 
+  /// Modale di lancio del programma affiliazione mostrata dopo il login: qui
+  /// finisce il "non mostrare piu'" (presa visione data per assodata). Null =
+  /// la modale si ripropone a ogni login. Il "gia' vista in questa sessione"
+  /// vive invece nel cookie pv_aff_spot, non qui.
+  affiliazioneSpotDismissedAt DateTime?
+
   /// Permessi granulari (chiavi del catalogo lib/auth/permessi/catalogo.ts).
   /// Snapshot esplicito: nessuna eredita' dal ruolo. Ignorato per ADMIN_AZIENDA
   /// (owner: pieni poteri impliciti). Vuoto per gli utenti PV (companyId null).

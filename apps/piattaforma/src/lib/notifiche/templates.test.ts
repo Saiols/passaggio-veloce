@@ -135,6 +135,52 @@ describe('N40 cliente avanzamento', () => {
     expect(`${text}\n${html}`).not.toContain('Via Roma');
     expect(`${text}\n${html}`.toLowerCase()).not.toContain('dove recarti');
   });
+
+  it('ogni stato porta con sé il link all\'informativa privacy per i clienti', () => {
+    // Art. 14 GDPR: l'informativa va resa al più tardi alla prima
+    // comunicazione all'interessato. La N40 È quella comunicazione: se il
+    // link cade da una variante, quella variante viola l'articolo.
+    for (const stato of STATI) {
+      const { text, html } = tplN40ClienteAvanzamento({
+        codicePratica: 'PV-2026-100',
+        veicoloDescrizione: 'AB123CD',
+        nomeDestinatario: 'Mario Rossi',
+        ruolo: 'VENDITORE',
+        stato,
+      });
+      expect(text, `text/${stato}`).toContain('/privacy/clienti');
+      expect(html, `html/${stato}`).toContain('/privacy/clienti');
+    }
+  });
+
+  it('AVVIATA: dice da CHI abbiamo ricevuto i dati (il broker), che è il punto dell\'art. 14', () => {
+    const { text, html } = tplN40ClienteAvanzamento({
+      codicePratica: 'PV-2026-101',
+      veicoloDescrizione: 'AB123CD',
+      nomeDestinatario: 'Mario Rossi',
+      ruolo: 'ACQUIRENTE',
+      stato: 'AVVIATA',
+      nomeBroker: 'Autosalone Bianchi S.r.l.',
+    });
+    expect(text).toContain('Autosalone Bianchi S.r.l.');
+    expect(html).toContain('Autosalone Bianchi S.r.l.');
+  });
+
+  it('AVVIATA senza nomeBroker: nessun buco di testo, il link resta', () => {
+    // nomeBroker è opzionale: se la select fallisse o la company fosse
+    // sparita non dobbiamo scrivere "trasmessi da undefined".
+    const { text, html } = tplN40ClienteAvanzamento({
+      codicePratica: 'PV-2026-102',
+      veicoloDescrizione: null,
+      nomeDestinatario: 'Mario Rossi',
+      ruolo: 'VENDITORE',
+      stato: 'AVVIATA',
+    });
+    expect(text).not.toContain('undefined');
+    expect(html).not.toContain('undefined');
+    expect(text).not.toContain('null');
+    expect(text).toContain('/privacy/clienti');
+  });
 });
 
 describe('N9 addebito fallito agenzia', () => {

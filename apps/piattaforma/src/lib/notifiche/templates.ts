@@ -9,6 +9,7 @@
 import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { emailLayout, ctaButton } from './layout';
 import { escapeHtml } from '@/lib/escape-html';
+import { siteUrl } from '@/lib/seo/brand';
 
 export type N1BrokerInvioPayload = {
   codicePratica: string;
@@ -136,6 +137,10 @@ export type N40ClienteAvanzamentoPayload = {
   agenziaCap?: string | null;
   agenziaCitta?: string | null;
   agenziaProvincia?: string | null;
+  // Ragione sociale del broker che ci ha trasmesso i dati. Art. 14 GDPR: alla
+  // prima comunicazione dobbiamo dire all'interessato DA CHI li abbiamo
+  // ricevuti — è ciò che distingue questa informativa da quella dell'art. 13.
+  nomeBroker?: string | null;
 };
 
 export type N14AccountSospesoPayload = {
@@ -649,18 +654,37 @@ export function tplN40ClienteAvanzamento(p: N40ClienteAvanzamentoPayload): Notif
     </div>`
     : '';
 
+  // Informativa art. 14 GDPR. Su AVVIATA — la PRIMA comunicazione che il
+  // cliente riceve da noi — diciamo anche da chi abbiamo avuto i suoi dati.
+  const privacyUrl = siteUrl('/privacy/clienti');
+  const fonte =
+    p.stato === 'AVVIATA' && p.nomeBroker
+      ? ` I tuoi dati ci sono stati trasmessi da ${p.nomeBroker} per gestire questa pratica.`
+      : '';
+  const privacyText =
+    `\n\nPassaggio Veloce S.r.l. tratta i tuoi dati per gestire la pratica.${fonte}` +
+    ` Qui trovi chi siamo e quali diritti hai: ${privacyUrl}`;
+  const privacyHtml = `
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      Passaggio Veloce S.r.l. tratta i tuoi dati per gestire la pratica.${
+        fonte ? escapeHtml(fonte) : ''
+      }
+      Qui trovi <a href="${privacyUrl}" style="color:#0a2540">chi siamo e quali diritti hai</a>.
+    </p>`;
+
   const text =
     `Ciao ${p.nomeDestinatario},\n` +
     `${m.corpo}\n` +
     `Numero pratica: ${p.codicePratica}.` +
-    agenziaText;
+    agenziaText +
+    privacyText;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">${escapeHtml(m.titolo)}</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeDestinatario)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">${escapeHtml(m.corpo)}</p>
     <div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
       Numero pratica: <strong>${escapeHtml(p.codicePratica)}</strong>
-    </div>${agenziaHtml}
+    </div>${agenziaHtml}${privacyHtml}
   `);
   return { subject: m.subject, html, text };
 }

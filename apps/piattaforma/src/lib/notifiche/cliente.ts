@@ -45,6 +45,9 @@ export async function notifyClientiAvanzamento(
           },
         },
         veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+        // Chi ci ha trasmesso i dati del cliente: serve nell'email AVVIATA per
+        // l'informativa art. 14 GDPR ("da chi avete i miei dati?").
+        broker: { select: { ragioneSociale: true } },
         // Indirizzo "dove recarsi": preferisci la SEDE che ha accettato (in
         // multi-sede il cliente va lì, non all'azienda madre), con fallback
         // all'azienda madre. Il nome mostrato resta la ragione sociale.
@@ -104,6 +107,7 @@ export async function notifyClientiAvanzamento(
             agenziaCap: addr?.cap ?? null,
             agenziaCitta: addr?.citta ?? null,
             agenziaProvincia: addr?.provincia ?? null,
+            nomeBroker: pratica.broker?.ragioneSociale ?? null,
           },
         }).catch(() => undefined),
       ),

@@ -31,7 +31,19 @@ function normalize(s: string | null): string {
   return (s ?? '').trim().toLowerCase();
 }
 
-function dedupKey(c: RawContact): string | null {
+/** Sottoinsieme di RawContact che serve a calcolare la dedupKey. */
+export type DedupKeyInput = Pick<RawContact, 'email' | 'telefono' | 'cf' | 'piva'>;
+
+/**
+ * Chiave di deduplicazione del catalogo (F-05): email > telefono > CF > PIVA,
+ * già normalizzata (trim + lowercase, telefono senza spazi).
+ *
+ * ⚠️ Fonte unica anche per il diritto di opposizione (GDPR art. 21, modello
+ * `OpposizioneCatalogo.chiave`): chi registra un'opposizione DEVE salvare
+ * esattamente il valore restituito qui, altrimenti il filtro in
+ * buildCatalogoContatti() non aggancia nulla.
+ */
+export function dedupKey(c: DedupKeyInput): string | null {
   if (c.email) return `email:${normalize(c.email)}`;
   if (c.telefono) return `tel:${normalize(c.telefono).replace(/\s+/g, '')}`;
   if (c.cf) return `cf:${normalize(c.cf)}`;
@@ -48,35 +60,49 @@ function nominativo(c: RawContact): string {
  * Catalogo contatti aggregato (F-05). Estrae venditore/acquirente da tutte le
  * pratiche non eliminate, deduplica per email/telefono/CF/PIVA, conta quante
  * pratiche per contatto e tiene la data più recente.
+ *
+ * GDPR art. 21: prima di restituire il risultato esclude ogni contatto la cui
+ * dedupKey ha un'opposizione ATTIVA (tabella `OpposizioneCatalogo`, vedi
+ * `app/admin/crm/contatti-operativi/actions.ts`). Questa è la FONTE UNICA del
+ * catalogo: pagina admin ed export CSV passano entrambi da qui, quindi il
+ * filtro vale per qualunque consumer, incluso il canale che porta i dati
+ * fuori dalla piattaforma.
  */
 export async function buildCatalogoContatti(filtroQuery?: string): Promise<Contatto[]> {
-  const pratiche = await prisma.pratica.findMany({
-    where: { deletedAt: null },
-    select: {
-      createdAt: true,
-      venditori: {
-        orderBy: { ordine: 'asc' },
-        select: {
-          isPersonaGiuridica: true,
-          nome: true,
-          cognome: true,
-          ragioneSociale: true,
-          cf: true,
-          piva: true,
-          telefono: true,
-          email: true,
+  const [pratiche, opposizioni] = await Promise.all([
+    prisma.pratica.findMany({
+      where: { deletedAt: null },
+      select: {
+        createdAt: true,
+        venditori: {
+          orderBy: { ordine: 'asc' },
+          select: {
+            isPersonaGiuridica: true,
+            nome: true,
+            cognome: true,
+            ragioneSociale: true,
+            cf: true,
+            piva: true,
+            telefono: true,
+            email: true,
+          },
         },
+        acquirenteIsPersonaGiuridica: true,
+        acquirenteNome: true,
+        acquirenteCognome: true,
+        acquirenteRagioneSociale: true,
+        acquirenteCF: true,
+        acquirentePIVA: true,
+        acquirenteTelefono: true,
+        acquirenteEmail: true,
       },
-      acquirenteIsPersonaGiuridica: true,
-      acquirenteNome: true,
-      acquirenteCognome: true,
-      acquirenteRagioneSociale: true,
-      acquirenteCF: true,
-      acquirentePIVA: true,
-      acquirenteTelefono: true,
-      acquirenteEmail: true,
-    },
-  });
+    }),
+    prisma.opposizioneCatalogo.findMany({
+      where: { revocataAt: null },
+      select: { chiave: true },
+    }),
+  ]);
+  const chiaviOpposte = new Set(opposizioni.map((o) => o.chiave));
 
   const raw: RawContact[] = [];
   for (const p of pratiche) {
@@ -112,6 +138,7 @@ export async function buildCatalogoContatti(filtroQuery?: string): Promise<Conta
   for (const r of raw) {
     const key = dedupKey(r);
     if (!key) continue;
+    if (chiaviOpposte.has(key)) continue; // GDPR art. 21: opposizione attiva
     const existing = byKey.get(key);
     if (existing) {
       existing.numeroPratiche += 1;

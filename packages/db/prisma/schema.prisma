@@ -591,6 +591,11 @@ model User {
   // ...e quelle gestite da questo utente (admin)
   segnalazioniCreazioneGestite SegnalazioneCreazione[] @relation("SegnalazioneCreazioneGestore")
 
+  // GDPR art. 21: opposizioni al catalogo contatti (F-05) registrate/revocate
+  // da questo utente admin.
+  opposizioniCatalogoRegistrate OpposizioneCatalogo[] @relation("OpposizioneCatalogoRegistrata")
+  opposizioniCatalogoRevocate   OpposizioneCatalogo[] @relation("OpposizioneCatalogoRevocata")
+
   // Pratiche create da questo utente e pratiche che ha accettato per la sua agenzia.
   praticheCreate    Pratica[] @relation("PraticheCreate")
   praticheAccettate Pratica[] @relation("PraticheAccettate")
@@ -1051,6 +1056,46 @@ model SegnalazioneCreazione {
   @@index([stato, createdAt])
   @@index([companyId])
   @@map("segnalazioni_creazione")
+}
+
+// GDPR art. 21: diritto di opposizione al trattamento per finalità
+// commerciali/legittimo interesse (art. 6.1.f), dichiarato in
+// app/privacy/clienti/page.tsx. Il catalogo contatti (F-05, vedi
+// lib/catalogo-contatti.ts) è ricalcolato al volo da TUTTE le pratiche non
+// eliminate — non possiamo cancellarle (obbligo di conservazione fiscale).
+// Questa tabella è l'UNICO modo per onorare un'opposizione:
+// buildCatalogoContatti() esclude ogni contatto la cui dedupKey compare qui
+// (senza revoca attiva). Vale per qualunque consumer del catalogo, export
+// CSV incluso, perché tutti passano da quella funzione.
+//
+// `chiave` DEVE avere ESATTAMENTE il formato di dedupKey() in
+// lib/catalogo-contatti.ts (email:xxx / tel:xxx / cf:xxx / piva:xxx, già
+// normalizzati minuscolo/trim): è la stessa chiave di deduplicazione del
+// catalogo, quindi l'unica su cui si può filtrare in modo corretto.
+model OpposizioneCatalogo {
+  id     String @id @default(uuid()) @db.Uuid
+  chiave String @unique
+
+  /// Nominativo del contatto al momento della registrazione (denormalizzato,
+  /// per mostrarlo in admin senza reidratare la pratica).
+  nominativo String?
+  /// Estremi della richiesta arrivata a privacy@ (facoltativo).
+  note       String?
+
+  registrataDaId String @db.Uuid
+  registrataDa   User   @relation("OpposizioneCatalogoRegistrata", fields: [registrataDaId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  /// Revoca: l'interessato può cambiare idea (legittimo). Non-null = non più
+  /// attiva, il contatto ricompare nel catalogo. Riga mantenuta per audit
+  /// invece di essere cancellata.
+  revocataAt   DateTime?
+  revocataDaId String?   @db.Uuid
+  revocataDa   User?     @relation("OpposizioneCatalogoRevocata", fields: [revocataDaId], references: [id])
+
+  @@index([revocataAt])
+  @@map("opposizioni_catalogo")
 }
 
 model Veicolo {

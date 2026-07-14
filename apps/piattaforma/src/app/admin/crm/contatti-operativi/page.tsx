@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { auth } from '@/auth';
+import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { StatCard } from '@/components/ui';
 import { TextSearchFilter } from '@/components/text-search-filter';
-import { formatRelative } from '@/lib/format';
+import { formatRelative, formatDateTime } from '@/lib/format';
 import { buildCatalogoContatti } from '@/lib/catalogo-contatti';
+import { OpposizioneCatalogoButton } from './opposizione-button';
+import { RevocaOpposizioneCatalogoButton } from './revoca-opposizione-button';
 
 type Ruolo = 'VENDITORE' | 'ACQUIRENTE';
 type SearchParams = { q?: string; ruolo?: string };
@@ -29,7 +32,19 @@ export default async function AdminCRMContattiOperativiPage({
   const ruoloFilter: Ruolo | null =
     sp.ruolo === 'VENDITORE' || sp.ruolo === 'ACQUIRENTE' ? sp.ruolo : null;
 
-  const contatti = await buildCatalogoContatti(q);
+  const [contatti, opposizioni] = await Promise.all([
+    buildCatalogoContatti(q),
+    // GDPR art. 21: elenco opposizioni registrate (attive + revocate, per
+    // audit). Volume atteso basso (evento raro), niente paginazione.
+    prisma.opposizioneCatalogo.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        registrataDa: { select: { nome: true, cognome: true } },
+        revocataDa: { select: { nome: true, cognome: true } },
+      },
+    }),
+  ]);
   const venditori = contatti.filter((c) => c.ruolo === 'VENDITORE').length;
   const acquirenti = contatti.filter((c) => c.ruolo === 'ACQUIRENTE').length;
   // Filtro per tipologia (acquirente/venditore) sulla lista mostrata.
@@ -133,6 +148,7 @@ export default async function AdminCRMContattiOperativiPage({
                   <th className="px-5 py-3 hidden lg:table-cell">CF / P.IVA</th>
                   <th className="px-5 py-3 hidden lg:table-cell">Pratiche</th>
                   <th className="px-5 py-3 text-right">Ultima</th>
+                  <th className="px-5 py-3 text-right">Azioni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-pv-slate-200">
@@ -176,11 +192,79 @@ export default async function AdminCRMContattiOperativiPage({
                     <td className="px-5 py-3 text-right text-pv-slate-500">
                       {formatRelative(c.ultimoVistoAt)}
                     </td>
+                    <td className="px-5 py-3 text-right">
+                      <OpposizioneCatalogoButton chiave={c.key} nominativo={c.nominativo} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+        </div>
+
+        {/* GDPR art. 21 — opposizioni registrate sul catalogo (attive + revocate,
+            per audit). Chi si oppone lascia il catalogo/export CSV; una revoca
+            legittima lo fa rientrare. */}
+        <div className="mt-8">
+          <h2 className="text-[15px] font-extrabold tracking-tight text-pv-navy-900">
+            Opposizioni registrate (art. 21 GDPR)
+          </h2>
+          <p className="mt-1 text-[12.5px] text-pv-slate-500">
+            Contatti esclusi dal catalogo su richiesta esplicita a privacy@passaggioveloce.it.
+          </p>
+
+          <div className="mt-3 overflow-hidden rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
+            {opposizioni.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <p className="text-[13px] text-pv-slate-500">Nessuna opposizione registrata.</p>
+              </div>
+            ) : (
+              <table className="w-full text-[13px]">
+                <thead className="border-b border-pv-slate-200 bg-pv-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Nominativo</th>
+                    <th className="px-5 py-3 hidden md:table-cell">Nota</th>
+                    <th className="px-5 py-3 hidden sm:table-cell">Registrata</th>
+                    <th className="px-5 py-3">Stato</th>
+                    <th className="px-5 py-3 text-right">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pv-slate-200">
+                  {opposizioni.map((o) => {
+                    const attiva = o.revocataAt === null;
+                    const registrataDaNome = `${o.registrataDa.nome} ${o.registrataDa.cognome}`.trim();
+                    return (
+                      <tr key={o.id} className="hover:bg-pv-slate-50">
+                        <td className="px-5 py-3 font-semibold text-pv-navy-800">
+                          {o.nominativo ?? '—'}
+                        </td>
+                        <td className="px-5 py-3 hidden text-pv-slate-700 md:table-cell">
+                          {o.note ?? '—'}
+                        </td>
+                        <td className="px-5 py-3 hidden text-pv-slate-500 sm:table-cell">
+                          {formatDateTime(o.createdAt)} · {registrataDaNome}
+                        </td>
+                        <td className="px-5 py-3">
+                          {attiva ? (
+                            <span className="inline-flex items-center rounded-full bg-pv-red-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-pv-red-500">
+                              Attiva
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-pv-slate-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                              Revocata
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          {attiva && <RevocaOpposizioneCatalogoButton id={o.id} />}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
     </AppShell>

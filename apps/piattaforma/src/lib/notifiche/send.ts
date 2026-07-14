@@ -21,6 +21,7 @@ import {
   tplN23ReferralFirstPratica,
   tplN24PayoutAffiliationAvailable,
   tplN25MonthlyAffiliationRecap,
+  tplN26EmailPartenza,
   tplN31ValutaAgenzia,
   tplN40ClienteAvanzamento,
   tplN41AdminNuovaSegnalazione,
@@ -52,6 +53,7 @@ import {
   type N23ReferralFirstPraticaPayload,
   type N24PayoutAffiliationAvailablePayload,
   type N25MonthlyAffiliationRecapPayload,
+  type N26EmailPartenzaPayload,
   type N31ValutaAgenziaPayload,
   type N40ClienteAvanzamentoPayload,
   type N41AdminNuovaSegnalazionePayload,
@@ -158,6 +160,11 @@ type SendInput =
       payload: N25MonthlyAffiliationRecapPayload;
     }
   | {
+      tipo: 'N26_EMAIL_PARTENZA';
+      target: Target;
+      payload: N26EmailPartenzaPayload;
+    }
+  | {
       tipo: 'N31_VALUTA_AGENZIA';
       target: Target;
       payload: N31ValutaAgenziaPayload;
@@ -243,6 +250,8 @@ function render(input: SendInput): NotificaContent {
       return tplN24PayoutAffiliationAvailable(input.payload);
     case 'N25_MONTHLY_AFFILIATION_RECAP':
       return tplN25MonthlyAffiliationRecap(input.payload);
+    case 'N26_EMAIL_PARTENZA':
+      return tplN26EmailPartenza(input.payload);
     case 'N31_VALUTA_AGENZIA':
       return tplN31ValutaAgenzia(input.payload);
     case 'N40_CLIENTE_AVANZAMENTO':

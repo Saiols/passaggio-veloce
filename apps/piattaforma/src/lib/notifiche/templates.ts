@@ -1308,6 +1308,91 @@ export function tplN41AdminNuovaSegnalazione(p: N41AdminNuovaSegnalazionePayload
   return { subject, html, text };
 }
 
+export type N26EmailPartenzaPayload = {
+  nomeReferente: string;
+  ragioneSociale: string;
+  categoria: 'BROKER' | 'AGENZIA';
+  linkUrl: string;
+  unsubUrl: string;
+  codice?: { code: string; importoEuro: number };
+};
+
+/**
+ * Email a freddo (lead senza account) inviata dal team sales dopo una
+ * telefonata di attivazione. NON passa dal gating preferenze di
+ * `sendNotification` (che richiede `userId`): il link di disiscrizione va
+ * quindi incluso direttamente nel corpo, sia text che html (il segnaposto
+ * `<!--PV_UNSUB-->` del layout resta volutamente non sostituito qui).
+ */
+export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent {
+  const isBroker = p.categoria === 'BROKER';
+  const ctaLabel = isBroker ? 'Registra la tua concessionaria' : 'Registra la tua agenzia';
+  const contesto = isBroker
+    ? 'Carichi la pratica in 2 minuti, un’agenzia della tua zona la prende in carico e la segui in tempo reale.'
+    : 'Ricevi pratiche già complete e verificate dalla tua provincia, e decidi tu quali accettare.';
+
+  const nome = escapeHtml(p.nomeReferente);
+  const rag = escapeHtml(p.ragioneSociale);
+
+  const checklist = [
+    'Carta d’identità e tessera sanitaria del titolare (fronte e retro)',
+    'Visura camerale in PDF (dal Registro Imprese)',
+    'P.IVA, PEC, codice SDI e regime fiscale',
+    'IBAN aziendale',
+  ];
+
+  const checklistHtml = checklist
+    .map(
+      (v) =>
+        `<li style="margin:0 0 6px;font-size:14px;color:#334155">${escapeHtml(v)}</li>`,
+    )
+    .join('');
+
+  const codiceHtml = p.codice
+    ? `<div style="margin-top:18px;background:#fff7ed;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:14px;color:#0a2540">
+        🎁 <strong>Hai ${p.codice.importoEuro} € di credito di benvenuto.</strong><br>
+        Il codice <strong>${escapeHtml(p.codice.code)}</strong> è già incluso nel link: lo troverai precompilato all’ultimo passaggio, non devi ricordartelo.
+      </div>`
+    : '';
+
+  const body = `
+    <p style="margin:0 0 12px;font-size:15px;color:#0a2540">Buongiorno ${nome},</p>
+    <p style="margin:0 0 12px;font-size:14px;color:#334155">come d’accordo nella nostra telefonata, ecco il link per attivare <strong>${rag}</strong> su Passaggio Veloce. Bastano circa 5 minuti.</p>
+    <p style="margin:0 0 18px;font-size:14px;color:#334155">${escapeHtml(contesto)}</p>
+    <div style="margin:0 0 18px">${ctaButton(p.linkUrl, ctaLabel)}</div>
+    <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0a2540">Cosa tenere a portata di mano</p>
+    <ul style="margin:0 0 4px;padding-left:18px">${checklistHtml}</ul>
+    ${codiceHtml}
+    <p style="margin:18px 0 0;font-size:13px;color:#64748b">Per qualsiasi cosa trovi i nostri contatti qui sotto.</p>
+    <p style="margin:10px 0 0;padding-top:10px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8">Non vuoi più ricevere queste email? <a href="${escapeHtml(p.unsubUrl)}" style="color:#94a3b8">Disiscriviti</a></p>
+  `;
+
+  const codiceText = p.codice
+    ? `\n\nHai ${p.codice.importoEuro} € di credito di benvenuto. Il codice ${p.codice.code} è già incluso nel link e precompilato all’ultimo passaggio.`
+    : '';
+
+  const text = `Buongiorno ${p.nomeReferente},
+
+come d’accordo nella nostra telefonata, ecco il link per attivare ${p.ragioneSociale} su Passaggio Veloce. Bastano circa 5 minuti.
+
+${contesto}
+
+Registrati qui: ${p.linkUrl}
+
+Cosa tenere a portata di mano:
+- ${checklist.join('\n- ')}${codiceText}
+
+Per qualsiasi cosa trovi i nostri contatti in fondo all’email.
+
+Per non ricevere più queste email: ${p.unsubUrl}`;
+
+  return {
+    subject: 'Passaggio Veloce — il link per registrarti',
+    html: emailLayout(body),
+    text,
+  };
+}
+
 export function tplN42BrokerSegnalazioneGestita(p: N42BrokerSegnalazioneGestitaPayload): NotificaContent {
   const subject = 'Risposta alla tua segnalazione';
   const saluto = p.nomeBroker ? `Ciao ${escapeHtml(p.nomeBroker)},` : 'Ciao,';

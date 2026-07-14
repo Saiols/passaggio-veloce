@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito } from './templates';
+import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 import { formatDate } from '@/lib/format';
 
@@ -297,5 +297,59 @@ describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 
     const dataAttesa = formatDate(attestataDaPvAt);
     expect(out.text).toContain(dataAttesa);
     expect(out.html).toContain(dataAttesa);
+  });
+});
+
+describe('N26 email di partenza', () => {
+  const base = {
+    nomeReferente: 'Mario Rossi',
+    ragioneSociale: 'Autosalone Rossi Srl',
+    linkUrl: 'https://passaggioveloce.it/i/tok123',
+    unsubUrl: 'https://passaggioveloce.it/unsubscribe?token=uns123',
+  } as const;
+
+  it('broker: CTA concessionaria + frase di contesto broker', () => {
+    const { html, subject, text } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
+    expect(subject.toLowerCase()).toContain('registrarti');
+    expect(html).toContain('Registra la tua concessionaria');
+    expect(html).toContain('la prende in carico e la segui in tempo reale');
+    expect(html).toContain('https://passaggioveloce.it/i/tok123');
+    expect(html).toContain('logo-email.png'); // layout istituzionale
+    expect(text).toContain('Autosalone Rossi Srl');
+  });
+
+  it('agenzia: CTA agenzia + frase di contesto agenzia', () => {
+    const { html } = tplN26EmailPartenza({ ...base, categoria: 'AGENZIA' });
+    expect(html).toContain('Registra la tua agenzia');
+    expect(html).toContain('già complete e verificate dalla tua provincia');
+  });
+
+  it('senza codice: nessun blocco credito, nessun simbolo €', () => {
+    const { html, text } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
+    expect(html).not.toContain('credito di benvenuto');
+    expect(text).not.toContain('€');
+  });
+
+  it('con codice: blocco credito col codice e importo', () => {
+    const { html, text } = tplN26EmailPartenza({
+      ...base,
+      categoria: 'BROKER',
+      codice: { code: 'BENVENUTO50', importoEuro: 50 },
+    });
+    expect(html).toContain('BENVENUTO50');
+    expect(html).toContain('50');
+    expect(html).toContain('credito di benvenuto');
+    expect(text).toContain('BENVENUTO50');
+  });
+
+  it('la checklist documenti è presente', () => {
+    const { html } = tplN26EmailPartenza({ ...base, categoria: 'AGENZIA' });
+    expect(html).toContain('Visura camerale');
+    expect(html).toContain('IBAN');
+  });
+
+  it('include il link di disiscrizione (email a freddo)', () => {
+    const { html } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
+    expect(html).toContain('https://passaggioveloce.it/unsubscribe?token=uns123');
   });
 });

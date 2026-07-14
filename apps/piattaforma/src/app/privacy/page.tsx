@@ -45,7 +45,7 @@ export default function PrivacyPage() {
           <p>
             Passaggio Veloce S.r.l., con sede legale in Italia, è il titolare
             del trattamento dei dati personali raccolti tramite la piattaforma
-            <code> passaggioveloce.it</code> e i sottodomini collegati.
+            <code> passaggioveloce.it</code>{' '}e i sottodomini collegati.
           </p>
           <p>
             Per qualsiasi richiesta in materia di protezione dati:{' '}
@@ -77,7 +77,7 @@ export default function PrivacyPage() {
               dall&apos;utente
               per la lavorazione della pratica. Quando la pratica lo richiede
               includono <strong>permesso di soggiorno</strong>,{' '}
-              <strong>certificato di morte</strong> e atti di successione,
+              <strong>certificato di morte</strong>{' '}e atti di successione,
               procure e autorizzazioni del giudice tutelare. Rispetto a questi
               dati Passaggio Veloce è titolare autonomo: v.{' '}
               <Link
@@ -124,17 +124,17 @@ export default function PrivacyPage() {
         <Section title="Conservazione">
           <p>
             I documenti rimossi vengono cancellati definitivamente (dal
-            database e dallo storage) <strong>90 giorni</strong> dopo la
-            rimozione. Le pratiche rimaste in <strong>bozza</strong> e mai
+            database e dallo storage) <strong>90 giorni</strong>{' '}dopo la
+            rimozione. Le pratiche rimaste in <strong>bozza</strong>{' '}e mai
             inviate, con i relativi documenti, vengono eliminate dopo{' '}
             <strong>30 giorni</strong>.
           </p>
           <p>
-            I dati delle pratiche <strong>portate a termine</strong> e i dati
+            I dati delle pratiche <strong>portate a termine</strong>{' '}e i dati
             contabili e fiscali sono conservati per il periodo imposto dalla
             normativa fiscale e dagli obblighi connessi agli adempimenti sul
             veicolo. I dati di un account eliminato sono soft-deleted per{' '}
-            <strong>90 giorni</strong> e poi rimossi, fatti salvi gli obblighi
+            <strong>90 giorni</strong>{' '}e poi rimossi, fatti salvi gli obblighi
             di conservazione di legge.
           </p>
         </Section>

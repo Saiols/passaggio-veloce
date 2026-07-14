@@ -47,14 +47,14 @@ export default function CookiePage() {
           </h3>
           <ul className="list-disc pl-5">
             <li>
-              <code>authjs.session-token</code> — sessione di login
+              <code>authjs.session-token</code>{' '}— sessione di login
               (HTTP-only, secure)
             </li>
             <li>
-              <code>authjs.csrf-token</code> — protezione CSRF
+              <code>authjs.csrf-token</code>{' '}— protezione CSRF
             </li>
             <li>
-              <code>pv-cookie-consent-v1</code> — memorizza la tua scelta sui
+              <code>pv-cookie-consent-v1</code>{' '}— memorizza la tua scelta sui
               cookie (LocalStorage)
             </li>
           </ul>
@@ -68,7 +68,7 @@ export default function CookiePage() {
             Analytics
           </h3>
           <p>
-            <strong>Nessuno attualmente attivo.</strong> Quando attiveremo
+            <strong>Nessuno attualmente attivo.</strong>{' '}Quando attiveremo
             analytics aggregato (privacy-friendly, server-side) chiederemo
             consenso esplicito.
           </p>

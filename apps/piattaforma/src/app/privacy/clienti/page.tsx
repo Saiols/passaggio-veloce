@@ -115,13 +115,13 @@ export default function PrivacyClientiPage() {
         <Section title="Perché li trattiamo e su quale base">
           <ul className="list-disc pl-5">
             <li>
-              <strong>Per gestire la pratica</strong> di passaggio di proprietà che il
+              <strong>Per gestire la pratica</strong>{' '}di passaggio di proprietà che il
               professionista ci ha affidato, e per informarti sul suo avanzamento — nostro{' '}
-              <strong>legittimo interesse</strong> e interesse tuo a che la pratica vada a buon
+              <strong>legittimo interesse</strong>{' '}e interesse tuo a che la pratica vada a buon
               fine (art. 6.1.f GDPR).
             </li>
             <li>
-              <strong>Per prevenire le frodi</strong> sui passaggi di proprietà (veicoli con fermi
+              <strong>Per prevenire le frodi</strong>{' '}sui passaggi di proprietà (veicoli con fermi
               amministrativi o ipoteche, documenti non autentici) — legittimo interesse
               (art. 6.1.f GDPR).
             </li>
@@ -132,7 +132,7 @@ export default function PrivacyClientiPage() {
             </li>
           </ul>
           <p>
-            <strong>Non ti chiediamo un consenso</strong> perché non è su questo che si fonda il
+            <strong>Non ti chiediamo un consenso</strong>{' '}perché non è su questo che si fonda il
             trattamento: senza i tuoi dati il passaggio di proprietà non si può materialmente
             fare, e alcuni obblighi ci sono imposti dalla legge.
           </p>
@@ -141,7 +141,7 @@ export default function PrivacyClientiPage() {
         <Section title="A chi comunichiamo i tuoi dati">
           <ul className="list-disc pl-5">
             <li>
-              <strong>All&apos;agenzia di pratiche auto</strong> che lavora la tua pratica e presso
+              <strong>All&apos;agenzia di pratiche auto</strong>{' '}che lavora la tua pratica e presso
               cui firmerai: è un soggetto distinto da noi e tratta i tuoi dati come titolare
               autonomo per gli adempimenti di sua competenza.
             </li>
@@ -151,25 +151,25 @@ export default function PrivacyClientiPage() {
               {' '}(lettura automatica dei documenti, trattamento in Unione Europea),{' '}
               <strong>Resend</strong> (invio delle email, Unione Europea), <strong>Vercel</strong>{' '}
               (hosting dell&apos;applicazione e archiviazione dei documenti caricati),{' '}
-              <strong>Neon</strong> (database, Unione Europea).
+              <strong>Neon</strong>{' '}(database, Unione Europea).
             </li>
             <li>
               <strong>Alle autorità</strong>, quando la legge lo impone.
             </li>
           </ul>
           <p>
-            <strong>Non vendiamo i tuoi dati</strong> e non li usiamo per inviarti pubblicità.
+            <strong>Non vendiamo i tuoi dati</strong>{' '}e non li usiamo per inviarti pubblicità.
           </p>
         </Section>
 
         <Section title="Per quanto tempo li conserviamo">
           <p>
             I documenti che rimuoviamo o che appartengono a pratiche mai completate vengono
-            cancellati automaticamente: <strong>90 giorni</strong> dalla rimozione per i documenti,{' '}
-            <strong>30 giorni</strong> per le pratiche rimaste in bozza e mai inviate.
+            cancellati automaticamente: <strong>90 giorni</strong>{' '}dalla rimozione per i documenti,{' '}
+            <strong>30 giorni</strong>{' '}per le pratiche rimaste in bozza e mai inviate.
           </p>
           <p>
-            I dati delle pratiche <strong>portate a termine</strong> restano conservati per il
+            I dati delle pratiche <strong>portate a termine</strong>{' '}restano conservati per il
             tempo imposto dalla normativa fiscale e dagli obblighi connessi agli adempimenti sul
             veicolo.
           </p>
@@ -177,14 +177,14 @@ export default function PrivacyClientiPage() {
 
         <Section title="I tuoi diritti">
           <p>
-            Puoi chiederci in ogni momento di <strong>accedere</strong> ai tuoi dati, di{' '}
+            Puoi chiederci in ogni momento di <strong>accedere</strong>{' '}ai tuoi dati, di{' '}
             <strong>correggerli</strong>, di <strong>cancellarli</strong>, di{' '}
-            <strong>limitarne</strong> il trattamento o di <strong>riceverli</strong> in un
+            <strong>limitarne</strong> il trattamento o di <strong>riceverli</strong>{' '}in un
             formato leggibile (artt. 15-20 GDPR).
           </p>
           <p>
             Poiché una parte del trattamento si fonda sul nostro legittimo interesse, hai anche il{' '}
-            <strong>diritto di opporti</strong> (art. 21 GDPR). Tieni presente che se ti opponi
+            <strong>diritto di opporti</strong>{' '}(art. 21 GDPR). Tieni presente che se ti opponi
             mentre la pratica è in corso, il passaggio di proprietà potrebbe non poter essere
             completato; alcuni dati, inoltre, dobbiamo conservarli per obbligo di legge anche dopo
             una richiesta di cancellazione.

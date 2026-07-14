@@ -10,16 +10,16 @@
  */
 
 /** Numero dell'articolo di approvazione specifica ex artt. 1341-1342 c.c. */
-export const ART_APPROVAZIONE_SPECIFICA = 18;
+export const ART_APPROVAZIONE_SPECIFICA = 19;
 
 /**
  * Clausole che l'Utente approva specificamente con la seconda spunta in
  * registrazione. Ordinate, senza duplicati, tutte < ART_APPROVAZIONE_SPECIFICA.
  */
-export const CLAUSOLE_VESSATORIE = [3, 5, 7, 8, 10, 11, 12, 13, 17] as const;
+export const CLAUSOLE_VESSATORIE = [3, 5, 7, 8, 10, 11, 12, 13, 17, 18] as const;
 
 /**
- * Descrizione sintetica di ogni clausola vessatoria, per il render dell'art. 18
+ * Descrizione sintetica di ogni clausola vessatoria, per il render dell'art. 19
  * (`app/termini/page.tsx`). Le CHIAVI devono coprire esattamente
  * CLAUSOLE_VESSATORIE: se manca una chiave il render mostra `undefined`, se ne
  * avanza una è una descrizione orfana di una clausola non più vessatoria.
@@ -35,7 +35,8 @@ export const DESCRIZIONI_VESSATORIE: Record<(typeof CLAUSOLE_VESSATORIE)[number]
   11: 'potere di attestazione della firma da parte del Gestore',
   12: 'limitazione operativa, sospensione e cancellazione dell’account',
   13: 'limitazioni di responsabilità',
-  17: 'deroga alla competenza territoriale (foro esclusivo)',
+  17: 'garanzia e manleva sui dati di venditori e acquirenti',
+  18: 'deroga alla competenza territoriale (foro esclusivo)',
 };
 
 /**
@@ -43,9 +44,23 @@ export const DESCRIZIONI_VESSATORIE: Record<(typeof CLAUSOLE_VESSATORIE)[number]
  * momento dell'accettazione: senza, non sappiamo QUALE testo l'utente ha
  * accettato. Aggiornare a ogni modifica sostanziale della pagina /termini.
  */
-export const TERMS_VERSION = '2026-07-13';
+export const TERMS_VERSION = '2026-07-14';
 
-/** L'elenco come lo legge l'utente: "3, 5, 7, 8, 10, 11, 12, 13, 17". */
+/** L'elenco come lo legge l'utente: "3, 5, 7, 8, 10, 11, 12, 13, 17, 18". */
 export function elencoClausoleVessatorie(): string {
   return CLAUSOLE_VESSATORIE.join(', ');
+}
+
+/**
+ * Le descrizioni nell'ordine dell'elenco, per la parentesi della checkbox in
+ * registrazione: "prezzo del servizio…, …, deroga alla competenza territoriale
+ * (foro esclusivo)".
+ *
+ * Era prosa scritta a mano accanto a un elenco di numeri generato: 10 numeri e
+ * 9 descrizioni sarebbero bastati a far approvare "specificamente" (art. 1341
+ * c.c.) una clausola che la checkbox non nominava. Generandola, non può più
+ * divergere dall'elenco.
+ */
+export function elencoDescrizioniVessatorie(): string {
+  return CLAUSOLE_VESSATORIE.map((n) => DESCRIZIONI_VESSATORIE[n]).join(', ');
 }

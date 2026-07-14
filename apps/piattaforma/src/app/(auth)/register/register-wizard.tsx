@@ -20,7 +20,7 @@ import { registerAction, checkPromoCodeAction, verifyRegistrationDocumentsAction
 import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
-import { elencoClausoleVessatorie } from '@/lib/legal/clausole-vessatorie';
+import { elencoClausoleVessatorie, elencoDescrizioniVessatorie } from '@/lib/legal/clausole-vessatorie';
 import {
   REGISTER_DRAFT_KEY,
   parseRegisterDraft,
@@ -1066,9 +1066,7 @@ function PaymentStep({
           >
             Termini e Condizioni
           </a>{' '}
-          (prezzo del servizio e sue variazioni, condizioni di prelievo, regime fiscale e trattenute,
-          manleva sull&apos;aggiornamento della visura, penali, attestazione della firma da parte del
-          Gestore, sospensione, limitazioni di responsabilità, foro competente).
+          ({elencoDescrizioniVessatorie()}).
           <span className="ml-1 text-pv-orange-500" aria-hidden="true">
             •
           </span>

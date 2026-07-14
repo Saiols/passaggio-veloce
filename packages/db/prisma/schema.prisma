@@ -312,6 +312,7 @@ enum NotificaTipo {
   N23_REFERRAL_FIRST_PRATICA
   N24_PAYOUT_AFFILIATION_AVAILABLE
   N25_MONTHLY_AFFILIATION_RECAP
+  N26_EMAIL_PARTENZA
   N31_VALUTA_AGENZIA
   N40_CLIENTE_AVANZAMENTO
   N41_ADMIN_NUOVA_SEGNALAZIONE_CREAZIONE
@@ -1891,6 +1892,13 @@ model CrmContact {
   lastAccessAt   DateTime?
   tassoComp      Int            @default(0) // 0-100
 
+  // Email di partenza CRM (onboarding post-telefonata)
+  invitoToken        String?    @unique // token opaco del link /i/<token>, riscritto a ogni reinvio
+  emailUnsubToken    String?    @unique // token STABILE per l'unsubscribe del lead (mai riscritto)
+  emailOptOutAt      DateTime? // disiscrizione del lead → blocca invii futuri
+  promoCodeInviatoId String?    @db.Uuid // ultimo PromoCode welcome inviato
+  promoCodeInviato   PromoCode? @relation("CrmContactPromoInviato", fields: [promoCodeInviatoId], references: [id], onDelete: SetNull)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -1904,6 +1912,7 @@ model CrmContact {
   @@index([assignedToId])
   @@index([companyId])
   @@index([linkAperto])
+  @@index([promoCodeInviatoId])
   @@map("crm_contacts")
 }
 
@@ -2060,7 +2069,8 @@ model PromoCode {
   active         Boolean   @default(true)
   createdById    String?   @db.Uuid
 
-  redemptions PromoCodeRedemption[]
+  redemptions        PromoCodeRedemption[]
+  crmContattiInviati CrmContact[]          @relation("CrmContactPromoInviato")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

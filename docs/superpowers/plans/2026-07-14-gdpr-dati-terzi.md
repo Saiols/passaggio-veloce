@@ -16,8 +16,13 @@
 - **Base giuridica verso i terzi:** art. 6.1.f (legittimo interesse) + art. 6.1.c (obbligo legale). **Mai** «consenso», **mai** art. 6.1.b verso il terzo (il contratto è col broker).
 - **Fonte unica dei numeri di clausola:** `apps/piattaforma/src/lib/legal/clausole-vessatorie.ts`. Nessun numero di clausola scritto a mano nel JSX quando esiste la costante.
 - **Colori:** solo token del design system (`text-pv-navy-900`, `text-pv-slate-700`, …). Nessun colore hardcoded nelle pagine. Le email HTML sono l'eccezione già in essere (client email non leggono le CSS var): là si seguono gli hex già usati in `templates.ts`.
-- **Comandi** (da `apps/piattaforma/`): test `pnpm --filter piattaforma test`, typecheck `pnpm --filter piattaforma typecheck`, lint `pnpm --filter piattaforma lint`, dev `pnpm --filter piattaforma dev`.
-- **Node:** `nvm use 22.15.0` prima di qualsiasi comando pnpm (post-riavvio la shell torna a Node 16).
+- **Comandi — usare PowerShell, NON Git Bash.** In questo ambiente Node non è sul PATH di Git Bash: un comando pnpm da bash **non parte**, e il suo silenzio somiglia a un successo. Da PowerShell, sempre con `nvm use 22.15.0` prima (post-riavvio la shell torna a Node 16):
+  - test: `nvm use 22.15.0; pnpm --filter piattaforma test`
+  - typecheck: `nvm use 22.15.0; pnpm --filter piattaforma typecheck`
+  - lint: `nvm use 22.15.0; pnpm --filter piattaforma lint`
+  - dev: `nvm use 22.15.0; pnpm --filter piattaforma dev`
+- **DB locale:** l'utente psql del container è **`pv`**, non `postgres`. Query:
+  `docker compose exec -T postgres psql -U pv -d passaggio_veloce -c "<sql>"`
 
 ---
 
@@ -27,11 +32,14 @@ Questo task **non tocca il testo dei Termini**: sposta solo i numeri nella fonte
 
 **Files:**
 - Modify: `apps/piattaforma/src/lib/legal/clausole-vessatorie.ts`
+- Modify: `apps/piattaforma/src/app/(auth)/register/register-wizard.tsx:1069-1071`
 - Test: `apps/piattaforma/src/lib/legal/clausole-vessatorie.test.ts`
 
 **Interfaces:**
 - Consumes: niente.
-- Produces: `ART_APPROVAZIONE_SPECIFICA = 19`, `CLAUSOLE_VESSATORIE = [3,5,7,8,10,11,12,13,17,18]`, `DESCRIZIONI_VESSATORIE` con le chiavi `17` (dati terzi) e `18` (foro), `TERMS_VERSION = '2026-07-14'`. Consumati da Task 2 (`termini/page.tsx`) e, già oggi, da `register-wizard.tsx` (che non va toccato: legge la fonte unica).
+- Produces: `ART_APPROVAZIONE_SPECIFICA = 19`, `CLAUSOLE_VESSATORIE = [3,5,7,8,10,11,12,13,17,18]`, `DESCRIZIONI_VESSATORIE` con le chiavi `17` (dati terzi) e `18` (foro), `TERMS_VERSION = '2026-07-14'`, `elencoDescrizioniVessatorie()`. Consumati da Task 2 (`termini/page.tsx`) e da `register-wizard.tsx`.
+
+> **Perché il wizard è in questo task.** La checkbox di registrazione mostra i numeri **generati** dalla fonte unica (`elencoClausoleVessatorie()`), ma la parentesi che li descrive — `(prezzo del servizio e sue variazioni, …, foro competente)`, righe 1069-1071 — è **prosa scritta a mano** che enumera le 9 clausole attuali. Aggiungendo la decima, la checkbox elencherebbe **10 numeri e 9 descrizioni**: l'utente approverebbe specificamente una clausola che la sua stessa checkbox non nomina — che è precisamente ciò che l'art. 1341 c.c. pretende. La review della release precedente aveva già marcato questa prosa come «prossimo anello debole della catena». Non si rattoppa la prosa: si **genera** dalla fonte unica, e l'anello si chiude.
 
 - [ ] **Step 1: Aggiornare il test alle attese nuove (rosso atteso)**
 
@@ -62,6 +70,31 @@ Aggiungere in coda al `describe` un test che blinda il significato, non solo il 
     expect(DESCRIZIONI_VESSATORIE[17]).toMatch(/dati di venditori e acquirenti/i);
     expect(DESCRIZIONI_VESSATORIE[18]).toMatch(/foro/i);
   });
+
+  it('la prosa descrittiva della checkbox copre TUTTE le clausole elencate', () => {
+    // La checkbox di registrazione mostrava i numeri generati dalla fonte
+    // unica ma una parentesi descrittiva scritta a mano. Alla decima clausola
+    // avrebbe elencato 10 numeri e 9 descrizioni: l'utente approverebbe
+    // "specificamente" (art. 1341 c.c.) una clausola che la checkbox non
+    // nomina. Da qui in poi la prosa è generata: non può più divergere.
+    const prosa = elencoDescrizioniVessatorie();
+    for (const n of CLAUSOLE_VESSATORIE) {
+      expect(prosa).toContain(DESCRIZIONI_VESSATORIE[n]);
+    }
+  });
+```
+
+Aggiornare anche l'import in testa al file di test:
+
+```ts
+import {
+  ART_APPROVAZIONE_SPECIFICA,
+  CLAUSOLE_VESSATORIE,
+  DESCRIZIONI_VESSATORIE,
+  TERMS_VERSION,
+  elencoClausoleVessatorie,
+  elencoDescrizioniVessatorie,
+} from './clausole-vessatorie';
 ```
 
 - [ ] **Step 2: Eseguire il test e verificare che FALLISCA**
@@ -112,16 +145,63 @@ export const DESCRIZIONI_VESSATORIE: Record<(typeof CLAUSOLE_VESSATORIE)[number]
 export const TERMS_VERSION = '2026-07-14';
 ```
 
+La funzione `elencoClausoleVessatorie()` in coda al file resta **invariata**. Aggiungere sotto di essa il nuovo helper:
+
+```ts
+/**
+ * Le descrizioni nell'ordine dell'elenco, per la parentesi della checkbox in
+ * registrazione: "prezzo del servizio…, …, deroga alla competenza territoriale
+ * (foro esclusivo)".
+ *
+ * Era prosa scritta a mano accanto a un elenco di numeri generato: 10 numeri e
+ * 9 descrizioni sarebbero bastati a far approvare "specificamente" (art. 1341
+ * c.c.) una clausola che la checkbox non nominava. Generandola, non può più
+ * divergere dall'elenco.
+ */
+export function elencoDescrizioniVessatorie(): string {
+  return CLAUSOLE_VESSATORIE.map((n) => DESCRIZIONI_VESSATORIE[n]).join(', ');
+}
+```
+
 - [ ] **Step 4: Eseguire il test e verificare che PASSI**
 
-Run: `pnpm --filter piattaforma test -- clausole-vessatorie`
-Expected: PASS, 8 test.
+Run (PowerShell): `nvm use 22.15.0; pnpm --filter piattaforma test -- clausole-vessatorie`
+Expected: PASS, 9 test.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Generare dalla fonte unica anche la parentesi della checkbox**
+
+In `apps/piattaforma/src/app/(auth)/register/register-wizard.tsx`, sostituire la prosa scritta a mano (righe 1069-1071):
+
+```tsx
+          (prezzo del servizio e sue variazioni, condizioni di prelievo, regime fiscale e trattenute,
+          manleva sull&apos;aggiornamento della visura, penali, attestazione della firma da parte del
+          Gestore, sospensione, limitazioni di responsabilità, foro competente).
+```
+
+con:
+
+```tsx
+          ({elencoDescrizioniVessatorie()}).
+```
+
+Aggiungere `elencoDescrizioniVessatorie` all'import **già esistente** da `@/lib/legal/clausole-vessatorie` (il file importa già `elencoClausoleVessatorie`: aggiungere il nome nella stessa graffa, non creare un secondo import).
+
+- [ ] **Step 6: Verificare nel browser (non saltabile)**
+
+Run: `nvm use 22.15.0; pnpm --filter piattaforma dev`, poi `http://localhost:3000/register`, avanzare fino allo **step 4 (Pagamento e condizioni)**.
+
+Expected: la checkbox delle vessatorie elenca i numeri `3, 5, 7, 8, 10, 11, 12, 13, 17, 18` **e** dieci descrizioni fra parentesi, tra cui «garanzia e manleva sui dati di venditori e acquirenti». **Contare numeri e descrizioni: devono essere dieci e dieci.** Verificare che non compaiano parole incollate o doppie parentesi — i byte del sorgente non provano il testo renderizzato, il JSX mangia gli spazi a ridosso dei tag.
+
+- [ ] **Step 7: Suite completa + typecheck**
+
+Run: `nvm use 22.15.0; pnpm --filter piattaforma test; pnpm --filter piattaforma typecheck`
+Expected: suite verde (non solo il file delle clausole: la fonte unica ha altri consumer) e typecheck exit 0.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add apps/piattaforma/src/lib/legal/clausole-vessatorie.ts apps/piattaforma/src/lib/legal/clausole-vessatorie.test.ts
-git commit -m "feat(termini): la clausola 17 diventa la garanzia sui dati dei terzi, il foro slitta alla 18"
+git add apps/piattaforma/src/lib/legal/clausole-vessatorie.ts apps/piattaforma/src/lib/legal/clausole-vessatorie.test.ts "apps/piattaforma/src/app/(auth)/register/register-wizard.tsx"
+git commit -m "feat(termini): la clausola 17 e' la garanzia sui dati dei terzi, il foro slitta alla 18"
 ```
 
 ---
@@ -935,13 +1015,15 @@ Il popup è un componente client con stato: navigare per URL non lo esercita. Se
 
 Sul DB locale:
 
-```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "SELECT \"popupVersion\", \"praticaId\", \"createdAt\" FROM broker_dichiarazioni ORDER BY \"createdAt\" DESC LIMIT 3;"
 ```
+docker compose exec -T postgres psql -U pv -d passaggio_veloce -c "SELECT \"popupVersion\", \"praticaId\", \"createdAt\" FROM broker_dichiarazioni ORDER BY \"createdAt\" DESC LIMIT 3;"
+```
+
+(L'utente psql del container è **`pv`**, non `postgres`.)
 
 Expected: la riga più recente (la pratica appena inviata) ha `popupVersion = v3.0`. Se ha ancora `v2.0`, il valore non arriva al backend — indagare `wizard.tsx:1608`.
 
-> Se il nome del container o del database differiscono, ricavarli da `docker ps` e da `DATABASE_URL` in `.env`. Il punto della verifica non è il comando: è che la versione nuova sia davvero **persistita**, non solo renderizzata.
+> Il punto della verifica non è il comando: è che la versione nuova sia davvero **persistita**, non solo renderizzata.
 
 - [ ] **Step 7: Commit**
 

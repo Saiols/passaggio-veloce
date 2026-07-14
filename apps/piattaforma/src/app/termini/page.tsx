@@ -23,7 +23,7 @@ export const metadata: Metadata = {
  * DA SOTTOPORRE A REVISIONE LEGALE prima del go-live, in particolare la clausola 3
  * (variazione prezzo a discrezione), le manleve (8) e le limitazioni di
  * responsabilità (13). Le clausole vessatorie ex artt. 1341-1342 c.c. sono
- * elencate alla clausola 18 e richiedono la seconda accettazione specifica
+ * elencate alla clausola 19 e richiedono la seconda accettazione specifica
  * raccolta in fase di registrazione.
  *
  * Revisione 2026-07-11: riscritte le clausole 5 (prelievo — un wallet per
@@ -33,6 +33,11 @@ export const metadata: Metadata = {
  * quattro misure distinte, motivi tassativi, incl. 12.3-bis sospensione
  * della singola utenza). Spec:
  * docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
+ *
+ * Revisione 2026-07-14: nuova clausola 17 (dati di venditori e acquirenti —
+ * PV titolare autonomo, garanzia + manleva dell'Utente). Foro → 18,
+ * approvazione specifica → 19. Spec:
+ * docs/superpowers/specs/2026-07-14-gdpr-dati-terzi-design.md
  */
 export default function TerminiPage() {
   return (
@@ -49,7 +54,7 @@ export default function TerminiPage() {
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Termini e Condizioni di Utilizzo
         </h1>
-        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-13</p>
+        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-14</p>
 
         <p className="mt-4">
           I presenti Termini e Condizioni (i &laquo;<strong>Termini</strong>&raquo;) disciplinano
@@ -402,11 +407,66 @@ export default function TerminiPage() {
               Informativa Privacy
             </Link>
             , conforme al Regolamento (UE) 2016/679 (GDPR), che l&apos;Utente dichiara di aver preso
-            visione.
+            visione. I dati di venditori e acquirenti sono disciplinati dalla clausola 17 e
+            dall&apos;
+            <Link
+              href="/privacy/clienti"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              Informativa per venditori e acquirenti
+            </Link>
+            .
           </p>
         </Section>
 
-        <Section title="17. Legge applicabile e foro competente">
+        <Section title="17. Dati di venditori, acquirenti e altri terzi">
+          <p>
+            <strong>17.1 &mdash; Ruoli.</strong> Nel caricare sulla Piattaforma i dati personali di
+            venditori, acquirenti e altri soggetti terzi (i &laquo;<strong>Terzi</strong>&raquo;),
+            l&apos;Utente agisce quale <strong>titolare del trattamento</strong> nei confronti dei
+            propri clienti. Passaggio Veloce tratta i dati dei Terzi quale{' '}
+            <strong>titolare autonomo</strong>, per le proprie finalità (erogazione del servizio,
+            prevenzione delle frodi, adempimenti fiscali e di legge), e{' '}
+            <strong>non</strong> in qualità di responsabile del trattamento ai sensi
+            dell&apos;art. 28 GDPR.
+          </p>
+          <p>
+            <strong>17.2 &mdash; Garanzia dell&apos;Utente.</strong> L&apos;Utente garantisce di
+            aver reso ai Terzi l&apos;informativa prevista dall&apos;art. 13 GDPR e di averli
+            informati che i loro dati sono comunicati a Passaggio Veloce per la gestione della
+            pratica, e di avere titolo per conferirli.
+          </p>
+          <p>
+            <strong>17.3 &mdash; Informativa di Passaggio Veloce.</strong> Passaggio Veloce rende
+            ai Terzi la propria informativa ai sensi dell&apos;art. 14 GDPR (
+            <Link
+              href="/privacy/clienti"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              Informativa per venditori e acquirenti
+            </Link>
+            ), anche tramite le comunicazioni email sull&apos;avanzamento della pratica.
+          </p>
+          <p>
+            <strong>17.4 &mdash; Minimizzazione.</strong> L&apos;Utente carica esclusivamente i
+            dati e i documenti necessari alla lavorazione della pratica e si astiene dal conferire
+            dati ulteriori.
+          </p>
+          <p>
+            <strong>17.5 &mdash; Manleva.</strong> L&apos;Utente tiene indenne Passaggio Veloce da
+            ogni pretesa, reclamo, contestazione o sanzione, anche dell&apos;Autorità Garante, che
+            derivi dalla violazione delle garanzie di cui alle clausole 17.2 e 17.4 (clausola
+            vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+          </p>
+          <p>
+            <strong>17.6 &mdash; Violazioni dei dati personali.</strong> Ciascuna parte informa
+            l&apos;altra <strong>senza ingiustificato ritardo</strong> di ogni violazione di dati
+            personali (art. 4 n. 12 GDPR) che riguardi i dati dei Terzi trattati tramite la
+            Piattaforma, e coopera per gli adempimenti di cui agli artt. 33 e 34 GDPR.
+          </p>
+        </Section>
+
+        <Section title="18. Legge applicabile e foro competente">
           <p>
             I presenti Termini sono regolati dalla <strong>legge italiana</strong>. Per ogni
             controversia relativa alla loro interpretazione ed esecuzione è competente in via
@@ -416,7 +476,7 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="18. Approvazione specifica delle clausole (artt. 1341 e 1342 c.c.)">
+        <Section title="19. Approvazione specifica delle clausole (artt. 1341 e 1342 c.c.)">
           <p>
             Ai sensi e per gli effetti degli <strong>artt. 1341 e 1342 c.c.</strong>, l&apos;Utente
             dichiara di aver letto e di <strong>approvare specificamente</strong> le seguenti

@@ -13,9 +13,13 @@ export const metadata: Metadata = {
 };
 
 /**
- * Boilerplate Privacy Policy ITA. Da rivedere con il legale prima del
- * lancio in prod (B10 / B11): aggiungere DPO, base giuridica specifiche,
- * ricorso al Garante, periodo di conservazione preciso per categoria.
+ * Privacy Policy per gli UTENTI REGISTRATI (broker e agenzie). I dati di
+ * venditori e acquirenti — soggetti terzi che non hanno un rapporto con noi —
+ * hanno un'informativa dedicata ex art. 14: `app/privacy/clienti/page.tsx`.
+ *
+ * Da rivedere con il legale prima del lancio in prod: aggiungere DPO e
+ * ricorso al Garante per categoria.
+ * Spec: docs/superpowers/specs/2026-07-14-gdpr-dati-terzi-design.md
  */
 export default function PrivacyPage() {
   return (
@@ -26,7 +30,7 @@ export default function PrivacyPage() {
           url: siteUrl('/privacy'),
           name: 'Privacy Policy',
           description: 'Informativa privacy di Passaggio Veloce.',
-          lastModified: '2026-06-05',
+          lastModified: '2026-07-14',
         })}
       />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
@@ -34,7 +38,7 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-[12px] text-pv-slate-500">
-          Ultimo aggiornamento: 2026-06-05
+          Ultimo aggiornamento: 2026-07-14
         </p>
 
         <Section title="Titolare del trattamento">
@@ -63,8 +67,26 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Dati operativi</strong>: documenti caricati per le
-              pratiche (libretto, CI/CF, visure, ecc.), dati estratti via
+              pratiche (libretto di circolazione, carta d&apos;identità,
+              patente, passaporto, codice fiscale, visure), dati estratti via
               OCR, comunicazioni con le agenzie.
+            </li>
+            <li>
+              <strong>Dati di venditori e acquirenti</strong>{' '}
+              (soggetti terzi rispetto all&apos;utente registrato), conferiti
+              dall&apos;utente
+              per la lavorazione della pratica. Quando la pratica lo richiede
+              includono <strong>permesso di soggiorno</strong>,{' '}
+              <strong>certificato di morte</strong> e atti di successione,
+              procure e autorizzazioni del giudice tutelare. Rispetto a questi
+              dati Passaggio Veloce è titolare autonomo: v.{' '}
+              <Link
+                href="/privacy/clienti"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                informativa per venditori e acquirenti
+              </Link>
+              .
             </li>
             <li>
               <strong>Dati finanziari</strong>: addebiti, payout, transazioni
@@ -101,10 +123,19 @@ export default function PrivacyPage() {
 
         <Section title="Conservazione">
           <p>
-            I dati delle pratiche sono conservati per la durata del rapporto
-            contrattuale e per il periodo previsto dalla normativa fiscale
-            (10 anni). I dati di account eliminato sono soft-deleted per 90
-            giorni e poi rimossi dai backup attivi (compliance GDPR).
+            I documenti rimossi vengono cancellati definitivamente (dal
+            database e dallo storage) <strong>90 giorni</strong> dopo la
+            rimozione. Le pratiche rimaste in <strong>bozza</strong> e mai
+            inviate, con i relativi documenti, vengono eliminate dopo{' '}
+            <strong>30 giorni</strong>.
+          </p>
+          <p>
+            I dati delle pratiche <strong>portate a termine</strong> e i dati
+            contabili e fiscali sono conservati per il periodo imposto dalla
+            normativa fiscale e dagli obblighi connessi agli adempimenti sul
+            veicolo. I dati di un account eliminato sono soft-deleted per{' '}
+            <strong>90 giorni</strong> e poi rimossi, fatti salvi gli obblighi
+            di conservazione di legge.
           </p>
         </Section>
 
@@ -159,8 +190,9 @@ export default function PrivacyPage() {
               Unione Europea.
             </li>
             <li>
-              <strong>Cloudflare R2</strong>: archiviazione dei documenti
-              caricati.
+              <strong>Vercel Blob</strong>: archiviazione dei documenti
+              caricati (libretti, documenti di identità, visure), regione
+              Unione Europea.
             </li>
           </ul>
         </Section>
@@ -185,10 +217,19 @@ export default function PrivacyPage() {
         </Section>
 
         <p className="mt-8 text-[11px] text-pv-slate-500">
-          Documento boilerplate, in attesa di revisione legale (B10/B11). Per
-          la versione definitiva contatta{' '}
+          Documento in versione tecnica, soggetto a revisione legale prima
+          dell&apos;entrata in vigore definitiva. Se sei un venditore o un
+          acquirente e i tuoi dati ci sono stati trasmessi da un
+          professionista, l&apos;informativa che ti riguarda è{' '}
+          <Link
+            href="/privacy/clienti"
+            className="font-semibold text-pv-navy-700 hover:underline"
+          >
+            questa
+          </Link>
+          . Vedi anche la{' '}
           <Link href="/cookie" className="font-semibold text-pv-navy-700 hover:underline">
-            la cookie policy
+            cookie policy
           </Link>{' '}
           e i{' '}
           <Link href="/termini" className="font-semibold text-pv-navy-700 hover:underline">

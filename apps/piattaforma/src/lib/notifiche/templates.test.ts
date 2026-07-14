@@ -328,6 +328,7 @@ describe('N26 email di partenza', () => {
     const { html, text } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
     expect(html).not.toContain('credito di benvenuto');
     expect(text).not.toContain('€');
+    expect(html).not.toContain('€');
   });
 
   it('con codice: blocco credito col codice e importo', () => {
@@ -349,7 +350,8 @@ describe('N26 email di partenza', () => {
   });
 
   it('include il link di disiscrizione (email a freddo)', () => {
-    const { html } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
+    const { html, text } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
     expect(html).toContain('https://passaggioveloce.it/unsubscribe?token=uns123');
+    expect(text).toContain('https://passaggioveloce.it/unsubscribe?token=uns123');
   });
 });

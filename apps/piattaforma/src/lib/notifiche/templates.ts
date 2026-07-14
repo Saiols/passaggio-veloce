@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Template MVP per le notifiche email. Testi placeholder: i copy definitivi
  * verranno forniti dal team sales (blocco B7 del piano-implementazione).
  *
@@ -1328,14 +1328,14 @@ export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent
   const isBroker = p.categoria === 'BROKER';
   const ctaLabel = isBroker ? 'Registra la tua concessionaria' : 'Registra la tua agenzia';
   const contesto = isBroker
-    ? 'Carichi la pratica in 2 minuti, un’agenzia della tua zona la prende in carico e la segui in tempo reale.'
+    ? 'Carichi la pratica in 2 minuti, un\'agenzia della tua zona la prende in carico e la segui in tempo reale.'
     : 'Ricevi pratiche già complete e verificate dalla tua provincia, e decidi tu quali accettare.';
 
   const nome = escapeHtml(p.nomeReferente);
   const rag = escapeHtml(p.ragioneSociale);
 
   const checklist = [
-    'Carta d’identità e tessera sanitaria del titolare (fronte e retro)',
+    'Carta d\'identità e tessera sanitaria del titolare (fronte e retro)',
     'Visura camerale in PDF (dal Registro Imprese)',
     'P.IVA, PEC, codice SDI e regime fiscale',
     'IBAN aziendale',
@@ -1351,13 +1351,13 @@ export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent
   const codiceHtml = p.codice
     ? `<div style="margin-top:18px;background:#fff7ed;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:14px;color:#0a2540">
         🎁 <strong>Hai ${p.codice.importoEuro} € di credito di benvenuto.</strong><br>
-        Il codice <strong>${escapeHtml(p.codice.code)}</strong> è già incluso nel link: lo troverai precompilato all’ultimo passaggio, non devi ricordartelo.
+        Il codice <strong>${escapeHtml(p.codice.code)}</strong> è già incluso nel link: lo troverai precompilato all\'ultimo passaggio, non devi ricordartelo.
       </div>`
     : '';
 
   const body = `
     <p style="margin:0 0 12px;font-size:15px;color:#0a2540">Buongiorno ${nome},</p>
-    <p style="margin:0 0 12px;font-size:14px;color:#334155">come d’accordo nella nostra telefonata, ecco il link per attivare <strong>${rag}</strong> su Passaggio Veloce. Bastano circa 5 minuti.</p>
+    <p style="margin:0 0 12px;font-size:14px;color:#334155">come d\'accordo nella nostra telefonata, ecco il link per attivare <strong>${rag}</strong> su Passaggio Veloce. Bastano circa 5 minuti.</p>
     <p style="margin:0 0 18px;font-size:14px;color:#334155">${escapeHtml(contesto)}</p>
     <div style="margin:0 0 18px">${ctaButton(p.linkUrl, ctaLabel)}</div>
     <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0a2540">Cosa tenere a portata di mano</p>
@@ -1368,12 +1368,12 @@ export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent
   `;
 
   const codiceText = p.codice
-    ? `\n\nHai ${p.codice.importoEuro} € di credito di benvenuto. Il codice ${p.codice.code} è già incluso nel link e precompilato all’ultimo passaggio.`
+    ? `\n\nHai ${p.codice.importoEuro} € di credito di benvenuto. Il codice ${p.codice.code} è già incluso nel link e precompilato all\'ultimo passaggio.`
     : '';
 
   const text = `Buongiorno ${p.nomeReferente},
 
-come d’accordo nella nostra telefonata, ecco il link per attivare ${p.ragioneSociale} su Passaggio Veloce. Bastano circa 5 minuti.
+come d\'accordo nella nostra telefonata, ecco il link per attivare ${p.ragioneSociale} su Passaggio Veloce. Bastano circa 5 minuti.
 
 ${contesto}
 
@@ -1382,7 +1382,7 @@ Registrati qui: ${p.linkUrl}
 Cosa tenere a portata di mano:
 - ${checklist.join('\n- ')}${codiceText}
 
-Per qualsiasi cosa trovi i nostri contatti in fondo all’email.
+Per qualsiasi cosa trovi i nostri contatti in fondo all\'email.
 
 Per non ricevere più queste email: ${p.unsubUrl}`;
 

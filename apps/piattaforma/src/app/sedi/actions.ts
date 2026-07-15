@@ -157,6 +157,20 @@ export async function updateSedeAction(
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
 
+  // Coordinate: preferisci quelle catturate dal client (Google Places); se
+  // assenti (indirizzo digitato a mano / non ricambiato) geocoda server-side
+  // best-effort. Non owner-gated: chiunque possa modificare l'anagrafica
+  // aggiorna anche la posizione sulla mappa distribuzione.
+  const coords =
+    parseCoords(formData.get('lat'), formData.get('lng')) ??
+    (await geocodeAddress({
+      indirizzo: f.indirizzo,
+      civico: f.civico,
+      citta: f.citta,
+      cap: f.cap,
+      provincia: f.provincia,
+    }));
+
   await prisma.sede.update({
     where: { id: sedeId },
     data: {
@@ -173,6 +187,9 @@ export async function updateSedeAction(
       // Si OMETTONO, non si validano: chi forgia la POST non scrive nulla, e chi
       // salva la sola anagrafica non azzera l'IBAN (parseSedeFields mappa '' → null).
       ...(ctx.isOwner ? { iban: f.iban, payoutThresholdCent: f.payoutThresholdCent } : {}),
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
+      geocodedAt: coords ? new Date() : null,
     },
   });
 

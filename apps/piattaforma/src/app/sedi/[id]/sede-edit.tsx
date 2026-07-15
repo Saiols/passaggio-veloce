@@ -47,6 +47,8 @@ export function SedeEdit({
   const [f, setF] = useState({
     ...data,
     payoutEuro: (data.payoutThresholdCent / 100).toString(),
+    lat: '',
+    lng: '',
   });
 
   const set = (k: keyof typeof f, v: string) => setF((s) => ({ ...s, [k]: v }));
@@ -58,6 +60,8 @@ export function SedeEdit({
       citta: p.citta,
       cap: p.cap,
       provincia: p.provincia,
+      lat: p.lat != null ? String(p.lat) : '',
+      lng: p.lng != null ? String(p.lng) : '',
     }));
 
   const schema = useMemo(() => {
@@ -82,7 +86,7 @@ export function SedeEdit({
   const { field, gatedSubmit } = useFieldErrorsState(errors);
 
   const cancel = () => {
-    setF({ ...data, payoutEuro: (data.payoutThresholdCent / 100).toString() });
+    setF({ ...data, payoutEuro: (data.payoutThresholdCent / 100).toString(), lat: '', lng: '' });
     setError(null);
     setEditing(false);
   };
@@ -106,6 +110,8 @@ export function SedeEdit({
       // quindi il round-trip è un no-op lato server.
       fd.set('iban', f.iban);
       fd.set('payoutThresholdEuro', f.payoutEuro);
+      fd.set('lat', f.lat);
+      fd.set('lng', f.lng);
       const res = await updateSedeAction(sedeId, fd);
       if (res.ok) {
         setEditing(false);

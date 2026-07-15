@@ -100,6 +100,7 @@ export function RegisterWizard({
 } = {}) {
   const searchParams = useSearchParams();
   const referralCode = searchParams.get('ref') ?? undefined;
+  const initialPromoCode = searchParams.get('promo') ?? undefined;
   const [step, setStep] = useState(1);
   const [data, setData] = useState<WizardData>(
     forcedCompanyType
@@ -390,6 +391,7 @@ export function RegisterWizard({
             <PaymentStep
               defaultValues={data.payment}
               companyType={data.company?.type}
+              initialPromoCode={initialPromoCode}
               onBack={() => setStep(3)}
               onSubmit={handlePayment}
               isSubmitting={false}
@@ -917,12 +919,14 @@ function DocumentsStep({
 function PaymentStep({
   defaultValues,
   companyType,
+  initialPromoCode,
   onBack,
   onSubmit,
   isSubmitting,
 }: {
   defaultValues?: PaymentData;
   companyType?: 'DEALER' | 'AGENZIA';
+  initialPromoCode?: string;
   onBack: () => void;
   onSubmit: (data: PaymentData, promoCode: string) => void;
   isSubmitting: boolean;
@@ -938,9 +942,21 @@ function PaymentStep({
     mode: 'onChange',
   });
 
-  const [promoCode, setPromoCode] = useState('');
+  const [promoCode, setPromoCode] = useState(initialPromoCode ?? '');
   const [promoState, setPromoState] = useState<PromoCheckResult | null>(null);
   const [checkingPromo, setCheckingPromo] = useState(false);
+
+  // Auto-apply: se arriviamo dal link /i/<token> con ?promo=, validiamo subito
+  // così il credito risulta già applicato senza click.
+  useEffect(() => {
+    if (!initialPromoCode) return;
+    let alive = true;
+    setCheckingPromo(true);
+    checkPromoCodeAction(initialPromoCode)
+      .then((s) => { if (alive) setPromoState(s); })
+      .finally(() => { if (alive) setCheckingPromo(false); });
+    return () => { alive = false; };
+  }, [initialPromoCode]);
 
   const applyPromo = async () => {
     if (!promoCode.trim()) return;

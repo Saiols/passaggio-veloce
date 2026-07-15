@@ -27,7 +27,11 @@ export const registerStep1AccountSchema = z
     nome: z.string().min(1, 'Nome obbligatorio'),
     cognome: z.string().min(1, 'Cognome obbligatorio'),
     codiceFiscale: codiceFiscaleSchema,
-    dataNascita: z.coerce.date({ message: 'Data di nascita obbligatoria' }),
+    // errorMap (non `message`) così anche il caso "data vuota → Invalid Date"
+    // mostra il messaggio italiano invece del default zod "Invalid date".
+    dataNascita: z.coerce.date({
+      errorMap: () => ({ message: 'Data di nascita obbligatoria' }),
+    }),
     luogoNascita: z.string().min(1, 'Luogo di nascita obbligatorio'),
   })
   .refine((d) => d.password === d.passwordConfirm, {

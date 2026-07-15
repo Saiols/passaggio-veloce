@@ -10,7 +10,9 @@ import {
   registerStep1AccountSchema,
   registerStep2CompanySchema,
   registerStep4PaymentSchema,
+  registerSedeSchema,
 } from '@/lib/auth/schemas';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { Alert, Button, Checkbox, Field, Input, PasswordInput, Select } from '@/components/ui';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { WizardProgress } from '@/components/wizard-progress';
@@ -440,7 +442,7 @@ function AccountStep({
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<AccountData>({
     resolver: zodResolver(registerStep1AccountSchema),
     defaultValues: formDefaults,
@@ -448,7 +450,7 @@ function AccountStep({
   });
 
   return (
-    <form onSubmit={handleSubmit(onNext)} className="space-y-4">
+    <form onSubmit={handleSubmit(onNext)} noValidate className="space-y-4">
       <Field label="Email" required error={errors.email?.message}>
         <Input type="email" autoComplete="email" invalid={!!errors.email} {...register('email')} />
       </Field>
@@ -498,7 +500,7 @@ function AccountStep({
         </Field>
       </div>
 
-      <Button type="submit" disabled={!isValid} fullWidth>
+      <Button type="submit" fullWidth>
         Avanti
       </Button>
     </form>
@@ -525,7 +527,7 @@ function CompanyStep({
     handleSubmit,
     setValue,
     watch,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<CompanyData>({
     resolver: zodResolver(registerStep2CompanySchema),
     defaultValues: forcedCompanyType
@@ -548,7 +550,7 @@ function CompanyStep({
   };
 
   return (
-    <form onSubmit={handleSubmit(onNext)} className="space-y-4">
+    <form onSubmit={handleSubmit(onNext)} noValidate className="space-y-4">
       {forcedCompanyType ? (
         <input type="hidden" {...register('type')} value={forcedCompanyType} />
       ) : (
@@ -633,7 +635,7 @@ function CompanyStep({
         <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto">
           Indietro
         </Button>
-        <Button type="submit" disabled={!isValid} className="sm:flex-1">
+        <Button type="submit" className="sm:flex-1">
           Avanti
         </Button>
       </div>
@@ -811,7 +813,7 @@ function DocumentsStep({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="space-y-4">
       {kycErrors.length > 0 && (
         <Alert variant="error" title="Verifica documenti non superata">
           <ul className="list-disc space-y-1 pl-5">
@@ -900,7 +902,7 @@ function DocumentsStep({
         </Button>
         <Button
           type="submit"
-          disabled={!validation.ok || isVerifying}
+          disabled={isVerifying}
           loading={isVerifying}
           loadingLabel="Verifica documenti in corso…"
           className="sm:flex-1"
@@ -935,7 +937,7 @@ function PaymentStep({
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<PaymentData>({
     resolver: zodResolver(registerStep4PaymentSchema),
     defaultValues,
@@ -978,7 +980,7 @@ function PaymentStep({
   };
 
   return (
-    <form onSubmit={handleSubmit((v) => onSubmit(v, promoCode))} className="space-y-4">
+    <form onSubmit={handleSubmit((v) => onSubmit(v, promoCode))} noValidate className="space-y-4">
       <Field label="IBAN" required error={errors.iban?.message}>
         <Input
           invalid={!!errors.iban}
@@ -1100,7 +1102,6 @@ function PaymentStep({
         </Button>
         <Button
           type="submit"
-          disabled={!isValid}
           loading={isSubmitting}
           className="sm:flex-1"
         >
@@ -1158,7 +1159,6 @@ function SediStep({
   const [sedi, setSedi] = useState<SedeInput[]>(
     defaultValues && defaultValues.length > 0 ? defaultValues : [firstFromCompany],
   );
-  const [error, setError] = useState<string | null>(null);
 
   const update = (i: number, field: keyof SedeInput, value: string) => {
     setSedi((arr) => arr.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)));
@@ -1174,33 +1174,17 @@ function SediStep({
       ),
     );
 
-  const ibanOk = (v: string) => v.trim() === '' || /^IT\d{2}[A-Z0-9]{1,30}$/i.test(v.trim());
-  const valid =
-    sedi.length >= 1 &&
-    sedi.every(
-      (s) =>
-        s.nome.trim().length >= 2 &&
-        s.indirizzo.trim().length >= 2 &&
-        s.citta.trim().length >= 2 &&
-        s.cap.trim().length >= 4 &&
-        s.provincia.trim().length === 2 &&
-        ibanOk(s.iban),
-    );
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!valid) {
-      setError(
-        'Controlla i campi di ogni sede: nome, indirizzo, città, CAP, provincia sono obbligatori e l’IBAN (se inserito) deve essere un IBAN italiano valido.',
-      );
-      return;
-    }
-    setError(null);
-    onSubmit(sedi);
-  };
+  // Errori per-sede con chiave namespaced `${i}:${campo}`: riusa lo schema sede
+  // condiviso (stessi messaggi del server, nessuna divergenza).
+  const errors: Record<string, string> = {};
+  sedi.forEach((s, i) => {
+    const e = zodFieldErrors(registerSedeSchema, s);
+    for (const [k, v] of Object.entries(e)) errors[`${i}:${k}`] = v;
+  });
+  const { field: fieldErr, gatedSubmit } = useFieldErrorsState(errors);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={gatedSubmit(() => onSubmit(sedi))} noValidate className="space-y-4">
       <Alert variant="info">
         Definisci le sedi operative della tua azienda. Se ne hai una sola, è già pronta: clicca
         “Completa registrazione”. Puoi aggiungerne altre ora o in seguito dal pannello.
@@ -1227,23 +1211,49 @@ function SediStep({
             <AddressAutocomplete onSelect={(p) => applyAddress(i, p)} />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Nome sede" required>
-              <Input value={s.nome} onChange={(e) => update(i, 'nome', e.target.value)} />
+            <Field label="Nome sede" required error={fieldErr(`${i}:nome`).error}>
+              <Input
+                value={s.nome}
+                invalid={fieldErr(`${i}:nome`).invalid}
+                onBlur={fieldErr(`${i}:nome`).onBlur}
+                onChange={(e) => update(i, 'nome', e.target.value)}
+              />
             </Field>
-            <Field label="Indirizzo" required>
-              <Input value={s.indirizzo} onChange={(e) => update(i, 'indirizzo', e.target.value)} />
+            <Field label="Indirizzo" required error={fieldErr(`${i}:indirizzo`).error}>
+              <Input
+                value={s.indirizzo}
+                invalid={fieldErr(`${i}:indirizzo`).invalid}
+                onBlur={fieldErr(`${i}:indirizzo`).onBlur}
+                onChange={(e) => update(i, 'indirizzo', e.target.value)}
+              />
             </Field>
             <Field label="Civico">
               <Input value={s.civico} onChange={(e) => update(i, 'civico', e.target.value)} />
             </Field>
-            <Field label="Città" required>
-              <Input value={s.citta} onChange={(e) => update(i, 'citta', e.target.value)} />
+            <Field label="Città" required error={fieldErr(`${i}:citta`).error}>
+              <Input
+                value={s.citta}
+                invalid={fieldErr(`${i}:citta`).invalid}
+                onBlur={fieldErr(`${i}:citta`).onBlur}
+                onChange={(e) => update(i, 'citta', e.target.value)}
+              />
             </Field>
-            <Field label="CAP" required>
-              <Input value={s.cap} onChange={(e) => update(i, 'cap', e.target.value)} />
+            <Field label="CAP" required error={fieldErr(`${i}:cap`).error}>
+              <Input
+                value={s.cap}
+                invalid={fieldErr(`${i}:cap`).invalid}
+                onBlur={fieldErr(`${i}:cap`).onBlur}
+                onChange={(e) => update(i, 'cap', e.target.value)}
+              />
             </Field>
-            <Field label="Provincia (sigla)" required>
-              <Input maxLength={2} value={s.provincia} onChange={(e) => update(i, 'provincia', e.target.value)} />
+            <Field label="Provincia (sigla)" required error={fieldErr(`${i}:provincia`).error}>
+              <Input
+                maxLength={2}
+                value={s.provincia}
+                invalid={fieldErr(`${i}:provincia`).invalid}
+                onBlur={fieldErr(`${i}:provincia`).onBlur}
+                onChange={(e) => update(i, 'provincia', e.target.value)}
+              />
             </Field>
             <Field label="Telefono">
               <Input value={s.telefono} onChange={(e) => update(i, 'telefono', e.target.value)} />
@@ -1253,11 +1263,12 @@ function SediStep({
             </Field>
             <Field
               label="IBAN dedicato (opzionale, altrimenti quello aziendale)"
-              error={!ibanOk(s.iban) ? 'IBAN italiano non valido' : undefined}
+              error={fieldErr(`${i}:iban`).error}
             >
               <Input
                 value={s.iban}
-                invalid={!ibanOk(s.iban)}
+                invalid={fieldErr(`${i}:iban`).invalid}
+                onBlur={fieldErr(`${i}:iban`).onBlur}
                 placeholder="IT60X0542811101000000123456"
                 onChange={(e) => update(i, 'iban', e.target.value)}
               />
@@ -1276,13 +1287,11 @@ function SediStep({
         </button>
       </div>
 
-      {error && <Alert variant="error">{error}</Alert>}
-
       <div className="flex flex-col-reverse gap-3 sm:flex-row">
         <Button type="button" variant="secondary" onClick={onBack} className="sm:w-auto" disabled={isSubmitting}>
           Indietro
         </Button>
-        <Button type="submit" disabled={!valid} loading={isSubmitting} className="sm:flex-1">
+        <Button type="submit" loading={isSubmitting} className="sm:flex-1">
           Completa registrazione
         </Button>
       </div>

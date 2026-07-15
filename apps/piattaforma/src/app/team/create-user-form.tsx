@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { InlineSpinner, PasswordInput } from '@/components/ui';
+import { useMemo, useState, useTransition } from 'react';
+import { z } from 'zod';
+import { passwordSchema } from '@pv/lib';
+import { Button, Field, Input, PasswordInput, Select } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { MatricePermessi } from '@/components/permessi/matrice-permessi';
 import { applicaPreset, permessiConcedibili } from '@/components/permessi/matrice-logic';
 import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { createUserDirectAction } from './actions';
 
 export function CreateUserForm({
@@ -19,7 +22,6 @@ export function CreateUserForm({
   sedi?: { id: string; nome: string }[];
   companyType: CompanyTypeP;
   assegnabili: Permesso[];
-  /** Il chiamante ha `team.permessi`. Se no, la matrice non si mostra. */
   puoScegliere: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -30,10 +32,35 @@ export function CreateUserForm({
     applicaPreset('OPERATORE_BASE', companyType, permessiConcedibili(assegnabili, 'OPERATORE')),
   );
 
+  const [email, setEmail] = useState('');
+  const [nome, setNome] = useState('');
+  const [cognome, setCognome] = useState('');
+  const [password, setPassword] = useState('');
+  const [sedeId, setSedeId] = useState('');
+
+  const needSede = sedi.length > 1;
+  const schema = useMemo(
+    () =>
+      z.object({
+        email: z.string().email('Email non valida'),
+        nome: z.string().trim().min(1, 'Nome obbligatorio'),
+        cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+        password: passwordSchema,
+        sedeId: needSede ? z.string().min(1, 'Seleziona una sede') : z.string().optional(),
+      }),
+    [needSede],
+  );
+
+  const errors = zodFieldErrors(schema, { email, nome, cognome, password, sedeId });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fEmail = field('email');
+  const fNome = field('nome');
+  const fCognome = field('cognome');
+  const fPassword = field('password');
+  const fSede = field('sedeId');
+
   function onRuoloChange(r: 'ADMIN_SEDE' | 'OPERATORE') {
     setRuoloSede(r);
-    // Il set concedibile cambia col ruolo: ricalcolare il preset con i NUOVI concedibili,
-    // altrimenti passando ad «Operatore» resterebbero accesi dei team.* inerti.
     setPermessi(
       applicaPreset(
         r === 'ADMIN_SEDE' ? 'ADMIN_SEDE' : 'OPERATORE_BASE',
@@ -43,21 +70,16 @@ export function CreateUserForm({
     );
   }
 
-  function handleSubmit(formData: FormData) {
+  const onValid = (): void => {
     setError(null);
     setSuccess(null);
     startTransition(async () => {
-      const email = String(formData.get('email') ?? '');
-      const nome = String(formData.get('nome') ?? '');
-      const cognome = String(formData.get('cognome') ?? '');
-      const password = String(formData.get('password') ?? '');
-      const sedeId = String(formData.get('sedeId') ?? '') || undefined;
       const res = await createUserDirectAction(
         email,
         nome,
         cognome,
         password,
-        sedeId,
+        needSede ? sedeId : undefined,
         ruoloSede,
         puoScegliere ? permessi : undefined,
       );
@@ -70,65 +92,87 @@ export function CreateUserForm({
       );
       onSuccess?.();
     });
-  }
+  };
 
   return (
-    <form action={handleSubmit} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <input
-        type="email"
-        name="email"
+    <form onSubmit={gatedSubmit(onValid)} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <Field label="Email" required error={fEmail.error} className="sm:col-span-2">
+        <Input
+          type="email"
+          name="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onBlur={fEmail.onBlur}
+          invalid={fEmail.invalid}
+          placeholder="dipendente@azienda.it"
+        />
+      </Field>
+      <Field label="Nome" required error={fNome.error}>
+        <Input
+          name="nome"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          onBlur={fNome.onBlur}
+          invalid={fNome.invalid}
+          placeholder="Nome"
+        />
+      </Field>
+      <Field label="Cognome" required error={fCognome.error}>
+        <Input
+          name="cognome"
+          value={cognome}
+          onChange={(e) => setCognome(e.target.value)}
+          onBlur={fCognome.onBlur}
+          invalid={fCognome.invalid}
+          placeholder="Cognome"
+        />
+      </Field>
+      <Field
+        label="Password iniziale"
         required
-        placeholder="dipendente@azienda.it"
-        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm sm:col-span-2"
-      />
-      <input
-        type="text"
-        name="nome"
-        required
-        placeholder="Nome"
-        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
-      />
-      <input
-        type="text"
-        name="cognome"
-        required
-        placeholder="Cognome"
-        className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
-      />
-      <PasswordInput
-        name="password"
-        required
-        minLength={8}
-        placeholder="Password iniziale (min 8, A-z, 0-9)"
-        className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
-        containerClassName="sm:col-span-2"
-      />
-      {sedi.length > 1 && (
-        <select
-          name="sedeId"
-          required
-          defaultValue=""
-          className="rounded-lg border border-pv-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="" disabled>
-            Sede…
-          </option>
-          {sedi.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.nome}
-            </option>
-          ))}
-        </select>
-      )}
-      <select
-        name="ruoloSede"
-        value={ruoloSede}
-        onChange={(e) => onRuoloChange(e.target.value as 'ADMIN_SEDE' | 'OPERATORE')}
-        className={`rounded-lg border border-pv-slate-300 px-3 py-2 text-sm ${sedi.length > 1 ? '' : 'sm:col-span-2'}`}
+        error={fPassword.error}
+        hint="Min 8, con maiuscole, minuscole e numeri"
+        className="sm:col-span-2"
       >
-        <option value="OPERATORE">Operatore</option>
-        <option value="ADMIN_SEDE">Admin di sede</option>
-      </select>
+        <PasswordInput
+          name="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onBlur={fPassword.onBlur}
+          invalid={fPassword.invalid}
+          placeholder="Password iniziale"
+        />
+      </Field>
+      {needSede && (
+        <Field label="Sede" required error={fSede.error}>
+          <Select
+            name="sedeId"
+            value={sedeId}
+            onChange={(e) => setSedeId(e.target.value)}
+            onBlur={fSede.onBlur}
+            invalid={fSede.invalid}
+          >
+            <option value="" disabled>
+              Sede…
+            </option>
+            {sedi.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nome}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      <Field label="Ruolo" className={needSede ? undefined : 'sm:col-span-2'}>
+        <Select
+          name="ruoloSede"
+          value={ruoloSede}
+          onChange={(e) => onRuoloChange(e.target.value as 'ADMIN_SEDE' | 'OPERATORE')}
+        >
+          <option value="OPERATORE">Operatore</option>
+          <option value="ADMIN_SEDE">Admin di sede</option>
+        </Select>
+      </Field>
       {puoScegliere ? (
         <div className="sm:col-span-2">
           <MatricePermessi
@@ -144,15 +188,11 @@ export function CreateUserForm({
           L&apos;utente riceverà i permessi di base. Per personalizzarli, chiedi al titolare.
         </p>
       )}
-      <button
-        type="submit"
-        disabled={pending}
-        aria-busy={pending || undefined}
-        className="inline-flex items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2"
-      >
-        {pending && <InlineSpinner className="h-4 w-4" />}
-        <span>{pending ? 'Creazione…' : 'Crea account'}</span>
-      </button>
+      <div className="sm:col-span-2">
+        <Button type="submit" loading={pending} loadingLabel="Creazione…" fullWidth>
+          Crea account
+        </Button>
+      </div>
       {error && <p className="text-sm text-pv-red-500 sm:col-span-2">{error}</p>}
       {success && <p className="text-sm text-pv-green-500 sm:col-span-2">{success}</p>}
       <LoadingOverlay show={pending} label="Creazione…" />

@@ -7,7 +7,7 @@
  * Richiede NEXT_PUBLIC_GOOGLE_MAPS_API_KEY nell'ambiente.
  */
 import { prisma } from '@pv/db';
-import { geocodeAddress } from '../src/lib/geo/geocode';
+import { geocodeAddress } from '../src/lib/geo/geocode-core';
 
 const SLEEP_MS = 120; // ~8 req/s, sotto i limiti Google
 

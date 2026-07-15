@@ -2,8 +2,10 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { z } from 'zod';
 import { Alert, Button, NumberInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors, hasBlockingErrors } from '@/components/forms';
 import {
   createSalesAgentAction,
   updateSalesAgentAction,
@@ -15,6 +17,8 @@ import {
   type SalesAgentInput,
   type CampaignInput,
 } from './actions';
+
+const nomeSchema = z.object({ nome: z.string().trim().min(1, 'Nome obbligatorio') });
 
 type Agent = {
   id: string;
@@ -382,7 +386,12 @@ function AgentModal({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const errors = zodFieldErrors(nomeSchema, { nome: data.nome });
+  const { field, reveal } = useFieldErrorsState(errors);
+
   const submit = (): void => {
+    reveal();
+    if (hasBlockingErrors(errors)) return;
     setError(null);
     startTransition(async () => {
       const res = isCreate
@@ -422,6 +431,9 @@ function AgentModal({
             onChange={(v) => setData({ ...data, nome: v })}
             required
             placeholder="Es. Simona — Veneto"
+            invalid={field('nome').invalid}
+            error={field('nome').error}
+            onBlur={field('nome').onBlur}
           />
         </div>
         <FieldSelect
@@ -544,7 +556,12 @@ function CampaignModal({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const errors = zodFieldErrors(nomeSchema, { nome: data.nome });
+  const { field, reveal } = useFieldErrorsState(errors);
+
   const submit = (): void => {
+    reveal();
+    if (hasBlockingErrors(errors)) return;
     setError(null);
     startTransition(async () => {
       const res = isCreate
@@ -590,6 +607,9 @@ function CampaignModal({
             onChange={(v) => setData({ ...data, nome: v })}
             required
             placeholder="Es. Veneto — Agenzie S0"
+            invalid={field('nome').invalid}
+            error={field('nome').error}
+            onBlur={field('nome').onBlur}
           />
         </div>
         <FieldSelect
@@ -811,6 +831,9 @@ function FieldText({
   required,
   onChange,
   placeholder,
+  invalid,
+  error,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -818,7 +841,11 @@ function FieldText({
   required?: boolean;
   onChange: (v: string) => void;
   placeholder?: string;
+  invalid?: boolean;
+  error?: string;
+  onBlur?: () => void;
 }) {
+  const borderCls = invalid ? 'border-pv-red-500 bg-pv-red-50/70' : 'border-pv-slate-300';
   return (
     <label className="block">
       <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
@@ -840,8 +867,13 @@ function FieldText({
           required={required}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+          onBlur={onBlur}
+          aria-invalid={invalid || undefined}
+          className={`mt-1 w-full rounded-[10px] border-[1.5px] px-3 py-2 text-[13px] ${borderCls}`}
         />
+      )}
+      {error && (
+        <span className="mt-0.5 block text-[10.5px] font-medium text-pv-red-500">{error}</span>
       )}
     </label>
   );

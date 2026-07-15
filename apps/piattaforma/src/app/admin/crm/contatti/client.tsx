@@ -3,8 +3,10 @@
 import { useState, useTransition, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { z } from 'zod';
 import { Alert, Button } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors, hasBlockingErrors, type FieldState } from '@/components/forms';
 import {
   createCrmContactAction,
   updateCrmContactAction,
@@ -128,6 +130,13 @@ const STATI_COLOR: Record<string, string> = {
 
 const ROLE_CAN_DELETE = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
 const ROLE_CAN_BULK = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
+
+// Obbligatori compilabili a mano nel modale contatto (cat/status hanno sempre un
+// valore di default). Stesse regole del server (createCrmContactAction).
+const contactSchema = z.object({
+  nome: z.string().trim().min(1, 'Nome obbligatorio'),
+  tel: z.string().trim().min(1, 'Telefono obbligatorio'),
+});
 
 /** Chip colorato per distinguere a colpo d'occhio broker e agenzie. */
 function CatBadge({ cat }: { cat: 'BROKER' | 'AGENZIA' }) {
@@ -804,6 +813,10 @@ function ContactModal({
   // Form state
   const [data, setData] = useState<CrmContactInput>(() => initialData(contact));
 
+  // Validazione client: gli obbligatori compilabili a mano (nome e telefono).
+  const errors = zodFieldErrors(contactSchema, { nome: data.nome, tel: data.tel });
+  const { field, reveal } = useFieldErrorsState(errors);
+
   // Permessi specifici
   const canEditPiattaforma =
     !['SALES'].includes(currentUserRole); // SALES legge solo (decisione 7 + tab Piattaforma readonly)
@@ -820,6 +833,11 @@ function ContactModal({
   };
 
   const handleSave = (): void => {
+    reveal();
+    if (hasBlockingErrors(errors)) {
+      setTab('anagrafica'); // gli obbligatori vivono lì: portaci l'utente
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const res = isCreate
@@ -912,6 +930,7 @@ function ContactModal({
               set={set}
               salesUsers={salesUsers}
               readOnly={isReadOnlyForSales}
+              field={field}
             />
           )}
           {tab === 'stato' && (
@@ -1037,6 +1056,9 @@ function FieldText({
   type = 'text',
   onChange,
   hint,
+  invalid,
+  error,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -1045,6 +1067,9 @@ function FieldText({
   type?: string;
   onChange: (v: string) => void;
   hint?: string;
+  invalid?: boolean;
+  error?: string;
+  onBlur?: () => void;
 }) {
   return (
     <label className="block">
@@ -1058,11 +1083,18 @@ function FieldText({
         required={required}
         disabled={readOnly}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] disabled:bg-pv-slate-50 disabled:text-pv-slate-500"
+        onBlur={onBlur}
+        aria-invalid={invalid || undefined}
+        className={
+          'mt-1 w-full rounded-[10px] border-[1.5px] px-3 py-2 text-[13px] disabled:bg-pv-slate-50 disabled:text-pv-slate-500 ' +
+          (invalid ? 'border-pv-red-500 bg-pv-red-50/70' : 'border-pv-slate-300')
+        }
       />
-      {hint && (
+      {error ? (
+        <span className="mt-0.5 block text-[10.5px] font-medium text-pv-red-500">{error}</span>
+      ) : hint ? (
         <span className="mt-0.5 block text-[10.5px] text-pv-slate-500">{hint}</span>
-      )}
+      ) : null}
     </label>
   );
 }
@@ -1166,7 +1198,8 @@ function TabAnagrafica({
   set,
   salesUsers,
   readOnly,
-}: TabProps & { salesUsers: SalesUser[] }) {
+  field,
+}: TabProps & { salesUsers: SalesUser[]; field: (key: string) => FieldState }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div className="sm:col-span-2">
@@ -1176,6 +1209,9 @@ function TabAnagrafica({
           required
           readOnly={readOnly}
           onChange={(v) => set('nome', v)}
+          invalid={field('nome').invalid}
+          error={field('nome').error}
+          onBlur={field('nome').onBlur}
         />
       </div>
       <FieldSelect
@@ -1196,6 +1232,9 @@ function TabAnagrafica({
         readOnly={readOnly}
         onChange={(v) => set('tel', v)}
         hint="Sempre obbligatorio"
+        invalid={field('tel').invalid}
+        error={field('tel').error}
+        onBlur={field('tel').onBlur}
       />
       <FieldText
         label="WhatsApp"

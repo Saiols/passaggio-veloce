@@ -2,8 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { z } from 'zod';
+import { passwordSchema } from '@pv/lib';
 import { Alert, Button, PasswordInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors, hasBlockingErrors } from '@/components/forms';
 import {
   createCrmTeamUserAction,
   updateCrmTeamUserAction,
@@ -11,6 +14,18 @@ import {
   deleteCrmTeamUserAction,
 } from './actions';
 import type { Role } from '@/lib/auth/permissions';
+
+const createUserSchema = z.object({
+  nome: z.string().trim().min(1, 'Nome obbligatorio'),
+  cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+  email: z.string().email('Email non valida'),
+  password: passwordSchema,
+});
+const editUserSchema = z.object({
+  nome: z.string().trim().min(1, 'Nome obbligatorio'),
+  cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+  email: z.string().email('Email non valida'),
+});
 
 type UserRow = {
   id: string;
@@ -175,7 +190,12 @@ function CreateUserModal({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const errors = zodFieldErrors(createUserSchema, { nome, cognome, email, password });
+  const { field, reveal } = useFieldErrorsState(errors);
+
   const submit = (): void => {
+    reveal();
+    if (hasBlockingErrors(errors)) return;
     setError(null);
     startTransition(async () => {
       const res = await createCrmTeamUserAction({
@@ -196,12 +216,23 @@ function CreateUserModal({
   return (
     <ModalShell title="Nuovo utente team" onClose={onClose}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <FieldText label="Nome *" value={nome} onChange={setNome} required />
+        <FieldText
+          label="Nome *"
+          value={nome}
+          onChange={setNome}
+          required
+          invalid={field('nome').invalid}
+          error={field('nome').error}
+          onBlur={field('nome').onBlur}
+        />
         <FieldText
           label="Cognome *"
           value={cognome}
           onChange={setCognome}
           required
+          invalid={field('cognome').invalid}
+          error={field('cognome').error}
+          onBlur={field('cognome').onBlur}
         />
         <div className="sm:col-span-2">
           <FieldText
@@ -210,6 +241,9 @@ function CreateUserModal({
             value={email}
             onChange={setEmail}
             required
+            invalid={field('email').invalid}
+            error={field('email').error}
+            onBlur={field('email').onBlur}
           />
         </div>
         <FieldSelect
@@ -228,6 +262,9 @@ function CreateUserModal({
           onChange={setPassword}
           required
           hint="Min 8 char, maiuscola, minuscola, cifra"
+          invalid={field('password').invalid}
+          error={field('password').error}
+          onBlur={field('password').onBlur}
         />
       </div>
       {error && (
@@ -279,7 +316,12 @@ function EditUserModal({
     label: ROLE_LABEL[r] ?? r,
   }));
 
+  const errors = zodFieldErrors(editUserSchema, { nome, cognome, email });
+  const { field, reveal } = useFieldErrorsState(errors);
+
   const submit = (): void => {
+    reveal();
+    if (hasBlockingErrors(errors)) return;
     setError(null);
     startTransition(async () => {
       const res = await updateCrmTeamUserAction(user.id, {
@@ -342,12 +384,23 @@ function EditUserModal({
   return (
     <ModalShell title={`Modifica ${user.nome} ${user.cognome}`} onClose={onClose}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <FieldText label="Nome *" value={nome} onChange={setNome} required />
+        <FieldText
+          label="Nome *"
+          value={nome}
+          onChange={setNome}
+          required
+          invalid={field('nome').invalid}
+          error={field('nome').error}
+          onBlur={field('nome').onBlur}
+        />
         <FieldText
           label="Cognome *"
           value={cognome}
           onChange={setCognome}
           required
+          invalid={field('cognome').invalid}
+          error={field('cognome').error}
+          onBlur={field('cognome').onBlur}
         />
         <div className="sm:col-span-2">
           <FieldText
@@ -356,6 +409,9 @@ function EditUserModal({
             value={email}
             onChange={setEmail}
             required
+            invalid={field('email').invalid}
+            error={field('email').error}
+            onBlur={field('email').onBlur}
           />
         </div>
         <FieldSelect
@@ -513,6 +569,9 @@ function FieldText({
   required,
   onChange,
   hint,
+  invalid,
+  error,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -520,7 +579,11 @@ function FieldText({
   required?: boolean;
   onChange: (v: string) => void;
   hint?: string;
+  invalid?: boolean;
+  error?: string;
+  onBlur?: () => void;
 }) {
+  const borderCls = invalid ? 'border-pv-red-500 bg-pv-red-50/70' : 'border-pv-slate-300';
   return (
     <label className="block">
       <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
@@ -530,9 +593,11 @@ function FieldText({
         <PasswordInput
           value={value}
           required={required}
+          invalid={invalid}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
           containerClassName="mt-1"
-          className="w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+          className={`w-full rounded-[10px] border-[1.5px] px-3 py-2 text-[13px] ${borderCls}`}
         />
       ) : (
         <input
@@ -540,12 +605,16 @@ function FieldText({
           value={value}
           required={required}
           onChange={(e) => onChange(e.target.value)}
-          className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+          onBlur={onBlur}
+          aria-invalid={invalid || undefined}
+          className={`mt-1 w-full rounded-[10px] border-[1.5px] px-3 py-2 text-[13px] ${borderCls}`}
         />
       )}
-      {hint && (
+      {error ? (
+        <span className="mt-0.5 block text-[10.5px] font-medium text-pv-red-500">{error}</span>
+      ) : hint ? (
         <span className="mt-0.5 block text-[10.5px] text-pv-slate-500">{hint}</span>
-      )}
+      ) : null}
     </label>
   );
 }

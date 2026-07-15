@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
+import { env } from '@/env';
 import {
   canEditCrmContact,
   canDeleteCrmContact,
@@ -16,7 +17,6 @@ import { normalizePhone } from '@/lib/crm/phone';
 import { sendNotification } from '@/lib/notifiche';
 import { nextStatoInvio } from '@/lib/crm/email-partenza';
 import { evaluatePromoCode } from '@/lib/promo/evaluate';
-import { BRAND } from '@/lib/seo/brand';
 
 export type CrmContactResult =
   | { ok: true; id: string }
@@ -507,8 +507,12 @@ export async function sendEmailPartenzaAction(input: {
 
   const invitoToken = randomUUID();
   const emailUnsubToken = contact.emailUnsubToken ?? randomUUID();
-  const linkUrl = `${BRAND.url}/i/${invitoToken}`;
-  const unsubUrl = `${BRAND.url}/unsubscribe?token=${emailUnsubToken}`;
+  // NEXT_PUBLIC_APP_URL (host raggiungibile dell'app), NON BRAND.url: quest'ultimo
+  // è il dominio marketing passaggioveloce.it, che è in GATED_HOSTS → il lead
+  // anonimo verrebbe rimbalzato alla vetrina prima ancora dell'esenzione /i/ nel
+  // gate auth. Stesso accessor di /r/ (affiliazione) e dell'unsub in send.ts.
+  const linkUrl = `${env.NEXT_PUBLIC_APP_URL}/i/${invitoToken}`;
+  const unsubUrl = `${env.NEXT_PUBLIC_APP_URL}/unsubscribe?token=${emailUnsubToken}`;
 
   await sendNotification({
     tipo: 'N26_EMAIL_PARTENZA',

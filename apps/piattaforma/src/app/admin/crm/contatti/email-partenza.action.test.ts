@@ -54,6 +54,31 @@ describe('sendEmailPartenzaAction', () => {
     expect(upd.emailUnsubToken).toBeTruthy();
   });
 
+  // Regressione (review finale): i link dell'email DEVONO usare NEXT_PUBLIC_APP_URL
+  // (host dell'app raggiungibile), MAI il dominio marketing passaggioveloce.it che è
+  // in GATED_HOSTS — lì il lead anonimo verrebbe rimbalzato alla vetrina. In test
+  // NEXT_PUBLIC_APP_URL non è settato → default http://localhost:3000.
+  it('i link puntano all\'host app, non al dominio marketing gated', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
+    update.mockResolvedValue({});
+    await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario' });
+    const { linkUrl, unsubUrl } = sendNotification.mock.calls[0][0].payload;
+    expect(linkUrl).not.toContain('passaggioveloce.it');
+    expect(unsubUrl).not.toContain('passaggioveloce.it');
+    expect(linkUrl).toMatch(/^http:\/\/localhost:3000\/i\//);
+    expect(unsubUrl).toMatch(/^http:\/\/localhost:3000\/unsubscribe\?token=/);
+  });
+
+  // Invariante GDPR: al reinvio l'emailUnsubToken esistente NON va rigenerato,
+  // altrimenti il link di disiscrizione nelle email precedenti muore.
+  it('reinvio: riusa l\'emailUnsubToken esistente (link unsub stabile)', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S4', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: 'tok-stabile-123' });
+    update.mockResolvedValue({});
+    await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario' });
+    expect(update.mock.calls[0][0].data.emailUnsubToken).toBe('tok-stabile-123');
+    expect(sendNotification.mock.calls[0][0].payload.unsubUrl).toContain('tok-stabile-123');
+  });
+
   it('codice non più valido → errore, nessun invio', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
     promoFindUnique.mockResolvedValue({ id: 'p1', code: 'OLD', amountCent: 5000, active: false, expiresAt: null, maxRedemptions: null });

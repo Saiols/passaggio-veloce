@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Template MVP per le notifiche email. Testi placeholder: i copy definitivi
  * verranno forniti dal team sales (blocco B7 del piano-implementazione).
  *

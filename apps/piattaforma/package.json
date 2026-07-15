@@ -20,6 +20,7 @@
     "@auth/prisma-adapter": "^2.11.1",
     "@google-cloud/documentai": "^9.6.1",
     "@googlemaps/js-api-loader": "^2.1.0",
+    "@googlemaps/markerclusterer": "^2.6.2",
     "@hookform/resolvers": "^5.2.2",
     "@pv/db": "workspace:*",
     "@pv/lib": "workspace:*",

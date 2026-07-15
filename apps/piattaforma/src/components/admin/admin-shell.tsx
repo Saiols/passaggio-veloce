@@ -18,6 +18,7 @@ import {
   IconEscalation,
   IconFinance,
   // IconListini, // LISTINI DISABILITATI (feature nascosta 2026-06-12)
+  IconMappa,
   IconPermessi,
   IconPratiche,
   IconPromo,
@@ -98,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'CRM',
     items: [
       { href: '/admin/crm/dashboard', label: 'Dashboard', icon: IconDashboard },
+      { href: '/admin/crm/mappa', label: 'Mappa', icon: IconMappa },
       { href: '/admin/crm/contatti', label: 'Contatti', icon: IconCrm },
       { href: '/admin/crm/contatti-operativi', label: 'Acquirenti/venditori', icon: IconContatti },
       { href: '/admin/crm/sales', label: 'Sales', icon: IconSales },

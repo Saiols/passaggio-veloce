@@ -7,6 +7,8 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { prisma } from '@pv/db';
 import { parseSedeFields } from '@/lib/sedi/form';
+import { geocodeAddress } from '@/lib/geo/geocode';
+import { parseCoords } from '@/lib/geo/coords';
 
 export type SedeActionResult = { ok: true } | { ok: false; error: string };
 
@@ -64,6 +66,18 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
 
+  // Coordinate: preferisci quelle catturate dal client (Google Places); se
+  // assenti (indirizzo digitato a mano) geocoda server-side best-effort.
+  const coords =
+    parseCoords(formData.get('lat'), formData.get('lng')) ??
+    (await geocodeAddress({
+      indirizzo: f.indirizzo,
+      civico: f.civico,
+      citta: f.citta,
+      cap: f.cap,
+      provincia: f.provincia,
+    }));
+
   // referralCode univoco con retry su collisione.
   let referralCode = genReferralCode();
   for (let i = 0; i < 5; i++) {
@@ -91,6 +105,9 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
       iban: f.iban,
       payoutThresholdCent: f.payoutThresholdCent,
       referralCode,
+      lat: coords?.lat ?? null,
+      lng: coords?.lng ?? null,
+      geocodedAt: coords ? new Date() : null,
     },
   });
 

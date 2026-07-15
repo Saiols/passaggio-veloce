@@ -19,6 +19,8 @@ const EMPTY = {
   telefono: '',
   email: '',
   iban: '',
+  lat: '',
+  lng: '',
 };
 
 export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
@@ -36,6 +38,8 @@ export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       citta: p.citta,
       cap: p.cap,
       provincia: p.provincia,
+      lat: p.lat != null ? String(p.lat) : '',
+      lng: p.lng != null ? String(p.lng) : '',
     }));
 
   const errors = zodFieldErrors(registerSedeSchema, f);

@@ -14,6 +14,10 @@ export type AddressParts = {
   cap: string;
   /** Sigla provincia (admin_area_2 short, es. "RM") */
   provincia: string;
+  /** Latitudine (Google Places location), se disponibile. */
+  lat?: number;
+  /** Longitudine (Google Places location), se disponibile. */
+  lng?: number;
 };
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -159,8 +163,14 @@ export function AddressAutocomplete({
     setOpen(false);
     try {
       const place = pred.toPlace();
-      await place.fetchFields({ fields: ['addressComponents'] });
-      onSelectRef.current(parseComponents(place.addressComponents ?? undefined));
+      await place.fetchFields({ fields: ['addressComponents', 'location'] });
+      const parts = parseComponents(place.addressComponents ?? undefined);
+      const loc = place.location;
+      onSelectRef.current({
+        ...parts,
+        lat: typeof loc?.lat === 'function' ? loc.lat() : undefined,
+        lng: typeof loc?.lng === 'function' ? loc.lng() : undefined,
+      });
     } catch {
       /* ignora: l'utente può compilare i campi a mano */
     }

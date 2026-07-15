@@ -52,4 +52,34 @@ describe('GET /i/[token]', () => {
     expect(res.headers.get('location')).toContain('/register');
     expect(update).not.toHaveBeenCalled();
   });
+
+  it('codice scaduto → redirect senza promo', async () => {
+    findFirst.mockResolvedValue({
+      id: 'c3', cat: 'BROKER', status: 'S4',
+      promoCodeInviato: { code: 'OLD', active: true, expiresAt: new Date(Date.now() - 1000) },
+    });
+    update.mockResolvedValue({});
+    const res = await GET(req(), { params: Promise.resolve({ token: 'tok' }) });
+    expect(res.headers.get('location')).not.toContain('promo=');
+  });
+
+  it('codice disattivato → redirect senza promo', async () => {
+    findFirst.mockResolvedValue({
+      id: 'c4', cat: 'AGENZIA', status: 'S4',
+      promoCodeInviato: { code: 'OFF', active: false, expiresAt: null },
+    });
+    update.mockResolvedValue({});
+    const res = await GET(req(), { params: Promise.resolve({ token: 'tok' }) });
+    expect(res.headers.get('location')).not.toContain('promo=');
+  });
+
+  it('apertura valida: update marca linkAperto, S5 e incrementa linkAperture', async () => {
+    findFirst.mockResolvedValue({ id: 'c5', cat: 'BROKER', status: 'S4', promoCodeInviato: null });
+    update.mockResolvedValue({});
+    await GET(req(), { params: Promise.resolve({ token: 'tok' }) });
+    const data = update.mock.calls[0][0].data;
+    expect(data.linkAperto).toBe(true);
+    expect(data.status).toBe('S5');
+    expect(data.linkAperture).toEqual({ increment: 1 });
+  });
 });

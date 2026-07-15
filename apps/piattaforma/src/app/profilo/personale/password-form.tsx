@@ -51,7 +51,7 @@ export function CambioPasswordForm() {
   };
 
   return (
-    <form onSubmit={gatedSubmit(onValid)} className="space-y-4">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Password attuale" required error={fAttuale.error} className="sm:col-span-2">
           <PasswordInput

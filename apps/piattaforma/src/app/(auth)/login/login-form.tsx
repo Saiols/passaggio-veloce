@@ -40,6 +40,7 @@ export function LoginForm() {
 
       <form
         action={formAction}
+        noValidate
         onSubmit={(e) => {
           reveal();
           if (hasBlockingErrors(errors)) e.preventDefault();

@@ -95,7 +95,7 @@ export function CreateUserForm({
   };
 
   return (
-    <form onSubmit={gatedSubmit(onValid)} className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       <Field label="Email" required error={fEmail.error} className="sm:col-span-2">
         <Input
           type="email"

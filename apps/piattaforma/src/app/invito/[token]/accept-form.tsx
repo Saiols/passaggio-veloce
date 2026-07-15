@@ -35,7 +35,7 @@ export function AcceptForm({ token }: { token: string }) {
   };
 
   return (
-    <form onSubmit={gatedSubmit(onValid)} className="mt-6 space-y-3">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="mt-6 space-y-3">
       <Field label="Nome" required error={fNome.error}>
         <Input
           name="nome"

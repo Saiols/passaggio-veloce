@@ -58,7 +58,7 @@ export function ResetForm({ token }: { token: string | null }) {
   if (token) {
     const fPassword = field('password');
     return (
-      <form onSubmit={gatedSubmit(onConfirm)} className="mt-6 space-y-4">
+      <form onSubmit={gatedSubmit(onConfirm)} noValidate className="mt-6 space-y-4">
         <Field label="Nuova password" required error={fPassword.error}>
           <PasswordInput
             name="password"
@@ -80,7 +80,7 @@ export function ResetForm({ token }: { token: string | null }) {
 
   const fEmail = field('email');
   return (
-    <form onSubmit={gatedSubmit(onRequest)} className="mt-6 space-y-4">
+    <form onSubmit={gatedSubmit(onRequest)} noValidate className="mt-6 space-y-4">
       <Field label="Email" required error={fEmail.error}>
         <Input
           type="email"

@@ -1725,7 +1725,11 @@ function WizardBody({
             </button>
           )}
         </div>
-        <Field label="Tipo soggetto" required>
+        <Field
+          label="Tipo soggetto"
+          required
+          error={fe.err(`vend:${v.id}:tipoSoggetto`, !!v.tipoSoggetto, 'Seleziona il tipo soggetto')}
+        >
           <Select
             value={v.tipoSoggetto ?? ''}
             onChange={(e) => {
@@ -1867,7 +1871,11 @@ function WizardBody({
             Rimuovi
           </button>
         </div>
-        <Field label="Tipo soggetto" required>
+        <Field
+          label="Tipo soggetto"
+          required
+          error={fe.err(`co:${c.id}:tipoSoggetto`, !!c.tipoSoggetto, 'Seleziona il tipo soggetto')}
+        >
           <Select
             value={c.tipoSoggetto ?? ''}
             onChange={(e) => {
@@ -2485,7 +2493,11 @@ function WizardBody({
                   (operatore auto), con visura camerale.
                 </p>
               )}
-              <Field label="Tipo soggetto" required>
+              <Field
+                label="Tipo soggetto"
+                required
+                error={fe.err('acq:tipoSoggetto', !!acquirente.tipoSoggetto, 'Seleziona il tipo soggetto')}
+              >
                 <Select
                   value={acquirente.tipoSoggetto ?? ''}
                   onChange={(e) => {
@@ -2701,7 +2713,11 @@ function WizardBody({
                   La tua sede da cui nasce la pratica (per wallet, fatturazione e statistiche).
                   Non c’entra col comune di destinazione qui sotto.
                 </p>
-                <Field label="Sede" required>
+                <Field
+                  label="Sede"
+                  required
+                  error={fe.err('step4:sede', brokerSedeId.length > 0, 'Seleziona una sede')}
+                >
                   <Select
                     value={brokerSedeId}
                     onChange={(e) => setBrokerSedeId(e.target.value)}
@@ -2750,7 +2766,12 @@ function WizardBody({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <Field label="Comune" required className="sm:col-span-2">
+                  <Field
+                    label="Comune"
+                    required
+                    className="sm:col-span-2"
+                    error={fe.err('step4:comune', comune.trim().length > 0, 'Comune obbligatorio')}
+                  >
                     <Input
                       value={comune}
                       onChange={(e) => setComune(e.target.value)}
@@ -2759,7 +2780,11 @@ function WizardBody({
                       placeholder="Venezia"
                     />
                   </Field>
-                  <Field label="Provincia" required>
+                  <Field
+                    label="Provincia"
+                    required
+                    error={fe.err('step4:provincia', /^[A-Za-z]{2}$/.test(provincia.trim()), 'Provincia (2 lettere)')}
+                  >
                     <Input
                       maxLength={2}
                       value={provincia}
@@ -3104,7 +3129,11 @@ function VeicoloSection({
               : 'Dati estratti — correggi se serve'}
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Targa" required>
+            <Field
+              label="Targa"
+              required
+              error={fe.err(`${keyPrefix}:targa`, veicolo.targa.length >= 5, 'Targa obbligatoria (min 5 caratteri)')}
+            >
               <Input
                 value={veicolo.targa}
                 onChange={(e) => onChange({ targa: e.target.value.toUpperCase() })}
@@ -3112,7 +3141,11 @@ function VeicoloSection({
                 invalid={fe.isInvalid(`${keyPrefix}:targa`, veicolo.targa.length >= 5)}
               />
             </Field>
-            <Field label="Telaio" required>
+            <Field
+              label="Telaio"
+              required
+              error={fe.err(`${keyPrefix}:telaio`, veicolo.telaio.length >= 11, 'Telaio obbligatorio (min 11 caratteri)')}
+            >
               <Input
                 value={veicolo.telaio}
                 onChange={(e) => onChange({ telaio: e.target.value.toUpperCase() })}
@@ -3120,7 +3153,12 @@ function VeicoloSection({
                 invalid={fe.isInvalid(`${keyPrefix}:telaio`, veicolo.telaio.length >= 11)}
               />
             </Field>
-            <Field label="Proprietario attuale" required className="sm:col-span-2">
+            <Field
+              label="Proprietario attuale"
+              required
+              className="sm:col-span-2"
+              error={fe.err(`${keyPrefix}:proprietario`, !!veicolo.proprietarioAttuale.trim(), 'Proprietario obbligatorio')}
+            >
               <Input
                 value={veicolo.proprietarioAttuale}
                 onChange={(e) =>
@@ -3133,7 +3171,15 @@ function VeicoloSection({
                 )}
               />
             </Field>
-            <Field label="Data immatricolazione" required>
+            <Field
+              label="Data immatricolazione"
+              required
+              error={fe.err(
+                `${keyPrefix}:dataImmatricolazione`,
+                /^\d{4}-\d{2}-\d{2}$/.test(veicolo.dataImmatricolazione),
+                'Data immatricolazione obbligatoria',
+              )}
+            >
               <Input
                 type="date"
                 value={veicolo.dataImmatricolazione}
@@ -3185,7 +3231,16 @@ function VeicoloSection({
                 </button>
               </div>
             </div>
-            <Field label="Prezzo di vendita (€)" required className="sm:col-span-2">
+            <Field
+              label="Prezzo di vendita (€)"
+              required
+              className="sm:col-span-2"
+              error={fe.err(
+                `${keyPrefix}:prezzoVendita`,
+                Number(veicolo.prezzoVendita) > 0,
+                'Prezzo obbligatorio (maggiore di 0)',
+              )}
+            >
               <Input
                 type="number"
                 min="0"
@@ -3227,7 +3282,11 @@ function ParteForm({
     <div>
       {parte.isPG ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Ragione sociale" required>
+          <Field
+            label="Ragione sociale"
+            required
+            error={fe.err(`${fieldPrefix}:ragioneSociale`, !!parte.ragioneSociale.trim(), 'Ragione sociale obbligatoria')}
+          >
             <Input
               value={parte.ragioneSociale}
               onChange={(e) => onChange({ ...parte, ragioneSociale: e.target.value })}
@@ -3235,7 +3294,11 @@ function ParteForm({
               invalid={fe.isInvalid(`${fieldPrefix}:ragioneSociale`, !!parte.ragioneSociale.trim())}
             />
           </Field>
-          <Field label="Partita IVA" required>
+          <Field
+            label="Partita IVA"
+            required
+            error={fe.err(`${fieldPrefix}:piva`, parte.piva.length === 11, 'La P.IVA deve essere di 11 cifre')}
+          >
             <Input
               value={parte.piva}
               onChange={(e) => onChange({ ...parte, piva: e.target.value.replace(/\D/g, '') })}
@@ -3247,7 +3310,11 @@ function ParteForm({
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Nome" required>
+          <Field
+            label="Nome"
+            required
+            error={fe.err(`${fieldPrefix}:nome`, !!parte.nome.trim(), 'Nome obbligatorio')}
+          >
             <Input
               value={parte.nome}
               onChange={(e) => onChange({ ...parte, nome: e.target.value })}
@@ -3255,7 +3322,11 @@ function ParteForm({
               invalid={fe.isInvalid(`${fieldPrefix}:nome`, !!parte.nome.trim())}
             />
           </Field>
-          <Field label="Cognome" required>
+          <Field
+            label="Cognome"
+            required
+            error={fe.err(`${fieldPrefix}:cognome`, !!parte.cognome.trim(), 'Cognome obbligatorio')}
+          >
             <Input
               value={parte.cognome}
               onChange={(e) => onChange({ ...parte, cognome: e.target.value })}
@@ -3263,7 +3334,12 @@ function ParteForm({
               invalid={fe.isInvalid(`${fieldPrefix}:cognome`, !!parte.cognome.trim())}
             />
           </Field>
-          <Field label="Codice fiscale" required className="sm:col-span-2">
+          <Field
+            label="Codice fiscale"
+            required
+            className="sm:col-span-2"
+            error={fe.err(`${fieldPrefix}:cf`, parte.cf.trim().length === 16, 'Il codice fiscale deve contenere 16 caratteri')}
+          >
             <Input
               value={parte.cf}
               onChange={(e) => onChange({ ...parte, cf: e.target.value.toUpperCase() })}
@@ -3275,7 +3351,11 @@ function ParteForm({
         </div>
       )}
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Telefono" required>
+        <Field
+          label="Telefono"
+          required
+          error={fe.err(`${fieldPrefix}:telefono`, !!parte.telefono.trim(), 'Telefono obbligatorio')}
+        >
           <Input
             type="tel"
             value={parte.telefono}
@@ -3285,7 +3365,11 @@ function ParteForm({
             invalid={fe.isInvalid(`${fieldPrefix}:telefono`, !!parte.telefono.trim())}
           />
         </Field>
-        <Field label="Email" required>
+        <Field
+          label="Email"
+          required
+          error={fe.err(`${fieldPrefix}:email`, EMAIL_RE.test(parte.email.trim()), 'Email non valida')}
+        >
           <Input
             type="email"
             value={parte.email}

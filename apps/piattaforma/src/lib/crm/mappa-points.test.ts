@@ -35,6 +35,12 @@ describe('getMappaPoints', () => {
     const where = prismaMock.sede.findMany.mock.calls[0][0].where;
     expect(where.deletedAt).toBeNull();
     expect(where.lat).toEqual({ not: null });
+    expect(where.lng).toEqual({ not: null });
     expect(where.company).toEqual({ deletedAt: null });
+
+    const countWhere = prismaMock.sede.count.mock.calls[0][0].where;
+    expect(countWhere.deletedAt).toBeNull();
+    expect(countWhere.lat).toBeNull();
+    expect(countWhere.company).toEqual({ deletedAt: null });
   });
 });

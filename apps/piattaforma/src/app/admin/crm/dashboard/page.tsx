@@ -9,6 +9,7 @@ import {
 } from '@/lib/auth/permissions';
 import { formatCurrencyCent } from '@/lib/format';
 import { RendimentoChart } from '../../../wallet/rendimento-chart';
+import { getPlatformRegistrationStats } from '@/lib/crm/platform-stats';
 
 const STATI_ORDER = [
   'S0',
@@ -76,6 +77,7 @@ export default async function AdminCrmDashboardPage() {
     contactsByStato,
     contactsByStatoCat,
     contactsLast6m,
+    platformStats,
   ] = await Promise.all([
     prisma.crmContact.count({ where: { deletedAt: null } }),
     prisma.crmContact.count({
@@ -105,6 +107,7 @@ export default async function AdminCrmDashboardPage() {
       where: { deletedAt: null, createdAt: { gte: sixMonthsAgo } },
       select: { createdAt: true },
     }),
+    getPlatformRegistrationStats(),
   ]);
 
   // ─── Bucket contatti per mese (ultimi 6) ───────────────────────────
@@ -261,6 +264,30 @@ export default async function AdminCrmDashboardPage() {
             icon="📣"
             tone="green"
           />
+        </section>
+
+        {/* Registrati sulla piattaforma — dato informativo, NON metriche funnel */}
+        <section className="mt-6 rounded-[12px] border border-pv-slate-200 bg-white p-5 shadow-[var(--pv-shadow-card)]">
+          <h2 className="text-[14px] font-bold text-pv-navy-900">
+            Registrati sulla piattaforma
+          </h2>
+          <p className="text-[11.5px] text-pv-slate-500">
+            Dato informativo — non incide sulle metriche di conversione del funnel.
+          </p>
+          <div className="mt-4 grid gap-6 sm:grid-cols-2">
+            <RegistratiBlock
+              titolo="Broker"
+              d={platformStats.broker}
+              dot="bg-blue-500"
+              bar="bg-blue-500"
+            />
+            <RegistratiBlock
+              titolo="Agenzie"
+              d={platformStats.agenzia}
+              dot="bg-pv-orange-500"
+              bar="bg-pv-orange-500"
+            />
+          </div>
         </section>
 
         {/* Raggiungimento obiettivo (contattati / iscritti per categoria) */}
@@ -439,6 +466,39 @@ function FinanceCard({
         {value}
       </p>
       {hint && <p className="text-[10.5px] text-pv-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+function RegistratiBlock({
+  titolo,
+  d,
+  dot,
+  bar,
+}: {
+  titolo: string;
+  d: { tot: number; daLista: number; organici: number };
+  dot: string;
+  bar: string;
+}) {
+  return (
+    <div>
+      <p className="flex items-center gap-2 text-[12.5px] font-bold text-pv-navy-900">
+        <span className={'h-2 w-2 rounded-full ' + dot} />
+        {titolo}
+        <span className="ml-auto text-[18px] font-extrabold tracking-tight text-pv-navy-900">
+          {d.tot.toLocaleString('it-IT')}
+        </span>
+      </p>
+      <div className="mt-3 space-y-3">
+        <ObiettivoBar label="Da lista CRM" value={d.daLista} tot={d.tot} barClass={bar} />
+        <ObiettivoBar
+          label="Organici / passaparola"
+          value={d.organici}
+          tot={d.tot}
+          barClass={bar}
+        />
+      </div>
     </div>
   );
 }

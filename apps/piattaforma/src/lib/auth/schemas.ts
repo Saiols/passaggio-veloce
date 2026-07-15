@@ -116,3 +116,22 @@ export const registerFullSchema = z.object({
 });
 
 export type RegisterFullInput = z.infer<typeof registerFullSchema>;
+
+// ============================================================
+// Altri form auth (validazione client, stessi messaggi del server)
+// ============================================================
+
+// Accettazione invito dipendente: nome/cognome + password (policy standard).
+export const acceptInviteSchema = z.object({
+  nome: z.string().trim().min(1, 'Nome obbligatorio'),
+  cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+  password: passwordSchema,
+});
+
+// Reset password: richiesta (email) e conferma (nuova password, policy standard).
+export const resetRequestSchema = z.object({
+  email: z.string().email('Email non valida'),
+});
+export const resetConfirmSchema = z.object({
+  password: passwordSchema,
+});

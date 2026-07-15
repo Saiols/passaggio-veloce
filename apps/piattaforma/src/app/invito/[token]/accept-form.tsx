@@ -2,44 +2,74 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { InlineSpinner, PasswordInput } from '@/components/ui';
+import { Button, Field, Input, PasswordInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
+import { acceptInviteSchema } from '@/lib/auth/schemas';
 import { acceptInvitationAction } from '@/app/team/actions';
 
 export function AcceptForm({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const [nome, setNome] = useState('');
+  const [cognome, setCognome] = useState('');
+  const [password, setPassword] = useState('');
 
-  function handle(formData: FormData) {
+  const errors = zodFieldErrors(acceptInviteSchema, { nome, cognome, password });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fNome = field('nome');
+  const fCognome = field('cognome');
+  const fPassword = field('password');
+
+  const onValid = (): void => {
     setError(null);
     startTransition(async () => {
-      const res = await acceptInvitationAction(
-        token,
-        String(formData.get('nome') ?? ''),
-        String(formData.get('cognome') ?? ''),
-        String(formData.get('password') ?? ''),
-      );
-      if (!res.ok) { setError(res.error); return; }
+      const res = await acceptInvitationAction(token, nome, cognome, password);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
       router.push('/login?invited=success');
     });
-  }
+  };
 
   return (
-    <form action={handle} className="mt-6 space-y-3">
-      <input name="nome" required placeholder="Nome"
-        className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
-      <input name="cognome" required placeholder="Cognome"
-        className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
-      <PasswordInput name="password" required minLength={8}
-        placeholder="Password (min 8, A-z, 0-9)"
-        className="w-full rounded-lg border border-pv-slate-300 px-3 py-2 text-sm" />
+    <form onSubmit={gatedSubmit(onValid)} className="mt-6 space-y-3">
+      <Field label="Nome" required error={fNome.error}>
+        <Input
+          name="nome"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          onBlur={fNome.onBlur}
+          invalid={fNome.invalid}
+          placeholder="Nome"
+        />
+      </Field>
+      <Field label="Cognome" required error={fCognome.error}>
+        <Input
+          name="cognome"
+          value={cognome}
+          onChange={(e) => setCognome(e.target.value)}
+          onBlur={fCognome.onBlur}
+          invalid={fCognome.invalid}
+          placeholder="Cognome"
+        />
+      </Field>
+      <Field label="Password" required error={fPassword.error}>
+        <PasswordInput
+          name="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onBlur={fPassword.onBlur}
+          invalid={fPassword.invalid}
+          placeholder="Password (min 8, A-z, 0-9)"
+        />
+      </Field>
       {error && <p className="text-sm text-pv-red-500">{error}</p>}
-      <button type="submit" disabled={pending} aria-busy={pending || undefined}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-pv-navy-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-        {pending && <InlineSpinner className="h-4 w-4" />}
-        <span>{pending ? 'Creazione…' : 'Crea il mio account'}</span>
-      </button>
+      <Button type="submit" loading={pending} loadingLabel="Creazione…" fullWidth>
+        Crea il mio account
+      </Button>
       <LoadingOverlay show={pending} label="Creazione…" />
     </form>
   );

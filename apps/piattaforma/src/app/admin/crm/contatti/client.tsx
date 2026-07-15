@@ -11,6 +11,7 @@ import {
   deleteCrmContactAction,
   bulkImportCrmContactsAction,
   updateCrmContactStatusAction,
+  sendEmailPartenzaAction,
   type CrmContactInput,
 } from './actions';
 import { buildContactsQuery } from './query';
@@ -42,6 +43,7 @@ type ContactRow = {
   noteManuali: string | null;
   linkInviato: boolean;
   linkInviatoAt: string | null;
+  emailOptOutAt: string | null;
   linkAperto: boolean;
   linkAperture: number;
   videoInviato: boolean;
@@ -146,6 +148,7 @@ function CatBadge({ cat }: { cat: 'BROKER' | 'AGENZIA' }) {
 export function CrmContactsClient({
   contacts,
   salesUsers,
+  promoCodes,
   currentUserRole,
   currentUserId,
   page,
@@ -156,6 +159,7 @@ export function CrmContactsClient({
 }: {
   contacts: ContactRow[];
   salesUsers: SalesUser[];
+  promoCodes: Array<{ id: string; code: string; importoEuro: number }>;
   currentUserRole: string;
   currentUserId: string;
   page: number;
@@ -168,6 +172,7 @@ export function CrmContactsClient({
   const pathname = usePathname();
   const [editing, setEditing] = useState<ContactRow | null>(null);
   const [creating, setCreating] = useState(false);
+  const [sending, setSending] = useState<ContactRow | null>(null);
   const canDelete = ROLE_CAN_DELETE.includes(currentUserRole);
   const canBulk = ROLE_CAN_BULK.includes(currentUserRole);
 
@@ -347,6 +352,21 @@ export function CrmContactsClient({
                     >
                       Apri
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setSending(c)}
+                      disabled={!c.email || !!c.emailOptOutAt}
+                      title={
+                        !c.email
+                          ? 'Manca l’email'
+                          : c.emailOptOutAt
+                            ? 'Contatto disiscritto'
+                            : undefined
+                      }
+                      className="ml-2 rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-pv-navy-700 hover:bg-pv-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {c.linkInviato ? 'Reinvia' : 'Invia email'}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -390,6 +410,14 @@ export function CrmContactsClient({
             setCreating(false);
             router.refresh();
           }}
+        />
+      )}
+
+      {sending && (
+        <EmailPartenzaModal
+          contact={sending}
+          promoCodes={promoCodes}
+          onClose={() => setSending(null)}
         />
       )}
     </>
@@ -640,6 +668,108 @@ function CsvImportDialog({
         )}
       </div>
       <LoadingOverlay show={pending} label="Importazione…" />
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// Email di partenza (invio/reinvio + codice welcome)
+// ════════════════════════════════════════════════════════
+function EmailPartenzaModal({
+  contact,
+  promoCodes,
+  onClose,
+}: {
+  contact: ContactRow;
+  promoCodes: Array<{ id: string; code: string; importoEuro: number }>;
+  onClose: () => void;
+}) {
+  const [nomeReferente, setNomeReferente] = useState(contact.nome);
+  const [promoCodeId, setPromoCodeId] = useState('');
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setPending(true);
+    setError(null);
+    const res = await sendEmailPartenzaAction({
+      contactId: contact.id,
+      nomeReferente,
+      promoCodeId: promoCodeId || null,
+    });
+    setPending(false);
+    if (res.ok) {
+      onClose();
+    } else {
+      setError(res.error);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-pv-navy-900/40 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-[16px] bg-white p-5 shadow-[var(--pv-shadow-card-lg)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-[15px] font-bold text-pv-navy-900">
+          {contact.linkInviato ? 'Reinvia email di partenza' : 'Invia email di partenza'}
+        </h3>
+        <p className="mt-1 text-[12.5px] text-pv-slate-600">
+          A: {contact.email} · {contact.cat === 'BROKER' ? 'Broker' : 'Agenzia'}
+          {contact.linkInviato ? ' · già inviata in precedenza' : ''}
+        </p>
+
+        <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
+          Nome referente
+          <input
+            value={nomeReferente}
+            onChange={(e) => setNomeReferente(e.target.value)}
+            disabled={pending}
+            className="mt-1 block w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+          />
+        </label>
+
+        <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
+          Codice di benvenuto (opzionale)
+          <select
+            value={promoCodeId}
+            onChange={(e) => setPromoCodeId(e.target.value)}
+            disabled={pending}
+            className="mt-1 block w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+          >
+            <option value="">Nessun codice</option>
+            {promoCodes.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} — {p.importoEuro} €
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {error && (
+          <p className="mt-3 text-[12.5px] font-medium text-pv-red-500">{error}</p>
+        )}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={pending}>
+            Annulla
+          </Button>
+          <Button
+            size="sm"
+            onClick={submit}
+            disabled={pending || !nomeReferente.trim()}
+            loading={pending}
+            loadingLabel="Invio…"
+          >
+            Invia
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { canViewCrm } from '@/lib/auth/permissions';
 import { regioneVarianti } from '@/lib/crm/regione';
+import { listPromoCodesValidiAction } from './actions';
 import { CrmContactsClient } from './client';
 
 const STATI = [
@@ -90,7 +91,7 @@ export default async function AdminCrmPipelinePage({
   const PAGE_SIZE = 25;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [pageContacts, total, salesUsers, statsCounts] = await Promise.all([
+  const [pageContacts, total, salesUsers, statsCounts, promoCodes] = await Promise.all([
     prisma.crmContact.findMany({
       where,
       orderBy,
@@ -114,6 +115,7 @@ export default async function AdminCrmPipelinePage({
       where: { deletedAt: null },
       _count: { _all: true },
     }),
+    listPromoCodesValidiAction(),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -148,6 +150,7 @@ export default async function AdminCrmPipelinePage({
     lastContactAt: c.lastContactAt?.toISOString() ?? null,
     nextContactAt: c.nextContactAt?.toISOString() ?? null,
     linkInviatoAt: c.linkInviatoAt?.toISOString() ?? null,
+    emailOptOutAt: c.emailOptOutAt?.toISOString() ?? null,
     iscrizioneAt: c.iscrizioneAt?.toISOString() ?? null,
     primaPraticaAt: c.primaPraticaAt?.toISOString() ?? null,
     lastAccessAt: c.lastAccessAt?.toISOString() ?? null,
@@ -189,6 +192,7 @@ export default async function AdminCrmPipelinePage({
             id: u.id,
             name: `${u.nome} ${u.cognome}`.trim(),
           }))}
+          promoCodes={promoCodes}
           currentUserRole={session.user.role ?? ''}
           currentUserId={session.user.id ?? ''}
           page={page}

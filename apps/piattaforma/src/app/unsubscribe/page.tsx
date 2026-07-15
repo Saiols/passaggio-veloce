@@ -23,6 +23,22 @@ export default async function UnsubscribePage({
     }
   }
 
+  if (token && !ok) {
+    const contact = await prisma.crmContact.findUnique({
+      where: { emailUnsubToken: token },
+      select: { id: true, emailOptOutAt: true },
+    });
+    if (contact) {
+      if (!contact.emailOptOutAt) {
+        await prisma.crmContact.update({
+          where: { id: contact.id },
+          data: { emailOptOutAt: new Date() },
+        });
+      }
+      ok = true;
+    }
+  }
+
   return (
     <main style={{ fontFamily: 'system-ui, sans-serif', maxWidth: 520, margin: '80px auto', padding: '0 20px' }}>
       <h1 style={{ fontSize: 22, color: '#0a2540' }}>

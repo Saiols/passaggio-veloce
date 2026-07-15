@@ -2,9 +2,20 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui';
+import { z } from 'zod';
+import { codiceFiscaleSchema } from '@pv/lib';
+import { Button, Field, Input } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { updateOwnProfileAction } from './actions';
+
+const profiloPersonaleSchema = z.object({
+  nome: z.string().trim().min(1, 'Nome obbligatorio'),
+  cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+  email: z.string().email('Email non valida'),
+  // Codice fiscale: opzionale, ma se compilato dev'essere valido.
+  codiceFiscale: z.union([z.literal(''), codiceFiscaleSchema]),
+});
 
 export function ProfiloPersonaleForm({
   defaultEmail,
@@ -26,16 +37,17 @@ export function ProfiloPersonaleForm({
   const [cognome, setCognome] = useState(defaultCognome);
   const [codiceFiscale, setCodiceFiscale] = useState(defaultCodiceFiscale);
 
-  const handleSubmit = (e: React.FormEvent): void => {
-    e.preventDefault();
+  const errors = zodFieldErrors(profiloPersonaleSchema, { nome, cognome, email, codiceFiscale });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fNome = field('nome');
+  const fCognome = field('cognome');
+  const fEmail = field('email');
+  const fCf = field('codiceFiscale');
+
+  const onValid = (): void => {
     setError(null);
     startTransition(async () => {
-      const res = await updateOwnProfileAction(
-        email,
-        nome,
-        cognome,
-        codiceFiscale,
-      );
+      const res = await updateOwnProfileAction(email, nome, cognome, codiceFiscale);
       if (!res.ok) {
         setError(res.error);
         return;
@@ -46,55 +58,49 @@ export function ProfiloPersonaleForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Nome</span>
-          <input
+        <Field label="Nome" required error={fNome.error}>
+          <Input
             value={nome}
             onChange={(e) => setNome(e.target.value)}
-            required
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fNome.onBlur}
+            invalid={fNome.invalid}
           />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Cognome</span>
-          <input
+        </Field>
+        <Field label="Cognome" required error={fCognome.error}>
+          <Input
             value={cognome}
             onChange={(e) => setCognome(e.target.value)}
-            required
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fCognome.onBlur}
+            invalid={fCognome.invalid}
           />
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Email</span>
-          <input
+        </Field>
+        <Field label="Email" required error={fEmail.error} className="sm:col-span-2">
+          <Input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fEmail.onBlur}
+            invalid={fEmail.invalid}
           />
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="text-[12px] font-semibold text-pv-slate-700">
-            Codice fiscale (opzionale)
-          </span>
-          <input
+        </Field>
+        <Field label="Codice fiscale (opzionale)" error={fCf.error} className="sm:col-span-2">
+          <Input
             value={codiceFiscale}
             onChange={(e) => setCodiceFiscale(e.target.value.toUpperCase())}
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 font-mono text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fCf.onBlur}
+            invalid={fCf.invalid}
+            className="font-mono"
           />
-        </label>
+        </Field>
       </div>
 
       {error && <p className="text-[12px] text-pv-red-500">{error}</p>}
-      {savedAt && !error && (
-        <p className="text-[12px] text-pv-green-500">Modifiche salvate.</p>
-      )}
+      {savedAt && !error && <p className="text-[12px] text-pv-green-500">Modifiche salvate.</p>}
 
       <div className="flex justify-end">
-        <Button type="submit" size="md" disabled={pending} loading={pending} loadingLabel="Salvataggio…">
+        <Button type="submit" size="md" loading={pending} loadingLabel="Salvataggio…">
           Salva modifiche
         </Button>
       </div>

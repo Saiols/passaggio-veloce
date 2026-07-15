@@ -2,11 +2,17 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { ibanItSchema } from '@pv/lib';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
+import { z } from 'zod';
 import { ritentaAddebitoAction, aggiornaIbanERitentaAction } from './actions';
+
+const ibanFormSchema = z.object({ iban: ibanItSchema });
 
 export function BloccoPagamentoClient({
   isOwner,
@@ -23,6 +29,11 @@ export function BloccoPagamentoClient({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [iban, setIban] = useState(ibanAttuale);
+
+  const errors = zodFieldErrors(ibanFormSchema, { iban });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fIban = field('iban');
 
   const onRetry = () => {
     setError(null);
@@ -36,10 +47,12 @@ export function BloccoPagamentoClient({
     });
   };
 
-  const onAggiornaIban = (formData: FormData) => {
+  const onAggiornaIban = (): void => {
     setError(null);
     start(async () => {
-      const r = await aggiornaIbanERitentaAction(formData);
+      const fd = new FormData();
+      fd.set('iban', iban);
+      const r = await aggiornaIbanERitentaAction(fd);
       if (!r.ok) {
         setError(r.error);
       } else {
@@ -68,9 +81,19 @@ export function BloccoPagamentoClient({
       ) : (
         <>
           {isOwner ? (
-            <form action={onAggiornaIban} className="mt-6 space-y-3">
-              <label className="block text-[13px] font-semibold text-pv-navy-900">Aggiorna IBAN</label>
-              <Input name="iban" defaultValue={ibanAttuale} placeholder="IT60..." maxLength={34} disabled={pending} />
+            <form onSubmit={gatedSubmit(onAggiornaIban)} noValidate className="mt-6 space-y-3">
+              <Field label="Aggiorna IBAN" required error={fIban.error}>
+                <Input
+                  name="iban"
+                  value={iban}
+                  onChange={(e) => setIban(e.target.value)}
+                  onBlur={fIban.onBlur}
+                  invalid={fIban.invalid}
+                  placeholder="IT60..."
+                  maxLength={34}
+                  disabled={pending}
+                />
+              </Field>
               <Button type="submit" loading={pending} loadingLabel="Aggiornamento…">
                 Aggiorna IBAN e riprova
               </Button>

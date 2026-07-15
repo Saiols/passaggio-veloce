@@ -2,9 +2,17 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui';
+import { z } from 'zod';
+import { Button, Field, Input } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { updateAssistenteAction } from '@/app/admin/assistenti/actions';
+
+const editAssistenteSchema = z.object({
+  email: z.string().email('Email non valida'),
+  nome: z.string().trim().min(1, 'Nome obbligatorio'),
+  cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+});
 
 export function AssistenteEditForm({
   userId,
@@ -25,8 +33,13 @@ export function AssistenteEditForm({
   const [nome, setNome] = useState(defaultNome);
   const [cognome, setCognome] = useState(defaultCognome);
 
-  const handleSubmit = (e: React.FormEvent): void => {
-    e.preventDefault();
+  const errors = zodFieldErrors(editAssistenteSchema, { email, nome, cognome });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fEmail = field('email');
+  const fNome = field('nome');
+  const fCognome = field('cognome');
+
+  const onValid = (): void => {
     setError(null);
     startTransition(async () => {
       const res = await updateAssistenteAction(userId, email, nome, cognome);
@@ -40,45 +53,40 @@ export function AssistenteEditForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Email</span>
-          <input
+        <Field label="Email" required error={fEmail.error} className="sm:col-span-2">
+          <Input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fEmail.onBlur}
+            invalid={fEmail.invalid}
           />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Nome</span>
-          <input
+        </Field>
+        <Field label="Nome" required error={fNome.error}>
+          <Input
             value={nome}
             onChange={(e) => setNome(e.target.value)}
-            required
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fNome.onBlur}
+            invalid={fNome.invalid}
           />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Cognome</span>
-          <input
+        </Field>
+        <Field label="Cognome" required error={fCognome.error}>
+          <Input
             value={cognome}
             onChange={(e) => setCognome(e.target.value)}
-            required
-            className="mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]"
+            onBlur={fCognome.onBlur}
+            invalid={fCognome.invalid}
           />
-        </label>
+        </Field>
       </div>
 
       {error && <p className="text-[12px] text-pv-red-500">{error}</p>}
-      {savedAt && !error && (
-        <p className="text-[12px] text-pv-green-500">Salvato.</p>
-      )}
+      {savedAt && !error && <p className="text-[12px] text-pv-green-500">Salvato.</p>}
 
       <div className="flex justify-end">
-        <Button type="submit" size="md" disabled={pending} loading={pending} loadingLabel="Salvataggio…">
+        <Button type="submit" size="md" loading={pending} loadingLabel="Salvataggio…">
           Salva modifiche
         </Button>
       </div>

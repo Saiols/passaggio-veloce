@@ -2,12 +2,23 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Button, PasswordInput } from '@/components/ui';
+import { z } from 'zod';
+import { passwordSchema } from '@pv/lib';
+import { Button, Field, PasswordInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { changeOwnPasswordAction } from './actions';
 
-const INPUT_CLASS =
-  'w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]';
+const cambioPasswordSchema = z
+  .object({
+    attuale: z.string().min(1, 'Inserisci la password attuale'),
+    nuova: passwordSchema,
+    conferma: z.string().min(1, 'Ripeti la nuova password'),
+  })
+  .refine((d) => d.nuova === d.conferma, {
+    message: 'Le due nuove password non coincidono',
+    path: ['conferma'],
+  });
 
 export function CambioPasswordForm() {
   const [pending, startTransition] = useTransition();
@@ -17,14 +28,15 @@ export function CambioPasswordForm() {
   const [nuova, setNuova] = useState('');
   const [conferma, setConferma] = useState('');
 
-  const handleSubmit = (e: React.FormEvent): void => {
-    e.preventDefault();
+  const errors = zodFieldErrors(cambioPasswordSchema, { attuale, nuova, conferma });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fAttuale = field('attuale');
+  const fNuova = field('nuova');
+  const fConferma = field('conferma');
+
+  const onValid = (): void => {
     setError(null);
     setDone(false);
-    if (nuova !== conferma) {
-      setError('Le due nuove password non coincidono');
-      return;
-    }
     startTransition(async () => {
       const res = await changeOwnPasswordAction(attuale, nuova);
       if (!res.ok) {
@@ -39,45 +51,35 @@ export function CambioPasswordForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={gatedSubmit(onValid)} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Password attuale</span>
+        <Field label="Password attuale" required error={fAttuale.error} className="sm:col-span-2">
           <PasswordInput
             value={attuale}
             onChange={(e) => setAttuale(e.target.value)}
+            onBlur={fAttuale.onBlur}
+            invalid={fAttuale.invalid}
             autoComplete="current-password"
-            required
-            containerClassName="mt-1"
-            className={INPUT_CLASS}
           />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Nuova password</span>
+        </Field>
+        <Field label="Nuova password" required error={fNuova.error}>
           <PasswordInput
             value={nuova}
             onChange={(e) => setNuova(e.target.value)}
+            onBlur={fNuova.onBlur}
+            invalid={fNuova.invalid}
             autoComplete="new-password"
-            required
-            minLength={8}
-            containerClassName="mt-1"
-            className={INPUT_CLASS}
           />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">
-            Ripeti nuova password
-          </span>
+        </Field>
+        <Field label="Ripeti nuova password" required error={fConferma.error}>
           <PasswordInput
             value={conferma}
             onChange={(e) => setConferma(e.target.value)}
+            onBlur={fConferma.onBlur}
+            invalid={fConferma.invalid}
             autoComplete="new-password"
-            required
-            minLength={8}
-            containerClassName="mt-1"
-            className={INPUT_CLASS}
           />
-        </label>
+        </Field>
       </div>
 
       <p className="text-[12px] text-pv-slate-500">
@@ -100,13 +102,7 @@ export function CambioPasswordForm() {
       )}
 
       <div className="flex justify-end">
-        <Button
-          type="submit"
-          size="md"
-          disabled={pending || !attuale || !nuova || !conferma}
-          loading={pending}
-          loadingLabel="Aggiornamento…"
-        >
+        <Button type="submit" size="md" loading={pending} loadingLabel="Aggiornamento…">
           Aggiorna password
         </Button>
       </div>

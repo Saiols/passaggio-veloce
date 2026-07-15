@@ -13,6 +13,7 @@ import { headers, cookies } from 'next/headers';
 import { tryMatchCrmContact } from '@/lib/crm/sync';
 import { parseUtmCookie } from '@/lib/crm/utm';
 import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
+import { geocodeCompanySedi } from '@/lib/geo/geocode-sedi';
 import { AFF_SPOT_COOKIE } from '@/lib/affiliazione/spot-cookie';
 import { anonymizeIp, clientIp } from '@/lib/net/ip';
 import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
@@ -608,6 +609,9 @@ export async function registerAction(
       // AF-N: se il nuovo iscritto ha un referenteId, notifica al referente
       // (template N22 Referral Signup).
       void notifyReferralSignup(createdCompanyId);
+      // Geocoda le sedi appena create (best-effort, fuori dalla transazione).
+      // Se non fa in tempo/fallisce, il backfill le riprende (lat null).
+      void geocodeCompanySedi(createdCompanyId);
     }
 
     // Mandato SEPA via Stripe — SOLO agenzie e SOLO con provider stripe.

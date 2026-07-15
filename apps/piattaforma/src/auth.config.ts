@@ -53,6 +53,11 @@ export const authConfig = {
       // raggiungibile senza login (è l'ingresso dell'affiliazione).
       if (path.startsWith('/r/')) return true;
 
+      // Link "email di partenza" CRM: il lead ANONIMO clicca /i/<token>, la
+      // route traccia l'apertura e redirige a /register/...?promo=<code>. Come
+      // /r/, deve essere raggiungibile senza login (nessun account esiste ancora).
+      if (path.startsWith('/i/')) return true;
+
       if (isPublicPath(path)) return true;
 
       // Everything else requires auth.

@@ -67,11 +67,17 @@ export function MappaClient({
   const mapRef = useRef<HTMLDivElement>(null);
   const [showDealer, setShowDealer] = useState(true);
   const [showAgenzia, setShowAgenzia] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const dealerClustererRef = useRef<MarkerClusterer | null>(null);
   const agenziaClustererRef = useRef<MarkerClusterer | null>(null);
   const dealerMarkersRef = useRef<google.maps.Marker[]>([]);
   const agenziaMarkersRef = useRef<google.maps.Marker[]>([]);
+  // Ultimo valore dei toggle, letto alla COSTRUZIONE dei clusterer: se l'utente
+  // spegne un layer mentre la mappa carica (async), i clusterer nascono già
+  // coerenti col toggle invece di mostrare tutto ignorando lo stato.
+  const showDealerRef = useRef(showDealer);
+  const showAgenziaRef = useRef(showAgenzia);
 
   const nDealer = points.filter((p) => p.type === 'DEALER').length;
   const nAgenzia = points.filter((p) => p.type === 'AGENZIA').length;
@@ -81,52 +87,72 @@ export function MappaClient({
     let cancelled = false;
 
     void (async () => {
-      const { setOptions, importLibrary } = await import('@googlemaps/js-api-loader');
-      setOptions({ key: API_KEY, v: 'weekly' });
-      const { Map, InfoWindow } = (await importLibrary('maps')) as google.maps.MapsLibrary;
-      await importLibrary('marker'); // rende disponibile google.maps.Marker
-      if (cancelled || !mapRef.current) return;
+      try {
+        const { setOptions, importLibrary } = await import('@googlemaps/js-api-loader');
+        setOptions({ key: API_KEY, v: 'weekly' });
+        const { Map, InfoWindow } = (await importLibrary('maps')) as google.maps.MapsLibrary;
+        await importLibrary('marker'); // rende disponibile google.maps.Marker
+        if (cancelled || !mapRef.current) return;
 
-      const map = new Map(mapRef.current, {
-        center: ITALY_CENTER,
-        zoom: 6,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-      });
-      const info = new InfoWindow();
+        const map = new Map(mapRef.current, {
+          center: ITALY_CENTER,
+          zoom: 6,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        const info = new InfoWindow();
 
-      const makeMarkers = (type: 'DEALER' | 'AGENZIA') =>
-        points
-          .filter((p) => p.type === type)
-          .map((p) => {
-            const m = new google.maps.Marker({
-              position: { lat: p.lat, lng: p.lng },
-              icon: markerIcon(pointColor(type)),
-              title: p.nome,
+        const makeMarkers = (type: 'DEALER' | 'AGENZIA') =>
+          points
+            .filter((p) => p.type === type)
+            .map((p) => {
+              const m = new google.maps.Marker({
+                position: { lat: p.lat, lng: p.lng },
+                icon: markerIcon(pointColor(type)),
+                title: p.nome,
+              });
+              m.addListener('click', () => {
+                // Contenuto costruito come nodo DOM con textContent: nome/città/
+                // provincia sono free-text del tenant (nessuno stripping HTML lato
+                // schema) → mai interpolati come HTML, altrimenti XSS nella sessione
+                // dell'admin che clicca il pin. setContent riceve un Element.
+                const el = document.createElement('div');
+                el.style.fontSize = '13px';
+                const strong = document.createElement('strong');
+                strong.textContent = p.nome;
+                el.append(
+                  strong,
+                  document.createElement('br'),
+                  document.createTextNode(`${p.citta} (${p.provincia})`),
+                  document.createElement('br'),
+                  document.createTextNode(type === 'DEALER' ? 'Broker' : 'Agenzia'),
+                );
+                info.setContent(el);
+                info.open(map, m);
+              });
+              return m;
             });
-            m.addListener('click', () => {
-              info.setContent(
-                `<div style="font-size:13px"><strong>${p.nome}</strong><br/>${p.citta} (${p.provincia})<br/>${type === 'DEALER' ? 'Broker' : 'Agenzia'}</div>`,
-              );
-              info.open(map, m);
-            });
-            return m;
-          });
 
-      dealerMarkersRef.current = makeMarkers('DEALER');
-      agenziaMarkersRef.current = makeMarkers('AGENZIA');
+        dealerMarkersRef.current = makeMarkers('DEALER');
+        agenziaMarkersRef.current = makeMarkers('AGENZIA');
 
-      dealerClustererRef.current = new MarkerClusterer({
-        map,
-        markers: dealerMarkersRef.current,
-        renderer: clusterRenderer(DEALER_COLOR),
-      });
-      agenziaClustererRef.current = new MarkerClusterer({
-        map,
-        markers: agenziaMarkersRef.current,
-        renderer: clusterRenderer(AGENZIA_COLOR),
-      });
+        dealerClustererRef.current = new MarkerClusterer({
+          map,
+          markers: showDealerRef.current ? dealerMarkersRef.current : [],
+          renderer: clusterRenderer(DEALER_COLOR),
+        });
+        agenziaClustererRef.current = new MarkerClusterer({
+          map,
+          markers: showAgenziaRef.current ? agenziaMarkersRef.current : [],
+          renderer: clusterRenderer(AGENZIA_COLOR),
+        });
+      } catch (err) {
+        // Chiave invalida/con restrizioni o libreria non caricata: evita la mappa
+        // perennemente vuota senza feedback.
+        console.error('[mappa] caricamento Google Maps fallito', err);
+        if (!cancelled) setLoadError(true);
+      }
     })();
 
     return () => {
@@ -136,8 +162,11 @@ export function MappaClient({
     };
   }, [points]);
 
-  // Toggle layer: aggiungi/rimuovi i marker dal rispettivo clusterer.
+  // Toggle layer: aggiungi/rimuovi i marker dal rispettivo clusterer. La ref è
+  // aggiornata PRIMA dell'early-return così, se il clusterer non esiste ancora
+  // (mappa in caricamento), la costruzione successiva legge lo stato corretto.
   useEffect(() => {
+    showDealerRef.current = showDealer;
     const c = dealerClustererRef.current;
     if (!c) return;
     c.clearMarkers();
@@ -145,6 +174,7 @@ export function MappaClient({
   }, [showDealer]);
 
   useEffect(() => {
+    showAgenziaRef.current = showAgenzia;
     const c = agenziaClustererRef.current;
     if (!c) return;
     c.clearMarkers();
@@ -179,6 +209,12 @@ export function MappaClient({
           Agenzie · {nAgenzia}
         </button>
       </div>
+
+      {loadError && (
+        <div className="rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 p-4 text-[13px] text-pv-slate-500">
+          Mappa non caricata: verifica la chiave/permessi Google.
+        </div>
+      )}
 
       <div ref={mapRef} className="h-[70vh] w-full overflow-hidden rounded-[12px] border border-pv-slate-200" />
 

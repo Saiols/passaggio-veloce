@@ -1,18 +1,17 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui';
+import { z } from 'zod';
+import { Button, Field, Input, Select } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { MatricePermessi } from '@/components/permessi/matrice-permessi';
 import { permessiConcedibili } from '@/components/permessi/matrice-logic';
 import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { updateTeamUserAction } from '@/app/team/actions';
 
 type RuoloSede = 'OPERATORE' | 'ADMIN_SEDE';
-
-const inputClass =
-  'mt-1 w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] focus:border-pv-navy-600 focus:outline-none focus:shadow-[var(--pv-ring-focus)]';
 
 export function TeamEditForm({
   userId,
@@ -63,6 +62,25 @@ export function TeamEditForm({
   // la matrice sarebbe una promessa non mantenuta.
   const modificabile = puoScegliere && !isOwner && userId !== currentUserId;
 
+  const schema = useMemo(
+    () =>
+      z.object({
+        email: z.string().email('Email non valida'),
+        nome: z.string().trim().min(1, 'Nome obbligatorio'),
+        cognome: z.string().trim().min(1, 'Cognome obbligatorio'),
+        sedeId: isOwner
+          ? z.string().optional()
+          : z.string().min(1, 'Seleziona la sede di appartenenza'),
+      }),
+    [isOwner],
+  );
+  const errors = zodFieldErrors(schema, { email, nome, cognome, sedeId });
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const fEmail = field('email');
+  const fNome = field('nome');
+  const fCognome = field('cognome');
+  const fSede = field('sedeId');
+
   function onRuoloChange(r: RuoloSede) {
     setRuolo(r);
     // Il set concedibile cambia col ruolo: un OPERATORE non può avere team.* in
@@ -72,13 +90,8 @@ export function TeamEditForm({
     setPermessi((prev) => prev.filter((p) => concedibili.has(p)));
   }
 
-  const handleSubmit = (e: React.FormEvent): void => {
-    e.preventDefault();
+  const onValid = (): void => {
     setError(null);
-    if (!isOwner && !sedeId) {
-      setError('Seleziona la sede di appartenenza');
-      return;
-    }
     startTransition(async () => {
       const res = await updateTeamUserAction(
         userId,
@@ -99,41 +112,42 @@ export function TeamEditForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Email</span>
-          <input
+        <Field label="Email" required error={fEmail.error} className="sm:col-span-2">
+          <Input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            required
-            className={inputClass}
+            onBlur={fEmail.onBlur}
+            invalid={fEmail.invalid}
           />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Nome</span>
-          <input value={nome} onChange={(e) => setNome(e.target.value)} required className={inputClass} />
-        </label>
-        <label className="block">
-          <span className="text-[12px] font-semibold text-pv-slate-700">Cognome</span>
-          <input
+        </Field>
+        <Field label="Nome" required error={fNome.error}>
+          <Input
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+            onBlur={fNome.onBlur}
+            invalid={fNome.invalid}
+          />
+        </Field>
+        <Field label="Cognome" required error={fCognome.error}>
+          <Input
             value={cognome}
             onChange={(e) => setCognome(e.target.value)}
-            required
-            className={inputClass}
+            onBlur={fCognome.onBlur}
+            invalid={fCognome.invalid}
           />
-        </label>
+        </Field>
 
         {!isOwner && (
           <>
-            <label className="block">
-              <span className="text-[12px] font-semibold text-pv-slate-700">Sede di appartenenza</span>
-              <select
+            <Field label="Sede di appartenenza" required error={fSede.error}>
+              <Select
                 value={sedeId}
                 onChange={(e) => setSedeId(e.target.value)}
-                required
-                className={inputClass}
+                onBlur={fSede.onBlur}
+                invalid={fSede.invalid}
               >
                 <option value="" disabled>
                   Seleziona una sede…
@@ -143,19 +157,14 @@ export function TeamEditForm({
                     {s.nome}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="text-[12px] font-semibold text-pv-slate-700">Ruolo</span>
-              <select
-                value={ruolo}
-                onChange={(e) => onRuoloChange(e.target.value as RuoloSede)}
-                className={inputClass}
-              >
+              </Select>
+            </Field>
+            <Field label="Ruolo">
+              <Select value={ruolo} onChange={(e) => onRuoloChange(e.target.value as RuoloSede)}>
                 <option value="OPERATORE">Operatore</option>
                 <option value="ADMIN_SEDE">Admin di sede</option>
-              </select>
-            </label>
+              </Select>
+            </Field>
           </>
         )}
       </div>
@@ -190,7 +199,7 @@ export function TeamEditForm({
       {savedAt && !error && <p className="text-[12px] text-pv-green-500">Salvato.</p>}
 
       <div className="flex justify-end">
-        <Button type="submit" size="md" disabled={pending} loading={pending} loadingLabel="Salvataggio…">
+        <Button type="submit" size="md" loading={pending} loadingLabel="Salvataggio…">
           Salva modifiche
         </Button>
       </div>

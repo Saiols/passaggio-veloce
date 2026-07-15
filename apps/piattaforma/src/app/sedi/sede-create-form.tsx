@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Alert, Button, Field, Input } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
+import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
+import { registerSedeSchema } from '@/lib/auth/schemas';
 import { createSedeAction } from './actions';
 
 const EMPTY = {
@@ -36,21 +38,10 @@ export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       provincia: p.provincia,
     }));
 
-  const ibanOk = f.iban.trim() === '' || /^IT\d{2}[A-Z0-9]{1,30}$/i.test(f.iban.trim());
-  const valid =
-    f.nome.trim().length >= 2 &&
-    f.indirizzo.trim().length >= 2 &&
-    f.citta.trim().length >= 2 &&
-    f.cap.trim().length >= 4 &&
-    f.provincia.trim().length === 2 &&
-    ibanOk;
+  const errors = zodFieldErrors(registerSedeSchema, f);
+  const { field, gatedSubmit } = useFieldErrorsState(errors);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!valid) {
-      setError('Compila nome, indirizzo, città, CAP, provincia. L’IBAN (se inserito) dev’essere valido.');
-      return;
-    }
+  const onValid = (): void => {
     setError(null);
     start(async () => {
       const fd = new FormData();
@@ -67,26 +58,52 @@ export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={gatedSubmit(onValid)} noValidate className="space-y-3">
       <AddressAutocomplete onSelect={applyAddress} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Nome sede" required>
-          <Input value={f.nome} onChange={(e) => set('nome', e.target.value)} />
+        <Field label="Nome sede" required error={field('nome').error}>
+          <Input
+            value={f.nome}
+            invalid={field('nome').invalid}
+            onBlur={field('nome').onBlur}
+            onChange={(e) => set('nome', e.target.value)}
+          />
         </Field>
-        <Field label="Indirizzo" required>
-          <Input value={f.indirizzo} onChange={(e) => set('indirizzo', e.target.value)} />
+        <Field label="Indirizzo" required error={field('indirizzo').error}>
+          <Input
+            value={f.indirizzo}
+            invalid={field('indirizzo').invalid}
+            onBlur={field('indirizzo').onBlur}
+            onChange={(e) => set('indirizzo', e.target.value)}
+          />
         </Field>
         <Field label="Civico">
           <Input value={f.civico} onChange={(e) => set('civico', e.target.value)} />
         </Field>
-        <Field label="Città" required>
-          <Input value={f.citta} onChange={(e) => set('citta', e.target.value)} />
+        <Field label="Città" required error={field('citta').error}>
+          <Input
+            value={f.citta}
+            invalid={field('citta').invalid}
+            onBlur={field('citta').onBlur}
+            onChange={(e) => set('citta', e.target.value)}
+          />
         </Field>
-        <Field label="CAP" required>
-          <Input value={f.cap} onChange={(e) => set('cap', e.target.value)} />
+        <Field label="CAP" required error={field('cap').error}>
+          <Input
+            value={f.cap}
+            invalid={field('cap').invalid}
+            onBlur={field('cap').onBlur}
+            onChange={(e) => set('cap', e.target.value)}
+          />
         </Field>
-        <Field label="Provincia (sigla)" required>
-          <Input maxLength={2} value={f.provincia} onChange={(e) => set('provincia', e.target.value)} />
+        <Field label="Provincia (sigla)" required error={field('provincia').error}>
+          <Input
+            maxLength={2}
+            value={f.provincia}
+            invalid={field('provincia').invalid}
+            onBlur={field('provincia').onBlur}
+            onChange={(e) => set('provincia', e.target.value)}
+          />
         </Field>
         <Field label="Telefono">
           <Input value={f.telefono} onChange={(e) => set('telefono', e.target.value)} />
@@ -94,13 +111,11 @@ export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
         <Field label="Email operativa">
           <Input value={f.email} onChange={(e) => set('email', e.target.value)} />
         </Field>
-        <Field
-          label="IBAN dedicato (opzionale)"
-          error={!ibanOk ? 'IBAN italiano non valido' : undefined}
-        >
+        <Field label="IBAN dedicato (opzionale)" error={field('iban').error}>
           <Input
             value={f.iban}
-            invalid={!ibanOk}
+            invalid={field('iban').invalid}
+            onBlur={field('iban').onBlur}
             placeholder="IT60X0542811101000000123456"
             onChange={(e) => set('iban', e.target.value)}
           />
@@ -110,7 +125,7 @@ export function SedeCreateForm({ onSuccess }: { onSuccess?: () => void } = {}) {
       {error && <Alert variant="error">{error}</Alert>}
 
       <div className="flex justify-end">
-        <Button type="submit" size="md" disabled={!valid} loading={pending}>
+        <Button type="submit" size="md" loading={pending}>
           Aggiungi sede
         </Button>
       </div>

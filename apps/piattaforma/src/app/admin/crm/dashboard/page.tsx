@@ -9,7 +9,10 @@ import {
 } from '@/lib/auth/permissions';
 import { formatCurrencyCent } from '@/lib/format';
 import { RendimentoChart } from '../../../wallet/rendimento-chart';
-import { getPlatformRegistrationStats } from '@/lib/crm/platform-stats';
+import {
+  getPlatformRegistrationStats,
+  type TipoRegistrati,
+} from '@/lib/crm/platform-stats';
 
 const STATI_ORDER = [
   'S0',
@@ -477,7 +480,7 @@ function RegistratiBlock({
   bar,
 }: {
   titolo: string;
-  d: { tot: number; daLista: number; organici: number };
+  d: TipoRegistrati;
   dot: string;
   bar: string;
 }) {

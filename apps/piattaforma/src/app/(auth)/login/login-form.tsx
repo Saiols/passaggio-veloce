@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { Alert, Button, Field, Input, PasswordInput } from '@/components/ui';
+import { useFieldErrorsState, zodFieldErrors, hasBlockingErrors } from '@/components/forms';
+import { loginSchema } from '@/lib/auth/schemas';
 import { loginAction, type LoginActionState } from '../actions';
 
 const initialState: LoginActionState = {};
@@ -11,6 +13,12 @@ export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // In fase TOTP email/password sono readOnly e già validi: niente errori client.
+  const errors = state.needTotp ? {} : zodFieldErrors(loginSchema, { email, password });
+  const { field, reveal } = useFieldErrorsState(errors);
+  const emailF = field('email');
+  const pwF = field('password');
 
   return (
     <div className="space-y-6">
@@ -30,8 +38,15 @@ export function LoginForm() {
 
       {state.error && <Alert variant="error">{state.error}</Alert>}
 
-      <form action={formAction} className="space-y-4">
-        <Field label="Email" htmlFor="email" required>
+      <form
+        action={formAction}
+        onSubmit={(e) => {
+          reveal();
+          if (hasBlockingErrors(errors)) e.preventDefault();
+        }}
+        className="space-y-4"
+      >
+        <Field label="Email" htmlFor="email" required error={emailF.error}>
           <Input
             id="email"
             name="email"
@@ -41,11 +56,13 @@ export function LoginForm() {
             placeholder="nome@azienda.it"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onBlur={emailF.onBlur}
+            invalid={emailF.invalid}
             readOnly={state.needTotp}
           />
         </Field>
 
-        <Field label="Password" htmlFor="password" required>
+        <Field label="Password" htmlFor="password" required error={pwF.error}>
           <PasswordInput
             id="password"
             name="password"
@@ -54,6 +71,8 @@ export function LoginForm() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onBlur={pwF.onBlur}
+            invalid={pwF.invalid}
             readOnly={state.needTotp}
           />
         </Field>

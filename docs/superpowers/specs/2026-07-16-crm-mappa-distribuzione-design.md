@@ -37,9 +37,9 @@ coordinate**, non disegnare la mappa.
 | Chiave API | Riuso `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` anche lato server, allargando le restrizioni della chiave |
 | Libreria mappa | Google Maps JS (`@googlemaps/js-api-loader`, già presente) + `@googlemaps/markerclusterer` (nuova dep) |
 | Stile cluster | Due layer separati: blu (broker) + arancione (agenzie), indipendenti, con toggle |
-| Unità del puntino | Ogni sede operativa: Company-madre + ogni `Sede` |
+| Unità del puntino | Ogni `Sede` (la sede madre è già una `Sede`: la registrazione ne crea sempre almeno una — vedi sotto) |
 | Collocazione | Voce dedicata "Mappa" nel gruppo CRM (`/admin/crm/mappa`), non nella dashboard |
-| Infowindow al click | Sì (nome / indirizzo / tipo / madre-o-sede) |
+| Infowindow al click | Sì (nome sede / città-provincia / tipo) |
 
 Alternative valutate e scartate: Leaflet+OSM (introdurrebbe un provider di tile
 inutile, abbiamo già Google), centroidi comune offline (nessuna precisione reale
@@ -50,7 +50,16 @@ inutile, abbiamo già Google), centroidi comune offline (nessuna precisione real
 
 ### 1. Modello dati (`packages/db/prisma/schema.prisma`)
 
-Aggiungere a **`Company`** e a **`Sede`** tre campi nullable:
+Le coordinate vanno **solo su `Sede`**, non su `Company`. Motivo di correttezza:
+la registrazione (`app/(auth)/actions.ts`) crea **sempre almeno una `Sede`** —
+le sedi dello step wizard, oppure una singola sede derivata 1:1 dall'indirizzo
+azienda. Quindi ogni luogo fisico (HQ incluso) è già una `Sede`; mettere le
+coordinate anche sulla `Company` madre farebbe **doppioni** dell'HQ sulla mappa.
+Come bonus, la logica geografica futura (`lib/distribuzione/tick.ts`) lavora già
+per `Sede`, quindi coordinate a livello di `Sede` sono anche il livello giusto per
+il "agenzie entro X km".
+
+Aggiungere a **`Sede`** tre campi nullable:
 
 ```prisma
 lat        Float?
@@ -59,8 +68,9 @@ geocodedAt DateTime?
 ```
 
 Nullable perché: (a) il geocoding può fallire o essere in coda; (b) il backfill è
-progressivo. `geocodedAt` distingue "mai geocodato" (null) da "geocodato ma senza
-risultato" (valorizzato con lat/lng null) e permette ri-geocodifiche mirate.
+progressivo. `geocodedAt` = timestamp dell'ultima geolocalizzazione **riuscita**;
+resta `null` se non è mai riuscita, così il backfill (che seleziona `lat: null`)
+ci riprova ai giri successivi senza dover distinguere casi.
 
 **Migration a mano** (additiva, `ALTER TABLE ... ADD COLUMN`). NON usare
 `prisma migrate dev` — su questo schema propone DROP SEQUENCE distruttive. Si
@@ -73,14 +83,16 @@ scrive lo SQL a mano e si applica con `migrate deploy`.
 - `fetchFields({ fields: ['addressComponents', 'location'] })`.
 - Estendere `AddressParts` con `lat?: number; lng?: number` letti da
   `place.location?.lat()` / `.lng()`.
-- I consumatori che creano/modificano **azienda** e **sede** propagano lat/lng al
-  save:
-  - `app/(auth)/register/register-wizard.tsx` → indirizzo Company madre
-  - `app/sedi/sede-create-form.tsx` e `app/sedi/[id]/sede-edit.tsx` → indirizzo Sede
-  - (`app/pratiche/nuova/wizard.tsx` usa l'autocomplete per l'indirizzo della
-    *pratica*, non serve alla mappa → invariato)
+- Cablaggio (solo dove è economico threadare le coordinate come campi
+  passthrough, senza toccare gli schemi zod di validazione):
+  - `app/sedi/sede-create-form.tsx` + `createSedeAction` → sede creata a mano
+  - `app/sedi/[id]/sede-edit.tsx` + `updateSedeAction` → sede modificata
+  - Il **register-wizard** (file grande, sedi create in transazione) NON viene
+    threadato: le sedi nuove da registrazione si geocodano **post-commit**
+    server-side (vedi §3), fuori dalla transazione. `app/pratiche/nuova/wizard.tsx`
+    usa l'autocomplete per l'indirizzo *pratica* → invariato.
 
-### 3. Geocoding — server + fallback
+### 3. Geocoding — server (backbone di copertura)
 
 `apps/piattaforma/src/lib/geo/geocode.ts`:
 
@@ -90,17 +102,22 @@ scrive lo SQL a mano e si applica con `migrate deploy`.
   leggibili server-side a prescindere dal prefisso `NEXT_PUBLIC`).
 - Tollerante: ritorna `null` su `ZERO_RESULTS`, errore di rete, quota, o chiave
   mancante. Mai lancia verso il chiamante.
-- **Fallback su save**: nelle server action che creano/modificano Company e Sede,
-  se il client non ha fornito lat/lng (es. indirizzo digitato a mano senza
-  selezionare dal dropdown) o l'indirizzo è cambiato, chiamare `geocodeAddress`
-  best-effort. Il fallimento non blocca il salvataggio (coord restano null).
+- **Geocode-on-save (mai in transazione)**: garantisce la copertura di tutte le
+  sedi nuove indipendentemente dal client.
+  - `createSedeAction` / `updateSedeAction`: se il client ha fornito lat/lng
+    (Places) le usa; altrimenti (o se l'indirizzo è cambiato) chiama
+    `geocodeAddress` best-effort prima di scrivere. Fallimento → coord null, il
+    salvataggio non si blocca.
+  - Registrazione (`app/(auth)/actions.ts`): **dopo** il commit del `$transaction`,
+    geocodifica best-effort le sedi appena create e le aggiorna (nessuna chiamata
+    di rete dentro la transazione).
 
 ### 4. Backfill sedi già registrate
 
 `apps/piattaforma/scripts/geocode-backfill.ts`:
 
-- Itera **Company** e **Sede** con `lat` null, geocoda l'indirizzo, scrive
-  lat/lng + `geocodedAt`.
+- Itera le **Sede** con `lat` null, geocoda l'indirizzo, scrive lat/lng +
+  `geocodedAt`.
 - Rate-limited (pausa tra le chiamate) e **idempotente** (ri-eseguibile: salta chi
   ha già `geocodedAt`).
 - Logga esiti: geocodati / falliti (con indirizzo), così i falliti sono visibili e
@@ -112,13 +129,11 @@ scrive lo SQL a mano e si applica con `migrate deploy`.
 
 `apps/piattaforma/src/lib/crm/mappa-points.ts`:
 
-- `getMappaPoints()` → unione dei luoghi fisici delle **aziende iscritte** con
-  coordinate valide:
-  - Company-madre con `lat`/`lng` non null
-  - `Sede` con `lat`/`lng` non null
-- Ogni punto: `{ id, kind: 'company' | 'sede', type: 'DEALER' | 'AGENZIA', lat, lng, nome, citta, provincia }`.
-- Ritorna anche il **conteggio dei non geolocalizzati** (Company/Sede senza coord),
-  da mostrare in chiaro nella pagina (niente troncamenti silenziosi).
+- `getMappaPoints()` → una `Sede` = un punto, per le sole **aziende iscritte**
+  (Sede non cancellata, Company madre non cancellata) con `lat`/`lng` non null.
+- Ogni punto: `{ id, type: 'DEALER' | 'AGENZIA', lat, lng, nome, citta, provincia }`.
+- Ritorna anche il **conteggio delle sedi non geolocalizzate** (coord null), da
+  mostrare in chiaro nella pagina (niente troncamenti silenziosi).
 - La query si prova sul DB locale read-only prima di chiudere.
 
 ### 6. Pagina + mappa client
@@ -138,8 +153,8 @@ scrive lo SQL a mano e si applica con `migrate deploy`.
   - **Due `MarkerClusterer`** distinti (uno per DEALER, uno per AGENZIA) con
     **renderer di cluster custom** colorato (blu / arancione) che mostra il
     conteggio del proprio tipo.
-  - Pallini colorati per tipo; **infowindow** al click (nome, indirizzo, tipo,
-    madre-o-sede).
+  - Pallini colorati per tipo; **infowindow** al click (nome sede,
+    città/provincia, tipo).
   - **Legenda** con conteggi live e **chip toggle** per accendere/spegnere ciascun
     layer.
   - **Nota** "N sedi non ancora geolocalizzate" quando presenti.
@@ -179,8 +194,8 @@ con una nuova icona in `admin-icons`.
 ## Test & verifica
 
 - **Unit**: `geocode.ts` (mock fetch: hit / ZERO_RESULTS / errore / chiave
-  assente), mappatura tipo→colore, `getMappaPoints` (union Company+Sede,
-  esclusione dei null, conteggio non-geolocalizzati).
+  assente), mappatura tipo→colore, `getMappaPoints` (una Sede = un punto,
+  esclusione dei null e delle sedi/aziende cancellate, conteggio non-geolocalizzati).
 - **DB reale**: eseguire la query punti sul DB locale (copia di prod) in read-only
   prima di chiudere.
 - **Browser (obbligatorio)**: login admin → `/admin/crm/mappa` → verificare vista

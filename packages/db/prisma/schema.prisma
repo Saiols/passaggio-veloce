@@ -636,6 +636,13 @@ model Sede {
   telefono  String?
   email     String?
 
+  // Coordinate geografiche (Google Geocoding). Nullable: il geocoding è
+  // progressivo e best-effort. geocodedAt = ultima geolocalizzazione riuscita
+  // (null se mai riuscita → il backfill che filtra lat:null ci riprova).
+  lat        Float?
+  lng        Float?
+  geocodedAt DateTime?
+
   iban                String? // null → usa Company.iban (madre)
   payoutThresholdCent Int     @default(100000)
   referralCode        String? @unique

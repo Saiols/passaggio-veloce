@@ -1,5 +1,6 @@
 'use server';
 
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -12,6 +13,10 @@ import {
 } from '@/lib/auth/permissions';
 import { parseContactsCsv } from '@/lib/crm/csv-import';
 import { normalizePhone } from '@/lib/crm/phone';
+import { sendNotification } from '@/lib/notifiche';
+import { nextStatoInvio } from '@/lib/crm/email-partenza';
+import { evaluatePromoCode } from '@/lib/promo/evaluate';
+import { BRAND } from '@/lib/seo/brand';
 
 export type CrmContactResult =
   | { ok: true; id: string }
@@ -419,4 +424,117 @@ export async function bulkImportCrmContactsAction(
 
   revalidatePath('/admin/crm/contatti');
   return { ok: true, created, skipped, errors: errors.slice(0, 25) };
+}
+
+// ════════════════════════════════════════════════════════
+// Email di partenza
+// ════════════════════════════════════════════════════════
+
+/** Codici promo validi (attivi, non scaduti, non esauriti) per la select d'invio. */
+export async function listPromoCodesValidiAction(): Promise<
+  Array<{ id: string; code: string; importoEuro: number }>
+> {
+  const session = await auth();
+  if (!session?.user || !canEditCrmContact(session.user.role)) return [];
+  const codes = await prisma.promoCode.findMany({
+    where: { active: true },
+    select: {
+      id: true,
+      code: true,
+      amountCent: true,
+      expiresAt: true,
+      maxRedemptions: true,
+      _count: { select: { redemptions: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return codes
+    .filter((c) => {
+      const stato = evaluatePromoCode(
+        { amountCent: c.amountCent, expiresAt: c.expiresAt, active: true, maxRedemptions: c.maxRedemptions },
+        c._count.redemptions,
+      ).stato;
+      return stato === 'valido';
+    })
+    .map((c) => ({ id: c.id, code: c.code, importoEuro: Math.round(c.amountCent / 100) }));
+}
+
+/** Invia l'email di partenza a un lead. Gate: permessi, email, opt-out, codice valido. */
+export async function sendEmailPartenzaAction(input: {
+  contactId: string;
+  nomeReferente: string;
+  promoCodeId?: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canEditCrmContact(session.user.role)) {
+    return { ok: false, error: 'Non autorizzato.' };
+  }
+
+  const contact = await prisma.crmContact.findUnique({
+    where: { id: input.contactId },
+    select: {
+      id: true, cat: true, status: true, email: true, nome: true,
+      emailOptOutAt: true, emailUnsubToken: true, assignedToId: true,
+    },
+  });
+  if (!contact) return { ok: false, error: 'Contatto non trovato.' };
+
+  // Scoping SALES: può inviare solo ai contatti a lui assegnati.
+  if (session.user.role === 'SALES' && contact.assignedToId !== session.user.id) {
+    return { ok: false, error: 'Non autorizzato su questo contatto.' };
+  }
+
+  if (!contact.email) return { ok: false, error: 'Il contatto non ha un’email.' };
+  if (contact.emailOptOutAt) return { ok: false, error: 'Il contatto si è disiscritto dalle email.' };
+
+  // Rivalida il codice (potrebbe essere stato disattivato dopo l'apertura del modale).
+  let codice: { code: string; importoEuro: number } | undefined;
+  let promoCodeInviatoId: string | null = null;
+  if (input.promoCodeId) {
+    const promo = await prisma.promoCode.findUnique({
+      where: { id: input.promoCodeId },
+      select: { id: true, code: true, amountCent: true, expiresAt: true, active: true, maxRedemptions: true },
+    });
+    if (!promo) return { ok: false, error: 'Codice non trovato.' };
+    const count = await prisma.promoCodeRedemption.count({ where: { promoCodeId: promo.id } });
+    if (evaluatePromoCode(promo, count).stato !== 'valido') {
+      return { ok: false, error: 'Il codice selezionato non è più valido.' };
+    }
+    codice = { code: promo.code, importoEuro: Math.round(promo.amountCent / 100) };
+    promoCodeInviatoId = promo.id;
+  }
+
+  const invitoToken = randomUUID();
+  const emailUnsubToken = contact.emailUnsubToken ?? randomUUID();
+  const linkUrl = `${BRAND.url}/i/${invitoToken}`;
+  const unsubUrl = `${BRAND.url}/unsubscribe?token=${emailUnsubToken}`;
+
+  await sendNotification({
+    tipo: 'N26_EMAIL_PARTENZA',
+    target: { email: contact.email },
+    payload: {
+      nomeReferente: input.nomeReferente.trim() || contact.nome,
+      ragioneSociale: contact.nome,
+      categoria: contact.cat as 'BROKER' | 'AGENZIA',
+      linkUrl,
+      unsubUrl,
+      codice,
+    },
+  });
+
+  await prisma.crmContact.update({
+    where: { id: contact.id },
+    data: {
+      linkInviato: true,
+      linkInviatoAt: new Date(),
+      invitoToken,
+      emailUnsubToken,
+      promoCodeInviatoId,
+      status: nextStatoInvio(contact.status),
+    },
+  });
+
+  revalidatePath('/admin/crm/contatti');
+  return { ok: true };
 }

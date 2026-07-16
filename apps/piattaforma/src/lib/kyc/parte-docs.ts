@@ -52,6 +52,17 @@ export type Verdetto = 'MATCH' | 'MISMATCH' | 'ILLEGGIBILE' | 'SCADUTO';
 
 export type DocRequisiti = { identita: boolean; visura: boolean; permesso: boolean; codiceFiscale: boolean };
 
+/**
+ * Freschezza della visura di una PARTE della pratica (venditore/acquirente
+ * persona giuridica) — Schema Documentale v7. Si applica solo ai commercianti
+ * d'auto (`verificaVisura(..., { requireFreshness })`).
+ *
+ * ⚠️ NON è la validità della visura dell'ORGANIZZAZIONE iscritta alla
+ * piattaforma: quella vale 180 giorni e sta in `lib/visura/validita.ts`.
+ * Sono due domini diversi con regole diverse: NON unificarli. Qui si parla di
+ * un documento di un terzo dentro una pratica, là dell'anagrafica di chi ha
+ * aderito e a cui fatturiamo.
+ */
 const VISURA_VALIDITA_MESI = 6;
 
 function isPG(p: ParteDati): boolean {

@@ -56,9 +56,17 @@ export function isInPreavviso(emissione: Date | null, oggi: Date): boolean {
   return g >= VISURA_VALIDITA_GIORNI - PREAVVISO_GIORNI && g < VISURA_VALIDITA_GIORNI;
 }
 
-/** Giorni che restano prima del blocco. Mai negativo: 0 = scaduta. */
+/**
+ * Giorni che restano prima del blocco, clampati a [0, VISURA_VALIDITA_GIORNI].
+ * Mai negativo: 0 = scaduta. Mai oltre VISURA_VALIDITA_GIORNI: un'emissione
+ * futura (giorniTrascorsi negativo) non deve far scrivere a un banner
+ * "restano 349 giorni".
+ */
 export function giorniRimanenti(emissione: Date, oggi: Date): number {
-  return Math.max(0, VISURA_VALIDITA_GIORNI - giorniTrascorsi(emissione, oggi));
+  return Math.min(
+    VISURA_VALIDITA_GIORNI,
+    Math.max(0, VISURA_VALIDITA_GIORNI - giorniTrascorsi(emissione, oggi)),
+  );
 }
 
 /**

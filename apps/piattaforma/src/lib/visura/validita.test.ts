@@ -24,13 +24,25 @@ describe('giorniTrascorsi', () => {
     expect(giorniTrascorsi(emissione('2026-07-16'), oggi('2026-07-16'))).toBe(0);
   });
 
-  it('conta i giorni di calendario, non le 24h', () => {
+  it('somma correttamente su un intervallo di mesi (regressione; con fixture a mezzogiorno equivale a un floor ms/24h, non lo distingue)', () => {
     expect(giorniTrascorsi(emissione('2026-01-01'), oggi('2026-07-01'))).toBe(181);
   });
 
-  it('attraversa il cambio di ora legale senza perdere un giorno', () => {
-    // 2026-03-29 è il passaggio a CEST: quel giorno dura 23 ore.
+  it('resta corretto a cavallo del cambio di ora legale (regressione; UTC non ha DST, quindi con fixture a mezzogiorno non distingue da un floor ms/24h — vedi i test dedicati al giorno di Roma sotto)', () => {
+    // 2026-03-29 è il passaggio a CEST a Roma, ma qui sia emissione che oggi sono istanti UTC fissi.
     expect(giorniTrascorsi(emissione('2026-03-28'), oggi('2026-03-30'))).toBe(2);
+  });
+
+  it("legge il giorno di ROMA, non UTC: 22:30Z d'estate è già il giorno dopo", () => {
+    // 2026-06-29T22:30Z = 30 giu 00:30 CEST → giorno 180 → scaduta
+    const e = emissione('2026-01-01');
+    expect(giorniTrascorsi(e, new Date('2026-06-29T22:30:00Z'))).toBe(180); // UTC darebbe 179
+    expect(isVisuraScaduta(e, new Date('2026-06-29T22:30:00Z'))).toBe(true);
+  });
+
+  it('legge il giorno di Roma anche in ora solare (CET, +1)', () => {
+    // 2026-12-31T23:30Z = 1 gen 2027 00:30 CET
+    expect(giorniTrascorsi(emissione('2026-07-04'), new Date('2026-12-31T23:30:00Z'))).toBe(181);
   });
 });
 
@@ -97,6 +109,10 @@ describe('giorniRimanenti', () => {
 
   it('ampiamente scaduta → 0, non un numero negativo', () => {
     expect(giorniRimanenti(emissione('2024-12-13'), oggi('2026-07-16'))).toBe(0);
+  });
+
+  it('emissione futura → clampata a VISURA_VALIDITA_GIORNI, non 349', () => {
+    expect(giorniRimanenti(emissione('2027-01-01'), oggi('2026-07-16'))).toBe(VISURA_VALIDITA_GIORNI);
   });
 });
 

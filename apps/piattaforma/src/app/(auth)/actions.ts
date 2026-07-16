@@ -199,7 +199,17 @@ function parseBlobRefs(
 export type RegisterActionResult =
   | {
       ok: true;
-      emailVerificationToken: string;
+      /**
+       * Scorciatoia di verifica email, esposta al client SOLO in DEMO_MODE (dove
+       * l'email è simulata e il link non arriverebbe mai). In produzione è
+       * `undefined`: il token viaggia esclusivamente via email.
+       *
+       * NON rimuovere la condizione. Ritornarlo sempre significa consegnare al
+       * browser un link che scavalca la verifica dell'indirizzo — e il wizard,
+       * che mostra il box "🧪 Modalità DEMO" appena il campo è valorizzato, lo
+       * sbandiererebbe a un cliente vero in produzione.
+       */
+      emailVerificationToken?: string;
       promo?: { applied: true; amountCent: number } | { applied: false };
     }
   | { ok: false; error: string; field?: string; kycFailures?: import('@/lib/kyc/verify').KycFailure[] };
@@ -691,7 +701,9 @@ export async function registerAction(
 
     return {
       ok: true,
-      emailVerificationToken: verificationToken,
+      // Solo in DEMO: in produzione il link di verifica arriva via email (sopra),
+      // e non deve finire nel payload della Server Action.
+      emailVerificationToken: env.DEMO_MODE ? verificationToken : undefined,
       promo: promoCodeFromPayload ? promoResult : undefined,
     };
   } catch (error) {

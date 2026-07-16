@@ -304,7 +304,9 @@ export function RegisterWizard({
 
       if (result.ok) {
         clearRegisterDraft();
-        setToken(result.emailVerificationToken);
+        // undefined fuori da DEMO_MODE (il server non espone più il token):
+        // → `token` resta null → il box "Modalità DEMO" non viene renderizzato.
+        setToken(result.emailVerificationToken ?? null);
         setPromoOutcome(result.promo ?? null);
       } else if (result.kycFailures && result.kycFailures.length > 0) {
         // Gate KYC non superato: torna allo step Documenti e mostra i motivi

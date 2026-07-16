@@ -157,19 +157,39 @@ export async function updateSedeAction(
   if (!parsed.ok) return { ok: false, error: parsed.error };
   const f = parsed.data;
 
-  // Coordinate: preferisci quelle catturate dal client (Google Places); se
-  // assenti (indirizzo digitato a mano / non ricambiato) geocoda server-side
-  // best-effort. Non owner-gated: chiunque possa modificare l'anagrafica
-  // aggiorna anche la posizione sulla mappa distribuzione.
+  // Coordinate — regola: NON perdere mai coordinate buone già a DB.
+  //  1) le coordinate del client (Google Places) vincono sempre;
+  //  2) altrimenti si ri-geocoda SOLO se l'indirizzo è cambiato (un salvataggio
+  //     che tocca telefono/email/IBAN non deve ripagare il geocoder);
+  //  3) se non si ottengono coordinate (indirizzo invariato, oppure geocode
+  //     best-effort fallito — errore transitorio, ZERO_RESULTS, o API non
+  //     ancora abilitata sulla chiave in finestra pre-go-live) le chiavi lat/
+  //     lng/geocodedAt si OMETTONO dall'update: le coordinate esistenti restano
+  //     intatte. Scriverle a `null` qui cancellerebbe silenziosamente la sede
+  //     dalla mappa distribuzione ad ogni modifica.
+  const clientCoords = parseCoords(formData.get('lat'), formData.get('lng'));
+  const existing = await prisma.sede.findUnique({
+    where: { id: sedeId },
+    select: { indirizzo: true, civico: true, citta: true, cap: true, provincia: true },
+  });
+  const addressChanged =
+    !existing ||
+    existing.indirizzo !== f.indirizzo ||
+    (existing.civico ?? '') !== (f.civico ?? '') ||
+    existing.citta !== f.citta ||
+    existing.cap !== f.cap ||
+    existing.provincia !== f.provincia;
   const coords =
-    parseCoords(formData.get('lat'), formData.get('lng')) ??
-    (await geocodeAddress({
-      indirizzo: f.indirizzo,
-      civico: f.civico,
-      citta: f.citta,
-      cap: f.cap,
-      provincia: f.provincia,
-    }));
+    clientCoords ??
+    (addressChanged
+      ? await geocodeAddress({
+          indirizzo: f.indirizzo,
+          civico: f.civico,
+          citta: f.citta,
+          cap: f.cap,
+          provincia: f.provincia,
+        })
+      : null);
 
   await prisma.sede.update({
     where: { id: sedeId },
@@ -187,9 +207,9 @@ export async function updateSedeAction(
       // Si OMETTONO, non si validano: chi forgia la POST non scrive nulla, e chi
       // salva la sola anagrafica non azzera l'IBAN (parseSedeFields mappa '' → null).
       ...(ctx.isOwner ? { iban: f.iban, payoutThresholdCent: f.payoutThresholdCent } : {}),
-      lat: coords?.lat ?? null,
-      lng: coords?.lng ?? null,
-      geocodedAt: coords ? new Date() : null,
+      // Coord: scritte SOLO se ottenute; altrimenti chiavi omesse → si preserva
+      // il valore a DB (mai azzerato su fallimento best-effort).
+      ...(coords ? { lat: coords.lat, lng: coords.lng, geocodedAt: new Date() } : {}),
     },
   });
 

@@ -87,13 +87,16 @@ Conseguenza logica di "niente blocco su data" + "blocco duro a 180": un'agenzia 
 e risultare bloccata dal primo minuto, senza aver mai ricevuto un preavviso (finestra 175-179
 già passata). L'avviso deve dire chiaramente cosa succederà.
 
-> **Da decidere in fase di piano.** Il server conosce l'età della visura solo *dopo* il submit
-> (l'OCR gira dentro la register action). Quindi:
-> - **opzione economica**: avviso nella schermata di esito registrazione + banner al primo accesso;
-> - **opzione fedele** ("in fondo allo step 3"): richiede una chiamata OCR di *pre-flight* prima
->   del submit → un'estrazione Document AI in più per ogni registrazione.
->
-> Valutare il costo OCR. Il banner al primo accesso compare comunque, in automatico.
+**Dove:** nella **schermata di esito registrazione** (DECISO 2026-07-16). Il server conosce
+l'età della visura solo *dopo* il submit — l'OCR gira dentro la register action — e a quel
+punto la data estratta è già disponibile: l'avviso costa zero.
+
+> Scartata l'alternativa "inline in fondo allo step 3": avrebbe richiesto una chiamata OCR di
+> **pre-flight** prima del submit, cioè un'estrazione Document AI in più **per ogni
+> registrazione**, inclusi tutti quelli con la visura fresca. Costo non giustificato.
+
+Il banner (giallo o rosso a seconda dell'età) compare comunque in automatico al primo accesso:
+è la stessa funzione pura, non serve nulla di dedicato.
 
 ---
 
@@ -150,10 +153,15 @@ Le precedenti **restano**. La visura "che conta" è la più recente:
 
 ## Punto 3 — Preavviso email
 
-**Cron giornaliero** `/api/jobs/preavviso-visura` (decimo cron). In `vercel.json` ci sono già
-**9 cron giornalieri**, ben oltre il limite del piano Hobby (2): il progetto è quindi su Pro e
-un decimo cron non pone problemi di piano. *(Dedotto dalla config, non verificato sul billing:
-confermare prima di dare per scontato lo slot.)*
+**Cron giornaliero** `/api/jobs/preavviso-visura` (decimo cron, dopo i 9 già in `vercel.json`).
+
+> ⚠️ **Dipendenza:** il passaggio al piano **Pro è previsto ma non ancora fatto** (confermato da
+> Francesco il 2026-07-16). Sul piano Hobby il limite è di 2 cron job: finché non si passa a
+> Pro il decimo cron **non gira**, e senza cron non partono né i preavvisi (N46) né l'email di
+> scaduta (N47) né la notifica di congelamento al broker (N48). Il resto del ciclo (banner,
+> guard su payout/pratiche, filtro distribuzione) **non dipende dal cron** ed è pienamente
+> funzionante: è tutto derivato dalla data. Verificare il piano prima di considerare il punto 3
+> rilasciato.
 
 Nuovi `NotificaTipo`:
 
@@ -342,7 +350,7 @@ Per riferimento, chi sarebbe colpito oggi:
 | `documenti` non ha unique su `(companyId, tipo)` → add non replace già possibile | `\d documenti` |
 | `notifiche_inviate.payload` è `jsonb` → anti-join possibile | `information_schema.columns` |
 | Il filtro distribuzione esclude solo le scadute e lascia i null | query su `sedi ⋈ companies` |
-| 9 cron giornalieri già configurati — oltre il limite Hobby (2) → **dedotto** piano Pro, non verificato sul billing | `apps/piattaforma/vercel.json` |
+| 9 cron giornalieri già configurati; piano **Pro previsto ma non ancora attivo** → il 10° cron non gira finché non si passa | `apps/piattaforma/vercel.json` + conferma di Francesco |
 | I candidati distribuzione sono **SEDI** filtrate per madre | `lib/distribuzione/tick.ts:157-165` |
 
 ## Rischi noti
@@ -353,6 +361,9 @@ Per riferimento, chi sarebbe colpito oggi:
    comportamento reale rende falso uno dei due. Vanno modificati insieme.
 3. **Pratiche congelate.** Un cliente finale può restare in attesa per un adempimento
    dell'agenzia. Accettato ora, da monitorare.
-4. **Costo OCR** se si sceglie l'avviso inline allo step 3 (pre-flight su ogni registrazione).
+4. **Il punto 3 dipende dal piano Vercel.** Preavvisi, email di scaduta e notifica di
+   congelamento non partono finché il progetto resta su Hobby. Il resto del ciclo funziona
+   comunque: è derivato dalla data, non dal cron.
 5. **Registrazione che accetta ciò che punisce.** Un'agenzia con visura ≥180 si iscrive ed è
-   subito bloccata. Mitigato dall'avviso, non eliminato: è insito nel flusso richiesto.
+   subito bloccata. Mitigato dall'avviso in schermata di esito, non eliminato: è insito nel
+   flusso richiesto.

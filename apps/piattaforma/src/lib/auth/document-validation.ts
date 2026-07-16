@@ -24,8 +24,6 @@ export const REQUIRED_DOC_TIPI: readonly RegistrationDocTipo[] = [
   'VISURA_CAMERALE',
 ];
 
-const VISURA_MAX_AGE_MONTHS = 6;
-
 /**
  * Sottrae `months` mesi a una data, lavorando in UTC a granularità di giorno,
  * con clamp sull'ultimo giorno del mese target per evitare l'overflow di fine
@@ -41,32 +39,6 @@ function subtractMonthsUtcDay(base: Date, months: number): number {
   ).getUTCDate();
   const day = Math.min(base.getUTCDate(), lastDayOfTarget);
   return Date.UTC(targetYear, targetMonth, day);
-}
-
-/** Valida la data di emissione della visura: non futura e non oltre 6 mesi.
- * Il confronto è a granularità di giorno (UTC) per essere indipendente
- * dall'ora di `now` e gestire correttamente i fine-mese. */
-export function validateVisuraData(
-  visuraData: string,
-  now: Date = new Date(),
-): DocValidationResult {
-  const d = new Date(visuraData);
-  if (Number.isNaN(d.getTime())) {
-    return { ok: false, error: 'Data della visura non valida' };
-  }
-  const visuraDay = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-  const nowDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  if (visuraDay > nowDay) {
-    return { ok: false, error: 'La data della visura non può essere futura' };
-  }
-  const limiteDay = subtractMonthsUtcDay(now, VISURA_MAX_AGE_MONTHS);
-  if (visuraDay < limiteDay) {
-    return {
-      ok: false,
-      error: 'La visura camerale deve essere emessa da non più di 6 mesi',
-    };
-  }
-  return { ok: true };
 }
 
 /** Valida una data emissione visura: non futura e non oltre `maxAgeMonths` mesi.
@@ -93,9 +65,8 @@ export function isVisuraDateValid(
  * (dove un FAILED viene comunque salvato), qui i documenti sono obbligatori:
  * il primo errore blocca la registrazione.
  *
- * NB: la data di emissione visura non è più richiesta a mano; verrà estratta e
- * validata (entro 5 mesi) dall'OCR sulla visura camerale. `validateVisuraData`
- * resta come utility riusabile da quel controllo.
+ * NB: la data di emissione visura non è richiesta a mano: viene estratta dall'OCR
+ * sulla visura camerale. La sua validità è in `lib/visura/validita.ts` (180 giorni).
  */
 export function validateRegistrationDocuments(
   docs: RegistrationDocInput[],

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseYmd, romeStartOfDay, romeEndOfDay, resolveDayRange } from './rome-day';
+import { parseYmd, romeStartOfDay, romeEndOfDay, resolveDayRange, romeYmd } from './rome-day';
 
 describe('parseYmd', () => {
   it('accetta una data di calendario valida', () => {
@@ -28,6 +28,24 @@ describe('romeStartOfDay / romeEndOfDay (Europe/Rome, DST)', () => {
   it('giorno di fall-back (25/10/2026)', () => {
     expect(romeStartOfDay([2026, 10, 25]).toISOString()).toBe('2026-10-24T22:00:00.000Z');
     expect(romeEndOfDay([2026, 10, 25]).toISOString()).toBe('2026-10-25T22:59:59.999Z');
+  });
+});
+
+describe('romeYmd', () => {
+  it('ora legale (CEST, +2): 23:30 UTC del 16/07 è già il 17/07 a Roma', () => {
+    expect(romeYmd(new Date('2026-07-16T23:30:00Z'))).toEqual([2026, 7, 17]);
+  });
+
+  it('ora legale: 21:30 UTC del 16/07 è ancora il 16/07 a Roma', () => {
+    expect(romeYmd(new Date('2026-07-16T21:30:00Z'))).toEqual([2026, 7, 16]);
+  });
+
+  it('ora solare (CET, +1): 23:30 UTC del 15/01 è già il 16/01 a Roma', () => {
+    expect(romeYmd(new Date('2026-01-15T23:30:00Z'))).toEqual([2026, 1, 16]);
+  });
+
+  it('ora solare: 22:30 UTC del 15/01 è ancora il 15/01 a Roma', () => {
+    expect(romeYmd(new Date('2026-01-15T22:30:00Z'))).toEqual([2026, 1, 15]);
   });
 });
 

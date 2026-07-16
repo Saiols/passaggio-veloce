@@ -67,6 +67,27 @@ export function romeEndOfDay([y, mo, d]: [number, number, number]): Date {
   return romeWallClockToUtc(y, mo, d, 23, 59, 59, 999);
 }
 
+/**
+ * Giorno di calendario (anno, mese 1-12, giorno) a Roma per un dato istante.
+ *
+ * Serve a rispondere a "che giorno è OGGI per l'azienda": alle 00:30 del 17
+ * luglio a Roma in UTC sono ancora le 22:30 del 16, e usare UTC sposterebbe di
+ * un giorno ogni soglia calcolata su questo (scadenza visura, preavvisi).
+ */
+export function romeYmd(instant: Date): [number, number, number] {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: ROME_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const g: Record<string, number> = {};
+  for (const p of dtf.formatToParts(instant)) {
+    if (p.type !== 'literal') g[p.type] = Number(p.value);
+  }
+  return [g.year!, g.month!, g.day!];
+}
+
 export type DayRange = { gte?: Date; lte?: Date; da: string; a: string; active: boolean };
 
 /**

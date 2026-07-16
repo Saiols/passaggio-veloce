@@ -17,6 +17,26 @@ export function formatAddress(a: GeocodeInput): string {
 }
 
 /**
+ * Chiave per le chiamate server-side al Geocoding.
+ *
+ * Si usa `GOOGLE_GEOCODING_API_KEY`: una chiave dedicata, NON esposta al
+ * browser, senza restrizione per referrer e ristretta alla sola Geocoding API.
+ * Serve una chiave separata perché `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` è pubblica
+ * (finisce nel bundle) e per questo è protetta da una restrizione per referrer
+ * HTTP — che Google rifiuta sulle chiamate server, prive di referrer:
+ * «API keys with referer restrictions cannot be used with this API».
+ * Toglierle quella restrizione la renderebbe utilizzabile da chiunque la peschi
+ * dal bundle, a consumo sul nostro budget.
+ *
+ * Fallback sulla chiave pubblica per gli ambienti dove quella dedicata non è
+ * configurata (es. dev locale): lì funziona solo se non ha restrizioni referrer,
+ * altrimenti geocodeAddress ritorna null e le coordinate restano da backfillare.
+ */
+function geocodingKey(): string | undefined {
+  return process.env.GOOGLE_GEOCODING_API_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+}
+
+/**
  * Geocoda un indirizzo con la Google Geocoding API. Tollerante: ritorna null su
  * chiave mancante, ZERO_RESULTS, risposta non-OK, errore di rete/quota. Non
  * lancia mai — il chiamante tratta null come "coordinate non disponibili".
@@ -24,7 +44,7 @@ export function formatAddress(a: GeocodeInput): string {
 export async function geocodeAddress(
   a: GeocodeInput,
 ): Promise<{ lat: number; lng: number } | null> {
-  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const key = geocodingKey();
   if (!key) return null;
   const url = `${ENDPOINT}?address=${encodeURIComponent(formatAddress(a))}&region=it&key=${key}`;
   try {

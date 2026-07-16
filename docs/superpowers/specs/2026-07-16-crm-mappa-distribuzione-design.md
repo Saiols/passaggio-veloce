@@ -34,7 +34,7 @@ coordinate**, non disegnare la mappa.
 | Tema | Scelta |
 |---|---|
 | Sorgente coordinate | Geocoding reale con Google (no centroidi) |
-| Chiave API | Riuso `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` anche lato server, allargando le restrizioni della chiave |
+| Chiave API | **Due chiavi**: `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (pubblica, referrer-restricted) per Places/Maps nel browser; `GOOGLE_GEOCODING_API_KEY` (dedicata, server-only, no referrer, ristretta a Geocoding) per le chiamate server. Vedi §"Prerequisiti" |
 | Libreria mappa | Google Maps JS (`@googlemaps/js-api-loader`, già presente) + `@googlemaps/markerclusterer` (nuova dep) |
 | Stile cluster | Due layer separati: blu (broker) + arancione (agenzie), indipendenti, con toggle |
 | Unità del puntino | Ogni `Sede` (la sede madre è già una `Sede`: la registrazione ne crea sempre almeno una — vedi sotto) |
@@ -98,8 +98,10 @@ scrive lo SQL a mano e si applica con `migrate deploy`.
 
 - `geocodeAddress(parts): Promise<{ lat: number; lng: number } | null>` — wrapper
   sulla Google Geocoding REST API (`https://maps.googleapis.com/maps/api/geocode/json`),
-  chiave letta da `process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (le env var sono
-  leggibili server-side a prescindere dal prefisso `NEXT_PUBLIC`).
+  chiave letta da `process.env.GOOGLE_GEOCODING_API_KEY`, con fallback su
+  `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` per gli ambienti dove la dedicata non è
+  configurata (il fallback funziona solo se quella chiave non ha restrizioni
+  referrer).
 - Tollerante: ritorna `null` su `ZERO_RESULTS`, errore di rete, quota, o chiave
   mancante. Mai lancia verso il chiamante.
 - **Geocode-on-save (mai in transazione)**: garantisce la copertura di tutte le
@@ -174,15 +176,28 @@ con una nuova icona in `admin-icons`.
 
 ## Prerequisiti di configurazione (Google Cloud)
 
-- Abilitare **Maps JavaScript API** e **Geocoding API** sul progetto (oggi è attiva
-  solo Places).
-- **Allargare le restrizioni** della chiave `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` così
-  che le chiamate server-side al Geocoding (senza HTTP referrer) passino:
-  restrizione applicazione "Nessuna" o per IP, e restrizione API che includa
-  Places + Maps JS + Geocoding. Nota: la chiave è già pubblica (esposta come
-  `NEXT_PUBLIC` nel browser), quindi allargare l'app-restriction non cambia
-  sostanzialmente l'esposizione; il contenimento del rischio è via restrizione-API
-  + quota di billing.
+- Abilitare **Maps JavaScript API** e **Geocoding API** sul progetto (prima era
+  attiva solo Places).
+- **Due chiavi distinte** (deciso in corsa, 2026-07-16, dopo il fallimento del
+  primo backfill in prod):
+  - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — pubblica (finisce nel bundle del
+    browser), **mantiene la restrizione per referrer HTTP**. Usata da Places
+    (autocomplete) e Maps JS (rendering mappa). La cattura client delle
+    coordinate funziona con questa.
+  - `GOOGLE_GEOCODING_API_KEY` — **dedicata, server-only** (nessun prefisso
+    `NEXT_PUBLIC`, mai esposta al browser): restrizione applicazione "Nessuna"
+    (o per IP) e restrizione API alla **sola Geocoding API**. Usata dal
+    geocoder server (`geocode-core.ts`), dal fallback su create/edit sede, dal
+    geocode post-commit in registrazione e dallo script di backfill.
+
+  **Perché due e non una**: la prima ipotesi era riusare la chiave pubblica
+  allargandone le restrizioni. Provato in prod: Google risponde
+  `REQUEST_DENIED — "API keys with referer restrictions cannot be used with
+  this API"`. Per usarla server-side bisognerebbe toglierle la restrizione
+  referrer — ma è una chiave già pubblica nel bundle, quindi chiunque la
+  peschi potrebbe consumare Geocoding (a pagamento) sul nostro budget. La
+  chiave server separata risolve entrambi i lati: la pubblica resta protetta
+  dal referrer, la server non è mai esposta.
 
 ## Error handling
 

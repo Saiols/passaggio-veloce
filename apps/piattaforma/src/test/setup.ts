@@ -5,10 +5,12 @@ process.env.EMAIL_PROVIDER = process.env.EMAIL_PROVIDER ?? 'console';
 process.env.OCR_PROVIDER = process.env.OCR_PROVIDER ?? 'mock';
 process.env.PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER ?? 'mock';
 process.env.DEMO_MODE = process.env.DEMO_MODE ?? 'true';
-// Nessun test deve poter colpire la Google Geocoding API reale: azzeriamo la
-// chiave Maps a livello globale. `geocodeAddress` ritorna null senza chiave, e
+// Nessun test deve poter colpire la Google Geocoding API reale: azzeriamo a
+// livello globale ENTRAMBE le chiavi che geocodeAddress sa usare (quella server
+// dedicata e il fallback pubblico). `geocodeAddress` ritorna null senza chiave, e
 // createSedeAction la richiama come fallback quando mancano le coordinate
-// client — così un env/CI che espone la chiave non trasforma uno unit test in
+// client — così un env/CI che espone una chiave non trasforma uno unit test in
 // una chiamata di rete live. I test che vogliono la chiave (geocode.test.ts) la
 // impostano nel proprio beforeEach e la ripristinano.
 delete process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+delete process.env.GOOGLE_GEOCODING_API_KEY;

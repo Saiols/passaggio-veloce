@@ -31,12 +31,26 @@ isInPreavviso(emissione: Date, oggi: Date): boolean      // 175 <= giorniTrascor
   va preso con `lib/date/rome-day.ts` (helper esistente), **non** con la mezzanotte UTC:
   l'azienda opera in Italia e una notte di differenza sposta il confine di un giorno intero.
 
-Questa costante è l'**unica** fonte. Vanno eliminate le due divergenti di oggi:
+Questa costante è l'unica fonte **per la visura dell'organizzazione iscritta** (registrazione +
+ciclo di vita). Oggi le costanti di validità visura in giro sono **tre**, con tre numeri diversi:
 
-| Dove | Oggi | Destino |
-|---|---|---|
-| `lib/kyc/verify.ts:11` | `VISURA_MAX_AGE_MONTHS = 5` | **rimossa** (punto 1) |
-| `lib/auth/document-validation.ts:27` | `VISURA_MAX_AGE_MONTHS = 6` | **rimossa** — è codice morto |
+| Dove | Oggi | Dominio | Destino |
+|---|---|---|---|
+| `lib/kyc/verify.ts:11` | `VISURA_MAX_AGE_MONTHS = 5` | visura dell'azienda **che si registra** | **rimossa** → `VISURA_VALIDITA_GIORNI` |
+| `lib/auth/document-validation.ts:27` | `VISURA_MAX_AGE_MONTHS = 6` | idem, ma **codice morto** | **rimossa** |
+| `lib/kyc/parte-docs.ts:55` | `VISURA_VALIDITA_MESI = 6` | visura di **venditore/acquirente in una pratica** | **NON TOCCARE** |
+
+> ⚠️ **`parte-docs.ts` è un altro dominio: non unificarlo.** Governa la visura di un **terzo**
+> (venditore o acquirente persona giuridica) dentro una pratica — Schema Documentale v7 — non
+> quella dell'azienda iscritta alla piattaforma. Ha anche una semantica sua: la freschezza si
+> applica **solo ai commercianti d'auto** come parte (`verificaVisura(..., { requireFreshness })`,
+> `parte-docs.ts:141-157`); per le altre società la data non è controllata affatto.
+>
+> Accorparlo a `VISURA_VALIDITA_GIORNI` cambierebbe le regole documentali delle pratiche, che
+> non sono oggetto di questo lavoro. **Le due regole restano separate per scelta, non per
+> dimenticanza**: `lib/visura/validita.ts` deve dirlo in testa al file, e `parte-docs.ts:55` deve
+> avere un commento che rimanda qui — altrimenti il prossimo che legge "fonte unica" le fonde e
+> rompe le pratiche in silenzio.
 
 `validateVisuraData` (`document-validation.ts:49`) è chiamata **solo dal suo test**: nessun
 consumatore in produzione (verificato con grep). Va via insieme a `subtractMonthsUtcDay` e ai
@@ -148,15 +162,39 @@ registrazione sarebbe un falso positivo. (In registrazione il cross-match resta.
 
 | Campo | Azione |
 |---|---|
-| `visuraCameraleData` | **sempre** sovrascritta con la nuova data di emissione |
-| `ragioneSociale` | aggiornata se cambiata (finisce in fattura) |
-| sede legale (`indirizzo`, `civico`, `cap`, `citta`, `provincia`) | aggiornata se cambiata |
+| `visuraCameraleData` | **sempre** sovrascritta con la data estratta dal **server**. Mai modificabile dal client. |
+| `ragioneSociale` | aggiornata dall'estrazione se cambiata (finisce in fattura) |
+| sede legale (`indirizzo`, `civico`, `cap`, `citta`, `provincia`) | **estratta best-effort e CONFERMATA dal titolare** (vedi sotto) |
 | **`partitaIva`** | **MAI** — una P.IVA diversa è un altro soggetto: quello è `AZIENDA_MISMATCH`, non un aggiornamento |
 | `regimeFiscale` | **MAI** — non è un dato camerale, è una scelta fiscale |
 
 > ⚠️ I dati aggiornati finiscono su **fatture elettroniche numerate e trasmesse a SdI**. Un OCR
-> sbagliato che riscrive la ragione sociale è un problema fiscale, non estetico. Limitare la
-> superficie ai due campi sopra è deliberato.
+> sbagliato che riscrive questi campi è un problema fiscale, non estetico.
+
+### La sede legale passa da un umano (DECISO 2026-07-16)
+
+Il parser **non estrae oggi alcun indirizzo**, e non è un campo in più: una visura reale ne
+contiene **quattro**, e il testo `unpdf` è in ordine di oggetti PDF, non visivo — l'etichetta
+`Indirizzo Sedelegale` finisce lontana dal suo valore. Dalla fixture reale (`visura-planet-auto`):
+
+| Indirizzo | Cos'è |
+|---|---|
+| `MAGENTA (MI) VIA A. VOLTA 10 CAP 20013` | **sede legale** — quello giusto |
+| `SANTO STEFANO TICINO (MI) VIA TRIESTE 21/C CAP 20010` | domicilio **dell'amministratrice** |
+| `MILANO (MI) CORSO DI PORTA VITTORIA 18 CAP 20122` | indirizzo di una **socia** (ALL HOLDING S.R.L.) |
+| `CASARILE (MI) VIA GIACOMO PUCCINI 63 CAP 20059` | **unità locale** |
+
+Una regex ingenua ne pesca uno a caso: il caso peggiore è scrivere il **domicilio di casa
+dell'amministratore** come sede legale su una fattura trasmessa a SdI.
+
+**Quindi:** il parser estrae la sede legale **best-effort**, e `/visura` la mostra
+**precompilata e modificabile** al titolare, che la conferma o la corregge prima del salvataggio.
+Un'estrazione sbagliata viene intercettata da un umano invece di finire in fattura in silenzio.
+
+**Vincolo di sicurezza:** dall'utente si accetta **solo l'indirizzo**. `visuraCameraleData` e
+`ragioneSociale` vengono **sempre** dall'estrazione del server: la data regge l'intero blocco, e
+renderla modificabile dal client significherebbe consegnare all'utente la chiave del proprio
+sblocco.
 
 ### Storico documenti — add, non replace
 
@@ -363,6 +401,7 @@ Per riferimento, chi sarebbe colpito oggi:
 | Fatto | Come |
 |---|---|
 | `validateVisuraData` è codice morto (solo il suo test la chiama) | grep su `apps/piattaforma/src` |
+| Le costanti visura sono **tre**, non due: la terza (`parte-docs.ts:55`) è di un altro dominio | `parte-docs.ts:55,141-157` |
 | Il gate reale in registrazione è **5 mesi, solo DEALER** | `lib/kyc/verify.ts:11,86-89` |
 | Le agenzie non hanno **alcun** controllo di età (nemmeno data futura) | `verify.ts:84-89` |
 | `documenti` non ha unique su `(companyId, tipo)` → add non replace già possibile | `\d documenti` |

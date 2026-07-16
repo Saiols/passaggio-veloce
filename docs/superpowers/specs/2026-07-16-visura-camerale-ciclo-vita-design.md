@@ -87,13 +87,31 @@ Conseguenza logica di "niente blocco su data" + "blocco duro a 180": un'agenzia 
 e risultare bloccata dal primo minuto, senza aver mai ricevuto un preavviso (finestra 175-179
 già passata). L'avviso deve dire chiaramente cosa succederà.
 
-**Dove:** nella **schermata di esito registrazione** (DECISO 2026-07-16). Il server conosce
-l'età della visura solo *dopo* il submit — l'OCR gira dentro la register action — e a quel
-punto la data estratta è già disponibile: l'avviso costa zero.
+**Dove: allo step 3 (Documenti), al passaggio 3→4** (DECISO 2026-07-16, dopo correzione).
 
-> Scartata l'alternativa "inline in fondo allo step 3": avrebbe richiesto una chiamata OCR di
-> **pre-flight** prima del submit, cioè un'estrazione Document AI in più **per ogni
-> registrazione**, inclusi tutti quelli con la visura fresca. Costo non giustificato.
+**Costa zero: l'OCR gira già lì.** `verifyRegistrationDocumentsAction`
+(`app/(auth)/actions.ts:719`) è un **gate KYC anticipato** che al passaggio Documenti→Pagamento
+chiama già `verifyRegistrationKyc` (`:771`) e firma il risultato in un token
+(`signKycToken`, `:780`) *proprio per non rifare l'OCR al submit*. `dataEmissione` è quindi già
+estratta e pagata a quel punto: basta esporla.
+
+Serve solo estendere `VerifyDocsResult` (`actions.ts:709-711`) con l'età della visura, e
+mostrarla in `register-wizard.tsx` accanto agli errori KYC già renderizzati nel `DocumentsStep`.
+
+> **Correzione di rotta registrata.** Una prima stesura di questa spec sceglieva la "schermata
+> di esito" sul presupposto che l'avviso allo step 3 costasse un'estrazione Document AI in più
+> per ogni registrazione. **Il presupposto era falso** (l'OCR era già lì). Ed è emerso anche che
+> una "schermata di esito" **non esiste**: dopo il submit il wizard resta sullo step 5 e mostra
+> banner sopra il form, che resta montato.
+>
+> Lo step 3 non è solo gratis, è l'unico punto in cui l'utente può **ancora agire**: sostituire
+> la visura con una fresca prima di completare l'iscrizione, invece di scoprirsi bloccato a
+> registrazione conclusa.
+
+> ⚠️ Attenzione ai **5 step** del wizard (non 3): 1 Account, 2 Azienda, 3 Documenti,
+> 4 Pagamento, 5 Sedi. Il submit finale è allo **step 5**; lo step 3 ha solo il gate anticipato.
+> In `DEMO_MODE` il gate anticipato ritorna subito (`actions.ts:752`) e non c'è alcuna data:
+> l'avviso semplicemente non compare.
 
 Il banner (giallo o rosso a seconda dell'età) compare comunque in automatico al primo accesso:
 è la stessa funzione pura, non serve nulla di dedicato.

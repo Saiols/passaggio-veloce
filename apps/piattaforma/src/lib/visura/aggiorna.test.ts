@@ -264,6 +264,19 @@ describe('aggiornaVisura — N49 ADMIN_ATECO_NON_IDONEO', () => {
     expect(create).toHaveBeenCalled();
     expect(sendNotification).toHaveBeenCalledTimes(1);
   });
+
+  it('se getAdminEmails rigetta (blip DB dopo il commit), aggiornaVisura ritorna comunque ok:true', async () => {
+    // L'aggiornamento è già committato: un errore nel RECUPERO admin non deve
+    // risalire all'error boundary Next (pagina d'errore su operazione riuscita).
+    getAdminEmails.mockRejectedValue(new Error('db blip'));
+    const r = await aggiornaVisura(
+      { companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({ ...VISURA_OK, atecoCodes: ['99.99.99'] }),
+    );
+    expect(r.ok).toBe(true);
+    expect(update).toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
 });
 
 describe('verificaVisuraPerAggiornamento — passo 1: non scrive nulla', () => {

@@ -321,24 +321,33 @@ export async function aggiornaVisura(
   // subito che una visura con ATECO non ammesso è stata accettata (vedi
   // punto 4 di `eseguiControlli`), non al prossimo giro notturno.
   if (r.atecoNonIdoneo) {
-    const codes = r.visura.atecoCodes ?? (r.visura.ateco ? [r.visura.ateco] : []);
-    const admins = await getAdminEmails();
-    await Promise.all(
-      admins.map((a) =>
-        sendNotification({
-          tipo: 'N49_ADMIN_ATECO_NON_IDONEO',
-          target: { email: a.email, userId: a.userId, companyId: null },
-          payload: {
-            // La stessa denominazione appena scritta su Company (o quella
-            // esistente, se la visura non ne esponeva una nuova — vedi update sopra).
-            nomeAzienda: r.visura.denominazione ?? r.company.ragioneSociale,
-            companyType: r.company.type,
-            atecoCodes: codes.join(', '),
-            adminUrl: `${env.NEXT_PUBLIC_APP_URL}/admin/companies/${r.company.id}`,
-          },
-        }).catch(() => undefined),
-      ),
-    );
+    // best effort: un errore qui (incluso getAdminEmails, es. blip DB subito
+    // dopo il commit) NON deve risalire — lo sblocco azienda è già scritto e
+    // aggiornaVisuraAction propagherebbe l'eccezione all'error boundary Next,
+    // mostrando una pagina d'errore su un'operazione di fatto riuscita.
+    // Stesso pattern di lib/segnalazioni/creazione.ts.
+    try {
+      const codes = r.visura.atecoCodes ?? (r.visura.ateco ? [r.visura.ateco] : []);
+      const admins = await getAdminEmails();
+      await Promise.all(
+        admins.map((a) =>
+          sendNotification({
+            tipo: 'N49_ADMIN_ATECO_NON_IDONEO',
+            target: { email: a.email, userId: a.userId, companyId: null },
+            payload: {
+              // La stessa denominazione appena scritta su Company (o quella
+              // esistente, se la visura non ne esponeva una nuova — vedi update sopra).
+              nomeAzienda: r.visura.denominazione ?? r.company.ragioneSociale,
+              companyType: r.company.type,
+              atecoCodes: codes.join(', '),
+              adminUrl: `${env.NEXT_PUBLIC_APP_URL}/admin/companies/${r.company.id}`,
+            },
+          }).catch(() => undefined),
+        ),
+      );
+    } catch {
+      // getAdminEmails o altro: ignorato di proposito (vedi sopra).
+    }
   }
 
   return { ok: true, dataEmissione: r.dataEmissioneIso, atecoNonIdoneo: r.atecoNonIdoneo };

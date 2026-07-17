@@ -44,7 +44,7 @@ export const DESCRIZIONI_VESSATORIE: Record<(typeof CLAUSOLE_VESSATORIE)[number]
   3: 'variazione del prezzo del servizio a discrezione del Gestore',
   5: 'condizioni e soglia di prelievo del wallet (payout)',
   7: 'determinazione differenziata del compenso in base al regime fiscale',
-  8: 'manleva in materia di visura camerale',
+  8: 'aggiornamento e manleva in materia di visura camerale',
   10: 'sistema di segnalazioni e penali',
   11: 'potere di attestazione della firma da parte del Gestore',
   12: 'limitazione operativa, sospensione e cancellazione dell’account',
@@ -58,7 +58,7 @@ export const DESCRIZIONI_VESSATORIE: Record<(typeof CLAUSOLE_VESSATORIE)[number]
  * momento dell'accettazione: senza, non sappiamo QUALE testo l'utente ha
  * accettato. Aggiornare a ogni modifica sostanziale della pagina /termini.
  */
-export const TERMS_VERSION = '2026-07-14';
+export const TERMS_VERSION = '2026-07-17';
 
 /** L'elenco come lo legge l'utente: "3, 5, 7, 8, 10, 11, 12, 13, 17, 18". */
 export function elencoClausoleVessatorie(): string {

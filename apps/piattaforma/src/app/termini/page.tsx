@@ -38,6 +38,16 @@ export const metadata: Metadata = {
  * PV titolare autonomo, garanzia + manleva dell'Utente). Foro → 18,
  * approvazione specifica → 19. Spec:
  * docs/superpowers/specs/2026-07-14-gdpr-dati-terzi-design.md
+ *
+ * Revisione 2026-07-17: ciclo di vita della visura camerale nelle clausole
+ * ESISTENTI, senza alcuna rinumerazione (i numeri sono citati dentro record
+ * persistiti — v. lib/legal/clausole-vessatorie.ts). Clausola 8: validità
+ * 180 giorni, obbligo di aggiornamento e preavviso email a 5 giorni.
+ * Clausola 5: sospensione del prelievo (Broker e Agenzia) per visura non
+ * aggiornata. Clausola 12: nuovo sotto-punto 12.1-bis, limitazione operativa
+ * della sola Agenzia (parallelo della 12.1). Le tre erano già vessatorie con
+ * doppia accettazione. DA SOTTOPORRE A REVISIONE LEGALE (sospendono un
+ * servizio a pagamento). Spec: .superpowers/sdd/task-6.1-brief.md
  */
 export default function TerminiPage() {
   return (
@@ -54,7 +64,7 @@ export default function TerminiPage() {
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Termini e Condizioni di Utilizzo
         </h1>
-        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-14</p>
+        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-17</p>
 
         <p className="mt-4">
           I presenti Termini e Condizioni (i &laquo;<strong>Termini</strong>&raquo;) disciplinano
@@ -154,6 +164,9 @@ export default function TerminiPage() {
           <p>
             In caso di penali (clausola 10) il saldo di un wallet può risultare negativo: in tale ipotesi <strong>i prelievi sono sospesi su tutti i wallet dell&apos;Utente</strong> (ogni sede e, ove presente, il wallet aziendale di affiliazione) <strong>e non soltanto su quello in negativo</strong>, fino al ripristino di un saldo non negativo su quest&apos;ultimo; nel frattempo i compensi successivi continuano ad accreditarsi liberamente su ciascun wallet, anche a compensazione del saldo negativo. <strong>L&apos;operatività dell&apos;Utente nella gestione delle pratiche resta invariata.</strong>{' '}L&apos;Utente accetta espressamente le presenti condizioni di prelievo, inclusa la soglia di richiesta del payout e la sospensione dei prelievi su tutti i wallet in caso di saldo negativo di uno solo di essi (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
+          <p>
+            <strong>Sospensione del prelievo per visura camerale non aggiornata.</strong>{' '}Il prelievo del saldo dei wallet dell&apos;Utente &mdash; di ciascuna sede e, ove presente, del wallet aziendale di affiliazione &mdash; è <strong>altresì sospeso</strong> qualora la visura camerale dell&apos;Utente risulti <strong>emessa da oltre 180 giorni</strong> (clausola 8), e ciò fino al caricamento di una visura aggiornata nell&apos;apposita sezione della Piattaforma. La sospensione <strong>non incide sulla maturazione né sulla titolarità delle somme</strong>, che restano integralmente acquisite all&apos;Utente, ma ne differisce la sola erogazione: lo <strong>sblocco è automatico e immediato</strong> al momento dell&apos;accettazione del documento aggiornato, senza necessità di alcun intervento manuale. La misura si applica <strong>sia all&apos;Utente Broker sia all&apos;Utente Agenzia</strong>. L&apos;Utente accetta espressamente tale sospensione del prelievo per visura camerale non aggiornata (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+          </p>
         </Section>
 
         <Section title="6. Fatturazione per conto terzi (fatturazione delegata)">
@@ -195,6 +208,9 @@ export default function TerminiPage() {
             visura camerale e degli altri dati anagrafici e fiscali sulla Piattaforma. Passaggio
             Veloce si basa sui dati e documenti forniti dall&apos;Utente per la gestione dei compensi
             e della fatturazione.
+          </p>
+          <p>
+            <strong>Validità e aggiornamento della visura camerale.</strong>{' '}L&apos;Utente garantisce che la visura camerale fornita sia autentica e riferita alla propria impresa. La visura ha una <strong>validità di 180 (centottanta) giorni</strong> dalla data di emissione risultante dal Registro delle Imprese. Decorso tale termine, l&apos;Utente è tenuto a caricare, nell&apos;<strong>apposita sezione della Piattaforma</strong>, una visura aggiornata, <strong>emessa da non più di 180 giorni</strong>. L&apos;aggiornamento è necessario a consentire a Passaggio Veloce la corretta emissione dei documenti fiscali per conto e nei confronti dell&apos;Utente (clausola 6). Passaggio Veloce comunica all&apos;Utente l&apos;approssimarsi della scadenza nei <strong>5 (cinque) giorni</strong> precedenti, all&apos;indirizzo email indicato in registrazione. <strong>Il mancato aggiornamento entro il predetto termine comporta le conseguenze di cui alle clausole 5 e 12</strong>: la sospensione del prelievo dei wallet per ogni Utente (clausola 5) e, per il solo Utente Agenzia, la limitazione dell&apos;operatività con esclusione dalla distribuzione delle pratiche (clausola 12); entrambe cessano automaticamente al caricamento di una visura aggiornata.
           </p>
           <p>
             L&apos;Utente <strong>manleva e tiene indenne Passaggio Veloce</strong>{' '}da ogni pretesa,
@@ -295,6 +311,9 @@ export default function TerminiPage() {
           </p>
           <p>
             <strong>12.1 &mdash; Limitazione operativa per mancato incasso della fee (solo agenzie).</strong> <em>Presupposto:</em> l&apos;addebito SEPA della fee (clausola 3) non va a buon fine. <em>Effetto:</em> l&apos;agenzia <strong>conserva l&apos;accesso alla Piattaforma</strong> &mdash; <strong>l&apos;account NON è sospeso</strong> &mdash; ma è esclusa dalla distribuzione di nuove pratiche e non può accettare, lavorare o portare a firma pratiche fino alla regolarizzazione. <em>Rimedio:</em> l&apos;agenzia può in ogni momento <strong>aggiornare l&apos;IBAN</strong> o <strong>richiedere un nuovo tentativo di addebito</strong> dall&apos;apposita sezione. <em>Revoca:</em> <strong>automatica</strong>, non appena non risultino più addebiti insoluti o in corso. Non è discrezionale.
+          </p>
+          <p>
+            <strong>12.1-bis &mdash; Limitazione operativa per visura camerale non aggiornata (solo agenzie).</strong> <em>Presupposto:</em> la visura camerale dell&apos;Utente Agenzia risulta emessa da oltre 180 giorni (clausola 8). <em>Effetto:</em> l&apos;agenzia <strong>conserva l&apos;accesso alla Piattaforma</strong> &mdash; <strong>l&apos;account NON è sospeso</strong> &mdash; ma è <strong>esclusa dalla distribuzione</strong> di nuove pratiche e non può accettare, lavorare o portare a firma pratiche fino alla regolarizzazione; le pratiche eventualmente già assegnate <strong>restano assegnate e riprendono alla regolarizzazione</strong>. Resta inoltre sospeso il prelievo dei wallet ai sensi della clausola 5. <em>Rimedio:</em> l&apos;agenzia carica in ogni momento una <strong>visura aggiornata</strong> (emessa da non più di 180 giorni) dall&apos;apposita sezione della Piattaforma. <em>Revoca:</em> <strong>automatica</strong>, non appena risulti caricata una visura in corso di validità; non è discrezionale. La presente misura riguarda le <strong>sole Agenzie</strong>: per l&apos;Utente Broker il mancato aggiornamento comporta la <strong>sola sospensione del prelievo</strong>{' '}di cui alla clausola 5, senza alcuna limitazione dell&apos;operatività.
           </p>
           <p>
             <strong>12.2 &mdash; Sospensione automatica per mancate risposte reiterate (solo agenzie).</strong> <em>Presupposto:</em> <strong>5 assegnazioni consecutive lasciate scadere senza alcuna risposta</strong> (né accettazione né rifiuto). <em>Effetto:</em> è sospesa la <strong>singola sede</strong> interessata, esclusa dalla distribuzione. <strong>Le altre sedi restano attive e gli utenti non sono disabilitati.</strong> <em>Misura anti-elusione:</em> finché la sospensione della sede ai sensi del presente punto è in essere, l&apos;Utente <strong>non può aprire nuove sedi</strong> per aggirarla. <em>Precisazione:</em> il <strong>rifiuto espresso</strong> di una pratica <strong>non concorre</strong> a questa soglia &mdash; incide solo sull&apos;ordinamento in distribuzione. Rileva <strong>unicamente la mancata risposta</strong>. <em>Revoca:</em> la sospensione disposta dal sistema anti-abuso è revocata <strong>da Passaggio Veloce</strong>, su richiesta dell&apos;Utente e previa verifica. Resta ferma e impregiudicata la facoltà dell&apos;Utente di <strong>sospendere e riattivare autonomamente</strong> le proprie sedi per esigenze organizzative: tale facoltà <strong>non consente</strong>{' '}di revocare la sospensione disposta ai sensi del presente punto.

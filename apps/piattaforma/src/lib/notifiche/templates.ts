@@ -1365,12 +1365,32 @@ export function tplN41AdminNuovaSegnalazione(p: N41AdminNuovaSegnalazionePayload
 
 export type N26EmailPartenzaPayload = {
   nomeReferente: string;
-  ragioneSociale: string;
+  /** Corpo del messaggio in plain-text (default da `defaultMessaggioPartenza`,
+   *  ritoccabile ad-hoc dall'admin nel modale). Reso come paragrafi HTML sicuri. */
+  messaggio: string;
   categoria: 'BROKER' | 'AGENZIA';
   linkUrl: string;
   unsubUrl: string;
   codice?: { code: string; importoEuro: number };
 };
+
+/**
+ * Converte il messaggio plain-text dell'admin in paragrafi HTML sicuri:
+ * riga vuota (`\n\n`) = nuovo `<p>`, singolo a-capo = `<br>`. Tutto escapato
+ * con `escapeHtml` per evitare HTML/JS iniettato nel corpo dell'email.
+ */
+function messaggioPartenzaToHtml(messaggio: string): string {
+  return messaggio
+    .trim()
+    .split(/\n{2,}/)
+    .map(
+      (para) =>
+        `<p style="margin:0 0 12px;font-size:14px;color:#334155">${escapeHtml(
+          para,
+        ).replace(/\n/g, '<br>')}</p>`,
+    )
+    .join('');
+}
 
 /**
  * Email a freddo (lead senza account) inviata dal team sales dopo una
@@ -1382,12 +1402,9 @@ export type N26EmailPartenzaPayload = {
 export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent {
   const isBroker = p.categoria === 'BROKER';
   const ctaLabel = isBroker ? 'Registra la tua concessionaria' : 'Registra la tua agenzia';
-  const contesto = isBroker
-    ? 'Carichi la pratica in 2 minuti, un\'agenzia della tua zona la prende in carico e la segui in tempo reale.'
-    : 'Ricevi pratiche già complete e verificate dalla tua provincia, e decidi tu quali accettare.';
 
   const nome = escapeHtml(p.nomeReferente);
-  const rag = escapeHtml(p.ragioneSociale);
+  const messaggioHtml = messaggioPartenzaToHtml(p.messaggio);
 
   const checklist = [
     'Carta d\'identità e tessera sanitaria del titolare (fronte e retro)',
@@ -1412,9 +1429,8 @@ export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent
 
   const body = `
     <p style="margin:0 0 12px;font-size:15px;color:#0a2540">Buongiorno ${nome},</p>
-    <p style="margin:0 0 12px;font-size:14px;color:#334155">come d\'accordo nella nostra telefonata, ecco il link per attivare <strong>${rag}</strong> su Passaggio Veloce. Bastano circa 5 minuti.</p>
-    <p style="margin:0 0 18px;font-size:14px;color:#334155">${escapeHtml(contesto)}</p>
-    <div style="margin:0 0 18px">${ctaButton(p.linkUrl, ctaLabel)}</div>
+    ${messaggioHtml}
+    <div style="margin:6px 0 18px">${ctaButton(p.linkUrl, ctaLabel)}</div>
     <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#0a2540">Cosa tenere a portata di mano</p>
     <ul style="margin:0 0 4px;padding-left:18px">${checklistHtml}</ul>
     ${codiceHtml}
@@ -1428,9 +1444,7 @@ export function tplN26EmailPartenza(p: N26EmailPartenzaPayload): NotificaContent
 
   const text = `Buongiorno ${p.nomeReferente},
 
-come d\'accordo nella nostra telefonata, ecco il link per attivare ${p.ragioneSociale} su Passaggio Veloce. Bastano circa 5 minuti.
-
-${contesto}
+${p.messaggio.trim()}
 
 Registrati qui: ${p.linkUrl}
 

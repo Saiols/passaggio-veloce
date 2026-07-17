@@ -463,12 +463,24 @@ export async function listPromoCodesValidiAction(): Promise<
 export async function sendEmailPartenzaAction(input: {
   contactId: string;
   nomeReferente: string;
+  messaggio: string;
   promoCodeId?: string | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!canEditCrmContact(session.user.role)) {
     return { ok: false, error: 'Non autorizzato.' };
+  }
+
+  // Il corpo del messaggio è precompilato dal client (default per categoria) ma
+  // ritoccabile ad-hoc: validalo qui (non vuoto, entro il limite) prima di ogni
+  // lavoro su DB.
+  const messaggio = (input.messaggio ?? '').trim();
+  if (!messaggio) {
+    return { ok: false, error: 'Il messaggio non può essere vuoto.' };
+  }
+  if (messaggio.length > 4000) {
+    return { ok: false, error: 'Il messaggio è troppo lungo (max 4000 caratteri).' };
   }
 
   const contact = await prisma.crmContact.findUnique({
@@ -519,7 +531,7 @@ export async function sendEmailPartenzaAction(input: {
     target: { email: contact.email },
     payload: {
       nomeReferente: input.nomeReferente.trim() || contact.nome,
-      ragioneSociale: contact.nome,
+      messaggio,
       categoria: contact.cat as 'BROKER' | 'AGENZIA',
       linkUrl,
       unsubUrl,

@@ -303,25 +303,59 @@ describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 
 describe('N26 email di partenza', () => {
   const base = {
     nomeReferente: 'Mario Rossi',
-    ragioneSociale: 'Autosalone Rossi Srl',
+    messaggio:
+      'come d\'accordo, ecco il link per Autosalone Rossi Srl.\n\nRicevi pratiche già complete e verificate dalla tua provincia.',
     linkUrl: 'https://passaggioveloce.it/i/tok123',
     unsubUrl: 'https://passaggioveloce.it/unsubscribe?token=uns123',
   } as const;
 
-  it('broker: CTA concessionaria + frase di contesto broker', () => {
+  it('broker: CTA concessionaria + saluto + link + layout', () => {
     const { html, subject, text } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
     expect(subject.toLowerCase()).toContain('registrarti');
     expect(html).toContain('Registra la tua concessionaria');
-    expect(html).toContain('la prende in carico e la segui in tempo reale');
+    expect(html).toContain('Buongiorno Mario Rossi'); // saluto dal nomeReferente
     expect(html).toContain('https://passaggioveloce.it/i/tok123');
     expect(html).toContain('logo-email.png'); // layout istituzionale
-    expect(text).toContain('Autosalone Rossi Srl');
   });
 
-  it('agenzia: CTA agenzia + frase di contesto agenzia', () => {
+  it('agenzia: CTA agenzia (etichetta guidata dalla categoria)', () => {
     const { html } = tplN26EmailPartenza({ ...base, categoria: 'AGENZIA' });
     expect(html).toContain('Registra la tua agenzia');
-    expect(html).toContain('già complete e verificate dalla tua provincia');
+  });
+
+  it('rende il messaggio custom in HTML e testo', () => {
+    const { html, text } = tplN26EmailPartenza({
+      ...base,
+      categoria: 'BROKER',
+      messaggio: 'Ciao, testo personalizzato per te.\n\nSeconda frase su misura.',
+    });
+    expect(html).toContain('Ciao, testo personalizzato per te.');
+    expect(html).toContain('Seconda frase su misura.');
+    expect(text).toContain('Ciao, testo personalizzato per te.');
+    expect(text).toContain('Seconda frase su misura.');
+  });
+
+  it('riga vuota = nuovo paragrafo, singolo a-capo = <br>', () => {
+    const { html } = tplN26EmailPartenza({
+      ...base,
+      categoria: 'BROKER',
+      messaggio: 'Primo paragrafo.\n\nRiga uno\nRiga due',
+    });
+    // due paragrafi distinti
+    expect(html.match(/<p[^>]*>Primo paragrafo\.<\/p>/)).toBeTruthy();
+    // singolo a-capo dentro un paragrafo → <br>
+    expect(html).toContain('Riga uno<br>Riga due');
+  });
+
+  it('escapa HTML pericoloso nel messaggio custom (no XSS stored)', () => {
+    const { html } = tplN26EmailPartenza({
+      ...base,
+      categoria: 'BROKER',
+      messaggio: '<script>alert(1)</script> & <b>grassetto</b>',
+    });
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).not.toContain('<b>grassetto</b>');
+    expect(html).toContain('&lt;script&gt;');
   });
 
   it('senza codice: nessun blocco credito, nessun simbolo €', () => {

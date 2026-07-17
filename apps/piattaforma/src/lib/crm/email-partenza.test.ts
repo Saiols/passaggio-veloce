@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { nextStatoInvio, nextStatoApertura } from './email-partenza';
+import {
+  nextStatoInvio,
+  nextStatoApertura,
+  defaultMessaggioPartenza,
+} from './email-partenza';
 
 describe('nextStatoInvio — avanza-non-declassa', () => {
   it('porta S0..S3 a S4', () => {
@@ -27,5 +31,33 @@ describe('nextStatoApertura — avanza-non-declassa', () => {
     for (const s of ['S6', 'S7', 'S8']) {
       expect(nextStatoApertura(s)).toBe(s);
     }
+  });
+});
+
+describe('defaultMessaggioPartenza — testo predefinito editabile', () => {
+  it('interpola la ragione sociale nel primo paragrafo', () => {
+    const msg = defaultMessaggioPartenza({
+      categoria: 'BROKER',
+      ragioneSociale: 'Autosalone Rossi Srl',
+    });
+    expect(msg).toContain('attivare Autosalone Rossi Srl su Passaggio Veloce');
+    expect(msg).toContain('Bastano circa 5 minuti');
+  });
+
+  it('BROKER: usa il contesto broker', () => {
+    const msg = defaultMessaggioPartenza({ categoria: 'BROKER', ragioneSociale: 'X' });
+    expect(msg).toContain('la prende in carico e la segui in tempo reale');
+    expect(msg).not.toContain('già complete e verificate dalla tua provincia');
+  });
+
+  it('AGENZIA: usa il contesto agenzia', () => {
+    const msg = defaultMessaggioPartenza({ categoria: 'AGENZIA', ragioneSociale: 'X' });
+    expect(msg).toContain('già complete e verificate dalla tua provincia');
+    expect(msg).not.toContain('la prende in carico e la segui in tempo reale');
+  });
+
+  it('separa i paragrafi con una riga vuota (\\n\\n)', () => {
+    const msg = defaultMessaggioPartenza({ categoria: 'BROKER', ragioneSociale: 'X' });
+    expect(msg).toContain('\n\n');
   });
 });

@@ -28,25 +28,36 @@ describe('sendEmailPartenzaAction', () => {
     promoFindUnique.mockReset(); redemptionCount.mockReset();
   });
 
+  const MSG = 'Testo di prova.';
+
   it('errore se il contatto non ha email', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: null, emailOptOutAt: null });
-    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario' });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });
     expect(res).toEqual({ ok: false, error: expect.stringContaining('email') });
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
   it('errore se il lead è disiscritto', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: new Date() });
-    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario' });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });
     expect(res).toEqual({ ok: false, error: expect.stringContaining('disiscritto') });
+  });
+
+  it('errore se il messaggio è vuoto: nessun invio', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: '   ' });
+    expect(res.ok).toBe(false);
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 
   it('happy path senza codice: invia, avanza a S4, salva token', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'AGENZIA', status: 'S3', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
     update.mockResolvedValue({});
-    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario Rossi' });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario Rossi', messaggio: '  Ciao, ecco il link.  ' });
     expect(res).toEqual({ ok: true });
     expect(sendNotification).toHaveBeenCalledTimes(1);
+    // il messaggio (trim) finisce nel payload della notifica
+    expect(sendNotification.mock.calls[0][0].payload.messaggio).toBe('Ciao, ecco il link.');
     const upd = update.mock.calls[0][0].data;
     expect(upd.linkInviato).toBe(true);
     expect(upd.status).toBe('S4');
@@ -61,7 +72,7 @@ describe('sendEmailPartenzaAction', () => {
   it('i link puntano all\'host app, non al dominio marketing gated', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
     update.mockResolvedValue({});
-    await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario' });
+    await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });
     const { linkUrl, unsubUrl } = sendNotification.mock.calls[0][0].payload;
     expect(linkUrl).not.toContain('passaggioveloce.it');
     expect(unsubUrl).not.toContain('passaggioveloce.it');
@@ -74,7 +85,7 @@ describe('sendEmailPartenzaAction', () => {
   it('reinvio: riusa l\'emailUnsubToken esistente (link unsub stabile)', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S4', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: 'tok-stabile-123' });
     update.mockResolvedValue({});
-    await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario' });
+    await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });
     expect(update.mock.calls[0][0].data.emailUnsubToken).toBe('tok-stabile-123');
     expect(sendNotification.mock.calls[0][0].payload.unsubUrl).toContain('tok-stabile-123');
   });
@@ -83,7 +94,7 @@ describe('sendEmailPartenzaAction', () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
     promoFindUnique.mockResolvedValue({ id: 'p1', code: 'OLD', amountCent: 5000, active: false, expiresAt: null, maxRedemptions: null });
     redemptionCount.mockResolvedValue(0);
-    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', promoCodeId: 'p1' });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG, promoCodeId: 'p1' });
     expect(res.ok).toBe(false);
     expect(sendNotification).not.toHaveBeenCalled();
   });

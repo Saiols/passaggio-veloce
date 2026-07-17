@@ -12,3 +12,23 @@ export function nextStatoInvio(current: string): CrmStatoContatto {
 export function nextStatoApertura(current: string): CrmStatoContatto {
   return (STATI_PRE_APERTURA.has(current) ? 'S5' : current) as CrmStatoContatto;
 }
+
+/**
+ * Testo predefinito del messaggio dell'email di partenza (N26), in plain-text.
+ * Fonte unica: precompila la textarea nel modale (client) ed è la base che
+ * l'admin può ritoccare ad-hoc prima dell'invio. Il resto dell'email (saluto,
+ * CTA, checklist, box codice, footer) resta fisso nel template `tplN26EmailPartenza`.
+ */
+export function defaultMessaggioPartenza({
+  categoria,
+  ragioneSociale,
+}: {
+  categoria: 'BROKER' | 'AGENZIA';
+  ragioneSociale: string;
+}): string {
+  const contesto =
+    categoria === 'BROKER'
+      ? 'Carichi la pratica in 2 minuti, un\'agenzia della tua zona la prende in carico e la segui in tempo reale.'
+      : 'Ricevi pratiche già complete e verificate dalla tua provincia, e decidi tu quali accettare.';
+  return `come d'accordo nella nostra telefonata, ecco il link per attivare ${ragioneSociale} su Passaggio Veloce. Bastano circa 5 minuti.\n\n${contesto}`;
+}

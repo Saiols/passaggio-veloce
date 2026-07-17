@@ -17,6 +17,7 @@ import {
   type CrmContactInput,
 } from './actions';
 import { buildContactsQuery } from './query';
+import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
 
 type ContactRow = {
   id: string;
@@ -694,6 +695,9 @@ function EmailPartenzaModal({
   onClose: () => void;
 }) {
   const [nomeReferente, setNomeReferente] = useState(contact.nome);
+  const [messaggio, setMessaggio] = useState(() =>
+    defaultMessaggioPartenza({ categoria: contact.cat, ragioneSociale: contact.nome }),
+  );
   const [promoCodeId, setPromoCodeId] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -704,6 +708,7 @@ function EmailPartenzaModal({
     const res = await sendEmailPartenzaAction({
       contactId: contact.id,
       nomeReferente,
+      messaggio,
       promoCodeId: promoCodeId || null,
     });
     setPending(false);
@@ -744,6 +749,22 @@ function EmailPartenzaModal({
         </label>
 
         <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
+          Messaggio
+          <textarea
+            value={messaggio}
+            onChange={(e) => setMessaggio(e.target.value)}
+            disabled={pending}
+            rows={7}
+            maxLength={4000}
+            className="mt-1 block w-full resize-y rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] leading-relaxed"
+          />
+          <span className="mt-1 block text-[11px] font-normal text-pv-slate-500">
+            Testo precompilato: modificalo pure prima di inviare. Saluto, pulsante,
+            checklist documenti e codice di benvenuto restano automatici.
+          </span>
+        </label>
+
+        <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
           Codice di benvenuto (opzionale)
           <select
             value={promoCodeId}
@@ -771,7 +792,7 @@ function EmailPartenzaModal({
           <Button
             size="sm"
             onClick={submit}
-            disabled={pending || !nomeReferente.trim()}
+            disabled={pending || !nomeReferente.trim() || !messaggio.trim()}
             loading={pending}
             loadingLabel="Invio…"
           >

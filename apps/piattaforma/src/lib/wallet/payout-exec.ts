@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { createDocBroker } from '@/lib/fatturazione/engine';
 import { getPayment } from '@/lib/providers/payment';
+import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { WALLET } from './config';
 import { hasNegativeCompanyWallet } from './negative-wallet-guard';
 
@@ -140,6 +141,31 @@ export async function eseguiPayoutImmediato(
   // Solo per la liquidazione del residuo alla cessazione del rapporto
   // (clausole 5 e 12.4 dei Termini). NON raggiungibile dal path utente.
   const ignoraSoglia = opts.ignoraSoglia ?? false;
+
+  // Ciclo di vita della visura camerale (clausola 8 dei Termini): senza una
+  // visura aggiornata PV non può fatturare correttamente (anche il documento
+  // broker conto terzi, clausola 6), quindi i payout restano sospesi finché
+  // l'azienda non la aggiorna — la via d'uscita esiste già (/visura). Per il
+  // broker questa è l'UNICA conseguenza (continua a creare/gestire pratiche);
+  // per l'agenzia si somma al blocco operativo (guard separato, altrove).
+  // Vale anche per la liquidazione di cessazione (`ignoraSoglia`): a
+  // differenza del saldo negativo, qui non esiste un pre-check company-wide
+  // a monte (in `deleteCompanyAction`) equivalente a questo.
+  // `isVisuraScadutaCompany` usa `prisma`, non `tx`: va risolta PRIMA di
+  // aprire la transazione di reserve, altrimenti annideremmo una query non
+  // transazionale dentro `$transaction`.
+  const walletOwner = await prisma.wallet.findUnique({
+    where: { id: walletId },
+    select: { companyId: true, sede: { select: { companyId: true } } },
+  });
+  const ownerCompanyId = walletOwner?.companyId ?? walletOwner?.sede?.companyId ?? null;
+  if (ownerCompanyId && (await isVisuraScadutaCompany(ownerCompanyId))) {
+    return {
+      ok: false,
+      error:
+        'La visura camerale della tua azienda è scaduta: i prelievi sono sospesi finché non la aggiorni.',
+    };
+  }
 
   const reserve = await prisma.$transaction(
     async (tx): Promise<{ ok: true; payoutId: string } | { ok: false; error: string }> => {

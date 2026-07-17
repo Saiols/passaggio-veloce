@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * "ignoraSoglia → eseguito" attraversa davvero `settlePayout`.
  */
 
-const { prismaMock, txMock, executePayoutMock, createDocBrokerMock } = vi.hoisted(() => {
+const { prismaMock, txMock, executePayoutMock, createDocBrokerMock, visuraScadutaMock } = vi.hoisted(() => {
   const txMock = {
     wallet: { findUnique: vi.fn(), update: vi.fn() },
     payout: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -26,9 +26,11 @@ const { prismaMock, txMock, executePayoutMock, createDocBrokerMock } = vi.hoiste
     txMock,
     executePayoutMock,
     createDocBrokerMock: vi.fn(),
+    visuraScadutaMock: vi.fn(),
     prismaMock: {
       $transaction: vi.fn((cb: (tx: typeof txMock) => unknown) => cb(txMock)),
       payout: { findUnique: vi.fn(), update: vi.fn() },
+      wallet: { findUnique: vi.fn() },
     },
   };
 });
@@ -38,6 +40,7 @@ vi.mock('@/lib/fatturazione/engine', () => ({ createDocBroker: createDocBrokerMo
 vi.mock('@/lib/providers/payment', () => ({
   getPayment: vi.fn(() => ({ executePayout: executePayoutMock })),
 }));
+vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 
 import { eseguiPayoutImmediato } from './payout-exec';
 import { WALLET } from './config';
@@ -47,6 +50,10 @@ const SOTTO_SOGLIA = WALLET.MIN_PAYOUT_CENT - 1; // 499,99 €
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // guard visura (clausola 8), fuori transazione: mai scaduta di default —
+  // non è l'oggetto di questi test, che coprono la soglia/il debito.
+  prismaMock.wallet.findUnique.mockResolvedValue({ companyId: 'company-1', sede: null });
+  visuraScadutaMock.mockResolvedValue(false);
   txMock.wallet.findUnique.mockResolvedValue({ id: W, saldoCent: SOTTO_SOGLIA });
   txMock.payout.findFirst.mockResolvedValue(null);
   txMock.payout.create.mockResolvedValue({ id: 'payout-1' });

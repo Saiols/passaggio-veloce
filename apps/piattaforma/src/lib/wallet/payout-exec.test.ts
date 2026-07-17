@@ -6,6 +6,7 @@ const {
   getPaymentMock,
   executePayoutMock,
   createDocBrokerMock,
+  visuraScadutaMock,
 } = vi.hoisted(() => {
   const txMock = {
     wallet: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
@@ -18,9 +19,11 @@ const {
     executePayoutMock,
     getPaymentMock: vi.fn(() => ({ executePayout: executePayoutMock })),
     createDocBrokerMock: vi.fn(),
+    visuraScadutaMock: vi.fn(),
     prismaMock: {
       $transaction: vi.fn((cb: (tx: typeof txMock) => unknown) => cb(txMock)),
       payout: { findUnique: vi.fn(), update: vi.fn() },
+      wallet: { findUnique: vi.fn() },
     },
   };
 });
@@ -29,6 +32,7 @@ vi.mock('server-only', () => ({}));
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/lib/fatturazione/engine', () => ({ createDocBroker: createDocBrokerMock }));
 vi.mock('@/lib/providers/payment', () => ({ getPayment: getPaymentMock }));
+vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 
 import { eseguiPayoutImmediato, settlePayout } from './payout-exec';
 
@@ -46,6 +50,13 @@ function payoutSede(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // guard visura (clausola 8), fuori transazione: azienda risolvibile e mai
+  // scaduta di default, così i test preesistenti restano invariati.
+  prismaMock.wallet.findUnique.mockResolvedValue({
+    companyId: 'company-1',
+    sede: null,
+  });
+  visuraScadutaMock.mockResolvedValue(false);
   // reserve (transazione)
   txMock.wallet.findFirst.mockResolvedValue(null);
   txMock.payout.findFirst.mockResolvedValue(null);
@@ -242,6 +253,50 @@ describe('eseguiPayoutImmediato — guard saldo negativo aziendale (clausola 5)'
     // di cessazione è incondizionata sul saldo positivo del wallet stesso.
     expect(txMock.wallet.findFirst).not.toHaveBeenCalled();
     expect(txMock.payout.create).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Ciclo di vita visura camerale (clausola 8 dei Termini): senza una visura
+ * aggiornata PV non può fatturare correttamente (anche il documento broker
+ * conto terzi, clausola 6), quindi i payout restano sospesi finché l'azienda
+ * non la aggiorna (via /visura, non un vicolo cieco). Per il broker questa è
+ * l'UNICA conseguenza; per l'agenzia si somma al blocco operativo (altrove).
+ * `isVisuraScadutaCompany` usa `prisma`, non `tx`: il guard vive PRIMA di
+ * aprire la transazione di reserve.
+ */
+describe('eseguiPayoutImmediato — guard visura scaduta (clausola 8)', () => {
+  it('visura scaduta → payout rifiutato, nessun Payout creato', async () => {
+    visuraScadutaMock.mockResolvedValue(true);
+    txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/visura/i);
+    expect(visuraScadutaMock).toHaveBeenCalledWith('company-1');
+    expect(txMock.payout.create).not.toHaveBeenCalled();
+    expect(executePayoutMock).not.toHaveBeenCalled();
+  });
+
+  it('visura valida → payout procede', async () => {
+    visuraScadutaMock.mockResolvedValue(false);
+    txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r.ok).toBe(true);
+    expect(txMock.payout.create).toHaveBeenCalled();
+  });
+
+  it("wallet senza company risolvibile (non trovato) → guard visura saltato, gestito dal check 'wallet non trovato' della transazione", async () => {
+    prismaMock.wallet.findUnique.mockResolvedValue(null);
+    txMock.wallet.findUnique.mockResolvedValue(null);
+
+    const r = await eseguiPayoutImmediato('w1');
+
+    expect(r).toEqual({ ok: false, error: 'Wallet non trovato' });
+    expect(visuraScadutaMock).not.toHaveBeenCalled();
   });
 });
 

@@ -9,12 +9,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * riaprendo lo stesso buco chiuso in `eseguiPayoutImmediato`.
  */
 
-const { prismaMock, hasNegativeCompanyWalletMock } = vi.hoisted(() => ({
+const { prismaMock, hasNegativeCompanyWalletMock, visuraScadutaMock } = vi.hoisted(() => ({
   prismaMock: {
     wallet: { findMany: vi.fn() },
     payout: { findFirst: vi.fn(), create: vi.fn() },
   },
   hasNegativeCompanyWalletMock: vi.fn(),
+  visuraScadutaMock: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
@@ -22,6 +23,7 @@ vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/lib/wallet/negative-wallet-guard', () => ({
   hasNegativeCompanyWallet: hasNegativeCompanyWalletMock,
 }));
+vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 
 import { triggerAutoPayout } from './trigger-auto-payout';
 
@@ -30,6 +32,7 @@ beforeEach(() => {
   prismaMock.payout.findFirst.mockResolvedValue(null);
   prismaMock.payout.create.mockResolvedValue({});
   hasNegativeCompanyWalletMock.mockResolvedValue(false);
+  visuraScadutaMock.mockResolvedValue(false);
 });
 
 describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', () => {
@@ -95,5 +98,52 @@ describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', ()
     expect(res).toEqual({ created: 0 });
     expect(hasNegativeCompanyWalletMock).not.toHaveBeenCalled();
     expect(prismaMock.payout.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Ciclo di vita visura camerale (clausola 8 dei Termini): questo job crea
+ * Payout RICHIESTO direttamente (non passa da `eseguiPayoutImmediato`, che
+ * ha il proprio guard visura), quindi il guard va replicato qui — altrimenti
+ * la rete di sicurezza periodica (cron notturno) pagherebbe un wallet di
+ * un'azienda con la visura scaduta, riaprendo lo stesso bypass già chiuso
+ * per il saldo negativo aziendale (vedi sopra).
+ */
+describe('triggerAutoPayout — guard visura scaduta (clausola 8)', () => {
+  it("wallet sopra soglia ma l'azienda ha la visura scaduta → nessun payout creato", async () => {
+    prismaMock.wallet.findMany.mockResolvedValue([
+      {
+        id: 'w1',
+        saldoCent: 150_000,
+        companyId: null,
+        sede: { payoutThresholdCent: 100_000, companyId: 'company-1' },
+        company: null,
+      },
+    ]);
+    visuraScadutaMock.mockResolvedValue(true);
+
+    const res = await triggerAutoPayout();
+
+    expect(res).toEqual({ created: 0 });
+    expect(visuraScadutaMock).toHaveBeenCalledWith('company-1');
+    expect(prismaMock.payout.create).not.toHaveBeenCalled();
+  });
+
+  it('visura valida → payout creato normalmente', async () => {
+    prismaMock.wallet.findMany.mockResolvedValue([
+      {
+        id: 'w1',
+        saldoCent: 150_000,
+        companyId: null,
+        sede: { payoutThresholdCent: 100_000, companyId: 'company-1' },
+        company: null,
+      },
+    ]);
+    visuraScadutaMock.mockResolvedValue(false);
+
+    const res = await triggerAutoPayout();
+
+    expect(res).toEqual({ created: 1 });
+    expect(prismaMock.payout.create).toHaveBeenCalled();
   });
 });

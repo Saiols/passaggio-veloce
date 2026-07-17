@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@pv/db';
 import { hasNegativeCompanyWallet } from '@/lib/wallet/negative-wallet-guard';
+import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 
 export type TriggerAutoPayoutResult = { created: number };
 
@@ -15,14 +16,16 @@ export type TriggerAutoPayoutResult = { created: number };
  * MANUALE, funziona anche in mock (Strada B): il safeguard sui soldi reali vive
  * nel provider dentro `settlePayout`, non qui.
  *
- * Clausola 5 dei Termini: questo path NON passa da `eseguiPayoutImmediato`
+ * Clausole 5 e 8 dei Termini: questo path NON passa da `eseguiPayoutImmediato`
  * (crea il Payout direttamente, `processPayouts` lo salda via
- * `settlePayout`), quindi il guard sul saldo negativo aziendale va replicato
- * qui — altrimenti la rete di sicurezza periodica pagherebbe un wallet anche
- * quando un altro wallet della stessa azienda è in negativo, riaprendo lo
- * stesso buco chiuso in `eseguiPayoutImmediato`. Non c'è eccezione
- * `ignoraSoglia` qui: questo path serve solo l'auto-payout ordinario, mai la
- * liquidazione di cessazione (quella passa da `deleteCompanyAction`).
+ * `settlePayout`), quindi i guard sul saldo negativo aziendale e sulla
+ * visura camerale scaduta vanno replicati qui — altrimenti la rete di
+ * sicurezza periodica pagherebbe un wallet anche quando un altro wallet
+ * della stessa azienda è in negativo, o quando la visura dell'azienda è
+ * scaduta, riaprendo lo stesso buco chiuso in `eseguiPayoutImmediato`. Non
+ * c'è eccezione `ignoraSoglia` qui: questo path serve solo l'auto-payout
+ * ordinario, mai la liquidazione di cessazione (quella passa da
+ * `deleteCompanyAction`).
  */
 export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
   const wallets = await prisma.wallet.findMany({
@@ -43,6 +46,7 @@ export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
 
     const companyId = w.companyId ?? w.sede?.companyId ?? null;
     if (companyId && (await hasNegativeCompanyWallet(prisma, companyId))) continue;
+    if (companyId && (await isVisuraScadutaCompany(companyId))) continue;
 
     const inflight = await prisma.payout.findFirst({
       where: { walletId: w.id, stato: { in: ['RICHIESTO', 'IN_LAVORAZIONE'] } },

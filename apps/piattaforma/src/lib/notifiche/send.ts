@@ -29,6 +29,10 @@ import {
   tplN43AgenziaSegnalazioneRespinta,
   tplN44BrokerSegnalazioneRespinta,
   tplN45UtenteSospeso,
+  tplN46VisuraInScadenza,
+  tplN47VisuraScaduta,
+  tplN48BrokerPraticaCongelata,
+  tplN49AdminAtecoNonIdoneo,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -61,6 +65,10 @@ import {
   type N43AgenziaSegnalazioneRespintaPayload,
   type N44BrokerSegnalazioneRespintaPayload,
   type N45UtenteSospesoPayload,
+  type N46VisuraInScadenzaPayload,
+  type N47VisuraScadutaPayload,
+  type N48BrokerPraticaCongelataPayload,
+  type N49AdminAtecoNonIdoneoPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -198,6 +206,26 @@ type SendInput =
       tipo: 'N45_UTENTE_SOSPESO';
       target: Target;
       payload: N45UtenteSospesoPayload;
+    }
+  | {
+      tipo: 'N46_VISURA_IN_SCADENZA';
+      target: Target;
+      payload: N46VisuraInScadenzaPayload;
+    }
+  | {
+      tipo: 'N47_VISURA_SCADUTA';
+      target: Target;
+      payload: N47VisuraScadutaPayload;
+    }
+  | {
+      tipo: 'N48_BROKER_PRATICA_CONGELATA';
+      target: Target;
+      payload: N48BrokerPraticaCongelataPayload;
+    }
+  | {
+      tipo: 'N49_ADMIN_ATECO_NON_IDONEO';
+      target: Target;
+      payload: N49AdminAtecoNonIdoneoPayload;
     };
 
 function render(input: SendInput): NotificaContent {
@@ -266,6 +294,14 @@ function render(input: SendInput): NotificaContent {
       return tplN44BrokerSegnalazioneRespinta(input.payload);
     case 'N45_UTENTE_SOSPESO':
       return tplN45UtenteSospeso(input.payload);
+    case 'N46_VISURA_IN_SCADENZA':
+      return tplN46VisuraInScadenza(input.payload);
+    case 'N47_VISURA_SCADUTA':
+      return tplN47VisuraScaduta(input.payload);
+    case 'N48_BROKER_PRATICA_CONGELATA':
+      return tplN48BrokerPraticaCongelata(input.payload);
+    case 'N49_ADMIN_ATECO_NON_IDONEO':
+      return tplN49AdminAtecoNonIdoneo(input.payload);
   }
 }
 

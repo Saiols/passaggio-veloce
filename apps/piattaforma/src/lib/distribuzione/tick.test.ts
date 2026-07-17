@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { tx, prismaMock } = vi.hoisted(() => {
   const tx = {
@@ -34,6 +34,7 @@ vi.mock('@/lib/notifiche/pratica', () => ({
 import { avviaRound1ForPratica } from './tick';
 import { sendNotifications } from '@/lib/notifiche';
 import { destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
+import { limiteVisuraUtc } from '@/lib/visura/validita';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,6 +77,110 @@ describe('avviaRound1ForPratica (multi-sede: tutte le sedi in zona)', () => {
     expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1' });
     expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2' });
     expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3' });
+  });
+});
+
+describe('Task 4.3: ciclo di vita visura — esclusione dalla distribuzione', () => {
+  const NOW = new Date('2026-07-17T10:00:00Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function daysAgo(n: number): Date {
+    return new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
+  }
+
+  /**
+   * Il mock di Prisma non applica filtri da solo: qui simuliamo la semantica
+   * reale di Postgres per `where.company.{deletedAt,suspendedAt,bloccoPagamentoAt,OR}`
+   * così il test discrimina davvero il verso della disuguaglianza e il ramo
+   * `null`, non solo la forma del `where` costruito da tick.ts.
+   */
+  function mockSediConVisuraMadre(
+    sedi: Array<{ id: string; companyId: string; visuraCameraleData: Date | null }>,
+  ) {
+    tx.sede.findMany.mockImplementation(
+      (args: { where?: { company?: { OR?: Array<Record<string, unknown>> } } }) => {
+        const orClauses = args?.where?.company?.OR;
+        // Comparatore generico (gt/gte/lt/lte) con semantica NULL di Postgres:
+        // un confronto contro una colonna NULL non è mai vero. Non capire solo
+        // `gt` è voluto: se il verso venisse invertito in `lt` nel codice sotto
+        // test, questo comparatore deve seguirlo fedelmente, non restare cieco.
+        const passesOr = (visura: Date | null): boolean => {
+          if (!orClauses) return true;
+          return orClauses.some((clause) => {
+            if (!('visuraCameraleData' in clause)) return false;
+            const cond = clause.visuraCameraleData;
+            if (cond === null) return visura === null;
+            if (visura === null) return false;
+            if (cond && typeof cond === 'object') {
+              const c = cond as { gt?: Date; gte?: Date; lt?: Date; lte?: Date };
+              if (c.gt) return visura.getTime() > c.gt.getTime();
+              if (c.gte) return visura.getTime() >= c.gte.getTime();
+              if (c.lt) return visura.getTime() < c.lt.getTime();
+              if (c.lte) return visura.getTime() <= c.lte.getTime();
+            }
+            return false;
+          });
+        };
+        const filtered = sedi.filter((s) => passesOr(s.visuraCameraleData));
+        return Promise.resolve(
+          filtered.map((s) => ({
+            id: s.id,
+            createdAt: new Date('2026-01-01'),
+            nome: `Agenzia ${s.id}`,
+            provincia: 'VE',
+            companyId: s.companyId,
+          })),
+        );
+      },
+    );
+  }
+
+  it('il `where` filtra sulla company: OR [null esente, gt(limiteVisuraUtc(now))]', async () => {
+    await avviaRound1ForPratica('p1');
+    const where = tx.sede.findMany.mock.calls[0][0].where;
+    expect(where.company.deletedAt).toBeNull();
+    expect(where.company.suspendedAt).toBeNull();
+    expect(where.company.bloccoPagamentoAt).toBeNull();
+    expect(where.company.OR).toEqual([
+      { visuraCameraleData: null },
+      { visuraCameraleData: { gt: limiteVisuraUtc(NOW) } },
+    ]);
+  });
+
+  it('sede la cui madre ha visura a 200 giorni → NON fra i candidati (scaduta)', async () => {
+    mockSediConVisuraMadre([
+      { id: 'sScaduta', companyId: 'mScaduta', visuraCameraleData: daysAgo(200) },
+    ]);
+    await avviaRound1ForPratica('p1');
+    const sedeIds = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data.sedeId);
+    expect(sedeIds).toHaveLength(0);
+    expect(sedeIds).not.toContain('sScaduta');
+  });
+
+  it('sede la cui madre ha visuraCameraleData a null → SÌ fra i candidati (esente)', async () => {
+    mockSediConVisuraMadre([
+      { id: 'sEsente', companyId: 'mEsente', visuraCameraleData: null },
+    ]);
+    await avviaRound1ForPratica('p1');
+    const sedeIds = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data.sedeId);
+    expect(sedeIds).toContain('sEsente');
+  });
+
+  it('sede la cui madre ha visura fresca (10 giorni) → SÌ fra i candidati', async () => {
+    mockSediConVisuraMadre([
+      { id: 'sFresca', companyId: 'mFresca', visuraCameraleData: daysAgo(10) },
+    ]);
+    await avviaRound1ForPratica('p1');
+    const sedeIds = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data.sedeId);
+    expect(sedeIds).toContain('sFresca');
   });
 });
 

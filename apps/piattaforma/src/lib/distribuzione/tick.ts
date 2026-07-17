@@ -5,6 +5,7 @@ import { provinceLimitrofe } from './province-limitrofe';
 import { computeCountdown, loadOrariPerSedi } from './countdown';
 import { attachRating, rankCandidates } from './ranking';
 import { checkAutoSuspendForSedi } from './auto-suspend';
+import { limiteVisuraUtc } from '@/lib/visura/validita';
 import {
   getAdminEmails,
   sendNotification,
@@ -161,7 +162,20 @@ async function avviaRound(
       suspendedAt: null,
       provincia: { in: provincieTarget as string[] },
       id: { notIn: Array.from(sediContattate) },
-      company: { deletedAt: null, suspendedAt: null, bloccoPagamentoAt: null },
+      company: {
+        deletedAt: null,
+        suspendedAt: null,
+        bloccoPagamentoAt: null,
+        // Ciclo di vita visura: un'agenzia con visura scaduta non riceve nuove
+        // pratiche. La visura sta sulla MADRE → escludendo la madre escono tutte
+        // le sue sedi, che è il comportamento voluto (multi-sede, P.IVA unica).
+        // `null` = ESENTE, deve restare idonea: senza questo ramo escluderemmo
+        // tutte le aziende senza data (oggi 9 agenzie su 10, account demo/seed).
+        OR: [
+          { visuraCameraleData: null },
+          { visuraCameraleData: { gt: limiteVisuraUtc(now) } },
+        ],
+      },
     },
     select: { id: true, createdAt: true, nome: true, provincia: true, companyId: true },
   });

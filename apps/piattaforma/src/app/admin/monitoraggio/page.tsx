@@ -21,7 +21,7 @@ export default async function MonitoraggioPage() {
     include: {
       broker: { select: { ragioneSociale: true } },
       agenziaAssegnata: { select: { ragioneSociale: true } },
-      agenziaSede: { select: { nome: true, citta: true, telefono: true } },
+      agenziaSede: { select: { nome: true, citta: true } },
       veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });

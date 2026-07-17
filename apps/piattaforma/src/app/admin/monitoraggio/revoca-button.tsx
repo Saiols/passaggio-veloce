@@ -46,7 +46,7 @@ export function RevocaButton({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-[16px] bg-white p-6 shadow-[var(--pv-shadow-card)]">
             <h2 className="text-[18px] font-bold text-pv-navy-900">Revoca e rimetti in circolo</h2>
-            <p className="mt-2 text-[13px] text-pv-slate-600">
+            <p className="mt-2 text-[13px] text-pv-slate-700">
               Stai per togliere <strong>{codicePratica}</strong> a <strong>{agenzia}</strong> e rimetterla in
               distribuzione nella zona. L&apos;agenzia riceverà una email e non verrà più ricontattata per questa
               pratica. Broker e clienti saranno informati.
@@ -67,7 +67,11 @@ export function RevocaButton({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                  setError(null);
+                  setMotivo('');
+                }}
                 className="rounded-[10px] border border-pv-slate-300 bg-white px-3 py-1.5 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50 disabled:opacity-60"
               >
                 Annulla

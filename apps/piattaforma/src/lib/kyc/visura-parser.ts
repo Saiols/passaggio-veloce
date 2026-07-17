@@ -8,6 +8,14 @@ export type VisuraData = {
   denominazione?: string;
   partitaIva?: string;
   amministratore?: { nome?: string; cognome?: string; codiceFiscale?: string };
+  /**
+   * Sede legale, BEST-EFFORT: una visura contiene 4+ indirizzi (sede legale,
+   * domicilio dell'amministratore, indirizzi dei soci, unità locali) e il testo
+   * unpdf è in ordine di oggetti PDF, non visivo. Non è affidabile al punto da
+   * poterci scrivere su una fattura senza che un umano guardi: `/visura` la
+   * mostra precompilata al titolare, che conferma o corregge.
+   */
+  sedeLegale?: { comune?: string; provincia?: string; indirizzo?: string; cap?: string };
   rawText: string;
 };
 
@@ -47,6 +55,7 @@ export function parseVisuraText(text: string): VisuraData {
   if (date) out.dataEmissione = `${date[3]}-${date[2]}-${date[1]}`;
 
   out.amministratore = parseAmministratore(text);
+  out.sedeLegale = parseSedeLegale(text);
   return out;
 }
 
@@ -148,6 +157,45 @@ function parseAmministratoreWindowed(text: string): VisuraData['amministratore']
 
   if (!nome && !cognome && !codiceFiscale) return undefined;
   return { nome, cognome, codiceFiscale };
+}
+
+/**
+ * Sede legale dalla visura InfoCamere. BEST-EFFORT: il consumatore DEVE farla
+ * confermare da un umano (cfr. /visura).
+ *
+ * Il testo unpdf non conserva l'ordine visivo, e nella stessa visura convivono
+ * l'indirizzo della sede legale, il domicilio dell'amministratore, quelli dei
+ * soci e delle unità locali: pescare "il primo VIA … CAP" significa, nella
+ * fixture reale, restituire il domicilio di casa dell'amministratrice.
+ *
+ * Àncora usata: la sequenza InfoCamere `Indirizzo Sede legale` (con e senza
+ * spazio: unpdf incolla spesso le etichette → `Sedelegale`) seguita, entro una
+ * finestra breve, dal blocco `COMUNE (PR) VIA … CAP NNNNN`. Nella visura reale
+ * questa finestra è un blocco "etichette poi valori" (tabella spezzata da
+ * unpdf): tra l'àncora e il valore dell'indirizzo si intromettono le altre
+ * etichette della stessa tabella (Domicilio digitale/PEC, Partita IVA, …), non
+ * un altro indirizzo — per questo una finestra di alcune centinaia di
+ * caratteri resta sicura.
+ *
+ * Se l'àncora non c'è, o non trova un indirizzo entro la finestra: `undefined`.
+ * MAI un fallback "primo indirizzo trovato" nell'intero testo — un indirizzo
+ * sbagliato è peggio di nessun indirizzo, perché finisce in fattura.
+ */
+function parseSedeLegale(text: string): VisuraData['sedeLegale'] {
+  const anchor = /Indirizzo\s*Sede\s*legale/i.exec(text);
+  if (!anchor) return undefined;
+  const window = text.slice(anchor.index, anchor.index + 400);
+  const m =
+    /([A-ZÀ-Ù'’\s.]{2,40}?)\s*\(([A-Z]{2})\)\s+((?:VIA|VIALE|CORSO|PIAZZA|PIAZZALE|LARGO|STRADA|LOCALITA'|LOC\.|FRAZIONE|BORGO)\s+[^\n]{2,60}?)\s+CAP\s+(\d{5})/i.exec(
+      window,
+    );
+  if (!m) return undefined;
+  return {
+    comune: m[1]!.trim(),
+    provincia: m[2]!.toUpperCase(),
+    indirizzo: m[3]!.trim(),
+    cap: m[4],
+  };
 }
 
 /** Estrae i dati visura da un PDF. Usa unpdf (testo); se il PDF non ha testo

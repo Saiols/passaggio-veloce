@@ -160,3 +160,42 @@ describe('parseVisuraText (corpus reale unpdf: PLANET AUTO, ordine token non vis
     expect(r.denominazione).toContain('PLANET AUTO');
   });
 });
+
+// La visura reale contiene QUATTRO indirizzi (sede legale, domicilio
+// dell'amministratrice, indirizzo di una socia, unità locale) e il testo unpdf
+// non conserva l'ordine visivo: l'etichetta "Indirizzo Sedelegale" finisce
+// lontana dal proprio valore. Il test che conta non è "estrae un indirizzo" —
+// è "non estrae quello sbagliato": un indirizzo sbagliato in fattura (es. il
+// domicilio di casa dell'amministratrice) è peggio di nessun indirizzo.
+describe('sedeLegale — sulla fixture reale', () => {
+  it('estrae la sede legale', () => {
+    const v = parseVisuraText(REAL_PLANET_AUTO);
+    expect(v.sedeLegale?.comune).toBe('MAGENTA');
+    expect(v.sedeLegale?.provincia).toBe('MI');
+    expect(v.sedeLegale?.indirizzo).toBe('VIA A. VOLTA 10');
+    expect(v.sedeLegale?.cap).toBe('20013');
+  });
+
+  // I TRE test che contano davvero: il fallimento silenzioso e' pescare
+  // l'indirizzo sbagliato, non il non-estrarre.
+  it("NON prende il domicilio dell'amministratrice", () => {
+    const v = parseVisuraText(REAL_PLANET_AUTO);
+    expect(v.sedeLegale?.indirizzo).not.toContain('TRIESTE');
+    expect(v.sedeLegale?.comune).not.toBe('SANTO STEFANO TICINO');
+  });
+
+  it("NON prende l'indirizzo della societa' socia", () => {
+    const v = parseVisuraText(REAL_PLANET_AUTO);
+    expect(v.sedeLegale?.indirizzo).not.toContain('PORTA VITTORIA');
+  });
+
+  it("NON prende l'unita' locale", () => {
+    const v = parseVisuraText(REAL_PLANET_AUTO);
+    expect(v.sedeLegale?.indirizzo).not.toContain('PUCCINI');
+    expect(v.sedeLegale?.cap).not.toBe('20059');
+  });
+
+  it('testo senza sede legale → undefined, non un indirizzo a caso', () => {
+    expect(parseVisuraText('testo qualunque senza indirizzi').sedeLegale).toBeUndefined();
+  });
+});

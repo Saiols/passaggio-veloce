@@ -30,7 +30,6 @@ import { isVisuraScaduta, VISURA_VALIDITA_GIORNI } from './validita';
 
 export type SedeLegaleInput = {
   indirizzo: string;
-  civico: string;
   cap: string;
   citta: string;
   provincia: string;
@@ -278,8 +277,14 @@ export async function aggiornaVisura(
         // DALL'UTENTE, che l'ha confermata o corretta: l'estrazione della sede
         // legale è best-effort (4+ indirizzi per visura) e non è affidabile
         // abbastanza da scriverla in fattura senza che un umano la guardi.
+        // `indirizzo` è l'unico di questi campi che raggiunge la fattura
+        // (`snapshotCompany`, `lib/fatturazione/pv-emittente.ts`): lo si scrive
+        // COL numero civico dentro, com'è il testo che dà il parser (vedi
+        // `mapSedeLegale` in `app/visura/client.tsx`). Niente campo `civico`
+        // separato: nessun consumer lo legge (non esiste `NumeroCivico` nello
+        // XML FatturaPA), quindi è solo attrito nell'unica via d'uscita da un
+        // blocco operativo — chiavi OMESSE, non azzerate.
         indirizzo: input.sedeLegale.indirizzo,
-        civico: input.sedeLegale.civico,
         cap: input.sedeLegale.cap,
         citta: input.sedeLegale.citta,
         provincia: input.sedeLegale.provincia,

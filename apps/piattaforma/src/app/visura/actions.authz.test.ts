@@ -19,7 +19,7 @@ const REF_JSON = JSON.stringify(REF);
 
 // Provincia volutamente minuscola: dimostra che è il server (schema zod), non
 // il mock, a normalizzarla in maiuscolo prima di passarla ad aggiornaVisura.
-const SEDE = { indirizzo: 'Via Roma', civico: '10', cap: '20100', citta: 'Milano', provincia: 'mi' };
+const SEDE = { indirizzo: 'Via Roma 10', cap: '20100', citta: 'Milano', provincia: 'mi' };
 
 function sessione(role: string) {
   return { user: { id: 'u1', companyId: 'c1', role } };
@@ -75,8 +75,16 @@ describe('aggiornaVisuraAction — authz', () => {
       companyId: 'c1',
       userId: 'u1',
       ref: REF,
-      sedeLegale: { indirizzo: 'Via Roma', civico: '10', cap: '20100', citta: 'Milano', provincia: 'MI' },
+      sedeLegale: { indirizzo: 'Via Roma 10', cap: '20100', citta: 'Milano', provincia: 'MI' },
     });
+  });
+
+  it("civico NON compare nel payload passato ad aggiornaVisura (nessun consumer lo legge)", async () => {
+    authMock.mockResolvedValue(sessione('ADMIN_AZIENDA'));
+    const r = await aggiornaVisuraAction(fdAggiorna());
+    expect(r.ok).toBe(true);
+    const sedeLegale = aggiornaMock.mock.calls[0]![0].sedeLegale;
+    expect('civico' in sedeLegale).toBe(false);
   });
 
   it('blobRef malformato → rifiuta', async () => {

@@ -30,7 +30,7 @@ export default async function VisuraPage() {
     titolare
       ? prisma.company.findUnique({
           where: { id: u.companyId },
-          select: { indirizzo: true, civico: true, cap: true, citta: true, provincia: true },
+          select: { indirizzo: true, cap: true, citta: true, provincia: true },
         })
       : Promise.resolve(null),
   ]);
@@ -46,7 +46,6 @@ export default async function VisuraPage() {
         azienda
           ? {
               indirizzo: azienda.indirizzo,
-              civico: azienda.civico ?? '',
               cap: azienda.cap,
               citta: azienda.citta,
               provincia: azienda.provincia,

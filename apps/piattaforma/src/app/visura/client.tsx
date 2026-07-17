@@ -11,9 +11,9 @@ import { VISURA_VALIDITA_GIORNI } from '@/lib/visura/validita';
 import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import { verificaVisuraAction, aggiornaVisuraAction, type SedeLegalePreview } from './actions';
 
-type SedeForm = { indirizzo: string; civico: string; cap: string; citta: string; provincia: string };
+type SedeForm = { indirizzo: string; cap: string; citta: string; provincia: string };
 
-const SEDE_VUOTA: SedeForm = { indirizzo: '', civico: '', cap: '', citta: '', provincia: '' };
+const SEDE_VUOTA: SedeForm = { indirizzo: '', cap: '', citta: '', provincia: '' };
 
 // Duplicato di proposito: come `blocco-pagamento/client.tsx` (ibanFormSchema),
 // il client valida per l'esperienza utente, il server (actions.ts) rivalida
@@ -21,7 +21,6 @@ const SEDE_VUOTA: SedeForm = { indirizzo: '', civico: '', cap: '', citta: '', pr
 // stessa cosa, non lo stesso oggetto.
 const sedeLegaleSchema = z.object({
   indirizzo: z.string().trim().min(2, "Inserisci l'indirizzo"),
-  civico: z.string().trim().min(1, 'Inserisci il civico'),
   cap: z.string().trim().regex(/^\d{5}$/, 'Il CAP deve avere 5 cifre'),
   citta: z.string().trim().min(2, 'Inserisci la città'),
   provincia: z.string().trim().length(2, 'La provincia è di 2 lettere'),
@@ -39,11 +38,11 @@ function formatDataEmissione(iso: string): string {
  *
  * Il parser (`sedeLegale`) restituisce l'indirizzo COMPLETO col civico dentro
  * (es. "VIA A. VOLTA 10": vedi `lib/kyc/visura-parser.ts`), non un civico
- * separato. Non lo si separa con una regex — vie che finiscono con un numero,
- * indirizzi "SNC" o con civici tipo "10/A" renderebbero il taglio automatico
- * inaffidabile, e un civico sbagliato è peggio di uno vuoto perché finisce in
- * fattura senza che sembri richiedere revisione. Si lascia `civico` vuoto e lo
- * scrive il titolare, che sta già rivedendo l'indirizzo per confermarlo.
+ * separato — e non ce n'è bisogno: nessun consumer legge un civico a parte
+ * (`snapshotCompany`, l'unico mapper verso fattura, non lo accetta nemmeno
+ * nel tipo; niente `NumeroCivico` nello XML FatturaPA). Si scrive quindi
+ * `indirizzo` così com'è, numero compreso: è più corretto di scriverlo monco,
+ * ed è l'unico di questi campi che raggiunge davvero la fattura.
  *
  * Se il parser non ha trovato nulla, si precompila con la sede ATTUALE
  * dell'azienda (passata dalla page): meglio proporre il dato che già
@@ -53,7 +52,6 @@ function mapSedeLegale(sedeLegale: SedeLegalePreview | null, sedeAttuale: SedeFo
   if (sedeLegale) {
     return {
       indirizzo: sedeLegale.indirizzo ?? '',
-      civico: '',
       cap: sedeLegale.cap ?? '',
       citta: sedeLegale.comune ?? '',
       provincia: sedeLegale.provincia ?? '',
@@ -91,19 +89,28 @@ export function VisuraClient({
   const [dataEmissione, setDataEmissione] = useState<string | null>(null);
   const [sede, setSede] = useState<SedeForm>(SEDE_VUOTA);
   const [sedeLegaleMancante, setSedeLegaleMancante] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [verificaPending, startVerifica] = useTransition();
   const [confermaPending, startConferma] = useTransition();
   const pending = verificaPending || confermaPending;
 
+  // Presente: usata SOLO nel banner SCADUTA, dove la conseguenza è già in
+  // atto ("Finché non carichi..., non puoi..."). PREAVVISO invece descrive
+  // cosa succederà ALLA scadenza (non ancora avvenuta): serve il futuro,
+  // vedi `conseguenzaFutura` sotto.
   const conseguenza =
     companyType === 'AGENZIA'
       ? 'non puoi gestire pratiche, non ne ricevi di nuove e non puoi prelevare dal wallet'
       : 'non puoi prelevare il saldo del tuo wallet';
+  const conseguenzaFutura =
+    companyType === 'AGENZIA'
+      ? 'non potrai gestire pratiche, non ne riceverai di nuove e non potrai prelevare dal wallet'
+      : 'non potrai prelevare il saldo del tuo wallet';
 
   const errors = zodFieldErrors(sedeLegaleSchema, sede);
-  const { field, gatedSubmit } = useFieldErrorsState(errors);
+  const { field, gatedSubmit, resetReveal } = useFieldErrorsState(errors);
   const fIndirizzo = field('indirizzo');
-  const fCivico = field('civico');
   const fCap = field('cap');
   const fCitta = field('citta');
   const fProvincia = field('provincia');
@@ -113,10 +120,14 @@ export function VisuraClient({
     setFile(f);
     setRef(null);
     if (!f) return;
+    setUploading(true);
+    setUploadProgress(0);
     try {
-      setRef(await uploadToBlob(f, 'visura'));
+      setRef(await uploadToBlob(f, 'visura', setUploadProgress));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Caricamento non riuscito');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -137,6 +148,10 @@ export function VisuraClient({
       setDataEmissione(r.dataEmissione);
       setSedeLegaleMancante(!r.sedeLegale);
       setSede(mapSedeLegale(r.sedeLegale, sedeAttuale));
+      // Anteprima dell'ATECO fin dal passo 1: non blocca (si può comunque
+      // confermare), ma il posto giusto per avvisare è PRIMA della scrittura,
+      // non solo nel messaggio di successo a cose fatte.
+      setAtecoNonIdoneo(r.atecoNonIdoneo);
       setStep('conferma');
     });
   };
@@ -147,6 +162,10 @@ export function VisuraClient({
     setRef(null);
     setError(null);
     setSede(SEDE_VUOTA);
+    // Si torna al form del passo 1: senza questo, un campo lasciato vuoto al
+    // tentativo di submit precedente (revealed=true) riapparirebbe già rosso
+    // alla riapertura del passo 2. Mai rossi all'apertura.
+    resetReveal();
   };
 
   const onConferma = (): void => {
@@ -156,7 +175,6 @@ export function VisuraClient({
       const fd = new FormData();
       fd.set('blobRef', JSON.stringify(ref));
       fd.set('indirizzo', sede.indirizzo);
-      fd.set('civico', sede.civico);
       fd.set('cap', sede.cap);
       fd.set('citta', sede.citta);
       fd.set('provincia', sede.provincia);
@@ -188,8 +206,8 @@ export function VisuraClient({
       )}
       {stato === 'PREAVVISO' && (
         <Alert variant="warning" title="La visura sta per scadere" className="mt-5">
-          Mancano {giorniRimanenti} giorni. Alla scadenza {conseguenza}: aggiornala ora per non
-          interrompere l&apos;operatività.
+          Mancano {giorniRimanenti} giorni. Alla scadenza {conseguenzaFutura}: aggiornala ora per
+          non interrompere l&apos;operatività.
         </Alert>
       )}
       {stato === 'OK' && (
@@ -229,6 +247,11 @@ export function VisuraClient({
           <div className={verificaPending ? 'pointer-events-none opacity-60' : undefined}>
             <DocCard label="Visura camerale (PDF)" pdfOnly file={file} onChange={onFile} />
           </div>
+          {uploading && (
+            <p className="mt-2 text-[12px] font-semibold text-pv-navy-600">
+              Caricamento in corso… {uploadProgress}%
+            </p>
+          )}
           {error && (
             <Alert variant="error" className="mt-4">
               {error}
@@ -240,7 +263,7 @@ export function VisuraClient({
             onClick={onVerifica}
             loading={verificaPending}
             loadingLabel="Verifica in corso…"
-            disabled={!ref}
+            disabled={!ref || uploading}
           >
             Verifica documento
           </Button>
@@ -259,6 +282,14 @@ export function VisuraClient({
             </Alert>
           )}
 
+          {atecoNonIdoneo && (
+            <Alert variant="warning" className="mt-3">
+              Il codice ATECO risultante dalla visura non è tra quelli ammessi per la tua
+              tipologia di azienda. Puoi comunque confermare: la visura verrà accettata, ma il
+              nostro team ti contatterà per una verifica.
+            </Alert>
+          )}
+
           <form onSubmit={gatedSubmit(onConferma)} noValidate className="mt-4 space-y-3">
             <Field label="Indirizzo" required error={fIndirizzo.error}>
               <Input
@@ -267,16 +298,6 @@ export function VisuraClient({
                 onChange={(e) => setSede((s) => ({ ...s, indirizzo: e.target.value }))}
                 onBlur={fIndirizzo.onBlur}
                 invalid={fIndirizzo.invalid}
-                disabled={confermaPending}
-              />
-            </Field>
-            <Field label="Civico" required error={fCivico.error}>
-              <Input
-                name="civico"
-                value={sede.civico}
-                onChange={(e) => setSede((s) => ({ ...s, civico: e.target.value }))}
-                onBlur={fCivico.onBlur}
-                invalid={fCivico.invalid}
                 disabled={confermaPending}
               />
             </Field>

@@ -48,6 +48,11 @@ const blobRefSchema = z.object({
  * commento in `lib/visura/aggiorna.ts`): se la data arrivasse dal form,
  * sbloccarsi sarebbe un semplice POST con la data di oggi.
  *
+ * Niente campo `civico` separato: il parser dà `indirizzo` col numero civico
+ * già dentro (es. "VIA A. VOLTA 10") e nessun consumer legge un civico a
+ * parte (`snapshotCompany`, l'unico mapper verso fattura, non lo accetta
+ * nemmeno nel tipo). `indirizzo` si scrive quindi COSÌ COM'È dato dal parser.
+ *
  * I campi `Company.indirizzo/citta/cap/provincia` sono `String` non-nullable
  * e alimentano FatturaPA: senza un `min` che rifiuti la stringa vuota, un
  * form sottomesso senza dati (es. da un client che salta il passo 1)
@@ -55,7 +60,6 @@ const blobRefSchema = z.object({
  */
 const sedeLegaleSchema = z.object({
   indirizzo: z.string().trim().min(2, "Inserisci l'indirizzo"),
-  civico: z.string().trim().min(1, 'Inserisci il civico'),
   cap: z.string().trim().regex(/^\d{5}$/, 'Il CAP deve avere 5 cifre'),
   citta: z.string().trim().min(2, 'Inserisci la città'),
   provincia: z.string().trim().length(2, 'La provincia è di 2 lettere').toUpperCase(),
@@ -119,7 +123,6 @@ export async function aggiornaVisuraAction(formData: FormData): Promise<Aggiorna
 
   const sedeParsed = sedeLegaleSchema.safeParse({
     indirizzo: formData.get('indirizzo'),
-    civico: formData.get('civico'),
     cap: formData.get('cap'),
     citta: formData.get('citta'),
     provincia: formData.get('provincia'),

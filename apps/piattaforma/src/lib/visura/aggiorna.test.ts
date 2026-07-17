@@ -26,7 +26,7 @@ const NOW = new Date('2026-07-16T12:00:00Z');
 const AZIENDA = {
   id: 'c1', type: 'DEALER', ragioneSociale: 'Rossi Auto', partitaIva: '12345678901',
 };
-const SEDE_OK = { indirizzo: 'VIA CORRETTA', civico: '1', cap: '20100', citta: 'MILANO', provincia: 'MI' };
+const SEDE_OK = { indirizzo: 'VIA CORRETTA 1', cap: '20100', citta: 'MILANO', provincia: 'MI' };
 const VISURA_OK = {
   dataEmissione: '2026-07-01', partitaIva: '12345678901', denominazione: 'Rossi Auto',
   atecoCodes: ['45.11.01'],
@@ -158,6 +158,10 @@ describe('aggiornaVisura — cosa scrive', () => {
     // Gating di un campo = OMETTERE la chiave: calcolarla a null AZZERA il dato.
     expect('partitaIva' in data).toBe(false);
     expect('regimeFiscale' in data).toBe(false);
+    // Stesso trattamento per `civico`: nessun consumer lo legge (non esiste
+    // `NumeroCivico` nello XML FatturaPA, `snapshotCompany` non lo accetta
+    // nemmeno nel tipo), quindi la chiave va OMESSA, non scritta.
+    expect('civico' in data).toBe(false);
   });
 
   it('la sede legale viene dal FORM, non dall\'OCR', async () => {
@@ -169,8 +173,10 @@ describe('aggiornaVisura — cosa scrive', () => {
       }),
     );
     const data = update.mock.calls[0]![0].data;
-    expect(data.indirizzo).toBe('VIA CORRETTA'); // vince l'umano
-    expect(data.civico).toBe('1');
+    // `indirizzo` è scritto COL civico dentro, com'è il testo che dà il form:
+    // è l'unico di questi campi che raggiunge la fattura (vedi commento in
+    // `aggiornaVisura`), niente `civico` separato.
+    expect(data.indirizzo).toBe('VIA CORRETTA 1'); // vince l'umano
     expect(data.cap).toBe('20100');
     expect(data.citta).toBe('MILANO');
     expect(data.provincia).toBe('MI');

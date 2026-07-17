@@ -19,6 +19,7 @@ import {
   IconFinance,
   // IconListini, // LISTINI DISABILITATI (feature nascosta 2026-06-12)
   IconMappa,
+  IconMonitoraggio,
   IconPermessi,
   IconPratiche,
   IconPromo,
@@ -71,6 +72,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/pratiche', label: 'Pratiche', icon: IconPratiche },
       { href: '/admin/escalation', label: 'Escalation', icon: IconEscalation },
+      { href: '/admin/monitoraggio', label: 'Monitoraggio', icon: IconMonitoraggio, adminOnly: true },
       {
         href: '/admin/segnalazioni',
         label: 'Segnalazioni',

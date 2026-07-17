@@ -66,6 +66,15 @@ export function IconEscalation({ className }: AdminIconProps) {
   );
 }
 
+export function IconMonitoraggio({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </Svg>
+  );
+}
+
 export function IconSegnalazioni({ className }: AdminIconProps) {
   return (
     <Svg className={className}>

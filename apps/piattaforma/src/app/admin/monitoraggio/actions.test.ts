@@ -4,7 +4,7 @@ const { authMock, txMock, transactionMock, avviaRoundMock, postCommitMock,
   sendMock, notifyClientiMock, destSedeMock, destBrokerMock, emitEventoMock, logMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   txMock: {
-    pratica: { findUnique: vi.fn(), update: vi.fn() },
+    pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     praticaAssegnazione: { updateMany: vi.fn(), findMany: vi.fn() },
   },
   transactionMock: vi.fn(),
@@ -36,6 +36,7 @@ beforeEach(() => {
   transactionMock.mockImplementation(async (cb: (tx: typeof txMock) => unknown) => cb(txMock));
   txMock.praticaAssegnazione.findMany.mockResolvedValue([{ sedeId: 'sRev', ciclo: 1, esito: 'REVOCATA_ADMIN' }]);
   avviaRoundMock.mockResolvedValue({ count: 2, newAssegnazioniIds: ['n1', 'n2'], escalated: false });
+  txMock.pratica.updateMany.mockResolvedValue({ count: 1 });
   postCommitMock.mockResolvedValue(undefined);
   destSedeMock.mockResolvedValue([{ email: 'ag@x.it', userId: 'u9', nome: 'Auto MI' }]);
   destBrokerMock.mockResolvedValue([{ email: 'br@x.it', userId: 'u1', nome: 'Rossi' }]);
@@ -79,10 +80,10 @@ describe('revocaERimettiInCircoloAction', () => {
         data: expect.objectContaining({ esito: 'REVOCATA_ADMIN' }),
       }),
     );
-    // pratica sganciata + ciclo incrementato
-    expect(txMock.pratica.update).toHaveBeenCalledWith(
+    // pratica sganciata + ciclo incrementato (compare-and-set)
+    expect(txMock.pratica.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'p1' },
+        where: expect.objectContaining({ id: 'p1', stato: 'ACCETTATA', processataAt: null }),
         data: expect.objectContaining({ agenziaAssegnataId: null, distribuzioneCiclo: 2, accettataAt: null }),
       }),
     );

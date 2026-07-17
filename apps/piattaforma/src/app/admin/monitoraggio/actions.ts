@@ -65,8 +65,14 @@ export async function revocaERimettiInCircoloAction(
       });
 
       // 2) sgancia l'agenzia e apri il nuovo ciclo (lo stato lo imposta avviaRound)
-      await tx.pratica.update({
-        where: { id: praticaId },
+      // compare-and-set: ri-asserisce stato/ciclo per evitare doppia revoca in race
+      const cas = await tx.pratica.updateMany({
+        where: {
+          id: praticaId,
+          stato: 'ACCETTATA',
+          processataAt: null,
+          distribuzioneCiclo: pratica.distribuzioneCiclo,
+        },
         data: {
           agenziaAssegnataId: null,
           agenziaSedeId: null,
@@ -79,6 +85,9 @@ export async function revocaERimettiInCircoloAction(
           escalationAt: null,
         },
       });
+      if (cas.count === 0) {
+        throw new Error('La pratica non è più in stato accettato/non lavorato');
+      }
 
       // 3) ricarica le assegnazioni (incl. la REVOCATA_ADMIN appena scritta)
       const assegnazioni = await tx.praticaAssegnazione.findMany({

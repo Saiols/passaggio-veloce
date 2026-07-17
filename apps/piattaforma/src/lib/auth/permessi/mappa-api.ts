@@ -43,6 +43,7 @@ export const MAPPA_API: Record<string, Permesso | null> = {
   'src/app/api/jobs/affiliation-monthly-recap/route.ts': null,
   'src/app/api/jobs/crm-sync/route.ts': null,
   'src/app/api/jobs/distribuzione-tick/route.ts': null,
+  'src/app/api/jobs/preavviso-visura/route.ts': null,
   'src/app/api/jobs/process-fee-scheduled/route.ts': null,
   'src/app/api/jobs/process-payouts/route.ts': null,
   'src/app/api/jobs/purge-deleted-documenti/route.ts': null,

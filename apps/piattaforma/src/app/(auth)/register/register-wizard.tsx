@@ -210,6 +210,10 @@ export function RegisterWizard({
     setKycErrors([]);
     setDocsVerified(false);
     setKycToken(null);
+    // Anche l'avviso sull'età: era riferito alla visura PRECEDENTE. Sostituito il
+    // file, lasciarlo appeso significherebbe mostrare i giorni di un documento
+    // che non c'è più, finché l'utente non riclicca Avanti.
+    setVisuraGiorni(null);
   };
 
   // Gate KYC anticipato: la verifica OCR gira QUI (Documenti → Pagamento), così

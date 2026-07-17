@@ -83,7 +83,7 @@ describe('revocaERimettiInCircoloAction', () => {
     // pratica sganciata + ciclo incrementato (compare-and-set)
     expect(txMock.pratica.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: 'p1', stato: 'ACCETTATA', processataAt: null }),
+        where: expect.objectContaining({ id: 'p1', stato: 'ACCETTATA', processataAt: null, distribuzioneCiclo: 1 }),
         data: expect.objectContaining({ agenziaAssegnataId: null, distribuzioneCiclo: 2, accettataAt: null }),
       }),
     );

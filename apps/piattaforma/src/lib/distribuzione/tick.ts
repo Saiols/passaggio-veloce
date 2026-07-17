@@ -5,6 +5,7 @@ import { provinceLimitrofe } from './province-limitrofe';
 import { computeCountdown, loadOrariPerSedi } from './countdown';
 import { attachRating, rankCandidates } from './ranking';
 import { checkAutoSuspendForSedi } from './auto-suspend';
+import { sediDaEscludere } from './esclusioni';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
 import {
   getAdminEmails,
@@ -124,20 +125,19 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
   return result;
 }
 
-async function avviaRound(
+export async function avviaRound(
   tx: Prisma.TransactionClient,
   pratica: {
     id: string;
     provincia: string | null;
-    assegnazioni: { sedeId: string | null }[];
+    distribuzioneCiclo: number;
+    assegnazioni: { sedeId: string | null; ciclo: number; esito: string }[];
   },
   round: 1 | 2 | 3,
 ): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean }> {
   const now = new Date();
   const provincia = (pratica.provincia ?? '').toUpperCase();
-  const sediContattate = new Set(
-    pratica.assegnazioni.map((a) => a.sedeId).filter((x): x is string => x != null),
-  );
+  const sediContattate = new Set(sediDaEscludere(pratica));
 
   let provincieTarget: readonly string[];
   if (round === 1 || round === 3) provincieTarget = [provincia];
@@ -212,6 +212,7 @@ async function avviaRound(
         agenziaId: a.companyId, // madre (colonna legacy, NOT NULL)
         sedeId: a.id, // sede fisica assegnataria
         round,
+        ciclo: pratica.distribuzioneCiclo,
         esito: 'PENDING',
         invioAt: now,
         countdownInizioAt: inizio,
@@ -269,7 +270,7 @@ function emptyJobs(): PostCommitJobs {
   return { newAssegnazioniIds: [], escalationPraticaId: null };
 }
 
-async function processPostCommitJobs(jobs: PostCommitJobs): Promise<void> {
+export async function processPostCommitJobs(jobs: PostCommitJobs): Promise<void> {
   if (jobs.newAssegnazioniIds.length > 0) {
     await emitN6ForAssegnazioni(jobs.newAssegnazioniIds);
   }
@@ -450,7 +451,7 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
   const result = await prisma.$transaction(async (tx) => {
     const pratica = await tx.pratica.findUnique({
       where: { id: praticaId },
-      include: { assegnazioni: { select: { sedeId: true } } },
+      include: { assegnazioni: { select: { sedeId: true, ciclo: true, esito: true } } },
     });
     if (!pratica) throw new Error('Pratica non trovata');
     const r = await avviaRound(tx, pratica, 1);

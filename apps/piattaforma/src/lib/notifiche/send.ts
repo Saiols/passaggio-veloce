@@ -33,6 +33,8 @@ import {
   tplN47VisuraScaduta,
   tplN48BrokerPraticaCongelata,
   tplN49AdminAtecoNonIdoneo,
+  tplN50AgenziaRevocata,
+  tplN51BrokerRimessaInCircolo,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -69,6 +71,8 @@ import {
   type N47VisuraScadutaPayload,
   type N48BrokerPraticaCongelataPayload,
   type N49AdminAtecoNonIdoneoPayload,
+  type N50AgenziaRevocataPayload,
+  type N51BrokerRimessaInCircoloPayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -226,7 +230,9 @@ type SendInput =
       tipo: 'N49_ADMIN_ATECO_NON_IDONEO';
       target: Target;
       payload: N49AdminAtecoNonIdoneoPayload;
-    };
+    }
+  | { tipo: 'N50_AGENZIA_PRATICA_REVOCATA'; target: Target; payload: N50AgenziaRevocataPayload }
+  | { tipo: 'N51_BROKER_PRATICA_RIMESSA_IN_CIRCOLO'; target: Target; payload: N51BrokerRimessaInCircoloPayload };
 
 function render(input: SendInput): NotificaContent {
   switch (input.tipo) {
@@ -302,6 +308,10 @@ function render(input: SendInput): NotificaContent {
       return tplN48BrokerPraticaCongelata(input.payload);
     case 'N49_ADMIN_ATECO_NON_IDONEO':
       return tplN49AdminAtecoNonIdoneo(input.payload);
+    case 'N50_AGENZIA_PRATICA_REVOCATA':
+      return tplN50AgenziaRevocata(input.payload);
+    case 'N51_BROKER_PRATICA_RIMESSA_IN_CIRCOLO':
+      return tplN51BrokerRimessaInCircolo(input.payload);
   }
 }
 

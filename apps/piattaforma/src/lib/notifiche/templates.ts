@@ -122,7 +122,7 @@ export type N13BrokerPraticaProcessataPayload = {
 };
 
 export type ClienteAvanzamentoStato =
-  | 'AVVIATA' | 'PRESA_IN_CARICO' | 'PRONTA_FIRMA' | 'COMPLETATA' | 'ANNULLATA';
+  | 'AVVIATA' | 'PRESA_IN_CARICO' | 'PRONTA_FIRMA' | 'COMPLETATA' | 'ANNULLATA' | 'RIMESSA_IN_CIRCOLO';
 export type ClienteAvanzamentoRuolo = 'ACQUIRENTE' | 'VENDITORE';
 export type N40ClienteAvanzamentoPayload = {
   codicePratica: string;
@@ -668,6 +668,11 @@ export function tplN40ClienteAvanzamento(p: N40ClienteAvanzamentoPayload): Notif
       titolo: 'Pratica annullata',
       subject: `Pratica ${p.codicePratica} annullata`,
       corpo: `la pratica${veic} è stata annullata. Per maggiori informazioni puoi contattare il tuo riferimento.`,
+    },
+    RIMESSA_IN_CIRCOLO: {
+      titolo: 'Aggiornamento sulla tua pratica',
+      subject: `Pratica ${p.codicePratica}: aggiornamento`,
+      corpo: `stiamo affidando la pratica${veic} a una nuova agenzia della zona per completare ${operazione}. Ti aggiorniamo appena viene presa in carico.`,
     },
   };
 
@@ -1635,6 +1640,60 @@ export function tplN49AdminAtecoNonIdoneo(p: N49AdminAtecoNonIdoneoPayload): Not
       l&apos;azienda bloccata senza una via d&apos;uscita autonoma. Valutare il caso.
     </p>
     ${ctaButton(p.adminUrl, 'Apri la scheda azienda')}
+  `);
+  return { subject, html, text };
+}
+
+export type N50AgenziaRevocataPayload = {
+  codicePratica: string;
+  targa: string | null;
+  nomeAgenzia: string;
+  motivo: string | null;
+};
+
+export function tplN50AgenziaRevocata(p: N50AgenziaRevocataPayload): NotificaContent {
+  const subject = `Gestione revocata — pratica ${p.codicePratica}`;
+  const text =
+    `Ciao ${p.nomeAgenzia},\n` +
+    `la gestione della pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} ` +
+    `è stata revocata da Passaggio Veloce perché non risultava lavorata.` +
+    `${p.motivo ? `\nMotivo: ${p.motivo}` : ''}\n` +
+    `La pratica è stata rimessa in distribuzione ad altre agenzie della zona. Non sono richieste altre azioni.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Gestione revocata</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la gestione della pratica <strong>${escapeHtml(p.codicePratica)}</strong>${p.targa ? ` (${escapeHtml(p.targa)})` : ''}
+      è stata revocata perché non risultava lavorata. La pratica è stata rimessa in distribuzione ad altre agenzie della zona.
+    </p>
+    ${p.motivo ? `<div style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">Motivo: ${escapeHtml(p.motivo)}</div>` : ''}
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">Non sono richieste altre azioni.</p>
+  `);
+  return { subject, html, text };
+}
+
+export type N51BrokerRimessaInCircoloPayload = {
+  codicePratica: string;
+  targa: string | null;
+  nomeBroker: string;
+};
+
+export function tplN51BrokerRimessaInCircolo(p: N51BrokerRimessaInCircoloPayload): NotificaContent {
+  const subject = `Pratica ${p.codicePratica} di nuovo in distribuzione`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `la pratica ${p.codicePratica}${p.targa ? ` (${p.targa})` : ''} è stata rimessa in distribuzione: ` +
+    `l'agenzia che l'aveva presa in carico non l'ha lavorata nei tempi, quindi la stiamo riassegnando ` +
+    `a un'altra agenzia della zona. Ti aggiorniamo appena viene accettata.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Pratica di nuovo in distribuzione</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la pratica <strong>${escapeHtml(p.codicePratica)}</strong>${p.targa ? ` (${escapeHtml(p.targa)})` : ''}
+      è stata rimessa in distribuzione: l'agenzia che l'aveva presa in carico non l'ha lavorata nei tempi,
+      quindi la stiamo riassegnando a un'altra agenzia della zona.
+    </p>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">Ti aggiorniamo appena viene accettata.</p>
   `);
   return { subject, html, text };
 }

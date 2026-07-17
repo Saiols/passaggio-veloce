@@ -28,8 +28,10 @@ function modelBlock(schema: string, model: string): string {
 describe('schema PraticaAssegnazione', () => {
   const block = modelBlock(readFileSync(SCHEMA_PATH, 'utf8'), 'PraticaAssegnazione');
 
-  it('ha il vincolo unico per SEDE (una assegnazione per pratica/sede/round)', () => {
-    expect(block).toContain('@@unique([praticaId, sedeId, round])');
+  it('ha il vincolo unico per SEDE, incluso il ciclo di distribuzione', () => {
+    // Il ciclo nel vincolo permette il ricircolo (revoca): la stessa sede può essere
+    // ricontattata allo stesso round in un ciclo successivo senza collidere.
+    expect(block).toContain('@@unique([praticaId, sedeId, round, ciclo])');
   });
 
   it('NON ha il vincolo unico per madre (vieterebbe due sedi della stessa madre nel round)', () => {

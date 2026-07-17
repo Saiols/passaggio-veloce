@@ -966,7 +966,7 @@ model PraticaAssegnazione {
   // L'assegnataria è la SEDE: due filiali della stessa madre possono competere
   // nello stesso round (distribuzione a tutte le sedi in zona). Il vincolo su
   // `agenziaId` le avrebbe vietate → P2002 al secondo create.
-  @@unique([praticaId, sedeId, round])
+  @@unique([praticaId, sedeId, round, ciclo])
   @@index([agenziaId, esito])
   @@index([sedeId, esito])
   @@index([round, esito])

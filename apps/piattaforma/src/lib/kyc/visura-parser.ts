@@ -163,10 +163,19 @@ function parseAmministratoreWindowed(text: string): VisuraData['amministratore']
  * Sede legale dalla visura InfoCamere. BEST-EFFORT: il consumatore DEVE farla
  * confermare da un umano (cfr. /visura).
  *
- * Il testo unpdf non conserva l'ordine visivo, e nella stessa visura convivono
- * l'indirizzo della sede legale, il domicilio dell'amministratore, quelli dei
- * soci e delle unità locali: pescare "il primo VIA … CAP" significa, nella
- * fixture reale, restituire il domicilio di casa dell'amministratrice.
+ * Il testo unpdf non conserva l'ordine visivo: l'ordine dei token dipende
+ * dagli oggetti del PDF, non dal layout. In QUESTA visura (fixture reale
+ * Planet Auto) la sede legale è per puro caso il PRIMO indirizzo dell'intero
+ * testo — quindi la fixture da sola NON dimostra che l'àncora serva: anche
+ * "prendi il primo VIA … CAP che trovi" la supererebbe (verificato). L'àncora
+ * resta necessaria comunque, perché l'ordine unpdf non è garantito: in
+ * un'altra visura (o in un'altra estrazione della stessa) un intruso — il
+ * domicilio dell'amministratore, l'indirizzo di un socio, un'unità locale —
+ * può comparire PRIMA della sede legale nel testo estratto (cfr. il test
+ * "intruso prima dell'àncora"). Gli altri indirizzi presenti in questa
+ * fixture (domicilio dell'amministratrice, socia, unità locale) restano
+ * comunque il motivo per cui non ci si affida MAI al "primo indirizzo che
+ * capita" nell'intero testo.
  *
  * Àncora usata: la sequenza InfoCamere `Indirizzo Sede legale` (con e senza
  * spazio: unpdf incolla spesso le etichette → `Sedelegale`) seguita, entro una
@@ -185,8 +194,19 @@ function parseSedeLegale(text: string): VisuraData['sedeLegale'] {
   const anchor = /Indirizzo\s*Sede\s*legale/i.exec(text);
   if (!anchor) return undefined;
   const window = text.slice(anchor.index, anchor.index + 400);
+  // Niente `/i`: nella visura reale le etichette InfoCamere (VIA/VIALE/…/CAP)
+  // e la provincia tra parentesi sono sempre MAIUSCOLE. Con `/i` la classe
+  // [A-ZÀ-Ù…] del comune pesca anche prosa minuscola (es. "la societa' (mi)
+  // strada per il conseguimento dell'oggetto" verrebbe scambiato per un
+  // indirizzo). Il lookbehind negativo evita che il gruppo comune parta a
+  // metà di un token maiuscolo precedente (es. l'ultima lettera di un codice
+  // fiscale) invece che a un confine di parola/spazio. Nell'indirizzo si
+  // escludono "@" (indirizzi e-mail) e le sequenze di 7+ cifre (numeri
+  // REA/telefono incollati da unpdf tra il civico e "CAP"): se non si riesce
+  // a isolare un civico pulito, meglio `undefined` che un indirizzo con
+  // dentro un'e-mail o un numero di telefono.
   const m =
-    /([A-ZÀ-Ù'’\s.]{2,40}?)\s*\(([A-Z]{2})\)\s+((?:VIA|VIALE|CORSO|PIAZZA|PIAZZALE|LARGO|STRADA|LOCALITA'|LOC\.|FRAZIONE|BORGO)\s+[^\n]{2,60}?)\s+CAP\s+(\d{5})/i.exec(
+    /(?<![A-ZÀ-Ù0-9])([A-ZÀ-Ù'’\s.]{2,40}?)\s*\(([A-Z]{2})\)\s+((?:VIA|VIALE|CORSO|PIAZZA|PIAZZALE|LARGO|STRADA|LOCALITA'|LOC\.|FRAZIONE|BORGO)\s+(?:(?!\d{7,})[^\n@]){2,60}?)\s+CAP\s+(\d{5})/.exec(
       window,
     );
   if (!m) return undefined;

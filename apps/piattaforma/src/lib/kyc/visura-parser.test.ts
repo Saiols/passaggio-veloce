@@ -198,4 +198,42 @@ describe('sedeLegale — sulla fixture reale', () => {
   it('testo senza sede legale → undefined, non un indirizzo a caso', () => {
     expect(parseVisuraText('testo qualunque senza indirizzi').sedeLegale).toBeUndefined();
   });
+
+  // I test sopra NON discriminano: nella fixture reale la sede legale è il
+  // PRIMO indirizzo dell'intero testo (~8000 caratteri prima di ogni
+  // intruso), quindi anche "prendi il primo VIA … CAP che trovi" li supera
+  // tutti. Questi due test isolano il comportamento che dipende DAVVERO
+  // dall'àncora (verificato: falliscono su un'implementazione senza àncora).
+  it("senza l'àncora non indovina: undefined, non il primo indirizzo del testo", () => {
+    // La fixture NON viene modificata su disco: replace solo in memoria.
+    const senzaAncora = REAL_PLANET_AUTO.replace(/Indirizzo\s*Sede\s*legale/gi, 'XXXXXXXX');
+    expect(parseVisuraText(senzaAncora).sedeLegale).toBeUndefined();
+  });
+
+  it('con un indirizzo estraneo prima della sede legale, prende comunque quest\'ultima', () => {
+    const t =
+      'Domicilio del titolare SANTO STEFANO TICINO (MI) VIA TRIESTE 21/C CAP 20010 ' +
+      "Indirizzo Sede legale - MAGENTA (MI) VIA A. VOLTA 10 CAP 20013";
+    expect(parseVisuraText(t).sedeLegale?.indirizzo).toBe('VIA A. VOLTA 10');
+  });
+
+  // La fixture reale non ha newline: senza vincoli sulla classe di caratteri,
+  // l'indirizzo "mangia" tutto quello che sta prima di "CAP", incluse
+  // e-mail/numeri incollati da unpdf tra il civico e il CAP (token riordinati:
+  // lo scenario esatto che giustifica l'àncora). Meglio `undefined` che un
+  // indirizzo con dentro un'e-mail — finisce in fattura elettronica.
+  it('con e-mail/numeri incollati tra il civico e il CAP, non produce un indirizzo spazzatura', () => {
+    const t =
+      'Indirizzo Sede legale - MAGENTA (MI) VIA A. VOLTA 10 planet@pec.it MI - 2749589 CAP 20013';
+    expect(parseVisuraText(t).sedeLegale).toBeUndefined();
+  });
+
+  // Senza il vincolo case-sensitive sull'indirizzo, la classe maiuscola del
+  // comune/indirizzo pesca anche prosa minuscola (prefissi come "strada",
+  // "localita'" compaiono anche fuori dal blocco indirizzo).
+  it('non scambia prosa minuscola per un indirizzo (caso "strada per il conseguimento…")', () => {
+    const t =
+      "Indirizzo Sede legale - la societa' (mi) strada per il conseguimento dell'oggetto CAP 20100";
+    expect(parseVisuraText(t).sedeLegale).toBeUndefined();
+  });
 });

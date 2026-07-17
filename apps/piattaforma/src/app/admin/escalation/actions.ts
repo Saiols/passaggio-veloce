@@ -90,6 +90,7 @@ export async function assegnaEscalationAction(
             agenziaId: sede.companyId,
             sedeId: sede.id,
             round: ESCALATION_ROUND,
+            ciclo: pratica.distribuzioneCiclo,
             esito: 'ACCETTATA',
             invioAt: new Date(),
             esitoAt: new Date(),

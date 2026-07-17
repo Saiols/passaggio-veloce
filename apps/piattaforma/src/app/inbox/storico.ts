@@ -26,5 +26,6 @@ export function labelEsito(e: string): string {
   if (e === 'ACCETTATA') return 'Accettata';
   if (e === 'RIFIUTATA' || e === 'ASSEGNATA_ALTRO') return 'Rifiutata';
   if (e === 'TIMEOUT') return 'Scaduta';
+  if (e === 'REVOCATA_ADMIN') return 'Revocata';
   return e.toLowerCase();
 }

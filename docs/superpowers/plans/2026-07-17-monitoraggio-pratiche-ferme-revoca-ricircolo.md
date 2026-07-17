@@ -1748,6 +1748,6 @@ Dopo la verifica, aggiorna `project_*` con lo stato "implementato su main, NON d
 
 ## Note di deploy (fuori dal ciclo di sviluppo)
 
-- La feature introduce una **migration** → NON è deployabile con il solo push. Applicare `20260717130000_monitoraggio_revoca_ricircolo` su Neon prod a mano (`prisma migrate deploy` con `DATABASE_URL`/`DIRECT_URL` prod), poi push su `main`.
+- La feature introduce **due migration** → NON è deployabile con il solo push. Applicare in ordine su Neon prod a mano (`prisma migrate deploy` con `DATABASE_URL`/`DIRECT_URL` prod): `20260717130000_monitoraggio_revoca_ricircolo` poi `20260717130001_assegnazione_unique_ciclo`, poi push su `main`.
 - Nessuna nuova env var richiesta.
 - N50/N51 sono transazionali: nessuna voce nelle preferenze notifiche.

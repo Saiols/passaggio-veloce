@@ -366,5 +366,6 @@ function labelEsitoLong(e: string): string {
   if (e === 'RIFIUTATA') return 'Hai rifiutato questa pratica';
   if (e === 'TIMEOUT') return 'Tempo scaduto — la pratica è stata girata ad altre agenzie';
   if (e === 'ASSEGNATA_ALTRO') return 'La pratica è stata assegnata ad un altra agenzia';
+  if (e === 'REVOCATA_ADMIN') return "Gestione revocata dall'amministrazione";
   return e;
 }

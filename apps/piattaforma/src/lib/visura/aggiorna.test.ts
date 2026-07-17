@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { findUnique, update, create, txMock, atecoFindMany } = vi.hoisted(() => ({
+const { findUnique, update, create, txMock, atecoFindMany, getAdminEmails, sendNotification } = vi.hoisted(() => ({
   findUnique: vi.fn(), update: vi.fn(), create: vi.fn(), txMock: vi.fn(),
   atecoFindMany: vi.fn(),
+  getAdminEmails: vi.fn(),
+  sendNotification: vi.fn(),
 }));
 vi.mock('@pv/db', () => ({
   prisma: {
@@ -16,7 +18,8 @@ vi.mock('@/lib/providers/storage', () => ({
   storageGetBuffer: vi.fn(async () => Buffer.from('pdf')),
   getStorage: () => ({ name: 'local' }),
 }));
-vi.mock('@/env', () => ({ env: { OCR_PROVIDER: 'mock' } }));
+vi.mock('@/env', () => ({ env: { OCR_PROVIDER: 'mock', NEXT_PUBLIC_APP_URL: 'https://app.test' } }));
+vi.mock('@/lib/notifiche', () => ({ getAdminEmails, sendNotification }));
 vi.mock('server-only', () => ({}));
 
 import { aggiornaVisura, verificaVisuraPerAggiornamento } from './aggiorna';
@@ -48,6 +51,8 @@ beforeEach(() => {
       company: { update }, documento: { create },
     }),
   );
+  getAdminEmails.mockResolvedValue([]);
+  sendNotification.mockResolvedValue(undefined);
 });
 
 describe('aggiornaVisura — controlli', () => {
@@ -205,6 +210,59 @@ describe('aggiornaVisura — cosa scrive', () => {
     expect(d.deletedAt).toBeUndefined();
     // ADD, non replace: non passa mai un praticaId (documento anagrafico aziendale).
     expect(d.praticaId).toBeUndefined();
+  });
+});
+
+describe('aggiornaVisura — N49 ADMIN_ATECO_NON_IDONEO', () => {
+  it('ATECO non ammesso → invia N49 a OGNI admin restituito da getAdminEmails', async () => {
+    getAdminEmails.mockResolvedValue([
+      { email: 'admin1@pv.it', userId: 'a1' },
+      { email: 'admin2@pv.it', userId: 'a2' },
+    ]);
+    const r = await aggiornaVisura(
+      { companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({ ...VISURA_OK, atecoCodes: ['99.99.99'] }),
+    );
+    expect(r.ok).toBe(true);
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+    for (const [args, expectedEmail, expectedUserId] of [
+      [sendNotification.mock.calls[0]![0], 'admin1@pv.it', 'a1'],
+      [sendNotification.mock.calls[1]![0], 'admin2@pv.it', 'a2'],
+    ] as const) {
+      expect(args.tipo).toBe('N49_ADMIN_ATECO_NON_IDONEO');
+      expect(args.target).toEqual({ email: expectedEmail, userId: expectedUserId, companyId: null });
+      expect(args.payload).toEqual({
+        nomeAzienda: 'Rossi Auto',
+        companyType: 'DEALER',
+        atecoCodes: '99.99.99',
+        adminUrl: 'https://app.test/admin/companies/c1',
+      });
+    }
+  });
+
+  it('ATECO valido → NESSUN invio N49', async () => {
+    getAdminEmails.mockResolvedValue([{ email: 'admin1@pv.it', userId: 'a1' }]);
+    const r = await aggiornaVisura(
+      { companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps(VISURA_OK),
+    );
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.atecoNonIdoneo).toBe(false);
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(getAdminEmails).not.toHaveBeenCalled();
+  });
+
+  it('invio DOPO il commit: se sendNotification rigetta, aggiornaVisura ritorna comunque ok:true (già scritto)', async () => {
+    getAdminEmails.mockResolvedValue([{ email: 'admin1@pv.it', userId: 'a1' }]);
+    sendNotification.mockRejectedValue(new Error('provider down'));
+    const r = await aggiornaVisura(
+      { companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({ ...VISURA_OK, atecoCodes: ['99.99.99'] }),
+    );
+    expect(r.ok).toBe(true);
+    expect(update).toHaveBeenCalled();
+    expect(create).toHaveBeenCalled();
+    expect(sendNotification).toHaveBeenCalledTimes(1);
   });
 });
 

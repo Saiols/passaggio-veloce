@@ -26,6 +26,7 @@ import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { isAtecoAllowed, type AllowedAteco } from '@/lib/kyc/ateco';
 import { companyMatches, normalizePiva } from '@/lib/kyc/match';
 import { extractVisura, type VisuraData } from '@/lib/kyc/visura-parser';
+import { getAdminEmails, sendNotification } from '@/lib/notifiche';
 import { isVisuraScaduta, VISURA_VALIDITA_GIORNI } from './validita';
 
 export type SedeLegaleInput = {
@@ -284,9 +285,8 @@ export async function aggiornaVisura(
         // nello XML e `snapshotCompany` non lo accetta nemmeno nel tipo. Per
         // questo `indirizzo` si scrive COL numero dentro, com'è il testo che dà
         // il parser (vedi `mapSedeLegale` in `app/visura/client.tsx`): scriverlo
-        // monco lo farebbe arrivare monco in fattura. Niente campo `civico`
-        // XML FatturaPA), quindi è solo attrito nell'unica via d'uscita da un
-        // blocco operativo — chiavi OMESSE, non azzerate.
+        // monco lo farebbe arrivare monco in fattura — è solo attrito
+        // nell'unica via d'uscita da un blocco operativo.
         indirizzo: input.sedeLegale.indirizzo,
         cap: input.sedeLegale.cap,
         citta: input.sedeLegale.citta,
@@ -315,6 +315,31 @@ export async function aggiornaVisura(
       },
     });
   });
+
+  // DOPO il commit: lo sblocco dell'azienda non deve dipendere dall'invio
+  // dell'email. Event-driven (non il cron di N46-N48): l'admin va avvertito
+  // subito che una visura con ATECO non ammesso è stata accettata (vedi
+  // punto 4 di `eseguiControlli`), non al prossimo giro notturno.
+  if (r.atecoNonIdoneo) {
+    const codes = r.visura.atecoCodes ?? (r.visura.ateco ? [r.visura.ateco] : []);
+    const admins = await getAdminEmails();
+    await Promise.all(
+      admins.map((a) =>
+        sendNotification({
+          tipo: 'N49_ADMIN_ATECO_NON_IDONEO',
+          target: { email: a.email, userId: a.userId, companyId: null },
+          payload: {
+            // La stessa denominazione appena scritta su Company (o quella
+            // esistente, se la visura non ne esponeva una nuova — vedi update sopra).
+            nomeAzienda: r.visura.denominazione ?? r.company.ragioneSociale,
+            companyType: r.company.type,
+            atecoCodes: codes.join(', '),
+            adminUrl: `${env.NEXT_PUBLIC_APP_URL}/admin/companies/${r.company.id}`,
+          },
+        }).catch(() => undefined),
+      ),
+    );
+  }
 
   return { ok: true, dataEmissione: r.dataEmissioneIso, atecoNonIdoneo: r.atecoNonIdoneo };
 }

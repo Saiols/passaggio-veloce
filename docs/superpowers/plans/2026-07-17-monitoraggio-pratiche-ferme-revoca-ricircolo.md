@@ -395,6 +395,22 @@ git commit -m "feat(distribuzione): ciclo di distribuzione in avviaRound + expor
 
 ---
 
+### Task 3b: `ciclo` nel vincolo unico di PraticaAssegnazione (correzione post-review)
+
+> Emersa dalla review di Task 3 (bug cross-task): con `@@unique([praticaId, sedeId, round])`
+> il ricircolo che ricontatta al round 1 di un nuovo ciclo una sede già contattata nel
+> ciclo 1 colliderebbe (P2002) facendo rollback della revoca. Va aggiunto `ciclo` al vincolo.
+> Deve stare PRIMA di Task 9. Brief completo: `.superpowers/sdd/task-3b-brief.md`.
+
+**Files:**
+- Modify: `packages/db/prisma/schema.prisma` (`@@unique([praticaId, sedeId, round, ciclo])`)
+- Create: `packages/db/prisma/migrations/20260717130001_assegnazione_unique_ciclo/migration.sql` (DROP + CREATE UNIQUE INDEX con `ciclo`)
+- Modify: `apps/piattaforma/src/lib/distribuzione/assegnazione-unique.test.ts` (assert del nuovo vincolo con `ciclo`)
+
+Gate: `prisma validate` + `db:deploy` + `db:generate` + `vitest run src/lib/distribuzione` + `@pv/db typecheck`.
+
+---
+
 ### Task 4: helper `logCambioStato` + costanti tipoEvento
 
 **Files:**

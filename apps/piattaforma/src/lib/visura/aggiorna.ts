@@ -277,11 +277,14 @@ export async function aggiornaVisura(
         // DALL'UTENTE, che l'ha confermata o corretta: l'estrazione della sede
         // legale è best-effort (4+ indirizzi per visura) e non è affidabile
         // abbastanza da scriverla in fattura senza che un umano la guardi.
-        // `indirizzo` è l'unico di questi campi che raggiunge la fattura
-        // (`snapshotCompany`, `lib/fatturazione/pv-emittente.ts`): lo si scrive
-        // COL numero civico dentro, com'è il testo che dà il parser (vedi
-        // `mapSedeLegale` in `app/visura/client.tsx`). Niente campo `civico`
-        // separato: nessun consumer lo legge (non esiste `NumeroCivico` nello
+        // `indirizzo`, `cap`, `citta` e `provincia` raggiungono TUTTI la fattura
+        // via `snapshotCompany` (`lib/fatturazione/pv-emittente.ts`) → tag
+        // `<Indirizzo>`, `<CAP>`, `<Comune>`, `<Provincia>` in FatturaPA.
+        // `civico` è l'unico che NON ci arriva: non esiste alcun `NumeroCivico`
+        // nello XML e `snapshotCompany` non lo accetta nemmeno nel tipo. Per
+        // questo `indirizzo` si scrive COL numero dentro, com'è il testo che dà
+        // il parser (vedi `mapSedeLegale` in `app/visura/client.tsx`): scriverlo
+        // monco lo farebbe arrivare monco in fattura. Niente campo `civico`
         // XML FatturaPA), quindi è solo attrito nell'unica via d'uscita da un
         // blocco operativo — chiavi OMESSE, non azzerate.
         indirizzo: input.sedeLegale.indirizzo,

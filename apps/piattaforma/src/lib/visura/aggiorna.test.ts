@@ -174,8 +174,8 @@ describe('aggiornaVisura — cosa scrive', () => {
     );
     const data = update.mock.calls[0]![0].data;
     // `indirizzo` è scritto COL civico dentro, com'è il testo che dà il form:
-    // è l'unico di questi campi che raggiunge la fattura (vedi commento in
-    // `aggiornaVisura`), niente `civico` separato.
+    // `civico` è l'unico campo della sede che NON raggiunge la fattura, quindi
+    // il numero deve stare dentro `indirizzo` o si perde (vedi `aggiornaVisura`).
     expect(data.indirizzo).toBe('VIA CORRETTA 1'); // vince l'umano
     expect(data.cap).toBe('20100');
     expect(data.citta).toBe('MILANO');

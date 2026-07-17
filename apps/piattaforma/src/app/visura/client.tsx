@@ -41,8 +41,9 @@ function formatDataEmissione(iso: string): string {
  * separato — e non ce n'è bisogno: nessun consumer legge un civico a parte
  * (`snapshotCompany`, l'unico mapper verso fattura, non lo accetta nemmeno
  * nel tipo; niente `NumeroCivico` nello XML FatturaPA). Si scrive quindi
- * `indirizzo` così com'è, numero compreso: è più corretto di scriverlo monco,
- * ed è l'unico di questi campi che raggiunge davvero la fattura.
+ * `indirizzo` così com'è, numero compreso: `indirizzo`, `cap`, `citta` e
+ * `provincia` finiscono TUTTI in fattura, e `civico` è l'unico che NON ci
+ * arriva — scrivere l'indirizzo senza numero lo farebbe arrivare monco.
  *
  * Se il parser non ha trovato nulla, si precompila con la sede ATTUALE
  * dell'azienda (passata dalla page): meglio proporre il dato che già

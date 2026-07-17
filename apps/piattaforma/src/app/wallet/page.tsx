@@ -32,6 +32,8 @@ import {
   motivoPenaleSegnalazione,
   type SegnalazioneTipo,
 } from '@/lib/pratiche/stato-extra';
+import { VisuraBanner } from '@/components/visura-banner';
+import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 
 const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
 
@@ -223,6 +225,15 @@ export default async function WalletPage({
             </p>
           </header>
 
+          {ctx.companyId && (
+            <div className="mb-6">
+              <VisuraBanner
+                companyId={ctx.companyId}
+                companyType={session.user.companyType === 'AGENZIA' ? 'AGENZIA' : 'DEALER'}
+              />
+            </div>
+          )}
+
           <WalletAggregato
             totaleCent={totaleCent}
             saldoAffiliazioneCent={saldoAffiliazioneCent}
@@ -264,7 +275,7 @@ export default async function WalletPage({
   } as const;
   const payoutsInclude = { orderBy: { richiestoAt: 'desc' }, take: 10 } as const;
 
-  const [wallet, walletMadre, sedeRow, company, saldoNegativoAzienda] = await Promise.all([
+  const [wallet, walletMadre, sedeRow, company, saldoNegativoAzienda, visuraScaduta] = await Promise.all([
     // Wallet di sede: compensi maturati dalle pratiche.
     prisma.wallet.findUnique({
       where: { sedeId: sede.id },
@@ -291,6 +302,10 @@ export default async function WalletPage({
     // un wallet qualsiasi (anche di un'altra sede, non solo i due mostrati
     // qui) è in saldo negativo — stesso guard di `eseguiPayoutImmediato`.
     session.user.companyId ? hasNegativeCompanyWallet(prisma, session.user.companyId) : false,
+    // Ciclo di vita visura (clausola 8): stesso guard di `eseguiPayoutImmediato`
+    // (lib/wallet/payout-exec.ts) — deve restare in sync con `canPayout` sotto,
+    // altrimenti il bottone promette un payout che il server rifiuta.
+    session.user.companyId ? isVisuraScadutaCompany(session.user.companyId) : false,
   ]);
 
   const saldoSedeCent = wallet?.saldoCent ?? 0;
@@ -322,10 +337,12 @@ export default async function WalletPage({
   const saldoNegativo = saldoSedeCent < 0 || saldoAffiliazioneCent < 0 || saldoNegativoAzienda;
 
   // Payout possibile se ALMENO uno dei due wallet supera la soglia minima E
-  // nessun wallet dell'azienda è in negativo (altrimenti `eseguiPayoutImmediato`
-  // rifiuterebbe comunque: il bottone non deve promettere ciò che il server nega).
+  // nessun wallet dell'azienda è in negativo E la visura camerale non è
+  // scaduta (altrimenti `eseguiPayoutImmediato` rifiuterebbe comunque: il
+  // bottone non deve promettere ciò che il server nega).
   const canPayout =
     !saldoNegativoAzienda &&
+    !visuraScaduta &&
     (saldoSedeCent >= WALLET.MIN_PAYOUT_CENT ||
       saldoAffiliazioneCent >= WALLET.MIN_PAYOUT_CENT);
 
@@ -404,6 +421,15 @@ export default async function WalletPage({
             automatico al raggiungimento di {formatCurrencyCent(thresholdAutoCent)}.
           </p>
         </header>
+
+        {session.user.companyId && (
+          <div className="mb-6">
+            <VisuraBanner
+              companyId={session.user.companyId}
+              companyType={session.user.companyType === 'AGENZIA' ? 'AGENZIA' : 'DEALER'}
+            />
+          </div>
+        )}
 
         {saldoNegativo && (
           <div className="mb-6">

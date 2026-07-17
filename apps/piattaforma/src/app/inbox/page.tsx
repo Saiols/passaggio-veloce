@@ -10,6 +10,7 @@ import { formatRelative } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from './actions';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 import { STORICO_ESITI, storicoCutoff, labelEsito } from './storico';
+import { VisuraBanner } from '@/components/visura-banner';
 
 export default async function InboxPage() {
   const session = await auth();
@@ -73,6 +74,11 @@ export default async function InboxPage() {
   return (
     <AppShell session={session} activePath="/inbox">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+        {session.user.companyId && (
+          <div className="mb-6">
+            <VisuraBanner companyId={session.user.companyId} companyType="AGENZIA" />
+          </div>
+        )}
         <header className="mb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
             Inbox agenzia

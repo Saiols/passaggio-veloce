@@ -32,6 +32,7 @@ import { redeemPromoCode, type PromoRedeemResult } from '@/lib/promo/redeem';
 import { verifyRegistrationKyc } from '@/lib/kyc/verify';
 import { signKycToken, verifyKycToken, hashDocs } from '@/lib/kyc/token';
 import { TERMS_VERSION } from '@/lib/legal/clausole-vessatorie';
+import { giorniTrascorsi } from '@/lib/visura/validita';
 
 // ============================================================
 // LOGIN
@@ -719,7 +720,16 @@ export async function registerAction(
 // ============================================================
 
 export type VerifyDocsResult =
-  | { ok: true; token?: string }
+  | {
+      ok: true;
+      token?: string;
+      /**
+       * Giorni di calendario trascorsi dall'emissione della visura appena
+       * verificata. Assente in DEMO_MODE (il gate ritorna prima dell'OCR).
+       * Serve solo ad AVVISARE: l'età non blocca più la registrazione.
+       */
+      visuraGiorni?: number;
+    }
   | { ok: false; error: string; kycFailures?: import('@/lib/kyc/verify').KycFailure[] };
 
 /**
@@ -790,7 +800,16 @@ export async function verifyRegistrationDocumentsAction(
     }
     // Token firmato legato a QUESTI file: il submit lo usa per non ri-fare l'OCR.
     const token = signKycToken(hashDocs([ci.buffer, cf.buffer, vis.buffer]), kyc.extracted, Date.now());
-    return { ok: true, token };
+    // L'età non blocca (nessuna regola VISURA_SCADUTA), ma va detta subito: qui
+    // l'utente può ancora sostituire la visura, dopo il submit non più.
+    const dataEmissione = kyc.extracted.visura.dataEmissione;
+    return {
+      ok: true,
+      token,
+      visuraGiorni: dataEmissione
+        ? giorniTrascorsi(new Date(`${dataEmissione}T00:00:00Z`), new Date())
+        : undefined,
+    };
   } catch (e) {
     console.error('[kyc] verifica documenti (step) fallita', (e as Error).message);
     return {

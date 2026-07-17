@@ -23,6 +23,7 @@ import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
 import { elencoClausoleVessatorie, elencoDescrizioniVessatorie } from '@/lib/legal/clausole-vessatorie';
+import { VISURA_VALIDITA_GIORNI } from '@/lib/visura/validita';
 import {
   REGISTER_DRAFT_KEY,
   parseRegisterDraft,
@@ -115,6 +116,9 @@ export function RegisterWizard({
   // modifiche. `kycToken` viene passato al submit per non ri-fare l'OCR lì.
   const [kycToken, setKycToken] = useState<string | null>(null);
   const [docsVerified, setDocsVerified] = useState(false);
+  // Giorni della visura appena verificata: >= VISURA_VALIDITA_GIORNI → avviso
+  // "già da aggiornare" (non blocca: il wizard avanza comunque).
+  const [visuraGiorni, setVisuraGiorni] = useState<number | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [promoOutcome, setPromoOutcome] = useState<
     { applied: true; amountCent: number } | { applied: false } | null
@@ -244,11 +248,13 @@ export function RegisterWizard({
         setData((d) => ({ ...d, documents: values }));
         setKycToken(res.token ?? null);
         setDocsVerified(true);
+        setVisuraGiorni(res.visuraGiorni ?? null);
         setStep(4);
       } else if (res.kycFailures && res.kycFailures.length > 0) {
         setKycErrors(res.kycFailures);
         setDocsVerified(false);
         setKycToken(null);
+        setVisuraGiorni(null);
       } else {
         setSubmitError(res.error);
       }
@@ -367,6 +373,17 @@ export function RegisterWizard({
             <div className="mt-4 rounded-lg border border-pv-amber-500 bg-pv-amber-50 p-4 text-sm text-pv-navy-900">
               Codice promozionale non valido: nessuna promozione attivata.
             </div>
+          )}
+          {visuraGiorni !== null && visuraGiorni >= VISURA_VALIDITA_GIORNI && (
+            <Alert variant="warning" title="Visura camerale da aggiornare">
+              La visura che hai caricato è stata emessa <strong>{visuraGiorni} giorni fa</strong> e
+              supera i {VISURA_VALIDITA_GIORNI} giorni di validità. Puoi completare la
+              registrazione, ma dovrai aggiornarla subito dopo il primo accesso: fino ad allora{' '}
+              {data.company?.type === 'DEALER'
+                ? 'non potrai prelevare il saldo del tuo wallet'
+                : 'non potrai gestire pratiche né riceverne di nuove'}
+              . Se hai una visura più recente, torna allo step Documenti e sostituiscila.
+            </Alert>
           )}
           {submitError && <Alert variant="error">{submitError}</Alert>}
 

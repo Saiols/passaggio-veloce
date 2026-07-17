@@ -24,7 +24,7 @@ import { prisma, Prisma, type CompanyType } from '@pv/db';
 import { env } from '@/env';
 import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
 import { isAtecoAllowed, type AllowedAteco } from '@/lib/kyc/ateco';
-import { companyMatches } from '@/lib/kyc/match';
+import { companyMatches, normalizePiva } from '@/lib/kyc/match';
 import { extractVisura, type VisuraData } from '@/lib/kyc/visura-parser';
 import { isVisuraScaduta, VISURA_VALIDITA_GIORNI } from './validita';
 
@@ -83,6 +83,21 @@ type ControlloResult =
  *  1. Leggibilità — senza dataEmissione, o senza né P.IVA né denominazione.
  *  2. AZIENDA_MISMATCH — dev'essere la visura di QUESTA azienda (le visure
  *     sono documenti pubblici acquistabili, quindi il match è necessario).
+ *     `companyMatches` da solo ha semantica OR (P.IVA O denominazione) ed è
+ *     l'UNICO controllo d'identità rimasto qui (niente cross-match CI/CF,
+ *     vedi sotto): un omonimo normalizzato — `normalizeCompanyName` toglie
+ *     forma giuridica E TUTTE LE CIFRE, quindi "Rossi Auto 2000 S.r.l." ≡
+ *     "Rossi Auto S.r.l." — potrebbe superarlo via denominazione con la
+ *     P.IVA di un estraneo. Si chiude il buco pretendendo ANCHE che la P.IVA
+ *     dell'azienda compaia nel testo grezzo della visura (2b).
+ *  2b. P.IVA nel testo grezzo — vedi sopra. Sicuro in entrambe le direzioni:
+ *     la visura di un estraneo non contiene la nostra P.IVA (rifiuta
+ *     l'omonimo), la nostra visura la contiene SEMPRE (nessun falso rifiuto),
+ *     indipendentemente da quale run di 11 cifre `PIVA_RE` abbia pescato come
+ *     `visura.partitaIva` — in una fixture reale è il CF di una società
+ *     socia, non la P.IVA dell'azienda in visura. Per questo NON si confronta
+ *     `visura.partitaIva` con quello dell'azienda (rifiuterebbe visure
+ *     legittime), si cerca la P.IVA nel testo intero.
  *  3. Età — la nuova visura deve avere giorniTrascorsi < 180, altrimenti non
  *     sbloccherebbe nulla.
  *  4. ATECO non ammesso → NON blocca: si accetta e si segnala
@@ -115,9 +130,37 @@ function eseguiControlli(
     };
   }
 
+  // 2b. La P.IVA dell'azienda deve comparire DA QUALCHE PARTE nel testo
+  // grezzo (vedi commento sopra la funzione). Si normalizzano TUTTE le cifre
+  // del testo intero (non un singolo campo estratto) e si cerca la sequenza:
+  // il testo unpdf può avere la P.IVA formattata con spazi/punti
+  // ("12.345.678.901") e non è in ordine visivo, quindi isolare "il" campo
+  // P.IVA non è affidabile — cercarla ovunque nel documento sì. `rawText`
+  // vuoto/assente non è un caso reale (`extractVisura` lo popola sempre), ma
+  // il verso giusto su un gate è fail-closed: rifiuta, non passare.
+  const rawDigits = visura.rawText ? normalizePiva(visura.rawText) : '';
+  if (!rawDigits || !rawDigits.includes(normalizePiva(company.partitaIva))) {
+    return {
+      ok: false,
+      error: 'La visura caricata non risulta intestata alla tua azienda (la partita IVA non compare nel documento).',
+    };
+  }
+
   // 3. Deve essere fresca, altrimenti non sbloccherebbe niente.
   const dataEmissioneIso = visura.dataEmissione;
   const dataEmissione = new Date(`${dataEmissioneIso}T00:00:00Z`);
+  // `new Date` non valida il calendario: '2026-17-35' → Invalid Date (che il
+  // gate età leggerebbe come "mai scaduta": NaN >= 180 è false → fail-open);
+  // '2026-02-31' → rollover silenzioso a '2026-03-03' (data valida ma diversa
+  // da quella sul documento, verrebbe scritta su Company). Il round-trip
+  // verso ISO è la verifica: se non torna la stringa di partenza, la data non
+  // è calendariale → stesso ramo/messaggio della leggibilità (fail-closed).
+  if (Number.isNaN(dataEmissione.getTime()) || dataEmissione.toISOString().slice(0, 10) !== dataEmissioneIso) {
+    return {
+      ok: false,
+      error: 'Non siamo riusciti a leggere la visura: carica il PDF originale (non una scansione).',
+    };
+  }
   if (isVisuraScaduta(dataEmissione, now)) {
     return {
       ok: false,

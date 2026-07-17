@@ -29,7 +29,10 @@ const AZIENDA = {
 const SEDE_OK = { indirizzo: 'VIA CORRETTA', civico: '1', cap: '20100', citta: 'MILANO', provincia: 'MI' };
 const VISURA_OK = {
   dataEmissione: '2026-07-01', partitaIva: '12345678901', denominazione: 'Rossi Auto',
-  atecoCodes: ['45.11.01'], rawText: '',
+  atecoCodes: ['45.11.01'],
+  // Deve contenere la P.IVA di AZIENDA (12345678901): è il nuovo controllo
+  // 2b in `eseguiControlli` (P.IVA nel testo grezzo, non solo companyMatches).
+  rawText: 'VISURA CAMERALE ORDINARIA - Denominazione: Rossi Auto - P.IVA 12345678901',
 };
 const deps = (v: object) => ({ getVisura: vi.fn(async () => v as never) });
 
@@ -69,9 +72,59 @@ describe('aggiornaVisura — controlli', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('visura di un OMONIMO con P.IVA diversa: rifiutata (companyMatches da solo non basta)', async () => {
+    // Stesso nome normalizzato di AZIENDA ("Rossi Auto") → companyMatches
+    // passerebbe DA SOLO via denominazione. Il testo grezzo però non contiene
+    // la P.IVA di c1 (12345678901): è la visura di un altro "Rossi Auto".
+    const r = await aggiornaVisura(
+      { companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({
+        ...VISURA_OK,
+        partitaIva: '99999999999',
+        denominazione: 'Rossi Auto',
+        rawText: 'VISURA CAMERALE ORDINARIA - Denominazione: Rossi Auto - P.IVA 99999999999',
+      }),
+    );
+    expect(r.ok).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('la propria visura passa anche se PIVA_RE ha pescato il CF di un socio', async () => {
+    // `visura.partitaIva` non è quello di c1 (è il CF/P.IVA di una società
+    // socia, primo run di 11 cifre nel testo): il check 2b non lo usa, cerca
+    // la P.IVA di c1 in TUTTO il rawText, dove compare comunque (con punti,
+    // come farebbe un OCR reale).
+    const r = await aggiornaVisura(
+      { companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({
+        ...VISURA_OK,
+        partitaIva: '12682930966',
+        rawText:
+          'VISURA CAMERALE ORDINARIA - Denominazione: Rossi Auto - Soci: ' +
+          'ALTRA SOCIETA SRL C.F. 12682930966 - P.IVA 12.345.678.901',
+      }),
+    );
+    expect(r.ok).toBe(true);
+    expect(update).toHaveBeenCalled();
+  });
+
   it('visura gia\' oltre i 180 giorni → rifiuta (non sbloccherebbe nulla)', async () => {
     const r = await aggiornaVisura({ companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
       deps({ ...VISURA_OK, dataEmissione: '2024-12-13' }));
+    expect(r.ok).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('data non calendariale (2026-02-31, rollover silenzioso) → rifiuta, non scrive una data sbagliata', async () => {
+    const r = await aggiornaVisura({ companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({ ...VISURA_OK, dataEmissione: '2026-02-31' }));
+    expect(r.ok).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('data non calendariale (2026-17-35, mese/giorno fuori range) → rifiuta, non passa fail-open', async () => {
+    const r = await aggiornaVisura({ companyId: 'c1', userId: 'u1', ref: REF, sedeLegale: SEDE_OK, now: NOW },
+      deps({ ...VISURA_OK, dataEmissione: '2026-17-35' }));
     expect(r.ok).toBe(false);
     expect(update).not.toHaveBeenCalled();
   });

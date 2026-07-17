@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito } from './templates';
+import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito, tplN46VisuraInScadenza, tplN47VisuraScaduta, tplN48BrokerPraticaCongelata, tplN49AdminAtecoNonIdoneo } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 import { formatDate } from '@/lib/format';
 
@@ -353,5 +353,154 @@ describe('N26 email di partenza', () => {
     const { html, text } = tplN26EmailPartenza({ ...base, categoria: 'BROKER' });
     expect(html).toContain('https://passaggioveloce.it/unsubscribe?token=uns123');
     expect(text).toContain('https://passaggioveloce.it/unsubscribe?token=uns123');
+  });
+});
+
+describe('N46 visura in scadenza', () => {
+  const base = {
+    nomeAzienda: 'Rossi Auto',
+    rimedioUrl: 'https://app.test/visura',
+    visuraData: '2026-07-10',
+  } as const;
+
+  it('pluralizza correttamente "1 giorno" (non "1 giorni") vs "N giorni"', () => {
+    const uno = tplN46VisuraInScadenza({ ...base, companyType: 'DEALER', giorniRimanenti: 1 });
+    expect(uno.subject).toContain('1 giorno');
+    expect(uno.subject).not.toContain('1 giorni');
+    expect(uno.text).toContain('1 giorno');
+    expect(uno.text).not.toContain('1 giorni');
+
+    const cinque = tplN46VisuraInScadenza({ ...base, companyType: 'DEALER', giorniRimanenti: 5 });
+    expect(cinque.subject).toContain('5 giorni');
+  });
+
+  it('dice quanti giorni restano e differenzia broker (solo wallet, futuro) da agenzia (operatività totale)', () => {
+    const broker = tplN46VisuraInScadenza({ ...base, companyType: 'DEALER', giorniRimanenti: 3 });
+    expect(broker.subject).toContain('3');
+    expect(broker.text).toContain('prelie'); // broker: solo prelievi dal wallet
+    expect(broker.text).not.toContain('pratiche'); // il broker NON perde l'operatività sulle pratiche
+    expect(broker.text).toContain('potrai'); // tempo futuro: non ancora successo
+    expect(broker.html).toContain('https://app.test/visura');
+
+    const agenzia = tplN46VisuraInScadenza({ ...base, nomeAzienda: 'Agenzia X', companyType: 'AGENZIA', giorniRimanenti: 1 });
+    expect(agenzia.text).toContain('pratiche'); // agenzia: operatività totale
+  });
+
+  it('escapa l\'HTML nel nome azienda (XSS stored)', () => {
+    const c = tplN46VisuraInScadenza({
+      ...base, nomeAzienda: '<script>alert(1)</script>', companyType: 'DEALER', giorniRimanenti: 2,
+    });
+    expect(c.html).not.toContain('<script>');
+    expect(c.html).toContain('&lt;script&gt;');
+  });
+
+  it('non usa mai "sospeso"/"sospensione": è una limitazione operativa (clausola 8)', () => {
+    const c = tplN46VisuraInScadenza({ ...base, companyType: 'AGENZIA', giorniRimanenti: 3 });
+    const hay = `${c.subject}\n${c.text}\n${c.html}`.toLowerCase();
+    expect(hay).not.toContain('sospes');
+    expect(hay).toContain('clausola 8');
+  });
+});
+
+describe('N47 visura scaduta', () => {
+  const base = {
+    nomeAzienda: 'Agenzia X',
+    rimedioUrl: 'https://app.test/visura',
+    visuraData: '2026-01-01',
+    giorniTrascorsi: 4,
+  } as const;
+
+  it('dice che il blocco è già attivo (tempo presente), cita la clausola 8 e mai "sospeso"', () => {
+    const c = tplN47VisuraScaduta({ ...base, companyType: 'AGENZIA' });
+    expect(c.subject.toLowerCase()).toContain('scadut');
+    expect(c.html).toContain('https://app.test/visura');
+    expect(c.text).toContain('puoi'); // presente
+    expect(c.text).not.toContain('potrai'); // NON futuro: è già successo
+    expect(c.text).toContain('clausola 8');
+    const hay = `${c.subject}\n${c.text}\n${c.html}`.toLowerCase();
+    expect(hay).not.toContain('sospes');
+    expect(hay).toContain('accesso'); // "l'accesso alla Piattaforma resta attivo"
+  });
+
+  it('usa giorniTrascorsi nel testo con la pluralizzazione corretta', () => {
+    const uno = tplN47VisuraScaduta({ ...base, companyType: 'AGENZIA', giorniTrascorsi: 1 });
+    expect(uno.text).toContain('1 giorno');
+    expect(uno.text).not.toContain('1 giorni');
+
+    const molti = tplN47VisuraScaduta({ ...base, companyType: 'AGENZIA', giorniTrascorsi: 12 });
+    expect(molti.text).toContain('12 giorni');
+  });
+
+  it('differenzia broker (solo wallet) da agenzia (operatività totale), anche a blocco attivo', () => {
+    const broker = tplN47VisuraScaduta({ ...base, companyType: 'DEALER' });
+    expect(broker.text).toContain('prelie');
+    expect(broker.text).not.toContain('pratiche');
+
+    const agenzia = tplN47VisuraScaduta({ ...base, companyType: 'AGENZIA' });
+    expect(agenzia.text).toContain('pratiche');
+  });
+
+  it('escapa l\'HTML nel nome azienda (XSS stored)', () => {
+    const c = tplN47VisuraScaduta({
+      ...base, nomeAzienda: '<img src=x onerror=alert(1)>', companyType: 'DEALER',
+    });
+    expect(c.html).not.toContain('<img src=x');
+  });
+});
+
+describe('N48 broker pratica congelata', () => {
+  it('dice al broker che non deve fare nulla e non lo chiama "bloccato" (adempimento altrui)', () => {
+    const c = tplN48BrokerPraticaCongelata({
+      nomeBroker: 'Mario Rossi',
+      nomeAgenzia: 'Agenzia Corsico',
+      praticaId: 'p1',
+      praticaUrl: 'https://app.test/pratiche/p1',
+      visuraData: '2026-01-01',
+    });
+    expect(c.html).toContain('https://app.test/pratiche/p1');
+    expect(c.text.toLowerCase()).toContain('non devi fare nulla');
+    expect(c.text).toContain('Agenzia Corsico');
+    const hay = `${c.text}\n${c.html}`.toLowerCase();
+    expect(hay).not.toContain('sei bloccato');
+    expect(hay).not.toContain('account bloccato');
+    expect(hay).not.toContain('sospes');
+  });
+
+  it('escapa l\'HTML nel nome broker e nel nome agenzia (XSS stored)', () => {
+    const c = tplN48BrokerPraticaCongelata({
+      nomeBroker: '<b>Mario</b>',
+      nomeAgenzia: '<script>x</script>',
+      praticaId: 'p1',
+      praticaUrl: 'https://app.test/pratiche/p1',
+      visuraData: '2026-01-01',
+    });
+    expect(c.html).not.toContain('<script>');
+    expect(c.html).not.toContain('<b>Mario</b>');
+  });
+});
+
+describe('N49 admin ateco non idoneo', () => {
+  it('riporta azienda, codici ATECO, link admin e che la visura è stata accettata comunque', () => {
+    const c = tplN49AdminAtecoNonIdoneo({
+      nomeAzienda: 'Rossi Auto',
+      companyType: 'DEALER',
+      atecoCodes: '45.11.01, 45.19.01',
+      adminUrl: 'https://app.test/admin/aziende/1',
+    });
+    expect(c.subject).toContain('Rossi Auto');
+    expect(c.html).toContain('45.11.01');
+    expect(c.html).toContain('https://app.test/admin/aziende/1');
+    expect(c.text.toLowerCase()).toContain('accettata');
+  });
+
+  it('escapa l\'HTML nei codici ATECO e nel nome azienda (XSS stored)', () => {
+    const c = tplN49AdminAtecoNonIdoneo({
+      nomeAzienda: '<script>x</script>',
+      companyType: 'AGENZIA',
+      atecoCodes: '<img src=x onerror=alert(1)>',
+      adminUrl: 'https://app.test/admin/aziende/1',
+    });
+    expect(c.html).not.toContain('<script>');
+    expect(c.html).not.toContain('<img src=x');
   });
 });

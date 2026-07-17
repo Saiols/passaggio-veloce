@@ -262,6 +262,61 @@ export type N42BrokerSegnalazioneGestitaPayload = {
   nomeBroker: string;
 };
 
+// ════════════════════════════════════════════════════════
+// Ciclo di vita visura camerale (clausola 8 dei Termini, 180 giorni)
+// ════════════════════════════════════════════════════════
+
+/**
+ * `visuraData` (ISO yyyy-mm-dd, data di emissione della visura corrente) NON
+ * si usa nel testo dell'email: è la CHIAVE DI DEDUPLICAZIONE del cron, che la
+ * rilegge da `NotificaInviata.payload` (`payload->>'visuraData'`, colonna
+ * jsonb). Sta nel payload perché è l'unico posto che `sendNotification`
+ * persiste — non c'è un'altra tabella dove il cron possa cercare "ho già
+ * avvisato per QUESTA visura?". Ancorando la chiave alla data della visura
+ * (non a un contatore o a "oggi"), un nuovo caricamento cambia la data e
+ * quindi la chiave, e il ciclo di avvisi riparte da solo per la nuova visura.
+ * Toglierla = il cron non ha più modo di distinguere "già avvisato" da
+ * "nuova scadenza": rispedisce le stesse email ogni giorno, per sempre.
+ */
+export type N46VisuraInScadenzaPayload = {
+  nomeAzienda: string;
+  companyType: 'DEALER' | 'AGENZIA';
+  /** Finestra di preavviso: 1-5 giorni alla scadenza (180 gg dall'emissione). */
+  giorniRimanenti: number;
+  rimedioUrl: string;
+  visuraData: string;
+};
+
+/** V. commento su `visuraData` in `N46VisuraInScadenzaPayload`: stessa chiave di deduplicazione cron. */
+export type N47VisuraScadutaPayload = {
+  nomeAzienda: string;
+  companyType: 'DEALER' | 'AGENZIA';
+  rimedioUrl: string;
+  visuraData: string;
+  /** Giorni trascorsi oltre i 180 di validità (visura scaduta da...). */
+  giorniTrascorsi: number;
+};
+
+/** V. commento su `visuraData` in `N46VisuraInScadenzaPayload`: stessa chiave di deduplicazione cron. */
+export type N48BrokerPraticaCongelataPayload = {
+  nomeBroker: string;
+  nomeAgenzia: string;
+  praticaId: string;
+  praticaUrl: string;
+  visuraData: string;
+};
+
+/**
+ * A evento (un aggiornamento visura con ATECO non ammesso), non ciclica come
+ * N46-N48: niente `visuraData`, non serve una chiave di deduplicazione cron.
+ */
+export type N49AdminAtecoNonIdoneoPayload = {
+  nomeAzienda: string;
+  companyType: 'DEALER' | 'AGENZIA';
+  atecoCodes: string;
+  adminUrl: string;
+};
+
 export type NotificaContent = { subject: string; html: string; text: string };
 
 // Wrapper unificato: delega al layout istituzionale condiviso.
@@ -1409,6 +1464,163 @@ export function tplN42BrokerSegnalazioneGestita(p: N42BrokerSegnalazioneGestitaP
       ${escapeHtml(p.nota)}
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">Per dubbi rispondi pure a questa email.</p>
+  `);
+  return { subject, html, text };
+}
+
+// ════════════════════════════════════════════════════════
+// N46-N49 — Ciclo di vita visura camerale (clausola 8 dei Termini)
+// ════════════════════════════════════════════════════════
+
+/** Etichetta leggibile, coerente con l'UI esistente (v. admin/ateco/client.tsx). */
+function labelCompanyTypeVisura(t: 'DEALER' | 'AGENZIA'): string {
+  return t === 'AGENZIA' ? 'Agenzia' : 'Broker';
+}
+
+/** "1 giorno" / "N giorni" — mai "1 giorni" (bug di pluralizzazione già trovato una volta). */
+function giorniLabel(n: number): string {
+  return n === 1 ? '1 giorno' : `${n} giorni`;
+}
+
+/**
+ * Conseguenza della visura scaduta, differenziata per tipo azienda e per
+ * tempo verbale. Il broker CONTINUA a creare e gestire pratiche normalmente:
+ * perde solo la possibilità di prelevare dal wallet (clausola 8 dei Termini —
+ * v. il guard identico in `eseguiPayoutImmediato`). Dirgli che è "bloccato"
+ * sarebbe falso. L'agenzia invece si ferma del tutto: non gestisce pratiche
+ * in corso, non ne riceve di nuove, non preleva.
+ *
+ * `futuro`: usata da N46 (preavviso, non ancora accaduto — "non potrai...").
+ * `presente`: usata da N47 (il blocco è già attivo — "non puoi...").
+ */
+function conseguenzaVisura(t: 'DEALER' | 'AGENZIA', tempo: 'futuro' | 'presente'): string {
+  if (tempo === 'futuro') {
+    return t === 'AGENZIA'
+      ? 'non potrai gestire le pratiche in corso, non ne riceverai di nuove e non potrai effettuare prelievi dal wallet'
+      : 'non potrai effettuare prelievi dal tuo wallet';
+  }
+  return t === 'AGENZIA'
+    ? 'non puoi gestire le pratiche in corso, non ne ricevi di nuove e non puoi effettuare prelievi dal wallet'
+    : 'non puoi effettuare prelievi dal tuo wallet';
+}
+
+export function tplN46VisuraInScadenza(p: N46VisuraInScadenzaPayload): NotificaContent {
+  const giorni = giorniLabel(p.giorniRimanenti);
+  const nome = escapeHtml(p.nomeAzienda);
+  const cons = conseguenzaVisura(p.companyType, 'futuro');
+  const subject = `La tua visura camerale scade fra ${giorni}`;
+  const text =
+    `Ciao ${p.nomeAzienda},\n` +
+    `la visura camerale che ci hai fornito scade fra ${giorni} (clausola 8 dei Termini).\n` +
+    `Ci serve aggiornata per poterti fatturare correttamente: alla scadenza ${cons}, ` +
+    `finché non ne carichi una nuova.\n` +
+    `Aggiornala qui: ${p.rimedioUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#b45309">La visura camerale sta per scadere</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${nome}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la visura camerale che ci hai fornito scade <strong>fra ${giorni}</strong>
+      (clausola 8 dei Termini). Ci serve aggiornata per poterti fatturare correttamente:
+      alla scadenza <strong>${cons}</strong>, finché non ne carichi una nuova.
+    </p>
+    ${ctaButton(p.rimedioUrl, 'Aggiorna la visura')}
+  `);
+  return { subject, html, text };
+}
+
+export function tplN47VisuraScaduta(p: N47VisuraScadutaPayload): NotificaContent {
+  const giorni = giorniLabel(p.giorniTrascorsi);
+  const nome = escapeHtml(p.nomeAzienda);
+  const cons = conseguenzaVisura(p.companyType, 'presente');
+  const subject = 'Visura camerale scaduta — operatività limitata';
+  const text =
+    `Ciao ${p.nomeAzienda},\n` +
+    `la visura camerale che ci hai fornito è scaduta da ${giorni} (clausola 8 dei Termini).\n` +
+    `Da ora ${cons}, finché non ne carichi una nuova.\n` +
+    `L'accesso alla Piattaforma resta attivo: è una limitazione operativa sulle sole ` +
+    `funzioni collegate alla visura, non riguarda il resto dell'account.\n` +
+    `Aggiornala qui: ${p.rimedioUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Visura camerale scaduta</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${nome}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      la visura camerale che ci hai fornito è scaduta da <strong>${giorni}</strong>
+      (clausola 8 dei Termini). <strong>Da ora ${cons}</strong>, finché non ne carichi
+      una nuova.
+    </p>
+    ${ctaButton(p.rimedioUrl, 'Aggiorna la visura')}
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">
+      L&apos;accesso alla Piattaforma resta attivo: è una limitazione operativa sulle
+      sole funzioni collegate alla visura, non riguarda il resto dell&apos;account.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+/**
+ * Al broker: la sua pratica è ferma per un adempimento ALTRUI (la visura
+ * dell'agenzia che l'ha in carico), non per colpa sua. Il broker continua a
+ * creare e gestire tutte le sue altre pratiche normalmente — questa email
+ * riguarda SOLO questa pratica, e lo dice esplicitamente perché altrimenti
+ * suonerebbe come se l'intero account fosse coinvolto.
+ */
+export function tplN48BrokerPraticaCongelata(p: N48BrokerPraticaCongelataPayload): NotificaContent {
+  const nomeBroker = escapeHtml(p.nomeBroker);
+  const nomeAgenzia = escapeHtml(p.nomeAgenzia);
+  const subject = 'Una tua pratica è temporaneamente ferma';
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `una tua pratica affidata a ${p.nomeAgenzia} è temporaneamente ferma: l'agenzia deve ` +
+    `aggiornare la propria visura camerale (clausola 8 dei Termini) prima di poterla lavorare.\n` +
+    `Non devi fare nulla: riguarda solo questa pratica, puoi continuare normalmente a ` +
+    `creare e gestire tutte le tue altre pratiche. Riprenderà appena l'agenzia avrà regolarizzato.\n` +
+    `Dettagli: ${p.praticaUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#b45309">Una tua pratica è temporaneamente ferma</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${nomeBroker}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      una tua pratica affidata a <strong>${nomeAgenzia}</strong> è temporaneamente ferma:
+      l&apos;agenzia deve aggiornare la propria visura camerale (clausola 8 dei Termini)
+      prima di poterla lavorare.
+    </p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      <strong>Non devi fare nulla</strong>: riguarda solo questa pratica, puoi continuare
+      normalmente a creare e gestire tutte le tue altre pratiche. Riprenderà appena
+      l&apos;agenzia avrà regolarizzato.
+    </p>
+    ${ctaButton(p.praticaUrl, 'Vedi la pratica')}
+  `);
+  return { subject, html, text };
+}
+
+/**
+ * All'admin: un aggiornamento visura è stato ACCETTATO nonostante l'ATECO non
+ * ammesso (v. `eseguiControlli` in `lib/visura/aggiorna.ts`, punto 4 — bloccare
+ * qui creerebbe un vicolo cieco per l'azienda). Serve solo a far valutare il
+ * caso a un umano, non descrive un blocco.
+ */
+export function tplN49AdminAtecoNonIdoneo(p: N49AdminAtecoNonIdoneoPayload): NotificaContent {
+  const nome = escapeHtml(p.nomeAzienda);
+  const tipoLbl = labelCompanyTypeVisura(p.companyType);
+  const codes = escapeHtml(p.atecoCodes);
+  const subject = `ATECO non idoneo dopo aggiornamento visura — ${p.nomeAzienda}`;
+  const text =
+    `${p.nomeAzienda} (${tipoLbl}) ha aggiornato la visura camerale, ma i codici ATECO ` +
+    `risultanti (${p.atecoCodes}) non rientrano fra quelli ammessi.\n` +
+    `La visura è stata ACCETTATA comunque, per non lasciare l'azienda bloccata senza una ` +
+    `via d'uscita autonoma: valutare il caso.\n` +
+    `Scheda azienda: ${p.adminUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#b45309">ATECO non idoneo dopo aggiornamento visura</h1>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      <strong>${nome}</strong> (${tipoLbl}) ha aggiornato la visura camerale, ma i codici
+      ATECO risultanti (<strong>${codes}</strong>) non rientrano fra quelli ammessi.
+    </p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      La visura è stata <strong>accettata comunque</strong>, per non lasciare
+      l&apos;azienda bloccata senza una via d&apos;uscita autonoma. Valutare il caso.
+    </p>
+    ${ctaButton(p.adminUrl, 'Apri la scheda azienda')}
   `);
   return { subject, html, text };
 }

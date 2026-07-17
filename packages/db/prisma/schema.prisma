@@ -99,6 +99,9 @@ enum AssegnazioneEsito {
   RIFIUTATA
   TIMEOUT
   ASSEGNATA_ALTRO
+  // Revoca admin: l'agenzia aveva accettato ma non ha lavorato la pratica.
+  // Segnale di esclusione PERMANENTE dai ricircoli successivi.
+  REVOCATA_ADMIN
 }
 
 // ============================================================
@@ -324,6 +327,8 @@ enum NotificaTipo {
   N47_VISURA_SCADUTA
   N48_BROKER_PRATICA_CONGELATA
   N49_ADMIN_ATECO_NON_IDONEO
+  N50_AGENZIA_PRATICA_REVOCATA
+  N51_BROKER_PRATICA_RIMESSA_IN_CIRCOLO
 }
 
 enum NotificaCanale {
@@ -762,6 +767,11 @@ model Pratica {
   tipo  PraticaTipo
   stato PraticaStato @default(BOZZA)
 
+  // Ciclo di distribuzione corrente. Incrementato a ogni revoca admin: fa
+  // ripartire la distribuzione "pulita" ricontattando la zona, mentre le sedi
+  // revocate (esito REVOCATA_ADMIN) restano escluse per sempre.
+  distribuzioneCiclo Int @default(1)
+
   // Numero veicoli: 1 per SEMPLICE, ≥ 2 per MINIVOLTURA.
   numeroVeicoli Int @default(1)
 
@@ -880,6 +890,7 @@ model Pratica {
   documentiFiscali        DocumentoFiscale[]
   commissioniAffiliazione CommissioneAffiliazione[]
   dichiarazioniBroker     BrokerDichiarazione[]
+  storicoStato            PraticaStatoLog[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -935,6 +946,9 @@ model PraticaAssegnazione {
 
   round Int // 1, 2, 3
 
+  // Ciclo di distribuzione (Pratica.distribuzioneCiclo) di questo tentativo.
+  ciclo Int @default(1)
+
   invioAt           DateTime  @default(now())
   notificaInviataAt DateTime?
 
@@ -957,6 +971,28 @@ model PraticaAssegnazione {
   @@index([sedeId, esito])
   @@index([round, esito])
   @@map("pratiche_assegnazioni")
+}
+
+// Storico append-only dei cambi di stato di una pratica: fonte di verità per
+// ricostruire il ciclo di vita. `attoreUserId` è soft-ref (nessuna FK: come
+// EventoPratica.seenByUserId) per non vincolare la cancellazione utenti.
+// `meta.tipoEvento` è una costante app-level (lib/pratiche/stato-log.ts).
+model PraticaStatoLog {
+  id        String  @id @default(uuid()) @db.Uuid
+  praticaId String  @db.Uuid
+  pratica   Pratica @relation(fields: [praticaId], references: [id], onDelete: Cascade)
+
+  statoDa PraticaStato?
+  statoA  PraticaStato
+
+  motivo       String?
+  attoreUserId String? @db.Uuid
+  meta         Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([praticaId, createdAt])
+  @@map("pratica_stato_log")
 }
 
 // ============================================================

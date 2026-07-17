@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Così l'allow-path è provato senza eseguire accrediti, fatture e notifiche.
  */
 
-const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, getSessionContextMock, redirectMock, visuraScadutaMock } = vi.hoisted(() => ({
   prismaMock: {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     praticaAssegnazione: { updateMany: vi.fn() },
@@ -28,6 +28,7 @@ const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted
   redirectMock: vi.fn((url: string) => {
     throw new Error(`__REDIRECT__:${url}`);
   }),
+  visuraScadutaMock: vi.fn(),
 }));
 
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
@@ -42,6 +43,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 // Effetti collaterali: mai raggiunti nei test di deny; neutralizzati per non
 // dipendere da wallet, fatture, email e CRM.
 vi.mock('@/lib/fee/blocco', () => ({ isAgenziaBloccata: vi.fn(() => Promise.resolve(false)) }));
+vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 vi.mock('@/lib/notifiche', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
   notifyClientiAvanzamento: vi.fn(() => Promise.resolve()),
@@ -147,6 +149,9 @@ beforeEach(() => {
   prismaMock.pratica.update.mockResolvedValue({});
   prismaMock.praticaAssegnazione.updateMany.mockResolvedValue({});
   prismaMock.valutazione.create.mockResolvedValue({});
+  // Default: visura non scaduta (ESENTE/OK/PREAVVISO), mai bloccata. I test
+  // dedicati sotto lo sovrascrivono a `true`.
+  visuraScadutaMock.mockResolvedValue(false);
 });
 
 describe('processaPraticaFromListaAction — scoping sede', () => {
@@ -399,5 +404,62 @@ describe('submitValutazioneAction — capability', () => {
 
     expect(res).toEqual({ ok: false, error: 'Non hai i permessi per questa azione' });
     expect(prismaMock.valutazione.create).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Guard visura scaduta (clausola 8 dei Termini), aggiunto accanto a
+ * `isAgenziaBloccata` in `processaPraticaCore` (app/pratiche/actions.ts) e nel
+ * ramo AGENZIA di `firmaPraticaCore` (lib/pratiche/firma-engine.ts). SOLO
+ * agenzie: qui la sessione è sempre AGENZIA, quindi non serve un test DEALER
+ * dedicato — il gate `companyType !== 'AGENZIA'` (verificato leggendo i tre
+ * punti) fa già uscire i broker prima di arrivare a questo check.
+ */
+describe('processaPraticaFromListaAction — guard visura scaduta (clausola 8)', () => {
+  it("agenzia con visura scaduta → non può lavorare la pratica (redirect /visura)", async () => {
+    sessione('AGENZIA', AGENZIA);
+    visuraScadutaMock.mockResolvedValue(true);
+
+    await expect(processaPraticaFromListaAction(PID)).rejects.toThrow(/__REDIRECT__/);
+
+    const url = redirectMock.mock.calls.at(-1)?.[0] as string;
+    expect(url).toBe('/visura');
+    // Il redirect scatta prima di leggere la pratica: nessuna riga toccata.
+    expect(prismaMock.pratica.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('agenzia con visura valida → procede (arriva al controllo di stato)', async () => {
+    sessione('AGENZIA', AGENZIA);
+    visuraScadutaMock.mockResolvedValue(false);
+    prismaMock.pratica.findUnique.mockResolvedValue(praticaMiaSede({ stato: 'BOZZA' }));
+
+    const res = await processaPraticaFromListaAction(PID);
+
+    expect(res).toEqual({ ok: false, error: 'Pratica non nello stato ACCETTATA' });
+  });
+});
+
+describe('firmaFromListaAction — guard visura scaduta (clausola 8)', () => {
+  it("agenzia con visura scaduta → non può firmare la pratica (redirect /visura)", async () => {
+    sessione('AGENZIA', AGENZIA);
+    visuraScadutaMock.mockResolvedValue(true);
+
+    await expect(firmaFromListaAction(PID)).rejects.toThrow(/__REDIRECT__/);
+
+    const url = redirectMock.mock.calls.at(-1)?.[0] as string;
+    expect(url).toBe('/visura');
+    expect(prismaMock.pratica.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('agenzia con visura valida → procede (arriva al controllo di stato)', async () => {
+    sessione('AGENZIA', AGENZIA);
+    visuraScadutaMock.mockResolvedValue(false);
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaMiaSede({ stato: 'ACCETTATA', broker: {}, agenziaAssegnata: {} }),
+    );
+
+    const res = await firmaFromListaAction(PID);
+
+    expect(res).toEqual({ ok: false, error: 'La pratica deve essere prima processata' });
   });
 });

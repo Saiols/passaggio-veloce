@@ -8,6 +8,7 @@ import { prisma } from '@pv/db';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariBroker } from '@/lib/notifiche/pratica';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
+import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoPraticaLavorata, eventoPraticaAnnullata } from '@/lib/eventi/pratica-eventi';
 import { requirePermesso } from '@/lib/auth/permessi/guard';
@@ -37,6 +38,12 @@ async function processaPraticaCore(praticaId: string): Promise<QuickActionResult
   }
   const agenziaId = session.user.companyId!;
   if (await isAgenziaBloccata(agenziaId)) redirect('/blocco-pagamento');
+  // Ciclo di vita della visura camerale (clausola 8 dei Termini): senza una
+  // visura aggiornata non fatturiamo correttamente all'agenzia → operatività
+  // sospesa finché non la rinnova in /visura. Solo le agenzie: il broker con
+  // visura scaduta perde solo il payout (guard in lib/wallet/payout-exec.ts)
+  // e continua a creare/gestire pratiche.
+  if (await isVisuraScadutaCompany(agenziaId)) redirect('/visura');
   const scope = await sedeScopeCorrente();
 
   try {

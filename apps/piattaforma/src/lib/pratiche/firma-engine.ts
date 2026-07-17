@@ -14,6 +14,7 @@ import {
 } from '@/lib/affiliazione/notifications';
 import { onPraticaFirmata } from '@/lib/crm/sync';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
+import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
 import { fatturaPvAttachment } from '@/lib/fatturazione/documento-pdf';
 import { autoPayoutBrokerDopoFirma } from '@/lib/wallet/auto-payout';
@@ -162,6 +163,11 @@ export async function firmaPraticaCore(
     }
     agenziaSessione = session.user.companyId!;
     if (await isAgenziaBloccata(agenziaSessione)) redirect('/blocco-pagamento');
+    // Ciclo di vita della visura camerale (clausola 8 dei Termini). Solo nel
+    // ramo AGENZIA: l'admin che attesta una firma (Termini art. 11, ramo
+    // `else` sotto) non deve essere bloccato dalla visura dell'agenzia
+    // assegnata alla pratica.
+    if (await isVisuraScadutaCompany(agenziaSessione)) redirect('/visura');
     scope = await sedeScopeCorrente();
   } else {
     // Attestazione admin (Termini art. 11). ASSISTENTE escluso: l'azione muove

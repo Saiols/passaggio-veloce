@@ -47,6 +47,7 @@ vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 vi.mock('@/lib/fee/blocco', () => ({ isAgenziaBloccata: vi.fn(() => Promise.resolve(false)) }));
+vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: vi.fn(() => Promise.resolve(false)) }));
 vi.mock('@/lib/notifiche', () => ({
   sendNotification: sendNotificationMock,
   notifyClientiAvanzamento: vi.fn(() => Promise.resolve()),

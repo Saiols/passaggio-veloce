@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * la stessa catena (`actions.ts` → `firma-engine.ts`).
  */
 
-const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted(() => ({
+const { prismaMock, authMock, getSessionContextMock, redirectMock, visuraScadutaMock } = vi.hoisted(() => ({
   prismaMock: {
     pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     feeAddebito: { create: vi.fn() },
@@ -26,6 +26,7 @@ const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted
   redirectMock: vi.fn((url: string) => {
     throw new Error(`__REDIRECT__:${url}`);
   }),
+  visuraScadutaMock: vi.fn(),
 }));
 
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
@@ -40,6 +41,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 // Effetti collaterali del percorso "happy path" (mai raggiunti nei test di
 // deny; neutralizzati per non dipendere da wallet, fatture, email e CRM).
 vi.mock('@/lib/fee/blocco', () => ({ isAgenziaBloccata: vi.fn(() => Promise.resolve(false)) }));
+vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 vi.mock('@/lib/notifiche', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
   notifyClientiAvanzamento: vi.fn(() => Promise.resolve()),
@@ -96,6 +98,8 @@ beforeEach(() => {
   // Default: la transizione di stato (compare-and-set) trova le precondizioni
   // vere e scrive 1 riga. I test della race la sovrascrivono a { count: 0 }.
   prismaMock.pratica.updateMany.mockResolvedValue({ count: 1 });
+  // Default: visura non scaduta, mai bloccata.
+  visuraScadutaMock.mockResolvedValue(false);
 });
 
 describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
@@ -161,6 +165,19 @@ describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
 
       expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
       expect(res).toEqual({ ok: true });
+    });
+
+    it("visura scaduta dell'agenzia assegnata NON blocca l'attestazione ADMIN (guard SOLO nel ramo AGENZIA)", async () => {
+      // Il guard di lib/visura/stato.ts (task 4.2) vive solo nel ramo `if
+      // (attore.tipo === 'AGENZIA')`, non in questo `else`: l'admin che
+      // attesta (Termini art. 11) non ha una company propria e non deve
+      // essere bloccato dalla visura scaduta dell'agenzia della pratica.
+      visuraScadutaMock.mockResolvedValue(true);
+
+      const res = await firmaPraticaCore(PID, { tipo: 'ADMIN', motivo: MOTIVO });
+
+      expect(res).toEqual({ ok: true });
+      expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it("firmaForzataDaId scritto nell'updateMany è l'id della SESSIONE, mai un valore passato dal chiamante", async () => {

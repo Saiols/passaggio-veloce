@@ -10,6 +10,7 @@ import { tickPratica } from '@/lib/distribuzione';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariBroker } from '@/lib/notifiche/pratica';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
+import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { emitEventoPratica, dismissNuovaPraticaEventi } from '@/lib/eventi/emit';
 import { eventoPraticaAccettata } from '@/lib/eventi/pratica-eventi';
 
@@ -39,6 +40,18 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
       ok: false,
       error:
         "Operatività sospesa per addebito non riuscito: regolarizza il pagamento in /blocco-pagamento per tornare a lavorare le pratiche.",
+    };
+  }
+
+  if (await isVisuraScadutaCompany(agenziaId)) {
+    // Ciclo di vita della visura camerale (clausola 8 dei Termini): stessa
+    // natura del check sopra — è una limitazione OPERATIVA, non una
+    // sospensione dell'account (l'account resta accessibile). Il messaggio
+    // non deve dire "sospeso"/"account sospeso".
+    return {
+      ok: false,
+      error:
+        'La visura camerale della tua azienda è scaduta: aggiornala in /visura per tornare a lavorare le pratiche.',
     };
   }
 

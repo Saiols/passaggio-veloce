@@ -148,23 +148,37 @@ export async function eseguiPayoutImmediato(
   // l'azienda non la aggiorna — la via d'uscita esiste già (/visura). Per il
   // broker questa è l'UNICA conseguenza (continua a creare/gestire pratiche);
   // per l'agenzia si somma al blocco operativo (guard separato, altrove).
-  // Vale anche per la liquidazione di cessazione (`ignoraSoglia`): a
-  // differenza del saldo negativo, qui non esiste un pre-check company-wide
-  // a monte (in `deleteCompanyAction`) equivalente a questo.
   // `isVisuraScadutaCompany` usa `prisma`, non `tx`: va risolta PRIMA di
   // aprire la transazione di reserve, altrimenti annideremmo una query non
   // transazionale dentro `$transaction`.
-  const walletOwner = await prisma.wallet.findUnique({
-    where: { id: walletId },
-    select: { companyId: true, sede: { select: { companyId: true } } },
-  });
-  const ownerCompanyId = walletOwner?.companyId ?? walletOwner?.sede?.companyId ?? null;
-  if (ownerCompanyId && (await isVisuraScadutaCompany(ownerCompanyId))) {
-    return {
-      ok: false,
-      error:
-        'La visura camerale della tua azienda è scaduta: i prelievi sono sospesi finché non la aggiorni.',
-    };
+  //
+  // Escluso per `ignoraSoglia` (liquidazione di cessazione, clausola 12.4:
+  // "il saldo residuo è liquidato integralmente"): a differenza del saldo
+  // negativo — che È un debito verso PV e resta verificato anche in questo
+  // flusso (guard sotto) — una visura scaduta non è un debito. E qui
+  // l'utente non può più sanarla: `deleteCompanyAction` marca l'azienda
+  // `deletedAt` e i suoi utenti `SUSPENDED`, mentre il login richiede
+  // `deletedAt: null` e `status != SUSPENDED` (`credentials-query.ts`), quindi
+  // `/visura` (che richiede una sessione) diventa irraggiungibile nello
+  // stesso istante in cui questo guard scatterebbe. Bloccare qui
+  // intrappolerebbe il denaro dovuto per sempre: `reactivateCompanyAction`
+  // azzera `suspendedAt` ma mai `deletedAt` (irreversibile da UI), e il
+  // chiamante (`deleteCompanyAction`) scarta l'esito con
+  // `.catch(() => undefined)` — un rifiuto qui sparirebbe in silenzio, senza
+  // log né notifica.
+  if (!ignoraSoglia) {
+    const walletOwner = await prisma.wallet.findUnique({
+      where: { id: walletId },
+      select: { companyId: true, sede: { select: { companyId: true } } },
+    });
+    const ownerCompanyId = walletOwner?.companyId ?? walletOwner?.sede?.companyId ?? null;
+    if (ownerCompanyId && (await isVisuraScadutaCompany(ownerCompanyId))) {
+      return {
+        ok: false,
+        error:
+          'La visura camerale della tua azienda è scaduta: i prelievi sono sospesi finché non la aggiorni.',
+      };
+    }
   }
 
   const reserve = await prisma.$transaction(

@@ -102,4 +102,33 @@ describe('eseguiPayoutImmediato — liquidazione alla cessazione', () => {
     expect(res.ok).toBe(false);
     expect(txMock.payout.create).not.toHaveBeenCalled();
   });
+
+  /**
+   * IMPORTANT (code review, commit 0882317): il guard visura NON era escluso
+   * da `ignoraSoglia`. `deleteCompanyAction` scarta l'esito del payout con
+   * `.catch(() => undefined)`, quindi un rifiuto qui spariva in silenzio; e
+   * dopo il soft delete l'utente non può più sanare la visura scaduta
+   * (`/visura` richiede login, che richiede `deletedAt: null` — irraggiungibile).
+   * Il denaro dovuto restava intrappolato per sempre. Una visura scaduta non è
+   * un debito verso PV: il guard deve saltare, esattamente come già succede
+   * per il debito da saldo negativo aziendale (vedi describe sopra).
+   */
+  it('visura SCADUTA con ignoraSoglia → eseguito comunque (una visura scaduta non è un debito)', async () => {
+    visuraScadutaMock.mockResolvedValue(true);
+
+    const res = await eseguiPayoutImmediato(W, { ignoraSoglia: true });
+
+    expect(res.ok).toBe(true);
+    expect(txMock.payout.create).toHaveBeenCalled();
+  });
+
+  it('visura SCADUTA SENZA ignoraSoglia → resta rifiutato (comportamento utente invariato)', async () => {
+    visuraScadutaMock.mockResolvedValue(true);
+    txMock.wallet.findUnique.mockResolvedValue({ id: W, saldoCent: 80_000 });
+
+    const res = await eseguiPayoutImmediato(W);
+
+    expect(res.ok).toBe(false);
+    expect(txMock.payout.create).not.toHaveBeenCalled();
+  });
 });

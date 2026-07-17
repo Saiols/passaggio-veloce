@@ -55,6 +55,13 @@ export const MAPPA_ENFORCEMENT: Record<string, Record<string, Permesso | null>> 
     ritentaAddebitoAction: null, // D4: aperta a tutta l'agenzia, non tocca IBAN né importi
     aggiornaIbanERitentaAction: null, // D1: owner-only (isOwner), l'IBAN è del solo titolare
   },
+  'src/app/visura/actions.ts': {
+    // Owner-only via `isOwner`, ri-verificato in entrambe le action: la visura
+    // camerale è un atto anagrafico dell'azienda, stessa linea dell'IBAN — non
+    // una capability delegabile, quindi niente chiave spuntabile nel catalogo.
+    verificaVisuraAction: null, // passo 1: OCR + controlli, non scrive nulla
+    aggiornaVisuraAction: null, // passo 2: scrive data/ragione sociale/sede legale
+  },
   'src/app/orari/actions.ts': {
     updateOrariAction: 'orari.edit',
   },

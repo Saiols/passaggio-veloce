@@ -39,6 +39,11 @@ export const MAPPA_PAGINE: Record<string, Permesso | null> = {
   'src/app/profilo/azienda/page.tsx': null, // owner-only: redirect a /profilo se role !== 'ADMIN_AZIENDA' — identità fiscale, non delegabile
   'src/app/profilo/listino/page.tsx': null, // feature parcheggiata: notFound() sempre, vedi project_listini_parcheggiati — NON riattivare
   'src/app/blocco-pagamento/page.tsx': null, // D4: aperta a chiunque in agenzia quando la sede è bloccata, non è una capability delegabile
+  // Gemella di blocco-pagamento: aperta a CHIUNQUE in azienda, perché chi trova
+  // l'operatività bloccata deve poter vedere il perché. Il caricamento della
+  // visura è owner-only (`isOwner`, come l'IBAN) ed è gatato dentro la pagina e
+  // ri-verificato nella server action — non è una capability delegabile.
+  'src/app/visura/page.tsx': null,
   'src/app/sedi/page.tsx': null, // owner-only: redirect a /dashboard se role !== 'ADMIN_AZIENDA', non un permesso del catalogo
   'src/app/sedi/[id]/page.tsx': null, // owner-only, stesso motivo di src/app/sedi/page.tsx
   // Doppio gate: `team.view` (capability) e `getManageableSedi()` (scope, owner o ADMIN_SEDE).

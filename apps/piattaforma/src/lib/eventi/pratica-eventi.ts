@@ -145,6 +145,25 @@ export function eventoPraticaAnnullata(args: {
   };
 }
 
+/** Admin revoca una pratica accettata-non-lavorata → la sede agenzia revocata lo vede. */
+export function eventoPraticaRevocata(args: {
+  praticaId: string;
+  agenziaId: string;
+  sedeId?: string | null;
+  codicePratica: string;
+}): EventoPraticaInput {
+  return {
+    praticaId: args.praticaId,
+    targetCompanyId: args.agenziaId,
+    targetSedeId: args.sedeId ?? null,
+    tipo: EVENTO.PRATICA_REVOCATA,
+    titolo: 'Gestione revocata',
+    testo: `La gestione della pratica ${args.codicePratica} è stata revocata perché non risultava lavorata. Non sono richieste altre azioni.`,
+    ctaLabel: null,
+    ctaHref: null,
+  };
+}
+
 /** Penale confermata → broker (addebito) e agenzia (segnalazione confermata). */
 export function eventoPraticaPenale(args: {
   praticaId: string;

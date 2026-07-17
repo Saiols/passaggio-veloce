@@ -8,6 +8,7 @@ import {
   eventoPraticaEscalation,
   eventoPraticaAssegnata,
   eventoPraticaAnnullata,
+  eventoPraticaRevocata,
   eventoPraticaPenale,
 } from './pratica-eventi';
 
@@ -90,5 +91,16 @@ describe('builder eventi pratica — target e tipo', () => {
     expect(broker.titolo).toBe('Penale addebitata');
     expect(agenzia.targetCompanyId).toBe('ag-1');
     expect(agenzia.titolo).toBe('Segnalazione confermata');
+  });
+});
+
+describe('eventoPraticaRevocata', () => {
+  it('targetizza la sede agenzia revocata, senza CTA', () => {
+    const e = eventoPraticaRevocata({ praticaId: 'p1', agenziaId: 'a1', sedeId: 's1', codicePratica: 'PV-1' });
+    expect(e.tipo).toBe('PRATICA_REVOCATA');
+    expect(e.targetCompanyId).toBe('a1');
+    expect(e.targetSedeId).toBe('s1');
+    expect(e.testo).toContain('PV-1');
+    expect(e.ctaHref).toBeNull();
   });
 });

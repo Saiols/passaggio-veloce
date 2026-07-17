@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   validateRegistrationDocuments,
-  isVisuraDateValid,
   type RegistrationDocInput,
 } from './document-validation';
 
@@ -19,20 +18,6 @@ const allDocs = (): RegistrationDocInput[] => [
   validDoc('CODICE_FISCALE_RETRO'),
   validDoc('VISURA_CAMERALE'),
 ];
-
-describe('isVisuraDateValid (parametrico)', () => {
-  const now = new Date('2026-06-04T12:00:00Z');
-  it('valida entro 5 mesi', () => {
-    expect(isVisuraDateValid('2026-02-01', 5, now)).toEqual({ ok: true });
-  });
-  it('blocca oltre 5 mesi', () => {
-    const r = isVisuraDateValid('2025-12-01', 5, now);
-    expect(r.ok).toBe(false);
-  });
-  it('blocca data futura', () => {
-    expect(isVisuraDateValid('2026-07-01', 5, now).ok).toBe(false);
-  });
-});
 
 describe('validateRegistrationDocuments', () => {
   it('passa con i 5 documenti validi', () => {

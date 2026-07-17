@@ -1,17 +1,14 @@
 import 'server-only';
 import type { CompanyType } from '@pv/db';
 import type { OcrExtractInput } from '@/lib/providers/ocr';
-import { isVisuraDateValid } from '@/lib/auth/document-validation';
 import { isAtecoAllowed, type AllowedAteco } from './ateco';
 import { companyMatches, nameMatches, normalizeCf } from './match';
 import { extractVisura, type VisuraData } from './visura-parser';
 import { extractCi, type CiData } from './extract-ci';
 import { extractCf, type CfData } from './extract-cf';
 
-const VISURA_MAX_AGE_MONTHS = 5;
-
 export type KycFailure = {
-  rule: 'VISURA_SCADUTA' | 'ATECO_NON_IDONEO' | 'AZIENDA_MISMATCH' | 'CI_MISMATCH' | 'CF_MISMATCH' | 'ILLEGGIBILE';
+  rule: 'ATECO_NON_IDONEO' | 'AZIENDA_MISMATCH' | 'CI_MISMATCH' | 'CF_MISMATCH' | 'ILLEGGIBILE';
   doc?: 'CI' | 'CF' | 'VISURA';
   message: string;
 };
@@ -46,11 +43,12 @@ export async function verifyRegistrationKyc(
     files: { ciFronte: OcrExtractInput; codiceFiscale: OcrExtractInput; visura: OcrExtractInput };
     company: { ragioneSociale: string; partitaIva: string; type: CompanyType };
     allowedAteco: AllowedAteco[];
-    now?: Date;
   },
   deps: KycDeps = defaultKycDeps,
 ): Promise<KycResult> {
-  const now = args.now ?? new Date();
+  // NB: niente `now`. Serviva solo al controllo di età della visura, rimosso:
+  // nessuna delle regole rimaste (leggibilità, ATECO, mismatch azienda/CI/CF)
+  // dipende dal tempo. Un parametro accettato e ignorato sarebbe una trappola.
   const [visura, ci, cf] = await Promise.all([
     deps.getVisuraData(args.files.visura),
     deps.getCiData(args.files.ciFronte),
@@ -81,12 +79,11 @@ export async function verifyRegistrationKyc(
   }
 
   // Regole di mismatch (solo se i dati necessari sono leggibili).
-  // Il controllo sull'età della visura vale SOLO per i broker (DEALER): le agenzie
-  // sono spesso imprese storiche e possono presentare una visura più datata.
-  if (args.company.type === 'DEALER' && visura.dataEmissione) {
-    const age = isVisuraDateValid(visura.dataEmissione, VISURA_MAX_AGE_MONTHS, now);
-    if (!age.ok) failures.push({ rule: 'VISURA_SCADUTA', doc: 'VISURA', message: age.error });
-  }
+  // NIENTE controllo di età in registrazione, per nessuno dei due tipi: la visura
+  // vecchia non impedisce di iscriversi, la gestisce il ciclo di vita a 180 giorni
+  // (`lib/visura/validita.ts`) dopo l'accesso. `dataEmissione` resta comunque
+  // obbligatoria e leggibile (regola ILLEGGIBILE sopra): senza, il ciclo non
+  // sarebbe applicabile e l'azienda resterebbe esente per sempre.
   if (atecoCodes.length > 0 &&
       !atecoCodes.some((c) => isAtecoAllowed(c, args.company.type, args.allowedAteco))) {
     failures.push({ rule: 'ATECO_NON_IDONEO', doc: 'VISURA', message: `Il codice ATECO (${atecoCodes.join(', ')}) non rientra tra le attività ammesse per la registrazione.` });

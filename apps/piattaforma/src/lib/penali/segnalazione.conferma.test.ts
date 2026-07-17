@@ -25,6 +25,7 @@ const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, send
     transazioneWallet: { findFirst: vi.fn(), create: vi.fn() },
     feeAddebito: { updateMany: vi.fn() },
     praticaAssegnazione: { updateMany: vi.fn() },
+    praticaStatoLog: { create: vi.fn() },
   };
   return {
     txMock,

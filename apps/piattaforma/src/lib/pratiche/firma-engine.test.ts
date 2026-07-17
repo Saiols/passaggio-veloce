@@ -19,6 +19,7 @@ const { prismaMock, authMock, getSessionContextMock, redirectMock, visuraScaduta
   prismaMock: {
     pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     feeAddebito: { create: vi.fn() },
+    praticaStatoLog: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),

@@ -20,6 +20,7 @@ const { prismaMock, authMock, getSessionContextMock, redirectMock } = vi.hoisted
   prismaMock: {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     praticaAssegnazione: { updateMany: vi.fn() },
+    praticaStatoLog: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),

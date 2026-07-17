@@ -13,6 +13,7 @@ import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { emitEventoPratica, dismissNuovaPraticaEventi } from '@/lib/eventi/emit';
 import { eventoPraticaAccettata } from '@/lib/eventi/pratica-eventi';
+import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -108,6 +109,15 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
           // firma, segnalazione confermata) devono arrivare a lui, non alla madre.
           accettataDaUserId: session.user.id,
         },
+      });
+
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: pratica.stato,
+        statoA: 'ACCETTATA',
+        tipoEvento: STATO_EVENTO.ACCEPT,
+        attoreUserId: session.user.id,
+        meta: { sedeId: assegnazione.sedeId },
       });
     });
   } catch (err) {

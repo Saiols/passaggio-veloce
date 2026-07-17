@@ -8,6 +8,7 @@ const { tx, prismaMock } = vi.hoisted(() => {
     praticaAssegnazione: { findMany: vi.fn(), create: vi.fn() },
     orariApertura: { findMany: vi.fn() },
     chiusuraStraordinaria: { findMany: vi.fn() },
+    praticaStatoLog: { create: vi.fn() },
   };
   const prismaMock = {
     $transaction: vi.fn((cb: (t: typeof tx) => unknown) => cb(tx)),

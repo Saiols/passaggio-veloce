@@ -14,6 +14,7 @@ import { eventoPraticaLavorata, eventoPraticaAnnullata } from '@/lib/eventi/prat
 import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { firmaPraticaCore, sedeScopeCorrente, assertSedeInScope } from '@/lib/pratiche/firma-engine';
 import type { QuickActionResult } from '@/lib/pratiche/quick-action';
+import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 // Ri-esportato per i consumer esistenti (il tipo vive in lib/pratiche/quick-action.ts:
 // vedi il commento lì per il perché non sta più qui).
@@ -64,6 +65,14 @@ async function processaPraticaCore(praticaId: string): Promise<QuickActionResult
           stato: 'PROCESSATA',
           processataAt: new Date(),
         },
+      });
+
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: 'ACCETTATA',
+        statoA: 'PROCESSATA',
+        tipoEvento: STATO_EVENTO.PROCESS,
+        attoreUserId: session.user.id,
       });
     });
   } catch (err) {
@@ -233,6 +242,14 @@ export async function annullaPraticaAction(praticaId: string): Promise<void> {
           stato: 'ANNULLATA',
           annullataAt: now,
         },
+      });
+
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: pratica.stato, // pratica caricata prima dell'update (già in scope)
+        statoA: 'ANNULLATA',
+        tipoEvento: STATO_EVENTO.CANCEL,
+        attoreUserId: session.user.id,
       });
 
       await tx.praticaAssegnazione.updateMany({

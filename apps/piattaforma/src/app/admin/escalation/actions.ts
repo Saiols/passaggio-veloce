@@ -9,6 +9,7 @@ import { destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
 import { emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoPraticaAssegnata } from '@/lib/eventi/pratica-eventi';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 export type AssignResult = { ok: true } | { ok: false; error: string };
 
@@ -105,6 +106,15 @@ export async function assegnaEscalationAction(
             agenziaSedeId: sede.id,
             accettataAt: new Date(),
           },
+        });
+
+        await logCambioStato(tx, {
+          praticaId,
+          statoDa: 'IN_ESCALATION',
+          statoA: 'ACCETTATA',
+          tipoEvento: STATO_EVENTO.ADMIN_ASSIGN,
+          attoreUserId: session.user.id,
+          meta: { sedeId: sede.id },
         });
 
         return {

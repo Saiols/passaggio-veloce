@@ -26,6 +26,7 @@ const {
   prismaMock: {
     pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     commissioneAffiliazione: { findMany: vi.fn() },
+    praticaStatoLog: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),

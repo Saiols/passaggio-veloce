@@ -28,6 +28,7 @@ import { motivoBloccoFirma } from '@/lib/pratiche/firma-gate';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { env } from '@/env';
 import type { QuickActionResult } from '@/lib/pratiche/quick-action';
+import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 /**
  * Scope sede della sessione corrente.
@@ -274,6 +275,18 @@ export async function firmaPraticaCore(
       if (count === 0) {
         throw new Error('Pratica già firmata o non più firmabile');
       }
+
+      // Da qui in poi il CAS ha avuto effetto (count > 0): logga la
+      // transizione di stato nella stessa tx, prima degli altri side-effect.
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: 'PROCESSATA',
+        statoA: 'FIRMATA',
+        tipoEvento: STATO_EVENTO.SIGN,
+        // Copre entrambi i percorsi: firmatario agenzia o admin che attesta
+        // (in quel ramo `adminId === session.user.id`, vedi sopra).
+        attoreUserId: session.user.id,
+      });
 
       // Credito wallet broker (proventi pratica) — multi-sede: wallet della sede.
       if (pratica.creditoBrokerCent > 0 && pratica.brokerSedeId) {

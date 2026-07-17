@@ -16,6 +16,7 @@ import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
 import { walletBrokerDellaPratica } from '@/lib/wallet/wallet-pratica';
 import { calcolaPenaleBrokerCent } from './config';
+import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 export type SegnalazioneTipo =
   | 'FERMO_AMMINISTRATIVO'
@@ -315,6 +316,18 @@ export async function confermaAnnullamentoConPenaleAction(
           segnalazioneEsitaDaId: adminId,
           penaleAddebitatoCent: importoPenaleCent,
         },
+      });
+
+      await logCambioStato(tx, {
+        praticaId,
+        // `pratica` è caricata prima dell'update (già in scope): la
+        // segnalazione è visibile sia in ACCETTATA sia in PROCESSATA
+        // (pre-firma), quindi lo stato di partenza non è sempre ACCETTATA.
+        statoDa: pratica.stato,
+        statoA: 'ANNULLATA',
+        tipoEvento: STATO_EVENTO.CANCEL,
+        attoreUserId: adminId,
+        meta: { conPenale: true },
       });
 
       // Eventuali FeeAddebito SCHEDULED per l'agenzia: annulliamo (rimborso)

@@ -16,6 +16,7 @@ import {
 import { emitEventiPratica, emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoNuovaPratica, eventoPraticaEscalation } from '@/lib/eventi/pratica-eventi';
 import { destinatariBroker, destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
+import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
   1: DISTRIBUZIONE.T1_HOURS,
@@ -101,6 +102,13 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
     if (currentRound < 3) {
       const nextRound = (currentRound + 1) as 1 | 2 | 3;
       const { count, newAssegnazioniIds, escalated } = await avviaRound(tx, pratica, nextRound);
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: pratica.stato,
+        statoA: escalated ? 'IN_ESCALATION' : statoNomePerRound(nextRound),
+        tipoEvento: escalated ? STATO_EVENTO.ESCALATION : STATO_EVENTO.ROUND_ADVANCE,
+        meta: { round: nextRound, ciclo: pratica.distribuzioneCiclo },
+      });
       return {
         result: { status: 'advanced-round' as const, nextRound, assegnazioni: count },
         jobs: {
@@ -114,6 +122,13 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
     await tx.pratica.update({
       where: { id: praticaId },
       data: { stato: 'IN_ESCALATION', escalationAt: now },
+    });
+    await logCambioStato(tx, {
+      praticaId,
+      statoDa: pratica.stato,
+      statoA: 'IN_ESCALATION',
+      tipoEvento: STATO_EVENTO.ESCALATION,
+      meta: { round: currentRound, ciclo: pratica.distribuzioneCiclo },
     });
     return {
       result: { status: 'escalated' as const },
@@ -257,6 +272,10 @@ function statoPerRound(
   if (round === 1) return { stato: 'IN_ATTESA_ROUND_1', round1StartedAt: now };
   if (round === 2) return { stato: 'IN_ATTESA_ROUND_2', round2StartedAt: now };
   return { stato: 'IN_ATTESA_ROUND_3', round3StartedAt: now };
+}
+
+function statoNomePerRound(round: 1 | 2 | 3): 'IN_ATTESA_ROUND_1' | 'IN_ATTESA_ROUND_2' | 'IN_ATTESA_ROUND_3' {
+  return round === 1 ? 'IN_ATTESA_ROUND_1' : round === 2 ? 'IN_ATTESA_ROUND_2' : 'IN_ATTESA_ROUND_3';
 }
 
 function currentRoundFromStato(stato: string): 1 | 2 | 3 | null {
@@ -458,6 +477,13 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
     const updated = await tx.pratica.findUnique({
       where: { id: praticaId },
       select: { stato: true },
+    });
+    await logCambioStato(tx, {
+      praticaId,
+      statoDa: pratica.stato,
+      statoA: updated!.stato,
+      tipoEvento: updated!.stato === 'IN_ESCALATION' ? STATO_EVENTO.ESCALATION : STATO_EVENTO.SUBMIT,
+      meta: { round: 1, ciclo: pratica.distribuzioneCiclo },
     });
     return {
       assegnazioni: r.count,

@@ -44,19 +44,35 @@ provinciali).
 
 ## 4. Decisioni prese
 
-1. **Raggi per round:** round 1 = **2 km**, round 2 = **5 km**, round 3 = **10 km**,
-   poi escalation.
+> **Emendamento 2026-07-19 (pre-merge):** raggi ridotti a **500/750/1000 m**,
+> finestre a **4h**, e **pool cumulativo** — le agenzie dei round precedenti
+> restano accettabili (non vanno più in TIMEOUT all'avanzamento). Punti 1, 6, 8
+> aggiornati sotto.
+
+1. **Raggi per round:** round 1 = **500 m**, round 2 = **750 m**, round 3 =
+   **1000 m** (`RAGGI_KM = [0.5, 0.75, 1]`), poi escalation.
 2. **Anelli incrementali:** ogni round contatta solo le sedi **nuove** che entrano
-   nel raggio allargato (le interne hanno già l'assegnazione del round precedente).
+   nel raggio allargato (le interne hanno già l'assegnazione del round precedente,
+   che ora resta accettabile — vedi punto 8).
 3. **Pratica senza coord:** il broker **deve** selezionare un luogo dall'autocomplete
    → coord garantite. **Nessun fallback provincia**, motore solo a raggio.
 4. **Sedi senza coord:** **escluse** dal raggio + geocoding a monte (già esistente) +
    visibilità admin sulle non geocodate.
 5. **Distanza in JS (Haversine)**, non in SQL (agenzie poche; semplice e testabile;
    pre-filtro bounding-box SQL rimandato a scala molto maggiore).
-6. **Round 3 dura 8h** anch'esso (tre finestre uguali da 8h), poi escalation.
-7. **Anello vuoto → salto immediato al raggio successivo** (niente attesa di 8h se
-   nell'anello non ci sono sedi nuove; se anche 10 km è vuoto → escalation immediata).
+6. **Finestre 4h/4h/4h** lavorative (~12h totali), non più 8h.
+7. **Anello vuoto → salto immediato al raggio successivo** (niente attesa se
+   nell'anello non ci sono sedi nuove; se anche 1 km è vuoto → escalation immediata).
+8. **Pool cumulativo + scadenza allineata:** al passaggio di round le agenzie **già
+   contattate restano `PENDING`** (continuano a vedere e poter accettare — l'azione
+   di accettazione le supporta già). L'avanzamento è **guidato dal tempo**: alla
+   scadenza della finestra corrente, si aprono le sedi **nuove** dell'anello E si
+   **ri-armano** le agenzie PENDING scadute con una finestra fresca (4h, sugli orari
+   di ciascuna sede) → tutto il pool condivide la scadenza corrente, che avanza. Le
+   agenzie che hanno **rifiutato** restano fuori. Le agenzie precedenti **non**
+   vengono ri-notificate via email all'allargamento (restano nella loro inbox); solo
+   le nuove ricevono la N6. **Escalation** solo alla scadenza della finestra del
+   round 3 con nessuno che ha accettato → allora TIMEOUT a tutti + escalation.
 
 ## 5. Design
 
@@ -99,8 +115,8 @@ zero su punto identico).
 **`constants.ts`** — sostituire i parametri di selezione:
 ```ts
 export const DISTRIBUZIONE = {
-  RAGGI_KM: [2, 5, 10],       // round 1 / 2 / 3
-  T1_HOURS: 8, T2_HOURS: 8, T3_HOURS: 8,
+  RAGGI_KM: [0.5, 0.75, 1], // round 1 / 2 / 3 = 500/750/1000 m
+  T1_HOURS: 4, T2_HOURS: 4, T3_HOURS: 4,
 } as const;
 ```
 Spariscono `N_PER_ROUND` e `N_MAX` (niente cap: tutte le sedi nell'anello).
@@ -114,7 +130,7 @@ più** i candidati.
    contattate nel ciclo + revocate permanenti).
 2. Filtra per `distanceKm(pratica, sede) <= RAGGI_KM[r-1]`.
 3. **Tutte** le sedi risultanti ricevono l'assegnazione (nessun cap, nessuna
-   selezione per ranking). Finestra countdown = `T{r}_HOURS` (8h), con gli orari
+   selezione per ranking). Finestra countdown = `T{r}_HOURS` (4h), con gli orari
    di apertura della sede (invariato, `computeCountdown`).
 4. **Anello incrementale gratis:** siccome `sediDaEscludere` esclude già le sedi
    dei round precedenti, "entro il raggio r meno le già contattate" = la corona tra
@@ -123,10 +139,26 @@ più** i candidati.
    **subito** al round `r+1` (raggio maggiore) nello stesso tick; se `r=3` e vuoto
    → escalation immediata.
 
-Il resto del ciclo (`tickPratica`: timeout, avanzamento a countdown scaduto,
-accettazione, escalation, log stato, notifiche N6/N10/N11, eventi in-app) resta
-invariato. Revoca/ricircolo (`distribuzioneCiclo`) invariato: al nuovo ciclo si
-riparte dal round 1 (2 km) escludendo le sedi revocate permanenti.
+**`tickPratica` (pool cumulativo — riscrittura avanzamento):** non è più "timeout
+del round corrente → avanza". Ora:
+- si guardano **tutte** le assegnazioni `PENDING` (di qualunque round), non solo
+  quelle del round corrente;
+- se qualcuna è `ACCETTATA` → risolto (noop);
+- se **tutte** le `PENDING` hanno la finestra ancora aperta (`countdownFineAt > now`)
+  → attesa;
+- se **tutte** le `PENDING` hanno la finestra scaduta e nessuno ha accettato:
+  - `round < 3` → **avanza**: `avviaRound(nextRound)` (apre le sedi nuove
+    dell'anello) **e ri-arma** le `PENDING` scadute con una finestra fresca
+    (`computeCountdown(now, 4h, orariSede)` per sede) — **nessun TIMEOUT**, restano
+    accettabili;
+  - `round = 3` → **escalation**: TIMEOUT a **tutte** le `PENDING` + `IN_ESCALATION`
+    + notifiche N10/N11 (qui l'anti-abuso `checkAutoSuspendForSedi` scatta sui
+    no-show, come prima ma tutto in una volta).
+
+Accettazione (`inbox/actions.ts`): **invariata** — cerca già `esito: 'PENDING'` di
+qualunque round, quindi un'agenzia early che è ancora PENDING può accettare.
+Revoca/ricircolo (`distribuzioneCiclo`) invariato: al nuovo ciclo si riparte dal
+round 1 (500 m) escludendo le sedi revocate permanenti.
 
 ### 5.5 Sedi senza coordinate
 
@@ -146,9 +178,12 @@ riscrittura). `comune`/`provincia` sulla Pratica **restano** come metadati.
 
 - **Pratica in bozza**: `lat`/`lng` null finché non si seleziona il luogo; il submit
   li rende obbligatori. Nessuna pratica **submitted** priva di coord (per costruzione).
-- **Nessuna sede entro 10 km**: escalation (come oggi quando la zona è scoperta).
+- **Nessuna sede entro 1 km**: escalation (come oggi quando la zona è scoperta).
 - **Sede geocodata tra un round e l'altro**: entra al round successivo (nessun
   trattamento speciale — il filtro coord è valutato ad ogni round).
+- **Ri-arma**: al passaggio di round si ri-arma solo le `PENDING` **scadute** (le
+  nuove hanno già finestra fresca); i `RIFIUTATA` restano fuori (non tornano in
+  gioco). Le `PENDING` di round diversi condividono così una scadenza che avanza.
 - **Fuori scope ora:** raggi/finestre editabili da admin (restano costanti,
   predisposti); pre-filtro distanza in SQL/PostGIS (solo a scala molto maggiore);
   ranking come tie-break (non serve: tutte ricevono).
@@ -156,10 +191,15 @@ riscrittura). `comune`/`provincia` sulla Pratica **restano** come metadati.
 ## 7. Test
 
 - `distanceKm`: distanze note (es. due punti a ~X km), simmetria, 0 su identico.
-- `avviaRound` (riscritto): seleziona tutte le sedi entro il raggio del round;
-  esclude quelle senza coord; esclude le già contattate (anello incrementale);
-  cascade su anello vuoto (0 nuove → avanza subito); escalation dopo round 3;
-  visura scaduta / sospese / bloccate restano escluse.
+- `avviaRound` (riscritto): seleziona tutte le sedi entro il raggio del round
+  (500/750/1000 m); esclude quelle senza coord; esclude le già contattate (anello
+  incrementale); cascade su anello vuoto (0 nuove → avanza subito); escalation dopo
+  round 3; visura scaduta / sospese / bloccate restano escluse.
+- `tickPratica` (pool cumulativo): all'avanzamento le PENDING dei round precedenti
+  **NON** vanno in TIMEOUT (restano accettabili) e vengono **ri-armate** con finestra
+  fresca; l'avanzamento scatta quando **tutte** le PENDING sono scadute; l'escalation
+  (solo a round 3) mette in TIMEOUT **tutte** le PENDING. Un'agenzia early PENDING
+  può accettare mentre la pratica è in un round successivo.
 - Wizard/action: submit senza coord → bloccato con errore sul luogo; submit con
   coord → salvate su Pratica.
 - Regressione: revoca/ricircolo riparte dal raggio 2 km escludendo le revocate.

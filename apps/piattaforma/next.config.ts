@@ -22,6 +22,35 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // Header di sicurezza globali (finding H1). Deliberatamente SOLO la difesa
+  // anti-clickjacking/sniffing: nessuna CSP restrittiva su script/connect-src,
+  // per non rompere Google Maps, Vercel Blob, Sentry e il widget chatbot.
+  // `camera=()` è sicuro qui: lo scanner documenti NON usa mai getUserMedia
+  // in pagina (nessun <video>/MediaDevices nel codice) — il picker "Scatta
+  // foto" arriva dalla fotocamera nativa del sistema operativo tramite
+  // <input type="file"> (vedi banner-foto-documenti.tsx), fuori dal contesto
+  // pagina e quindi non gatato da questa policy.
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
+          },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=()',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 const sentryEnabled = Boolean(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN);

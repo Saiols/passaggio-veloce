@@ -12,12 +12,5 @@ export function GET() {
     branch: ref,
     deployedAt: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
-    demoMode: process.env.DEMO_MODE === 'true',
-    authUrl: process.env.AUTH_URL ?? null,
-    nextauthUrl: process.env.NEXTAUTH_URL ?? null,
-    publicAppUrl: process.env.NEXT_PUBLIC_APP_URL ?? null,
-    vercelUrl: process.env.VERCEL_URL ?? null,
-    authSecretSet: Boolean(process.env.AUTH_SECRET),
-    authSecretLen: process.env.AUTH_SECRET?.length ?? 0,
   });
 }

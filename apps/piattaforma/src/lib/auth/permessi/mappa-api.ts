@@ -55,7 +55,6 @@ export const MAPPA_API: Record<string, Permesso | null> = {
   // --- Webhook / diagnostica / metadati, nessun dato azienda ---
   'src/app/api/webhooks/stripe/route.ts': null, // autenticato via firma Stripe (STRIPE_WEBHOOK_SECRET), non da un permesso
   'src/app/api/version/route.ts': null, // metadati di build (sha/branch/env), nessun dato azienda
-  'src/app/api/db-test/route.ts': null, // DA VALUTARE: diagnostica interna, ZERO controllo di sessione — espone conteggi User/Company/Pratica a chiunque conosca l'URL
 
   // --- Upload generico (infrastruttura, gate nella pagina/azione chiamante) ---
   'src/app/api/blob/upload/route.ts': null, // sessione richiesta salvo path KYC pre-sessione (uploadRequiresAuth); il permesso vive nell'azione che invoca l'upload

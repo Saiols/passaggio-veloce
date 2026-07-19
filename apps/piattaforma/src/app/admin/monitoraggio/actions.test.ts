@@ -20,7 +20,12 @@ const { authMock, txMock, transactionMock, avviaRoundMock, postCommitMock,
 
 vi.mock('@/auth', () => ({ auth: authMock }));
 vi.mock('@pv/db', () => ({ prisma: { $transaction: transactionMock } }));
-vi.mock('@/lib/distribuzione/tick', () => ({ avviaRound: avviaRoundMock, processPostCommitJobs: postCommitMock }));
+vi.mock('@/lib/distribuzione/tick', () => ({
+  avviaRound: avviaRoundMock,
+  processPostCommitJobs: postCommitMock,
+  statoNomePerRound: (round: 1 | 2 | 3) =>
+    round === 1 ? 'IN_ATTESA_ROUND_1' : round === 2 ? 'IN_ATTESA_ROUND_2' : 'IN_ATTESA_ROUND_3',
+}));
 vi.mock('@/lib/pratiche/stato-log', () => ({ logCambioStato: logMock, STATO_EVENTO: { RECIRCULATE: 'RECIRCULATE' } }));
 vi.mock('@/lib/notifiche', () => ({ sendNotification: sendMock, notifyClientiAvanzamento: notifyClientiMock }));
 vi.mock('@/lib/notifiche/pratica', () => ({ destinatariSedeAgenzia: destSedeMock, destinatariBroker: destBrokerMock }));
@@ -35,7 +40,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   transactionMock.mockImplementation(async (cb: (tx: typeof txMock) => unknown) => cb(txMock));
   txMock.praticaAssegnazione.findMany.mockResolvedValue([{ sedeId: 'sRev', ciclo: 1, esito: 'REVOCATA_ADMIN' }]);
-  avviaRoundMock.mockResolvedValue({ count: 2, newAssegnazioniIds: ['n1', 'n2'], escalated: false });
+  avviaRoundMock.mockResolvedValue({ count: 2, newAssegnazioniIds: ['n1', 'n2'], escalated: false, round: 1 });
   txMock.pratica.updateMany.mockResolvedValue({ count: 1 });
   postCommitMock.mockResolvedValue(undefined);
   destSedeMock.mockResolvedValue([{ email: 'ag@x.it', userId: 'u9', nome: 'Auto MI' }]);
@@ -89,6 +94,14 @@ describe('revocaERimettiInCircoloAction', () => {
     );
     expect(avviaRoundMock).toHaveBeenCalled();
     expect(logMock).toHaveBeenCalled();
+    // il log riflette il round realmente assegnato da avviaRound (qui: round 1, nessuna cascade)
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        statoA: 'IN_ATTESA_ROUND_1',
+        meta: expect.objectContaining({ round: 1, escalated: false }),
+      }),
+    );
     // N50 all'agenzia + N51 al broker + clienti + evento
     const tipiInviati = sendMock.mock.calls.map((c) => c[0].tipo);
     expect(tipiInviati).toContain('N50_AGENZIA_PRATICA_REVOCATA');
@@ -96,5 +109,39 @@ describe('revocaERimettiInCircoloAction', () => {
     expect(notifyClientiMock).toHaveBeenCalledWith('p1', 'RIMESSA_IN_CIRCOLO');
     expect(emitEventoMock).toHaveBeenCalled();
     expect(postCommitMock).toHaveBeenCalledWith({ newAssegnazioniIds: ['n1', 'n2'], escalationPraticaId: null });
+  });
+
+  it('cascade: avviaRound salta al round 2 (anello 2km vuoto) → il log riporta round 2, non 1 hardcoded', async () => {
+    authMock.mockResolvedValue({ user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } });
+    txMock.pratica.findUnique.mockResolvedValue(praticaAccettata);
+    avviaRoundMock.mockResolvedValue({ count: 3, newAssegnazioniIds: ['n3'], escalated: false, round: 2 });
+
+    const res = await revocaERimettiInCircoloAction('p1', 'ferma da giorni');
+
+    expect(res.ok).toBe(true);
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        statoA: 'IN_ATTESA_ROUND_2',
+        meta: expect.objectContaining({ round: 2, escalated: false }),
+      }),
+    );
+  });
+
+  it('escalation: avviaRound esaurisce i 3 anelli → il log riporta IN_ESCALATION e round 3', async () => {
+    authMock.mockResolvedValue({ user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } });
+    txMock.pratica.findUnique.mockResolvedValue(praticaAccettata);
+    avviaRoundMock.mockResolvedValue({ count: 0, newAssegnazioniIds: [], escalated: true, round: 3 });
+
+    const res = await revocaERimettiInCircoloAction('p1', 'nessuna sede in zona');
+
+    expect(res.ok).toBe(true);
+    expect(logMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        statoA: 'IN_ESCALATION',
+        meta: expect.objectContaining({ round: 3, escalated: true }),
+      }),
+    );
   });
 });

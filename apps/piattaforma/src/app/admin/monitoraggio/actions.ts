@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { avviaRound, processPostCommitJobs } from '@/lib/distribuzione/tick';
+import { avviaRound, processPostCommitJobs, statoNomePerRound } from '@/lib/distribuzione/tick';
 import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariSedeAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
@@ -107,11 +107,11 @@ export async function revocaERimettiInCircoloAction(
       await logCambioStato(tx, {
         praticaId,
         statoDa: 'ACCETTATA',
-        statoA: r.escalated ? 'IN_ESCALATION' : 'IN_ATTESA_ROUND_1',
+        statoA: r.escalated ? 'IN_ESCALATION' : statoNomePerRound(r.round),
         tipoEvento: STATO_EVENTO.RECIRCULATE,
         attoreUserId: adminId,
         motivo: motivoPulito,
-        meta: { ciclo: nuovoCiclo, revokedSedeId, round: 1, escalated: r.escalated },
+        meta: { ciclo: nuovoCiclo, revokedSedeId, round: r.round, escalated: r.escalated },
       });
 
       const targa = pratica.veicoli[0]?.targa

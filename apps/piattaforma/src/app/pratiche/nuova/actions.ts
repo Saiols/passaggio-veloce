@@ -460,6 +460,16 @@ const coAcquirenteSchema = z.object({
 
 export type CoAcquirenteInputData = z.infer<typeof coAcquirenteSchema>;
 
+// Coordinate del luogo di consegna: obbligatorie al submit (guidano la
+// distribuzione a raggio). Da FormData arrivano come stringhe → coerce + range.
+// Esportato standalone (oltre a essere spalmato dentro `submitSchema` sotto)
+// così il test unit può validare la regola senza costruire l'intero FormData
+// del wizard.
+export const praticaCoordsSchema = z.object({
+  lat: z.coerce.number().refine((n) => n >= -90 && n <= 90, 'lat fuori range'),
+  lng: z.coerce.number().refine((n) => n >= -180 && n <= 180, 'lng fuori range'),
+});
+
 const submitSchema = z.object({
   tipo: z.enum(['SEMPLICE', 'MINIVOLTURA']),
   numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),
@@ -557,6 +567,9 @@ const submitSchema = z.object({
     .trim()
     .length(2)
     .transform((s) => s.toUpperCase()),
+  // Coordinate del luogo di consegna: obbligatorie al submit (guidano la
+  // distribuzione a raggio, vedi `praticaCoordsSchema` sopra per il dettaglio).
+  ...praticaCoordsSchema.shape,
 
   // Sistema Penali Broker (SP-A): popup di responsabilità accettato
   dichiarazioneAccettata: formBool,
@@ -1346,6 +1359,8 @@ export async function submitNuovaPraticaAction(
 
       comune: d.comune,
       provincia: d.provincia,
+      lat: d.lat,
+      lng: d.lng,
 
       // Schema Documentale v7 (SD-B): branching variables persistite.
       // Quelle del venditore sono ora per-venditore (modello Venditore, sotto).

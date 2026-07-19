@@ -625,6 +625,12 @@ function WizardBody({
 
   const [comune, setComune] = useState('');
   const [provincia, setProvincia] = useState('');
+  // Distribuzione a raggio-km: coordinate del luogo selezionato dall'autocomplete
+  // (AddressAutocomplete). Obbligatorie al submit — vedi canSubmit/mancanzeStep4
+  // e la guardia in handleFinalSubmit più sotto — perché guidano l'assegnazione
+  // delle agenzie più vicine (Task 3, action). Nel ramo manuale (!hasMaps) non
+  // sono ottenibili: restano null, e il submit resta bloccato per design.
+  const [luogoCoords, setLuogoCoords] = useState<{ lat: number; lng: number } | null>(null);
   const hasMaps = !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   // Step Documenti: BlobRef caricate per documento richiesto (chiave = docKey).
@@ -1533,6 +1539,15 @@ function WizardBody({
       avvisaMancanze(mancanzeStep1());
       return;
     }
+    // Distribuzione a raggio-km (Task 3, action): lat/lng sono obbligatorie al
+    // submit. `canSubmit`/mancanzeStep4 già bloccano il tasto "Invia pratica"
+    // se manca la selezione, ma questo guard ripete il controllo qui — stesso
+    // criterio di `docsPronti` sopra — come ultima rete di sicurezza subito
+    // prima di costruire la FormData.
+    if (!luogoCoords) {
+      avvisaMancanze(["selezione del luogo dall'elenco (serve per assegnare le agenzie più vicine)"]);
+      return;
+    }
     const fd = new FormData();
     fd.append('tipo', tipo);
     fd.append('numeroVeicoli', String(numeroVeicoli));
@@ -1598,6 +1613,13 @@ function WizardBody({
 
     fd.append('comune', comune);
     fd.append('provincia', provincia);
+    // Distribuzione a raggio-km: la action (Task 3) richiede lat/lng al submit.
+    // Presenti per costruzione qui sotto (guardia handleFinalSubmit sopra), ma
+    // il check di tipo esplicito evita un `null` silenzioso in FormData.
+    if (luogoCoords) {
+      fd.append('lat', String(luogoCoords.lat));
+      fd.append('lng', String(luogoCoords.lng));
+    }
 
     // Multi-sede: sede broker di partenza (il server la valida e ricade sulla
     // sede operativa se vuota). Inviata solo se selezionabile.
@@ -2105,6 +2127,7 @@ function WizardBody({
     (!multiSede || brokerSedeId.length > 0) &&
     comune.trim().length > 0 &&
     /^[A-Za-z]{2}$/.test(provincia.trim()) &&
+    luogoCoords !== null &&
     esitoSchema.kind === 'OK';
 
   // Punto 3: il tasto di proseguimento resta "disabilitato" (look) ma cliccabile;
@@ -2177,6 +2200,7 @@ function WizardBody({
     if (multiSede && !brokerSedeId) m.push('sede di partenza');
     if (!comune.trim()) m.push('comune');
     if (!/^[A-Za-z]{2}$/.test(provincia.trim())) m.push('provincia (2 lettere)');
+    if (!luogoCoords) m.push("selezione del luogo dall'elenco (serve per assegnare le agenzie più vicine)");
     if (esitoSchema.kind !== 'OK') m.push('documenti richiesti incompleti');
     return m;
   };
@@ -2750,6 +2774,11 @@ function WizardBody({
                     onSelect={(p) => {
                       if (p.citta) setComune(p.citta);
                       if (p.provincia) setProvincia(p.provincia);
+                      setLuogoCoords(
+                        typeof p.lat === 'number' && typeof p.lng === 'number'
+                          ? { lat: p.lat, lng: p.lng }
+                          : null,
+                      );
                     }}
                   />
                   {comune && (
@@ -2765,35 +2794,45 @@ function WizardBody({
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  <Field
-                    label="Comune"
-                    required
-                    className="sm:col-span-2"
-                    error={fe.err('step4:comune', comune.trim().length > 0, 'Comune obbligatorio')}
-                  >
-                    <Input
-                      value={comune}
-                      onChange={(e) => setComune(e.target.value)}
-                      onBlur={() => fe.touch('step4:comune')}
-                      invalid={fe.isInvalid('step4:comune', comune.trim().length > 0)}
-                      placeholder="Venezia"
-                    />
-                  </Field>
-                  <Field
-                    label="Provincia"
-                    required
-                    error={fe.err('step4:provincia', /^[A-Za-z]{2}$/.test(provincia.trim()), 'Provincia (2 lettere)')}
-                  >
-                    <Input
-                      maxLength={2}
-                      value={provincia}
-                      onChange={(e) => setProvincia(e.target.value.toUpperCase())}
-                      onBlur={() => fe.touch('step4:provincia')}
-                      invalid={fe.isInvalid('step4:provincia', /^[A-Za-z]{2}$/.test(provincia.trim()))}
-                      placeholder="VE"
-                    />
-                  </Field>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <Field
+                      label="Comune"
+                      required
+                      className="sm:col-span-2"
+                      error={fe.err('step4:comune', comune.trim().length > 0, 'Comune obbligatorio')}
+                    >
+                      <Input
+                        value={comune}
+                        onChange={(e) => setComune(e.target.value)}
+                        onBlur={() => fe.touch('step4:comune')}
+                        invalid={fe.isInvalid('step4:comune', comune.trim().length > 0)}
+                        placeholder="Venezia"
+                      />
+                    </Field>
+                    <Field
+                      label="Provincia"
+                      required
+                      error={fe.err('step4:provincia', /^[A-Za-z]{2}$/.test(provincia.trim()), 'Provincia (2 lettere)')}
+                    >
+                      <Input
+                        maxLength={2}
+                        value={provincia}
+                        onChange={(e) => setProvincia(e.target.value.toUpperCase())}
+                        onBlur={() => fe.touch('step4:provincia')}
+                        invalid={fe.isInvalid('step4:provincia', /^[A-Za-z]{2}$/.test(provincia.trim()))}
+                        placeholder="VE"
+                      />
+                    </Field>
+                  </div>
+                  {/* Senza autocomplete non otteniamo lat/lng: la distribuzione a
+                      raggio-km (Task 3, action) le richiede obbligatoriamente al
+                      submit, quindi da qui la pratica non è inviabile. */}
+                  <Alert variant="warning">
+                    Servizio mappe non disponibile: senza selezione del luogo dall'elenco non
+                    possiamo calcolare le agenzie più vicine, quindi la pratica non può essere
+                    inviata da questo dispositivo/ambiente.
+                  </Alert>
                 </div>
               )}
             </div>

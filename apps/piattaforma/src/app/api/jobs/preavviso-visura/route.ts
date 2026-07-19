@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { preavvisoVisura } from '@/lib/jobs/preavviso-visura';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Ciclo di vita visura camerale: N46 nei 5 giorni di preavviso (175-179, una al
  * giorno), N47 alla scadenza (>=180, una per ciclo), N48 ai broker delle

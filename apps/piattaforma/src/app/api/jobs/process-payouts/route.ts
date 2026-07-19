@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { processPayouts } from '@/lib/jobs/process-payouts';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Processa payout pendenti. Schedule cron Vercel: 1x/giorno notte.
  */

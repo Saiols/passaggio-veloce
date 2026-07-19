@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { processFeeScheduled } from '@/lib/jobs/process-fee-scheduled';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Processa FeeAddebito SCHEDULED scaduti. Schedule cron Vercel: ogni 6h.
  */

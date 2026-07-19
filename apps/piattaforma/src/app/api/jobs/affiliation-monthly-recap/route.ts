@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { affiliationMonthlyRecap } from '@/lib/jobs/affiliation-monthly-recap';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Recap mensile affiliazione N25. Schedule cron Vercel: 1° del mese 9:00.
  */

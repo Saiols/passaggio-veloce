@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { sendSolleciti } from '@/lib/jobs/send-solleciti';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Invia N3 (broker, ogni 5gg senza firma) + N7 (agenzia, promemoria
  * countdown). Schedule cron Vercel: 1x/giorno mattina.

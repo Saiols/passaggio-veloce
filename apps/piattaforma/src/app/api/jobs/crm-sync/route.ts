@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { syncCrmFromPlatform } from '@/lib/crm/sync';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Sync CRM ↔ piattaforma. Schedule cron Vercel: 1x/giorno (vercel.json).
  * Auth: bearer CRON_SECRET (Vercel Cron) OR sessione ADMIN_PIATTAFORMA.

@@ -686,6 +686,7 @@ model Sede {
   @@index([type])
   @@index([citta])
   @@index([provincia])
+  @@index([type, deletedAt, suspendedAt])
   @@map("sedi")
 }
 
@@ -913,6 +914,8 @@ model Pratica {
   @@index([comune])
   @@index([flagSegnalata])
   @@index([richiedeRevisioneManuale])
+  @@index([agenziaSedeId, stato])
+  @@index([brokerSedeId, stato])
   @@map("pratiche")
 }
 
@@ -1829,6 +1832,7 @@ model EventoPratica {
 
   @@index([targetCompanyId, seenAt])
   @@index([praticaId])
+  @@index([targetSedeId, seenAt])
   @@map("eventi_pratica")
 }
 

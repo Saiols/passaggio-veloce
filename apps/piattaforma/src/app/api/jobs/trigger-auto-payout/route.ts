@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { triggerAutoPayout } from '@/lib/jobs/trigger-auto-payout';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Trigger payout automatici al raggiungimento soglia wallet.
  * Schedule cron Vercel: 1x/giorno notte (dopo process-payouts).

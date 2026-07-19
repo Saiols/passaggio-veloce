@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { tickAllPraticheInDistribuzione } from '@/lib/distribuzione';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 /**
  * Tick distribuzione: avanza pratiche in IN_ATTESA_ROUND_X scadute.
  * Schedule cron Vercel: ogni 30min (vercel.json).

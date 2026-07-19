@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { purgeDeletedDocumenti } from '@/lib/jobs/purge-deleted-documenti';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
+export const maxDuration = 60;
+
 async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);
   if (guard) return guard;

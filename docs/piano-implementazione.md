@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-05-25 (cluster A1-A11 fattibile-ora completati; restano solo blocchi esterni)
+> Ultimo aggiornamento: 2026-07-19 (A12 distribuzione raggio-km + pool cumulativo, A13 giustificativo interno costo promo — vedi §0.5 e Mappa lavoro residuo)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -34,7 +34,7 @@
 
 ### 0.2 Blocchi legali/fiscali
 - [x] Validazione commercialista modello fatturazione delegata — **CONFERMATO 2026-06-17** (split forfettario 55+20, TD01/TD06/ricevuta privato, IVA forfettario, numerazione progressiva). Sblocca FT-D XML (fatto). Resta gated solo l'account provider SDI (A-Cube).
-- [x] Definizione fallback se nessuna delle 5 agenzie accetta la pratica (vedi §0.5)
+- [x] Definizione fallback se nessuna agenzia accetta la pratica entro il round 3 (vedi §0.5)
 - [ ] Redazione T&C con clausola limitazione responsabilità + autorizzazione SEPA
 - [ ] Informativa privacy GDPR (dati sensibili CI/CF/visura)
 - [x] Policy data retention documenti caricati — `lib/documenti/retention.ts` (hard-delete 90gg, purge bozze 30gg) + job purge + Vercel cron daily 03:30
@@ -64,9 +64,11 @@
 - [~] Schema database iniziale (ERD) — scaffold base in `packages/db/prisma/schema.prisma`
 - [~] Definizione data model utenti, pratiche, wallet, notifiche, valutazioni — base Company/User creata
 
-### 0.5 Flusso fallback "nessuna delle 5 agenzie accetta" (proposta da validare)
+### 0.5 Distribuzione pratica — raggio-km + pool cumulativo ✅ SHIPPED 2026-07-19
 
 **Obiettivo:** garantire che ogni pratica trovi un'agenzia rispettando gli orari di lavoro reali delle agenzie, senza dare al dealer informazioni superflue.
+
+> **Storico:** il disegno originale sotto (proposta iniziale, mai del tutto implementata) usava round per **comune → comuni limitrofi (15 km) → provincia intera**, cap `N`=5 agenzie/round 1-2 e `Nmax`=15 al round 3, selezione/ordinamento per ranking. **Sostituito il 2026-07-19** dal modello a raggio-km reale documentato qui sotto — vedi `superpowers/specs/2026-07-19-distribuzione-raggio-km-design.md` e changelog **A12** (§ Mappa lavoro residuo).
 
 #### Orari di lavoro per agenzia
 - Ogni agenzia, in fase di registrazione (e poi modificabile dal profilo), inserisce i propri **giorni e orari di apertura** (es. Lun-Ven 9:00-13:00 / 15:00-18:30, Sab 9:00-12:00, Domenica chiuso)
@@ -77,71 +79,58 @@
 
 #### Comportamento broker
 - Il broker può inviare la pratica **24/7** senza vincoli
+- Il broker **deve selezionare il luogo di consegna dall'autocomplete** Google Places: le coordinate (`lat`/`lng`) sono **obbligatorie** al submit e guidano la distribuzione — non basta digitare comune/provincia a mano
 - Notifica al broker: solo "Pratica inviata" + codice pratica + numero di agenzie contattate
 - **Nessuna informazione** su orari delle singole agenzie o tempi attesi (rumore inutile, le agenzie hanno orari diversi)
 - La dashboard mostra lo stato corrente (`in_attesa`, `accettata`, `in_escalation`) ma non countdown visibili al broker
 
-#### Parametri configurabili da admin (default proposti)
-- `T1` finestra round 1 = **8 ore lavorative dell'agenzia** (~1 giornata operativa)
-- `T2` finestra round 2 = **8 ore lavorative**
-- `T3` finestra round 3 = **16 ore lavorative** (~2 giornate operative)
-- `R1` raggio iniziale = **comune selezionato**
-- `R2` raggio esteso = **comuni limitrofi entro 15 km**
-- `R3` raggio massimo = **provincia intera**
-- `N` agenzie per round 1 e 2 = **5**
-- `Nmax` cap round 3 = **15**
+#### Parametri (`lib/distribuzione/constants.ts`)
+- `RAGGI_KM = [0.5, 0.75, 1]` → round 1 = **500 m**, round 2 = **750 m**, round 3 = **1000 m** dal luogo di consegna (distanza reale Haversine, non provincia/comune)
+- `T1_HOURS`/`T2_HOURS`/`T3_HOURS` = **4h / 4h / 4h** lavorative (~12h totali, non più 8h/8h/16h)
+- **Nessun cap** per round: spariti `N`=5 e `Nmax`=15 — **tutte** le sedi idonee nell'anello ricevono l'assegnazione simultaneamente
+- Sedi senza `lat`/`lng` **escluse** dalla selezione (geocoding a monte + backfill + visibilità admin sulle non geocodate)
 
-> Nota: il countdown è **per-agenzia**, basato sulle sue ore di apertura. Il round avanza solo quando **tutte** le agenzie del round corrente hanno esaurito la loro finestra senza accettare (oppure hanno tutte rifiutato esplicitamente).
+> Nota: il countdown è **per-agenzia**, basato sulle sue ore di apertura. A differenza del disegno originale, l'avanzamento di round **non chiude** le agenzie del round precedente: il pool è **cumulativo** — restano `PENDING` e accettabili finché qualcuno accetta o si arriva a escalation.
 
-#### Flusso a 3 round + escalation manuale
+#### Flusso a raggio-km + pool cumulativo
 
-1. **Round 1 — Comune selezionato**
-   - Invio a 5 agenzie ordinate per ranking nel comune
+1. **Round 1 — 500 m dal luogo di consegna**
+   - Invio a **tutte** le sedi agenzia idonee (coordinate presenti, non sospese/eliminate, azienda madre non bloccata/sospesa, visura valida) entro 500 m
    - Ogni agenzia riceve notifica N6 immediatamente (anche fuori orario, l'email resta in inbox)
-   - Countdown T1 parte per ciascuna agenzia all'apertura della propria prima fascia oraria utile
+   - Countdown di 4h parte per ciascuna agenzia all'apertura della propria prima fascia oraria utile
    - Se almeno 1 accetta → flusso normale, le altre vengono notificate "pratica già assegnata"
-   - Stato pratica: `in_attesa_round_1`
+   - Stato pratica: `IN_ATTESA_ROUND_1`
 
-2. **Round 2 — Estensione comuni limitrofi (15 km)**
-   - Trigger automatico quando tutte le 5 agenzie del round 1 hanno esaurito T1 senza accettare
-   - Esclude le agenzie già contattate
-   - Invio a max 5 nuove agenzie nei comuni limitrofi
-   - Stato pratica: `in_attesa_round_2`
+2. **Round 2 — estensione a 750 m**
+   - Trigger automatico quando **tutte** le `PENDING` (di qualunque round, non solo quello corrente) hanno esaurito la finestra senza che nessuno accetti
+   - Si aprono le sedi **nuove** nella corona 500m→750m; le sedi del round 1 **restano `PENDING`** (nessun TIMEOUT, pool cumulativo) e vengono **ri-armate** con una finestra fresca di 4h
+   - Stato pratica: `IN_ATTESA_ROUND_2`
 
-3. **Round 3 — Provincia intera**
-   - Trigger automatico quando tutte le agenzie del round 2 hanno esaurito T2
-   - Esclude le precedenti
-   - Invio a tutte le agenzie attive in provincia, fino a `Nmax` = 15
-   - Stato pratica: `in_attesa_round_3`
+3. **Round 3 — estensione a 1000 m**
+   - Stesso meccanismo sulla corona 750m→1000m; tutte le `PENDING` precedenti restano accettabili e vengono ri-armate
+   - **Anello vuoto → cascade immediato** al raggio successivo nello stesso tick (nessuna attesa se non ci sono sedi nuove; vuoto anche a 1 km → escalation immediata)
+   - Stato pratica: `IN_ATTESA_ROUND_3`
 
 4. **Escalation admin**
-   - Se anche il round 3 fallisce → stato `in_escalation`
-   - Notifica N10 (nuova) all'admin con priorità alta
-   - Notifica N11 (nuova) al dealer: "la pratica è in gestione al nostro team, ti contatteremo a breve"
-   - L'admin può: assegnare manualmente a un'agenzia partner di fiducia, contattare il dealer per cambiare comune, annullare
+   - Round 3 scaduto senza che nessuno accetti → **TIMEOUT a tutte le `PENDING`** + stato `IN_ESCALATION` (qui scatta l'anti-abuso sui no-show)
+   - Notifica N10 all'admin con priorità alta
+   - Notifica N11 al dealer: "la pratica è in gestione al nostro team, ti contatteremo a breve"
+   - L'admin può: assegnare manualmente a un'agenzia partner di fiducia, contattare il dealer, annullare
 
 5. **Annullamento volontario**
    - In qualsiasi momento, il dealer può annullare la pratica dalla dashboard senza costi
    - I documenti restano salvati come bozza per 30 giorni
 
-#### Regole anti-abuso ranking
-- Agenzia che rifiuta esplicitamente >3 pratiche consecutive → decay ranking interno -0.5 per 7 giorni
-- Agenzia che ignora (timeout senza risposta) >5 pratiche consecutive → marcata `inattiva`, sospesa dall'algoritmo finché non si riconnette
-- Parametri configurabili da admin
+#### Ranking e anti-abuso
+- Il **ranking non seleziona più i candidati** (era così nel disegno originale sopra): la selezione è **solo a raggio-km**, tutte le sedi nell'anello ricevono la pratica, nessun ordinamento/tie-break per rating. Il ranking (media valutazioni, soglia 5 per essere "rankata", evidenza rating <2.5) resta **solo un badge visivo per l'admin** su `/admin/agenzie`, **senza alcun effetto operativo** su distribuzione o sospensione.
+- **Auto-sospensione**: solo timeout/no-show. 5 `TIMEOUT` consecutivi sulla stessa sede (non intervallati da un'accettata/rifiutata) → `Sede.suspendedAt` automatico (`ANTI_ABUSO.AUTO_SUSPEND_TIMEOUT_THRESHOLD`). **Nessun decay** per rifiuti espliciti (il rifiuto esclude quella sede dal pool per quella pratica, non penalizza il ranking).
 
 #### Audit e KPI da tracciare
 - % pratiche risolte al round 1 / 2 / 3 / escalation
 - Tempo medio reale di assegnazione (clock time) e tempo lavorativo
-- Top comuni con più escalation (segnale per onboarding commerciale agenzie)
+- Zone scoperte (escalation per assenza di sedi entro 1 km — segnale onboarding commerciale agenzie)
 - Top agenzie per tasso di accettazione e tasso di rifiuto
-- Scostamento tra orari dichiarati e orari di effettiva attività (login/risposta)
-
-#### Da validare con Alberto e Andrea prima dello sviluppo
-- [ ] Conferma parametri di default (T1, T2, T3, R2, R3, N, Nmax)
-- [ ] Conferma testi notifiche N6 / N9 (rimossa) / N10 / N11
-- [ ] Conferma policy anti-abuso ranking
-- [ ] Conferma esistenza di un'agenzia "partner di fiducia" per escalation manuale
-- [ ] Conferma comportamento email N6 fuori orario (inviata subito vs schedulata all'apertura)
+- Copertura geocoding sedi agenzia attive (sedi senza `lat`/`lng` = zero pratiche ricevute)
 
 ---
 
@@ -272,23 +261,23 @@
 ## FASE 4 - Distribuzione pratica e Dashboard Agenzia
 
 ### 4.1 Algoritmo distribuzione
-- [x] Ricerca agenzie per comune/provincia selezionata (round 1)
-- [x] Ordinamento per rating (avg desc, non rankate a fine, sospese escluse)
-- [x] Soglia minima 5 valutazioni per applicare ranking (`RANKING.MIN_RATINGS_FOR_RANK`)
+- [x] Ricerca sedi agenzia **per raggio-km reale** dal luogo di consegna (Haversine su `lat`/`lng`, `distanceKm`) — **SHIPPED 2026-07-19**, sostituisce comune/provincia (vedi §0.5)
+- [x] ~~Ordinamento per rating~~ **rimosso 2026-07-19**: nessuna selezione/ordinamento per ranking, tutte le sedi nell'anello ricevono la pratica; il ranking resta solo badge visivo admin
+- [x] Soglia minima 5 valutazioni per il badge "rankata" (`RANKING.MIN_RATINGS_FOR_RANK`) — solo visualizzazione admin, nessun effetto su selezione/sospensione
 - [x] Gestione race condition "prima che accetta vince" (transazione accept chiude altre PENDING come ASSEGNATA_ALTRO)
-- [x] Implementazione flusso fallback 3 round + escalation (vedi §0.5)
-- [x] Countdown per-agenzia basato sui suoi orari di apertura
+- [x] Implementazione flusso raggio-km (500/750/1000 m) + pool cumulativo + escalation (vedi §0.5)
+- [x] Countdown per-agenzia basato sui suoi orari di apertura (finestre 4h/4h/4h)
 - [x] Engine "ore lavorative" (calcolo finestre, esclusione ChiusuraStraordinaria, multi-fascia)
-- [x] Trigger passaggio round successivo (on-event via reject, on-schedule via tickPratica)
+- [x] Trigger passaggio round successivo (on-event via reject, on-schedule via tickPratica) — pool cumulativo: le `PENDING` dei round precedenti si ri-armano, non vanno in TIMEOUT
 - [x] Stato pratica `IN_ATTESA_ROUND_1/2/3`, `IN_ESCALATION`
 - [x] UI admin per visualizzazione escalation (`/admin/escalation`)
 - [ ] UI admin per assegnazione manuale a partner di fiducia (solo lista, non ancora assign)
-- [x] Invio notifiche (N6) alle agenzie del round corrente
+- [x] Invio notifiche (N6) solo alle sedi **nuove** che entrano nel raggio del round corrente
 - [x] Endpoint `/api/jobs/distribuzione-tick` + pulsante admin manuale
-- [ ] Cron automatico scheduling (Vercel Cron / GitHub Actions)
-- [ ] Anti-abuso ranking (decay rifiuti consecutivi, sospensione timeout >5)
-- [ ] KPI dashboard fallback (% per round, tempi medi, comuni critici)
-- [ ] Raggio km reale 15 km per round 2 (oggi mappa province limitrofe hardcoded Veneto)
+- [x] Cron automatico scheduling (Vercel Cron, vedi A2)
+- [x] ~~Anti-abuso ranking (decay rifiuti consecutivi)~~ **rimosso**: resta solo auto-sospensione su 5 TIMEOUT consecutivi (no-show), nessun decay per rifiuti
+- [ ] KPI dashboard fallback (% per round, tempi medi, zone critiche)
+- [x] Raggio km reale (Haversine su `lat`/`lng`) — **SHIPPED 2026-07-19**, sostituisce la mappa province limitrofe hardcoded (rimossa `province-limitrofe.ts`)
 
 ### 4.2 Dashboard Agenzia
 - [x] Lista pratiche in arrivo (`/inbox` con PENDING + storico ultime decisioni)
@@ -403,10 +392,10 @@
 - [x] ~~Segnalazione abuso prezzo nelle note (flag `segnalazioneAbuso` in `Valutazione`)~~ **RIMOSSA (giu-2026)**: UI e logica eliminate, colonna `segnalazioneAbuso` droppata via migration.
 - [x] Calcolo rating medio agenzia (`attachRating` con GROUP BY on-demand)
 - [x] Soglia minima 5 valutazioni (`RANKING.MIN_RATINGS_FOR_RANK`)
-- [x] Integrazione rating nell'algoritmo distribuzione (`rankCandidates` in `avviaRound`)
-- [x] Sospensione automatica rating <2.5 (`RANKING.MIN_AVG_TO_STAY_ACTIVE`, visibile in `/admin/agenzie`)
+- [x] ~~Integrazione rating nell'algoritmo distribuzione (`rankCandidates` in `avviaRound`)~~ **rimosso 2026-07-19**: `lib/distribuzione/ranking.ts` eliminato, la selezione è solo a raggio-km (vedi §0.5); il rating resta calcolato ma non entra più in `avviaRound`
+- [x] ~~Sospensione automatica rating <2.5~~ **non più operativo**: rating basso è solo evidenza visiva in `/admin/agenzie` (badge "⚠ Rating basso"), nessuna sospensione automatica per rating — la sospensione automatica resta solo su 5 TIMEOUT consecutivi (`ANTI_ABUSO.AUTO_SUSPEND_TIMEOUT_THRESHOLD`, `lib/distribuzione/auto-suspend.ts`)
 - [ ] Review admin per agenzie sospese (UI di unsuspension / note)
-- [x] Ranking NON pubblico (visibile solo lato admin e usato dall'engine distribuzione)
+- [x] Ranking NON pubblico (visibile solo lato admin, badge senza effetto operativo sulla distribuzione)
 
 ---
 
@@ -785,10 +774,10 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 2 Auth | ~96% | Login, wizard split dealer/agenzia, invito utenti team, reset password, **2FA TOTP ora ENFORCED al sign-in (TOTP + backup code), non più solo setup (A9)** + rate-limit login attivo. Manca solo email reale (Resend) |
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
 | 3 Documenti/OCR/Pratiche | ~88% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**, **hard-block pre-invio su doc FAILED + fallback OCR manuale + download ZIP pratica + retention/purge cron**, **OCR Mindee provider integrato (Fase 1 sprint OCR 2026-05) — pronto per swap su prod test appena env vars disponibili**. Document AI custom-trained in attesa di raccolta libretti reali dal beta (Fase 2 sprint OCR). |
-| 4 Distribuzione + agenzia | 100% | Engine 3-round, ore lavorative, ranking con **anti-abuso decay rifiuti + auto-suspend 5 timeout (A3)**, **110 province italiane (A3)**, cron automatico (A2). Tutto pronto |
+| 4 Distribuzione + agenzia | 100% | Engine **raggio-km reale (500/750/1000 m) + pool cumulativo, no cap, escalation (A12, 2026-07-19)** — sostituisce il vecchio comune/limitrofi/provincia + ranking (A3); ore lavorative, auto-suspend 5 timeout, cron automatico (A2). Tutto pronto |
 | 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1). Modello fatturazione delegata in spec — vedi `sistema-fatturazione.md` (5 bundle FT-A/B/C/D/E) |
 | 6 Notifiche | ~98% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6) + N31 valuta agenzia post-firma. Cron Vercel automatico (A2). **Unsubscribe granulare + preferenze opt-out ora implementati** |
-| 7 Valutazioni/Ranking | 100% | Form 5⭐, rating in distribuzione, sospensione auto, **unsuspend UI con nota motivazione + banner valuta dashboard dealer (A7)** |
+| 7 Valutazioni/Ranking | 100% | Form 5⭐, **ranking dal 2026-07-19 è solo badge visivo admin (A12) — nessun effetto su distribuzione/sospensione**, sospensione auto solo su timeout, **unsuspend UI con nota motivazione + banner valuta dashboard dealer (A7)** |
 | 8 Listini / Osservatorio | 100% | **Modulo intero in prod (A1)**: form/upload listino agenzia, engine osservatorio per provincia, benchmark "tu vs media zona", dashboard admin |
 | 9 Admin panel | ~95% | Tutto in prod incluso **audit log accessi (A5)**. Manca solo configurazione parametri runtime (DB-driven, backlog) |
 | 10 CRM vendite esterno | — | **Superato** dalla FASE 14 (CRM nativo) post-decisione 2026-05-06 |
@@ -841,14 +830,14 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - `.env.example`: aggiunto `CRON_SECRET` con doc
 - Da fare lato Vercel dashboard: aggiungere env var `CRON_SECRET` con valore casuale
 
-**A3. ✅ DONE — Anti-abuso ranking + raggio territoriale esteso**
-- `ANTI_ABUSO` constants: `REJECT_DECAY_PER_REJECT=0.2`, `REJECT_DECAY_LOOKBACK=10`, `AUTO_SUSPEND_TIMEOUT_THRESHOLD=5`
-- `effectiveScore = ratingAvg − recentRejects × 0.2`: agenzia con 6 rifiuti consecutivi (4.5⭐) viene posizionata sotto un'agenzia onesta a 3.5⭐
-- `attachRating` ora carica anche le ultime 10 assegnazioni per agenzia e conta i rifiuti consecutivi recenti (rotti al primo ACCETTATA/TIMEOUT)
-- `checkAutoSuspendForAgenzie` cablato nel tickPratica dopo updateMany TIMEOUT: se 5 timeout consecutivi → `Company.suspendedAt` + cascade users SUSPENDED + nota audit "Auto: 5 TIMEOUT consecutivi (anti-abuso A3)"
-- `province-limitrofe.ts` espanso da 7 voci Veneto a 110 province italiane complete (vicini reali ISTAT 2024)
-- Util pure `ranking-util.ts` (no server-only) per testabilità isolata; 7 unit test
-- Backlog: raggio km vero (Haversine su lat/lng) richiede geocoding esterno (Nominatim/Google) — escluso da A3
+**A3. ✅ DONE (storico — superato da A12 il 2026-07-19) — Anti-abuso ranking + raggio territoriale esteso**
+> ⚠️ **Superato da A12**: la selezione per ranking (`effectiveScore`, decay rifiuti) e la mappa `province-limitrofe.ts` sono state **rimosse** il 2026-07-19 con il passaggio al raggio-km reale. Voce lasciata per storico/tracciabilità: quanto descritto sotto **non riflette più il codice attuale**.
+- ~~`ANTI_ABUSO` constants: `REJECT_DECAY_PER_REJECT=0.2`, `REJECT_DECAY_LOOKBACK=10`, `AUTO_SUSPEND_TIMEOUT_THRESHOLD=5`~~ — resta solo `AUTO_SUSPEND_TIMEOUT_THRESHOLD=5`, il decay è stato rimosso
+- ~~`effectiveScore = ratingAvg − recentRejects × 0.2`~~ — rimosso, nessuna selezione per ranking
+- ~~`attachRating` carica le ultime 10 assegnazioni e conta i rifiuti consecutivi~~ — rimosso insieme a `ranking.ts`
+- `checkAutoSuspendForAgenzie` (oggi `checkAutoSuspendForSedi`, multi-sede) resta cablato nel tick dopo updateMany TIMEOUT: se 5 timeout consecutivi → sospensione automatica + nota audit — **questa parte è rimasta invariata**
+- ~~`province-limitrofe.ts` espanso da 7 voci Veneto a 110 province italiane complete~~ — file **rimosso** il 2026-07-19 (sostituito da `distanceKm` su coordinate reali)
+- Backlog risolto da A12: raggio km vero (Haversine su lat/lng) — implementato il 2026-07-19
 
 **A4. ✅ DONE — Gating documentale UI (rule-based)**
 - `lib/documenti/classifier.ts` con `classifyDocumento(input)` puro: regole MIME accettato (PDF/JPG/PNG), size minima 30KB, size massima 10MB, naming hints fronte/retro per CI
@@ -865,7 +854,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - ✅ **Assegnazione manuale escalation** — già implementata (`/admin/escalation` con `<AssignForm>` + `assegnaEscalationAction`, preload agenzie per provincia con rating + count valutazioni)
 - ✅ **Report finanziari export CSV** — già implementati per affiliazioni (`/api/admin/affiliazioni/export`), dashboard finanze (`/api/admin/dashboard/export`), contatti (`/api/admin/contatti/export`)
 - ✅ **Audit log accessi** — pagina `/admin/audit-log` con: 4 stat cards (utenti totali, login oggi, login ultimi 7gg, mai loggati), filtro ruolo + ricerca testuale (email/nome/ragione sociale), paginazione 50/pagina, sortato per `lastLoginAt` desc, gated `ADMIN_PIATTAFORMA`
-- ⏭ **Configurazione parametri runtime** — differita a backlog: richiede modello DB `Settings` chiave-valore o approccio simile, scope troppo grosso per scope A5. Oggi: parametri hardcoded in `lib/distribuzione/config.ts`, `lib/wallet/config.ts`, `lib/ranking.ts` con `payoutThresholdCent` configurabile per company.
+- ⏭ **Configurazione parametri runtime** — differita a backlog: richiede modello DB `Settings` chiave-valore o approccio simile, scope troppo grosso per scope A5. Oggi: parametri hardcoded in `lib/distribuzione/constants.ts` (raggi/finestre/ranking-badge, vedi A12), `lib/wallet/config.ts`, con `payoutThresholdCent` configurabile per company.
 
 **A6. ✅ DONE — AF-PDF rendiconto + N25 cron mensile**
 - `lib/pdf/rendiconto.ts` con `pdf-lib` (puro JS, no chromium): rendiconto A4 portrait con sezioni separate "Crediti da pratiche" + "Crediti da affiliazione" + totali e subtotali
@@ -927,6 +916,26 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Refactor: SiteFooter estratto componente, isPublicPath helper con prefix /guide
 - Spec: `docs/superpowers/specs/2026-05-25-guide-b2c-design.md` · Plan: `docs/superpowers/plans/2026-05-25-guide-b2c.md`
 
+**A12. ✅ DONE — [2026-07-19] Distribuzione a raggio-km reale + pool cumulativo (sostituisce comune/limitrofi/provincia + ranking)**
+- `Pratica.lat/lng` (nuovi campi, migration a mano): coordinate del luogo di consegna scelto dal broker via `AddressAutocomplete` (Google Places), **obbligatorie al submit** (validate con `parseCoords`; senza selezione dall'elenco il submit è bloccato con errore sul campo luogo)
+- `lib/geo/coords.ts` → nuovo `distanceKm` (Haversine, puro, testato: distanze note, simmetria, zero su punto identico)
+- `lib/distribuzione/constants.ts` riscritto: `RAGGI_KM=[0.5,0.75,1]` (round 1/2/3 = 500/750/1000 m), `T1_HOURS/T2_HOURS/T3_HOURS=4/4/4`; spariti `N_PER_ROUND`/`N_MAX`
+- `avviaRound` (`lib/distribuzione/tick.ts`) riscritto: seleziona **tutte** le sedi agenzia idonee (coordinate presenti, non sospese/eliminate, madre non bloccata, visura valida) entro il raggio del round, cascade su anello vuoto (salta subito al raggio successivo), nessuna selezione/ordinamento per ranking
+- `tickPratica` riscritto per **pool cumulativo**: guarda tutte le `PENDING` di qualunque round (non solo quello corrente); all'avanzamento le `PENDING` scadute **non vanno in TIMEOUT** ma si ri-armano con finestra fresca; l'escalation (solo a round 3 scaduto) mette in TIMEOUT tutte le `PENDING` in un colpo solo
+- `lib/distribuzione/ranking.ts` **rimosso** (codice morto dopo la riscrittura): il ranking non seleziona più i candidati, resta **solo badge visivo admin** su `/admin/agenzie` (nessun effetto operativo su distribuzione/sospensione)
+- `lib/distribuzione/province-limitrofe.ts` (+ test) **rimosso**: la mappa 110 province ISTAT non serve più
+- Auto-sospensione (`auto-suspend.ts`) rimane ma **solo timeout/no-show** (5 TIMEOUT consecutivi sulla sede), nessun decay per rifiuti
+- N6 inviata solo alle sedi **nuove** che entrano nel raggio del round; le sedi già contattate restano nella loro inbox senza nuova email
+- Spec: `docs/superpowers/specs/2026-07-19-distribuzione-raggio-km-design.md` · Plan: `docs/superpowers/plans/2026-07-19-distribuzione-raggio-km.md`
+- Aggiorna §0.5, FASE 4.1, FASE 7 sopra (dettagli completi lì)
+
+**A13. ✅ DONE — [2026-07-19] Giustificativo interno costo promo ("Documento 2", art. 108 TUIR)**
+- Nuovo modello `GiustificativoInterno` (+ `GiustificativoInternoTipo`, nuovo `ContatoreFiscaleTipo.GIUSTIFICATIVO_INTERNO` per numerazione interna `GI-<anno>-NNNNN` via `prossimoContatore` con `idSoggetto` fisso PV) — migration a mano, tabella separata da `DocumentoFiscale` (mai esposto su `/fatturazione` del broker)
+- `lib/fatturazione/giustificativo-promo.ts`: `createGiustificativoPromo({ payoutId })` chiamato dopo `settlePayout` quando il payout aggancia credito `CREDITO_PROMO`; best-effort e idempotente (`payoutId` unique); somma il promo lordo, risale ai `PromoCodeRedemption` via `transazioneWalletId` per popolare `righe`/`datiBeneficiario`
+- `createDocBroker` **invariato**: filtra esplicitamente `CREDITO_PRATICA`/`CREDITO_AFFILIAZIONE`, il bonus promo resta sempre fuori dalla fattura (regressione blindata da test)
+- Pagina `/admin/costi-promozionali`: lista + filtro intervallo date + export CSV (`lib/fatturazione/giustificativo-filtri.ts`), internal only, nessuna esposizione lato broker/agenzia
+- Spec: `docs/superpowers/specs/2026-07-19-giustificativo-costo-promo-design.md` · Plan: `docs/superpowers/plans/2026-07-19-giustificativo-costo-promo.md`
+
 ### B · Bloccato da account/decisione esterna
 
 | Blocco | Cosa serve | Cosa sblocca |
@@ -944,7 +953,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ### C · Da decidere
 
-- B2 fallback 5 agenzie (proposta in §0.5, manca ok finale)
+- ~~B2 fallback nessuna agenzia accetta~~ **risolto**: shippato come raggio-km + pool cumulativo (vedi §0.5, A12)
 - B5 era "scelta HubSpot vs Airtable" — **superato** dalla FASE 14 CRM nativo
 - Cap durata commissione affiliazione (sempre vs 24 mesi) — D-04 risolto a "sempre"
 - Soglia payout uniforme — D-05 risolto a "uguale per tutti"
@@ -956,7 +965,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | # | Blocco | Stato | Impatto | Owner |
 |---|--------|-------|---------|-------|
 | B1 | Validazione commercialista modello fatturazione delegata (`sistema-fatturazione.md` §9) | **Confermato 2026-06-17** | Sbloccata FT-D XML (fatta); resta gated solo l'account provider SDI (A-Cube) | Andrea + Commercialista |
-| B2 | Fallback 5 agenzie non accettano | Proposta in §0.5, da validare | Sblocca Fase 4.1 una volta approvato | Alberto + Andrea |
+| B2 | Fallback se nessuna agenzia accetta | **Risolto (shipped 2026-07-19)**: raggio-km + pool cumulativo, vedi §0.5 / A12 | Sblocca Fase 4.1 (fatto) | — |
 | B3 | Naming definitivo | Risolto: **Passaggio Veloce** | — | — |
 | B4 | CTO socio fondatore | Risolto: **Francesco Sioli** | — | — |
 | B5 | Scelta CRM core (HubSpot vs Airtable) | Aperto | Sblocca Fase 10.3 | CTO |

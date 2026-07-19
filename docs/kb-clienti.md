@@ -70,10 +70,12 @@ Verifica sempre con una visura PRA prima di inviare, per ogni veicolo della prat
 
 ## Come vengono scelte le agenzie
 
-Non scegli l'agenzia manualmente. Alla conferma, la pratica viene distribuita
-automaticamente in più round: prima alle agenzie del **comune**, poi (se nessuna accetta in
-tempo) ai **comuni limitrofi**, infine a tutta la **provincia**. Le agenzie sono ordinate
-per affidabilità (valutazioni reali) e la **prima che accetta** la prende in carico.
+Non scegli l'agenzia manualmente. Alla conferma, la richiesta viene inviata automaticamente
+alle agenzie più vicine al **luogo di consegna** che hai indicato, in cerchi progressivamente
+più ampi e in più round: si parte dalle agenzie più vicine e, se nessuna accetta in tempo, il
+raggio si allarga per includere altre agenzie via via più distanti. Le agenzie già contattate
+nei round precedenti restano libere di accettare finché la pratica non viene presa in carico.
+La **prima agenzia che accetta** la prende in carico.
 
 Ogni agenzia ha un tempo per rispondere: il **countdown considera solo gli orari di apertura**
 dell'agenzia (non scorre quando è chiusa). Se dopo tutti i round nessuna agenzia accetta, la
@@ -92,11 +94,11 @@ lo stato della pratica e le notifiche.
 
 ## Lato agenzia
 
-- Ricevi solo pratiche **complete e già verificate** dalla tua provincia.
+- Ricevi solo pratiche **complete e già verificate**, per i luoghi di consegna vicini alla tua sede.
 - Decidi quali **accettare** in base ai tuoi orari di apertura.
 - Lavori la pratica, fissi l'appuntamento per la firma e, a firma avvenuta, la flagghi come completata.
 - L'addebito della fee di piattaforma è automatico e avviene **al momento della firma** (addebito immediato tramite mandato SEPA).
-- Un sistema di **ranking trasparente** basato sulle valutazioni reali influenza la distribuzione delle pratiche.
+- Le valutazioni che ricevi dai dealer restano visibili nel tuo profilo e contribuiscono alla tua reputazione sulla piattaforma.
 
 ## Wallet e payout (broker)
 

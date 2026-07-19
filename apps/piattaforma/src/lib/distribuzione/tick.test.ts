@@ -5,7 +5,7 @@ const { tx, prismaMock } = vi.hoisted(() => {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     sede: { findMany: vi.fn() },
     valutazione: { groupBy: vi.fn() },
-    praticaAssegnazione: { findMany: vi.fn(), create: vi.fn() },
+    praticaAssegnazione: { findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
     orariApertura: { findMany: vi.fn() },
     chiusuraStraordinaria: { findMany: vi.fn() },
     praticaStatoLog: { create: vi.fn() },
@@ -36,7 +36,7 @@ vi.mock('@/lib/notifiche/pratica', () => ({
   destinatariBroker: vi.fn(() => Promise.resolve([])),
 }));
 
-import { avviaRound1ForPratica } from './tick';
+import { avviaRound1ForPratica, tickPratica } from './tick';
 import { sendNotifications } from '@/lib/notifiche';
 import { destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
@@ -57,7 +57,7 @@ beforeEach(() => {
     .mockResolvedValueOnce({ id: 'p1', provincia: 'VE', lat: LAT0, lng: LNG0, distribuzioneCiclo: 1, assegnazioni: [] })
     .mockResolvedValueOnce({ stato: 'IN_ATTESA_ROUND_1' });
   // Tre sedi: m1 ne ha due (s1, s2), m2 una (s3). Atteso: tutte e tre contattate (nessun dedup).
-  // Tutte alla stessa coordinata dell'origine (distanza 0) → dentro il raggio round 1 (2 km).
+  // Tutte alla stessa coordinata dell'origine (distanza 0) → dentro il raggio round 1 (500 m).
   tx.sede.findMany.mockResolvedValue([
     { id: 's1', createdAt: new Date('2026-01-01'), nome: 'A1', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'm1' },
     { id: 's2', createdAt: new Date('2026-01-02'), nome: 'A2', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'm1' },
@@ -69,6 +69,8 @@ beforeEach(() => {
   tx.chiusuraStraordinaria.findMany.mockResolvedValue([]);
   let n = 0;
   tx.praticaAssegnazione.create.mockImplementation(() => Promise.resolve({ id: `a${++n}` }));
+  tx.praticaAssegnazione.updateMany.mockResolvedValue({ count: 0 });
+  tx.praticaAssegnazione.update.mockResolvedValue({});
   tx.pratica.update.mockResolvedValue({});
   prismaMock.praticaAssegnazione.findMany.mockResolvedValue([]);
   // Default: nessuna pratica trovata → emitEscalationNotifications ritorna
@@ -395,18 +397,18 @@ describe('N6_AGENZIA_NUOVA_PRATICA: fan-out ai membri della sede assegnataria', 
 });
 
 describe('Task 5: avviaRound a raggio-km + cascade', () => {
-  it('round 1: assegna TUTTE le sedi entro 2 km, nessuna oltre (nessun cap)', async () => {
+  it('round 1: assegna TUTTE le sedi entro 500 m, nessuna oltre (nessun cap)', async () => {
     tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sVicina1', lat: kmLat(0.5), lng: LNG0, companyId: 'm1' },
-      { id: 'sVicina2', lat: kmLat(1.5), lng: LNG0, companyId: 'm2' },
-      { id: 'sLontana3km', lat: kmLat(3), lng: LNG0, companyId: 'm3' },
+      { id: 'sVicina1', lat: kmLat(0.2), lng: LNG0, companyId: 'm1' },
+      { id: 'sVicina2', lat: kmLat(0.45), lng: LNG0, companyId: 'm2' },
+      { id: 'sLontana600m', lat: kmLat(0.6), lng: LNG0, companyId: 'm3' },
     ]);
 
     await avviaRound1ForPratica('p1');
 
     const calls = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data);
     const sedeIds = calls.map((d) => d.sedeId).sort();
-    expect(sedeIds).toEqual(['sVicina1', 'sVicina2']); // sLontana3km NON assegnata
+    expect(sedeIds).toEqual(['sVicina1', 'sVicina2']); // sLontana600m NON assegnata
     expect(calls.every((d) => d.round === 1)).toBe(true);
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ATTESA_ROUND_1' }) }),
@@ -436,33 +438,33 @@ describe('Task 5: avviaRound a raggio-km + cascade', () => {
     expect(where.id).toEqual({ notIn: ['sGiaContattata'] });
   });
 
-  it('cascade: 0 sedi entro 2 km ma 1 entro 5 km → assegnata al round 2 (raggio 5), stato IN_ATTESA_ROUND_2', async () => {
+  it('cascade: 0 sedi entro 500 m ma 1 entro 750 m → assegnata al round 2 (raggio 750 m), stato IN_ATTESA_ROUND_2', async () => {
     tx.pratica.findUnique.mockReset();
     tx.pratica.findUnique
       .mockResolvedValueOnce({ id: 'p1', lat: LAT0, lng: LNG0, distribuzioneCiclo: 1, assegnazioni: [] })
       .mockResolvedValueOnce({ stato: 'IN_ATTESA_ROUND_2' });
     tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sMedia4km', lat: kmLat(4), lng: LNG0, companyId: 'mMedia' },
+      { id: 'sMedia600m', lat: kmLat(0.6), lng: LNG0, companyId: 'mMedia' },
     ]);
 
     await avviaRound1ForPratica('p1');
 
     expect(tx.praticaAssegnazione.create).toHaveBeenCalledTimes(1);
     expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ sedeId: 'sMedia4km', round: 2 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ sedeId: 'sMedia600m', round: 2 }) }),
     );
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ATTESA_ROUND_2' }) }),
     );
   });
 
-  it('escalation: nessuna sede entro 10 km → escalated true, stato IN_ESCALATION, nessuna assegnazione creata', async () => {
+  it('escalation: nessuna sede entro 1 km → escalated true, stato IN_ESCALATION, nessuna assegnazione creata', async () => {
     tx.pratica.findUnique.mockReset();
     tx.pratica.findUnique
       .mockResolvedValueOnce({ id: 'p1', lat: LAT0, lng: LNG0, distribuzioneCiclo: 1, assegnazioni: [] })
       .mockResolvedValueOnce({ stato: 'IN_ESCALATION' });
     tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sLontanissima12km', lat: kmLat(12), lng: LNG0, companyId: 'mLontanissima' },
+      { id: 'sLontanissima1_5km', lat: kmLat(1.5), lng: LNG0, companyId: 'mLontanissima' },
     ]);
 
     const result = await avviaRound1ForPratica('p1');
@@ -490,5 +492,166 @@ describe('Task 5: avviaRound a raggio-km + cascade', () => {
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ESCALATION' }) }),
     );
+  });
+});
+
+describe('Task 9: tickPratica — pool cumulativo (le PENDING precedenti restano accettabili)', () => {
+  const NOW = new Date('2026-07-19T12:00:00Z');
+  const SCADUTO = new Date('2026-07-19T08:00:00Z'); // countdownFineAt nel passato
+  const APERTO = new Date('2026-07-19T18:00:00Z'); // countdownFineAt nel futuro
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('avanzamento: le PENDING scadute del round precedente restano PENDING (nessun updateMany→TIMEOUT) e vengono ri-armate con finestra fresca', async () => {
+    tx.pratica.findUnique.mockReset();
+    tx.pratica.findUnique.mockResolvedValueOnce({
+      id: 'p1',
+      stato: 'IN_ATTESA_ROUND_1',
+      lat: LAT0,
+      lng: LNG0,
+      distribuzioneCiclo: 1,
+      assegnazioni: [
+        { id: 'aRound1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
+      ],
+    });
+    // round 2: una nuova sede in zona (0.75 km)
+    tx.sede.findMany.mockResolvedValueOnce([{ id: 's2', lat: LAT0, lng: LNG0, companyId: 'm2' }]);
+    // riarmaPendingScadute rilegge le PENDING scadute
+    tx.praticaAssegnazione.findMany.mockResolvedValueOnce([{ id: 'aRound1', sedeId: 's1' }]);
+
+    const result = await tickPratica('p1');
+
+    expect(result).toEqual({ status: 'advanced-round', nextRound: 2, assegnazioni: 1 });
+    // Niente TIMEOUT di massa sul round precedente: il pool è cumulativo.
+    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
+    // La PENDING scaduta viene ri-armata (nuova finestra), NON toccata nell'esito.
+    expect(tx.praticaAssegnazione.update).toHaveBeenCalledWith({
+      where: { id: 'aRound1' },
+      data: { countdownInizioAt: null, countdownFineAt: null },
+    });
+    // La nuova sede del round 2 è stata contattata.
+    expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ sedeId: 's2', round: 2, esito: 'PENDING' }) }),
+    );
+  });
+
+  it('attesa: se anche una sola PENDING è ancora nella sua finestra → noop, nessun avanzamento né timeout', async () => {
+    tx.pratica.findUnique.mockReset();
+    tx.pratica.findUnique.mockResolvedValueOnce({
+      id: 'p1',
+      stato: 'IN_ATTESA_ROUND_1',
+      lat: LAT0,
+      lng: LNG0,
+      distribuzioneCiclo: 1,
+      assegnazioni: [
+        { id: 'a1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
+        { id: 'a2', sedeId: 's2', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: APERTO },
+      ],
+    });
+
+    const result = await tickPratica('p1');
+
+    expect(result).toEqual({ status: 'noop', reason: 'finestra aperta' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.update).not.toHaveBeenCalled();
+  });
+
+  it('round 3, tutte le PENDING scadute → escalation: TIMEOUT su TUTTE le PENDING (qualunque round) + IN_ESCALATION', async () => {
+    tx.pratica.findUnique.mockReset();
+    tx.pratica.findUnique.mockResolvedValueOnce({
+      id: 'p1',
+      stato: 'IN_ATTESA_ROUND_3',
+      lat: LAT0,
+      lng: LNG0,
+      distribuzioneCiclo: 1,
+      assegnazioni: [
+        { id: 'a1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
+        { id: 'a2', sedeId: 's2', round: 2, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
+        { id: 'a3', sedeId: 's3', round: 3, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
+      ],
+    });
+    tx.praticaAssegnazione.findMany.mockResolvedValueOnce([
+      { id: 'a1', sedeId: 's1' },
+      { id: 'a2', sedeId: 's2' },
+      { id: 'a3', sedeId: 's3' },
+    ]);
+
+    const result = await tickPratica('p1');
+
+    expect(result).toEqual({ status: 'escalated' });
+    expect(tx.praticaAssegnazione.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['a1', 'a2', 'a3'] } },
+      data: { esito: 'TIMEOUT', esitoAt: NOW },
+    });
+    expect(tx.pratica.update).toHaveBeenCalledWith({
+      where: { id: 'p1' },
+      data: { stato: 'IN_ESCALATION', escalationAt: NOW },
+    });
+    // Round 3 esaurito: nessuna nuova selezione di sedi.
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+  });
+
+  it('una assegnazione ACCETTATA → noop, nessun avanzamento né timeout (qualunque round)', async () => {
+    tx.pratica.findUnique.mockReset();
+    tx.pratica.findUnique.mockResolvedValueOnce({
+      id: 'p1',
+      stato: 'IN_ATTESA_ROUND_2',
+      lat: LAT0,
+      lng: LNG0,
+      distribuzioneCiclo: 1,
+      assegnazioni: [
+        { id: 'a1', sedeId: 's1', round: 1, ciclo: 1, esito: 'TIMEOUT', countdownFineAt: SCADUTO },
+        { id: 'a2', sedeId: 's2', round: 2, ciclo: 1, esito: 'ACCETTATA', countdownFineAt: SCADUTO },
+      ],
+    });
+
+    const result = await tickPratica('p1');
+
+    expect(result).toEqual({ status: 'noop', reason: 'già accettata' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.update).not.toHaveBeenCalled();
+  });
+
+  it('CRITICO: avanzamento con cascade esaurita in avviaRound (nessuna sede in nessun anello) → escalation che mette in TIMEOUT anche le PENDING del round precedente (pool cumulativo)', async () => {
+    tx.pratica.findUnique.mockReset();
+    tx.pratica.findUnique.mockResolvedValueOnce({
+      id: 'p1',
+      stato: 'IN_ATTESA_ROUND_1',
+      lat: LAT0,
+      lng: LNG0,
+      distribuzioneCiclo: 1,
+      assegnazioni: [
+        { id: 'aRound1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
+      ],
+    });
+    // avviaRound(tx, pratica, 2): nessuna sede idonea in nessun anello (2 o 3) → escalation interna
+    tx.sede.findMany.mockResolvedValueOnce([]);
+    // escalatePratica (dentro avviaRound) rilegge TUTTE le PENDING della pratica, qualunque round
+    tx.praticaAssegnazione.findMany.mockResolvedValueOnce([{ id: 'aRound1', sedeId: 's1' }]);
+
+    const result = await tickPratica('p1');
+
+    expect(result).toEqual({ status: 'escalated' });
+    // La PENDING del round 1 (non più il round "corrente") viene comunque messa in TIMEOUT:
+    // altrimenti quell'agenzia potrebbe ancora accettare una pratica già escalata (l'accept
+    // controlla solo esito:'PENDING', non lo stato della pratica).
+    expect(tx.praticaAssegnazione.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['aRound1'] } },
+      data: { esito: 'TIMEOUT', esitoAt: NOW },
+    });
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ESCALATION', escalationAt: NOW }) }),
+    );
+    // Nessuna ri-armatura: l'escalation ha già chiuso tutto.
+    expect(tx.praticaAssegnazione.update).not.toHaveBeenCalled();
   });
 });

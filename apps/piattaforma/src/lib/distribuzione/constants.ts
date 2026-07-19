@@ -3,10 +3,10 @@
  * Sostituibili via DB admin config in Fase 9.
  */
 export const DISTRIBUZIONE = {
-  RAGGI_KM: [2, 5, 10] as const, // raggi round 1 / 2 / 3 (km)
-  T1_HOURS: 8, // finestra round 1
-  T2_HOURS: 8, // finestra round 2
-  T3_HOURS: 8, // finestra round 3
+  RAGGI_KM: [0.5, 0.75, 1], // round 1/2/3 = 500/750/1000 m
+  T1_HOURS: 4,
+  T2_HOURS: 4,
+  T3_HOURS: 4,
 } as const;
 
 /**

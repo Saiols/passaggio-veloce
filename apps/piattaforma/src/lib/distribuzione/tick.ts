@@ -36,6 +36,53 @@ type PostCommitJobs = {
   escalationPraticaId: string | null; // emette N10 + N11
 };
 
+/** Escalation: mette in TIMEOUT TUTTE le PENDING della pratica (pool cumulativo →
+ *  dopo l'escalation nessuno deve poter accettare), poi IN_ESCALATION. Scatta anche
+ *  l'anti-abuso sui no-show. */
+async function escalatePratica(tx: Prisma.TransactionClient, praticaId: string, now: Date): Promise<void> {
+  const pending = await tx.praticaAssegnazione.findMany({
+    where: { praticaId, esito: 'PENDING' },
+    select: { id: true, sedeId: true },
+  });
+  if (pending.length > 0) {
+    await tx.praticaAssegnazione.updateMany({
+      where: { id: { in: pending.map((a) => a.id) } },
+      data: { esito: 'TIMEOUT', esitoAt: now },
+    });
+    const sedi = Array.from(new Set(pending.map((a) => a.sedeId).filter((x): x is string => x != null)));
+    await checkAutoSuspendForSedi(tx, sedi);
+  }
+  await tx.pratica.update({ where: { id: praticaId }, data: { stato: 'IN_ESCALATION', escalationAt: now } });
+}
+
+/** Ri-arma le PENDING SCADUTE (le nuove appena create hanno già finestra fresca)
+ *  con una nuova finestra di `hours` ore lavorative, per gli orari di ciascuna sede
+ *  → scadenza allineata che avanza. NON tocca l'esito (restano PENDING). */
+async function riarmaPendingScadute(
+  tx: Prisma.TransactionClient,
+  praticaId: string,
+  now: Date,
+  hours: number,
+): Promise<void> {
+  const scadute = await tx.praticaAssegnazione.findMany({
+    where: { praticaId, esito: 'PENDING', countdownFineAt: { lte: now } },
+    select: { id: true, sedeId: true },
+  });
+  if (scadute.length === 0) return;
+  const orariMap = await loadOrariPerSedi(
+    scadute.map((a) => a.sedeId).filter((x): x is string => x != null),
+    tx,
+  );
+  for (const a of scadute) {
+    const orari = a.sedeId ? (orariMap.get(a.sedeId) ?? { fasce: {}, chiusure: [] }) : { fasce: {}, chiusure: [] };
+    const { inizio, fine } = computeCountdown(now, hours, orari);
+    await tx.praticaAssegnazione.update({
+      where: { id: a.id },
+      data: { countdownInizioAt: inizio, countdownFineAt: fine },
+    });
+  }
+}
+
 export async function tickPratica(praticaId: string): Promise<TickResult> {
   const { result, jobs } = await prisma.$transaction(async (tx) => {
     const pratica = await tx.pratica.findUnique({
@@ -63,67 +110,46 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
     }
 
     const now = new Date();
-    const assegnazioniCorrenti = pratica.assegnazioni.filter((a) => a.round === currentRound);
 
-    const daScadere = assegnazioniCorrenti.filter(
-      (a) => a.esito === 'PENDING' && a.countdownFineAt && a.countdownFineAt <= now,
-    );
-
-    if (daScadere.length > 0) {
-      await tx.praticaAssegnazione.updateMany({
-        where: { id: { in: daScadere.map((a) => a.id) } },
-        data: { esito: 'TIMEOUT', esitoAt: now },
-      });
-      for (const a of daScadere) {
-        a.esito = 'TIMEOUT';
-        a.esitoAt = now;
-      }
-      // A3 anti-abuso: dopo aver marcato TIMEOUT, controlla se le SEDI
-      // hanno ora 5+ timeout consecutivi → auto-suspend (per sede).
-      const sediToCheck = Array.from(
-        new Set(daScadere.map((a) => a.sedeId).filter((x): x is string => x != null)),
-      );
-      await checkAutoSuspendForSedi(tx, sediToCheck);
-    }
-
-    const ancoraPending = assegnazioniCorrenti.some((a) => a.esito === 'PENDING');
-    if (ancoraPending) {
-      return daScadere.length > 0
-        ? { result: { status: 'timeouts-marked' as const, count: daScadere.length }, jobs: emptyJobs() }
-        : { result: { status: 'noop' as const, reason: 'assegnazioni pending' }, jobs: emptyJobs() };
-    }
-
-    const accettata = assegnazioniCorrenti.some((a) => a.esito === 'ACCETTATA');
+    // Pool cumulativo: TUTTE le PENDING (qualunque round), non solo il round corrente.
+    const pending = pratica.assegnazioni.filter((a) => a.esito === 'PENDING');
+    const accettata = pratica.assegnazioni.some((a) => a.esito === 'ACCETTATA');
     if (accettata) {
-      return { result: { status: 'noop' as const, reason: 'round già risolto con accettazione' }, jobs: emptyJobs() };
+      return { result: { status: 'noop' as const, reason: 'già accettata' }, jobs: emptyJobs() };
     }
 
+    // Se almeno una PENDING è ancora nella sua finestra → attesa.
+    const ancoraAperta = pending.some((a) => a.countdownFineAt != null && a.countdownFineAt > now);
+    if (ancoraAperta) {
+      return { result: { status: 'noop' as const, reason: 'finestra aperta' }, jobs: emptyJobs() };
+    }
+
+    // Tutte le PENDING scadute (o nessuna) e nessuno ha accettato.
     if (currentRound < 3) {
       const nextRound = (currentRound + 1) as 1 | 2 | 3;
       const { count, newAssegnazioniIds, escalated, round: reached } = await avviaRound(tx, pratica, nextRound);
+      if (!escalated) {
+        // Ri-arma le PENDING scadute (le nuove hanno già finestra fresca) con la
+        // finestra del round raggiunto → scadenza allineata che avanza.
+        await riarmaPendingScadute(tx, praticaId, now, ROUND_TO_HOURS[reached]);
+      }
       await logCambioStato(tx, {
         praticaId,
         statoDa: pratica.stato,
         statoA: escalated ? 'IN_ESCALATION' : statoNomePerRound(reached),
         tipoEvento: escalated ? STATO_EVENTO.ESCALATION : STATO_EVENTO.ROUND_ADVANCE,
-        meta: { round: escalated ? currentRound : reached, ciclo: pratica.distribuzioneCiclo },
+        meta: { round: reached, ciclo: pratica.distribuzioneCiclo },
       });
       return {
         result: escalated
           ? { status: 'escalated' as const }
           : { status: 'advanced-round' as const, nextRound: reached, assegnazioni: count },
-        jobs: {
-          newAssegnazioniIds,
-          escalationPraticaId: escalated ? praticaId : null,
-        },
+        jobs: { newAssegnazioniIds, escalationPraticaId: escalated ? praticaId : null },
       };
     }
 
-    // Round 3 esaurito → escalation
-    await tx.pratica.update({
-      where: { id: praticaId },
-      data: { stato: 'IN_ESCALATION', escalationAt: now },
-    });
+    // Round 3, tutte scadute, nessuno ha accettato → escalation (TIMEOUT a tutte).
+    await escalatePratica(tx, praticaId, now);
     await logCambioStato(tx, {
       praticaId,
       statoDa: pratica.stato,
@@ -131,10 +157,7 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
       tipoEvento: STATO_EVENTO.ESCALATION,
       meta: { round: currentRound, ciclo: pratica.distribuzioneCiclo },
     });
-    return {
-      result: { status: 'escalated' as const },
-      jobs: { newAssegnazioniIds: [], escalationPraticaId: praticaId },
-    };
+    return { result: { status: 'escalated' as const }, jobs: { newAssegnazioniIds: [], escalationPraticaId: praticaId } };
   });
 
   await processPostCommitJobs(jobs);
@@ -158,10 +181,7 @@ export async function avviaRound(
   // Senza coordinate della pratica non possiamo calcolare distanze → escalation.
   // (Non dovrebbe accadere: il submit le rende obbligatorie; guardia difensiva.)
   if (pratica.lat == null || pratica.lng == null) {
-    await tx.pratica.update({
-      where: { id: pratica.id },
-      data: { stato: 'IN_ESCALATION', escalationAt: now },
-    });
+    await escalatePratica(tx, pratica.id, now);
     return { count: 0, newAssegnazioniIds: [], escalated: true, round: 3 };
   }
   const origine = { lat: pratica.lat, lng: pratica.lng };
@@ -228,11 +248,8 @@ export async function avviaRound(
     return { count: inRing.length, newAssegnazioniIds: newIds, escalated: false, round: r as 1 | 2 | 3 };
   }
 
-  // Nessuna sede fino a 10 km → escalation.
-  await tx.pratica.update({
-    where: { id: pratica.id },
-    data: { stato: 'IN_ESCALATION', escalationAt: now },
-  });
+  // Nessuna sede fino a 1 km → escalation.
+  await escalatePratica(tx, pratica.id, now);
   return { count: 0, newAssegnazioniIds: [], escalated: true, round: 3 };
 }
 

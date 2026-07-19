@@ -477,6 +477,7 @@ model Company {
 
   // Codici promozionali riscattati da questa azienda (in registrazione)
   promoRedemptions PromoCodeRedemption[]
+  giustificativiPromo GiustificativoInterno[] @relation("GiustificativiPromo")
 
   // Listini (agenzia)
   listini Listino[]
@@ -1354,6 +1355,7 @@ model Payout {
 
   transazioni      TransazioneWallet[]
   documentoFiscale DocumentoFiscale?
+  giustificativoInterno GiustificativoInterno?
 
   @@index([walletId, stato])
   @@map("payouts")
@@ -1649,6 +1651,41 @@ model DocumentoFiscale {
   @@index([emittenteCompanyId, anno])
   @@index([emessoAt])
   @@map("documenti_fiscali")
+}
+
+enum GiustificativoInternoTipo {
+  COSTO_PROMO
+}
+
+/// Giustificativo interno di costo (art. 108 TUIR) — NON fiscale, NON SdI.
+/// Documenta il bonus promozionale incassato in un payout ("Documento 2").
+model GiustificativoInterno {
+  id   String                    @id @default(uuid()) @db.Uuid
+  tipo GiustificativoInternoTipo @default(COSTO_PROMO)
+
+  // Numerazione interna progressiva (registro "GI", reset annuale) — separata
+  // dal registro fiscale (ContatoreFiscale, idSoggetto "PV").
+  numeroProgressivo Int
+  anno              Int
+  numeroStr         String @unique // es. "GI-2026-00001"
+
+  importoCent Int    // sempre positivo (costo promozionale erogato)
+  causale     String
+
+  payoutId String @unique @db.Uuid
+  payout   Payout @relation(fields: [payoutId], references: [id])
+
+  beneficiarioCompanyId String?  @db.Uuid
+  beneficiarioCompany   Company? @relation("GiustificativiPromo", fields: [beneficiarioCompanyId], references: [id])
+  datiBeneficiario      Json     // snapshot immutabile (ragione sociale, p.iva…)
+
+  righe Json // [{ code, dataIscrizione, amountCent, redemptionId }]
+
+  emessoAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@unique([anno, numeroProgressivo])
+  @@map("giustificativi_interni")
 }
 
 // ============================================================
@@ -2188,6 +2225,7 @@ enum ContatoreFiscaleTipo {
   DOC_BROKER
   NOTA_CREDITO
   PENALE
+  GIUSTIFICATIVO_INTERNO
 }
 
 // Contatore di numerazione fiscale (paper NumerazioneFatture). Una riga per

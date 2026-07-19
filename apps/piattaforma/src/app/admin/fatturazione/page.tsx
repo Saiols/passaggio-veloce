@@ -122,6 +122,12 @@ export default async function AdminFatturazionePage({
           <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
             Fatturazione
           </h1>
+          <Link
+            href="/admin/costi-promozionali"
+            className="mt-2 inline-block text-[13px] font-semibold text-pv-navy-600 hover:underline"
+          >
+            → Costi promozionali (giustificativi interni)
+          </Link>
         </header>
 
         <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">

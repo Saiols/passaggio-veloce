@@ -295,17 +295,19 @@ export async function firmaPraticaCore(
           update: {},
           create: { sedeId: pratica.brokerSedeId, saldoCent: 0 },
         });
-        const nuovoSaldo = wallet.saldoCent + pratica.creditoBrokerCent;
-        await tx.wallet.update({
+        // Incremento atomico (no leggi-poi-scrivi): il saldo post lo prendo dal
+        // valore restituito dall'UPDATE, così due accrediti concorrenti sullo
+        // stesso wallet non si sovrascrivono (lost update).
+        const w = await tx.wallet.update({
           where: { id: wallet.id },
-          data: { saldoCent: nuovoSaldo },
+          data: { saldoCent: { increment: pratica.creditoBrokerCent } },
         });
         await tx.transazioneWallet.create({
           data: {
             walletId: wallet.id,
             tipo: 'CREDITO_PRATICA',
             importoCent: pratica.creditoBrokerCent,
-            saldoPostCent: nuovoSaldo,
+            saldoPostCent: w.saldoCent,
             praticaId: pratica.id,
           },
         });

@@ -10,6 +10,7 @@ const {
   visuraScadutaMock,
 } = vi.hoisted(() => {
   const txMock = {
+    $queryRaw: vi.fn(),
     wallet: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     payout: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     transazioneWallet: { updateMany: vi.fn(), create: vi.fn() },
@@ -62,7 +63,8 @@ beforeEach(() => {
     sede: null,
   });
   visuraScadutaMock.mockResolvedValue(false);
-  // reserve (transazione)
+  // reserve (transazione): il row lock FOR UPDATE è un no-op nel mock.
+  txMock.$queryRaw.mockResolvedValue([{ id: 'w1' }]);
   txMock.wallet.findFirst.mockResolvedValue(null);
   txMock.payout.findFirst.mockResolvedValue(null);
   txMock.payout.create.mockResolvedValue({ id: 'p1' });
@@ -93,6 +95,24 @@ describe('eseguiPayoutImmediato', () => {
     const r = await eseguiPayoutImmediato('w1');
     expect(r).toEqual({ ok: false, error: 'Payout già in corso, attendi' });
     expect(txMock.payout.create).not.toHaveBeenCalled();
+  });
+
+  it('la reserve prende un row lock FOR UPDATE sul wallet (serializza le reserve concorrenti)', async () => {
+    txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+
+    await eseguiPayoutImmediato('w1');
+
+    // Il lock è emesso, parametrizzato sul walletId e verso la tabella wallets.
+    expect(txMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, id] = txMock.$queryRaw.mock.calls[0] as [string[], string];
+    expect(strings.join('')).toMatch(/FOR UPDATE/);
+    expect(strings.join('')).toMatch(/"wallets"/);
+    expect(id).toBe('w1');
+    // Deve precedere la lettura del wallet (e quindi il create del payout): è il
+    // lock a serializzare, non la findUnique.
+    const lockOrder = txMock.$queryRaw.mock.invocationCallOrder[0];
+    const findOrder = txMock.wallet.findUnique.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(findOrder);
   });
 
   it('happy path → crea IN_LAVORAZIONE, paga via provider, salda ESEGUITO, genera documento', async () => {

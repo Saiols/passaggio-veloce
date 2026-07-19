@@ -124,7 +124,14 @@ export async function accreditCommissioniAffiliazione(
     // Wallet popolato solo se NON sospetta. Se sospetta, l'accredit
     // arriverà al momento della review admin (approveCommissioneAction).
     if (!sospetta) {
-      nuovoSaldo = walletPreCent + quota;
+      // Incremento atomico (no leggi-poi-scrivi): l'UPDATE va PRIMA della
+      // transazione così il saldo post proviene dal valore restituito dal DB e
+      // due accrediti concorrenti sullo stesso wallet non si perdono a vicenda.
+      const w = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { saldoCent: { increment: quota } },
+      });
+      nuovoSaldo = w.saldoCent;
       const transazione = await tx.transazioneWallet.create({
         data: {
           walletId: wallet.id,
@@ -135,10 +142,6 @@ export async function accreditCommissioniAffiliazione(
         },
       });
       transazioneId = transazione.id;
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { saldoCent: nuovoSaldo },
-      });
     }
 
     await tx.commissioneAffiliazione.create({

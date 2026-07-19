@@ -43,17 +43,22 @@ export async function redeemPromoCode(
     create: { sedeId: sede.id, saldoCent: 0 },
     update: {},
   });
-  const nuovoSaldo = wallet.saldoCent + res.amountCent;
+  // Incremento atomico (no leggi-poi-scrivi): l'UPDATE va PRIMA della
+  // transazione così il saldo post proviene dal valore restituito dal DB e un
+  // accredito concorrente sullo stesso wallet non viene sovrascritto.
+  const w = await tx.wallet.update({
+    where: { id: wallet.id },
+    data: { saldoCent: { increment: res.amountCent } },
+  });
   const transazione = await tx.transazioneWallet.create({
     data: {
       walletId: wallet.id,
       tipo: 'CREDITO_PROMO',
       importoCent: res.amountCent,
-      saldoPostCent: nuovoSaldo,
+      saldoPostCent: w.saldoCent,
       note: `Codice promozionale ${code}`,
     },
   });
-  await tx.wallet.update({ where: { id: wallet.id }, data: { saldoCent: nuovoSaldo } });
   await tx.promoCodeRedemption.create({
     data: {
       promoCodeId: promo.id,

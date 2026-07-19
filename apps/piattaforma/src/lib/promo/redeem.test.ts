@@ -8,7 +8,9 @@ function makeTx(promo: unknown, count = 0, sede: unknown = { id: 's1' }) {
     sede: { findFirst: vi.fn().mockResolvedValue(sede) },
     wallet: {
       upsert: vi.fn().mockResolvedValue({ id: 'w1', saldoCent: 1000 }),
-      update: vi.fn().mockResolvedValue({}),
+      // Incremento atomico: l'UPDATE restituisce il nuovo saldo (1000 + 5000),
+      // che il codice usa come saldoPostCent della transazione.
+      update: vi.fn().mockResolvedValue({ id: 'w1', saldoCent: 6000 }),
     },
     transazioneWallet: { create: vi.fn().mockResolvedValue({ id: 't1' }) },
   };
@@ -39,10 +41,13 @@ describe('redeemPromoCode', () => {
     expect(tx.wallet.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { sedeId: 's1' }, create: { sedeId: 's1', saldoCent: 0 } }),
     );
+    // saldoPostCent = valore restituito dall'UPDATE atomico (6000), non una
+    // somma calcolata su una lettura stantia.
     expect(tx.transazioneWallet.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ walletId: 'w1', tipo: 'CREDITO_PROMO', importoCent: 5000, saldoPostCent: 6000 }) }),
     );
-    expect(tx.wallet.update).toHaveBeenCalledWith({ where: { id: 'w1' }, data: { saldoCent: 6000 } });
+    // Mutazione atomica: increment, non scrittura di un valore assoluto.
+    expect(tx.wallet.update).toHaveBeenCalledWith({ where: { id: 'w1' }, data: { saldoCent: { increment: 5000 } } });
     expect(tx.promoCodeRedemption.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ promoCodeId: 'p1', companyId: 'c1', amountCent: 5000, transazioneWalletId: 't1' }) }),
     );

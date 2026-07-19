@@ -109,7 +109,10 @@ beforeEach(() => {
   txMock.pratica.update.mockResolvedValue({});
   txMock.veicolo.updateMany.mockResolvedValue({ count: 0 });
   txMock.wallet.upsert.mockResolvedValue({ id: 'wallet-sede-1', saldoCent: 0 });
-  txMock.wallet.update.mockResolvedValue({});
+  // Decremento atomico: l'UPDATE restituisce il nuovo saldo, che il codice usa
+  // come saldoPostCent del movimento. Default benigno; i test lo sovrascrivono
+  // col valore atteso caso per caso.
+  txMock.wallet.update.mockResolvedValue({ saldoCent: 0 });
   txMock.transazioneWallet.findFirst.mockResolvedValue(null);
   txMock.transazioneWallet.create.mockResolvedValue({});
   txMock.feeAddebito.updateMany.mockResolvedValue({ count: 0 });
@@ -120,6 +123,8 @@ describe('confermaAnnullamentoConPenaleAction — cablaggio wallet di sede', () 
   it('pratica con brokerSedeId: risolve il wallet della SEDE (mai quello della madre) e vi addebita la penale', async () => {
     txMock.pratica.findUnique.mockResolvedValue(praticaFixture({ brokerSedeId: SEDE_BROKER }));
     txMock.wallet.upsert.mockResolvedValue({ id: 'wallet-sede-1', saldoCent: 0 });
+    // Decremento atomico: 0 − 2500 = −2500 (nessuno storno, solo la penale).
+    txMock.wallet.update.mockResolvedValue({ saldoCent: -PENALI.PENALE_BROKER_DEFAULT_CENT });
 
     const res = await confermaAnnullamentoConPenaleAction(PID);
 
@@ -132,7 +137,8 @@ describe('confermaAnnullamentoConPenaleAction — cablaggio wallet di sede', () 
       select: { id: true, saldoCent: true },
     });
     // La penale deve finire sul wallet appena risolto (quello della sede), non
-    // su un wallet risolto per companyId.
+    // su un wallet risolto per companyId. saldoPostCent = valore restituito
+    // dall'UPDATE atomico.
     expect(txMock.transazioneWallet.create).toHaveBeenCalledWith({
       data: {
         walletId: 'wallet-sede-1',
@@ -143,15 +149,17 @@ describe('confermaAnnullamentoConPenaleAction — cablaggio wallet di sede', () 
         note: motivoPenaleSegnalazione('FERMO_AMMINISTRATIVO'),
       },
     });
+    // Mutazione atomica: decrement della penale, non scrittura di un assoluto.
     expect(txMock.wallet.update).toHaveBeenCalledWith({
       where: { id: 'wallet-sede-1' },
-      data: { saldoCent: -PENALI.PENALE_BROKER_DEFAULT_CENT },
+      data: { saldoCent: { decrement: PENALI.PENALE_BROKER_DEFAULT_CENT } },
     });
   });
 
   it('pratica legacy senza brokerSedeId: ricade sul wallet della madre (where: companyId)', async () => {
     txMock.pratica.findUnique.mockResolvedValue(praticaFixture({ brokerSedeId: null }));
     txMock.wallet.upsert.mockResolvedValue({ id: 'wallet-madre-1', saldoCent: 0 });
+    txMock.wallet.update.mockResolvedValue({ saldoCent: -PENALI.PENALE_BROKER_DEFAULT_CENT });
 
     const res = await confermaAnnullamentoConPenaleAction(PID);
 
@@ -173,6 +181,11 @@ describe('confermaAnnullamentoConPenaleAction — cablaggio wallet di sede', () 
     txMock.wallet.upsert.mockResolvedValue({ id: 'wallet-sede-1', saldoCent: 10_000 });
     // Credito pratica di €50 già accreditato sul wallet di sede (edge case difensivo).
     txMock.transazioneWallet.findFirst.mockResolvedValue({ id: 'tw-credito-1', importoCent: 5_000 });
+    // Due decrementi atomici in sequenza: storno (10_000 − 5_000 = 5_000), poi
+    // penale (5_000 − 2_500 = 2_500). L'UPDATE restituisce il saldo aggiornato.
+    txMock.wallet.update
+      .mockResolvedValueOnce({ saldoCent: 5_000 })
+      .mockResolvedValueOnce({ saldoCent: 5_000 - PENALI.PENALE_BROKER_DEFAULT_CENT });
 
     const res = await confermaAnnullamentoConPenaleAction(PID);
 
@@ -204,10 +217,16 @@ describe('confermaAnnullamentoConPenaleAction — cablaggio wallet di sede', () 
         note: motivoPenaleSegnalazione('FERMO_AMMINISTRATIVO'),
       },
     });
-    // Il saldo finale persistito riflette sia lo storno sia la penale.
-    expect(txMock.wallet.update).toHaveBeenCalledWith({
+    // Due mutazioni atomiche distinte, nell'ordine: prima lo storno (decrement
+    // del credito), poi la penale (decrement della penale). Nessuna scrittura
+    // di un saldo assoluto (che perderebbe scritture concorrenti).
+    expect(txMock.wallet.update).toHaveBeenNthCalledWith(1, {
       where: { id: 'wallet-sede-1' },
-      data: { saldoCent: 5_000 - PENALI.PENALE_BROKER_DEFAULT_CENT },
+      data: { saldoCent: { decrement: 5_000 } },
+    });
+    expect(txMock.wallet.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'wallet-sede-1' },
+      data: { saldoCent: { decrement: PENALI.PENALE_BROKER_DEFAULT_CENT } },
     });
   });
 });
@@ -224,6 +243,8 @@ describe('confermaAnnullamentoConPenaleAction — penale per veicolo segnalato',
       }),
     );
     txMock.wallet.upsert.mockResolvedValue({ id: 'w-1', saldoCent: 0 });
+    // Decremento atomico: 0 − (2 × €25) = −5000.
+    txMock.wallet.update.mockResolvedValue({ saldoCent: -2 * PENALI.PENALE_BROKER_DEFAULT_CENT });
 
     const res = await confermaAnnullamentoConPenaleAction(PID);
     expect(res).toEqual({ ok: true });
@@ -285,6 +306,8 @@ describe('confermaAnnullamentoConPenaleAction — penale per veicolo segnalato',
     // Saldo iniziale non-zero e non banale, per distinguere davvero il saldo
     // post-addebito da uno zero di comodo.
     txMock.wallet.upsert.mockResolvedValue({ id: 'w-multi', saldoCent: 10_000 });
+    // Decremento atomico: 10_000 − (2 × €25) = 5_000, valore restituito dall'UPDATE.
+    txMock.wallet.update.mockResolvedValue({ saldoCent: 10_000 - 2 * PENALI.PENALE_BROKER_DEFAULT_CENT });
 
     const res = await confermaAnnullamentoConPenaleAction(PID);
     expect(res).toEqual({ ok: true });

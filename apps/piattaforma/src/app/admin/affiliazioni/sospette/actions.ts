@@ -45,36 +45,52 @@ export async function approveCommissioneAction(
         throw new Error(`Stato non valido: ${commissione.stato}`);
       }
 
+      // Compare-and-set: promuove DA_REVISIONARE→ACCREDITATA solo se nessun'altra
+      // transazione concorrente ha già vinto la corsa. Senza questo gate due
+      // approvazioni simultanee superano entrambe il controllo di stato sopra
+      // (READ COMMITTED) e accreditano il wallet due volte. Le review fields si
+      // scrivono qui, atomicamente con la transizione (stesso pattern del CAS
+      // PROCESSATA→FIRMATA in firma-engine.ts).
+      const claimed = await tx.commissioneAffiliazione.updateMany({
+        where: { id: commissioneId, stato: 'DA_REVISIONARE' },
+        data: {
+          stato: 'ACCREDITATA',
+          reviewedAt: new Date(),
+          reviewedById: session.user!.id,
+          reviewNotes: noteParsed.data || null,
+        },
+      });
+      // Un'altra approvazione concorrente ha già gestito la commissione: niente
+      // secondo accredito. Esito benigno (la commissione è già ACCREDITATA).
+      if (claimed.count !== 1) return;
+
       const wallet = await tx.wallet.upsert({
         where: { companyId: commissione.referenteId },
         update: {},
         create: { companyId: commissione.referenteId, saldoCent: 0 },
       });
-      const nuovoSaldo = wallet.saldoCent + commissione.importoNettoCent;
+      // Incremento atomico (no leggi-poi-scrivi): il saldo post proviene dal
+      // valore restituito dall'UPDATE.
+      const w = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { saldoCent: { increment: commissione.importoNettoCent } },
+      });
 
       const transazione = await tx.transazioneWallet.create({
         data: {
           walletId: wallet.id,
           tipo: 'CREDITO_AFFILIAZIONE',
           importoCent: commissione.importoNettoCent,
-          saldoPostCent: nuovoSaldo,
+          saldoPostCent: w.saldoCent,
           praticaId: commissione.praticaId,
         },
       });
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { saldoCent: nuovoSaldo },
-      });
 
+      // Aggancia la transazione appena creata alla commissione già promossa dal
+      // CAS (le altre review fields sono state scritte nell'updateMany sopra).
       await tx.commissioneAffiliazione.update({
         where: { id: commissioneId },
-        data: {
-          stato: 'ACCREDITATA',
-          transazioneWalletId: transazione.id,
-          reviewedAt: new Date(),
-          reviewedById: session.user!.id,
-          reviewNotes: noteParsed.data || null,
-        },
+        data: { transazioneWalletId: transazione.id },
       });
     });
   } catch (err) {

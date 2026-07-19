@@ -190,6 +190,16 @@ export async function eseguiPayoutImmediato(
 
   const reserve = await prisma.$transaction(
     async (tx): Promise<{ ok: true; payoutId: string } | { ok: false; error: string }> => {
+      // Serializzazione anti doppio-payout: prende un row lock Postgres sulla
+      // riga wallet PRIMA di leggere lo stato e i payout in-flight. Senza,
+      // due reserve concorrenti sullo stesso wallet leggerebbero entrambe
+      // "nessun payout in corso" (READ COMMITTED) e creerebbero due Payout
+      // IN_LAVORAZIONE per l'intero saldo → wallet svuotato due volte. Con il
+      // `FOR UPDATE` la seconda reserve blocca finché la prima non committa,
+      // poi la sua `findFirst(inflight)` vede il payout IN_LAVORAZIONE già
+      // committato e rifiuta con "Payout già in corso".
+      await tx.$queryRaw`SELECT id FROM "wallets" WHERE id = ${walletId}::uuid FOR UPDATE`;
+
       const wallet = await tx.wallet.findUnique({
         where: { id: walletId },
         include: { sede: { select: { companyId: true } } },

@@ -20,6 +20,8 @@ const { prismaMock, authMock, getSessionContextMock, redirectMock, visuraScaduta
     pratica: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     feeAddebito: { create: vi.fn() },
     praticaStatoLog: { create: vi.fn() },
+    wallet: { upsert: vi.fn(), update: vi.fn() },
+    transazioneWallet: { create: vi.fn() },
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),
@@ -197,6 +199,38 @@ describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
       // applicativo (`motivoBloccoFirma`) — è quello che rende la transizione
       // atomica sotto race concorrente.
       expect(call.where).toEqual({ id: PID, stato: 'PROCESSATA', flagSegnalata: false });
+    });
+
+    it('credito pratica broker → incremento wallet ATOMICO, saldoPostCent dal valore restituito dall\'UPDATE', async () => {
+      // Money-integrity: il credito pratica deve usare un increment atomico
+      // (no leggi-poi-scrivi), così due firme concorrenti sullo stesso wallet
+      // di sede non si sovrascrivono (lost update). saldoPostCent proviene dal
+      // saldo restituito dall'UPDATE, non da una somma su lettura stantia.
+      prismaMock.pratica.findUnique.mockResolvedValue({
+        ...praticaValida(),
+        creditoBrokerCent: 5_000,
+        brokerSedeId: 'sede-broker-1',
+      });
+      prismaMock.wallet.upsert.mockResolvedValue({ id: 'wallet-broker-1', saldoCent: 1_000 });
+      prismaMock.wallet.update.mockResolvedValue({ saldoCent: 6_000 });
+      prismaMock.transazioneWallet.create.mockResolvedValue({ id: 'tw-1' });
+
+      const res = await firmaPraticaCore(PID, { tipo: 'ADMIN', motivo: MOTIVO });
+
+      expect(res).toEqual({ ok: true });
+      expect(prismaMock.wallet.update).toHaveBeenCalledWith({
+        where: { id: 'wallet-broker-1' },
+        data: { saldoCent: { increment: 5_000 } },
+      });
+      expect(prismaMock.transazioneWallet.create).toHaveBeenCalledWith({
+        data: {
+          walletId: 'wallet-broker-1',
+          tipo: 'CREDITO_PRATICA',
+          importoCent: 5_000,
+          saldoPostCent: 6_000,
+          praticaId: PID,
+        },
+      });
     });
 
     it('updateMany con count:0 (un\'altra transazione ha già vinto la corsa) → il motore fallisce e NON crea FeeAddebito', async () => {

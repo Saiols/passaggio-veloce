@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prismaMock, txMock, executePayoutMock, createDocBrokerMock, visuraScadutaMock } = vi.hoisted(() => {
   const txMock = {
+    $queryRaw: vi.fn(),
     wallet: { findUnique: vi.fn(), update: vi.fn() },
     payout: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
     transazioneWallet: { updateMany: vi.fn(), create: vi.fn() },
@@ -54,6 +55,8 @@ beforeEach(() => {
   // non è l'oggetto di questi test, che coprono la soglia/il debito.
   prismaMock.wallet.findUnique.mockResolvedValue({ companyId: 'company-1', sede: null });
   visuraScadutaMock.mockResolvedValue(false);
+  // reserve: il row lock FOR UPDATE è un no-op nel mock.
+  txMock.$queryRaw.mockResolvedValue([{ id: W }]);
   txMock.wallet.findUnique.mockResolvedValue({ id: W, saldoCent: SOTTO_SOGLIA });
   txMock.payout.findFirst.mockResolvedValue(null);
   txMock.payout.create.mockResolvedValue({ id: 'payout-1' });

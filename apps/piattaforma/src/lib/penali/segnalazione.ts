@@ -271,7 +271,14 @@ export async function confermaAnnullamentoConPenaleAction(
         },
       });
       if (creditoPratica && creditoPratica.importoCent > 0) {
-        saldo -= creditoPratica.importoCent;
+        // Decremento atomico (no leggi-poi-scrivi): il saldo post proviene dal
+        // valore restituito dall'UPDATE, così lo storno non si perde sotto
+        // scritture concorrenti sullo stesso wallet.
+        const wStorno = await tx.wallet.update({
+          where: { id: wallet.id },
+          data: { saldoCent: { decrement: creditoPratica.importoCent } },
+        });
+        saldo = wStorno.saldoCent;
         await tx.transazioneWallet.create({
           data: {
             walletId: wallet.id,
@@ -285,9 +292,15 @@ export async function confermaAnnullamentoConPenaleAction(
 
       // Penale broker (può portare il wallet sotto zero). Il motivo (tipo
       // segnalazione) viene salvato nella nota così il movimento wallet può
-      // esplicitare al broker perché è stato addebitato.
+      // esplicitare al broker perché è stato addebitato. Decremento atomico: il
+      // saldo persistito e quello del movimento provengono dall'UPDATE, non da
+      // una lettura potenzialmente stantia.
       const tipoSeg = (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo;
-      saldo -= importoPenaleCent;
+      const wPenale = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { saldoCent: { decrement: importoPenaleCent } },
+      });
+      saldo = wPenale.saldoCent;
       await tx.transazioneWallet.create({
         data: {
           walletId: wallet.id,
@@ -300,10 +313,6 @@ export async function confermaAnnullamentoConPenaleAction(
       });
 
       const newSaldo = saldo;
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: { saldoCent: newSaldo },
-      });
 
       // Pratica: ANNULLATA + segnalazione CONFERMATA + penale addebitata
       await tx.pratica.update({

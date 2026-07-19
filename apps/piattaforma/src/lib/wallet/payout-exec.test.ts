@@ -6,6 +6,7 @@ const {
   getPaymentMock,
   executePayoutMock,
   createDocBrokerMock,
+  createGiustificativoPromoMock,
   visuraScadutaMock,
 } = vi.hoisted(() => {
   const txMock = {
@@ -19,6 +20,7 @@ const {
     executePayoutMock,
     getPaymentMock: vi.fn(() => ({ executePayout: executePayoutMock })),
     createDocBrokerMock: vi.fn(),
+    createGiustificativoPromoMock: vi.fn(),
     visuraScadutaMock: vi.fn(),
     prismaMock: {
       $transaction: vi.fn((cb: (tx: typeof txMock) => unknown) => cb(txMock)),
@@ -31,6 +33,9 @@ const {
 vi.mock('server-only', () => ({}));
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/lib/fatturazione/engine', () => ({ createDocBroker: createDocBrokerMock }));
+vi.mock('@/lib/fatturazione/giustificativo-promo', () => ({
+  createGiustificativoPromo: createGiustificativoPromoMock,
+}));
 vi.mock('@/lib/providers/payment', () => ({ getPayment: getPaymentMock }));
 vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 
@@ -70,6 +75,7 @@ beforeEach(() => {
   prismaMock.payout.update.mockResolvedValue({});
   executePayoutMock.mockResolvedValue({ ok: true, providerRef: 'prov-1' });
   createDocBrokerMock.mockResolvedValue(undefined);
+  createGiustificativoPromoMock.mockResolvedValue(undefined);
 });
 
 describe('eseguiPayoutImmediato', () => {
@@ -128,6 +134,7 @@ describe('eseguiPayoutImmediato', () => {
       }),
     );
     expect(createDocBrokerMock).toHaveBeenCalledWith({ payoutId: 'p1' });
+    expect(createGiustificativoPromoMock).toHaveBeenCalledWith({ payoutId: 'p1' });
   });
 
   it('provider rifiuta (safeguard go-live) → Payout FALLITO, wallet NON svuotato', async () => {
@@ -150,6 +157,7 @@ describe('eseguiPayoutImmediato', () => {
     // niente svuotamento saldo, niente documento
     expect(txMock.wallet.update).not.toHaveBeenCalled();
     expect(createDocBrokerMock).not.toHaveBeenCalled();
+    expect(createGiustificativoPromoMock).not.toHaveBeenCalled();
   });
 
   it('IBAN mancante → Payout FALLITO, provider non chiamato, wallet NON svuotato', async () => {
@@ -170,6 +178,7 @@ describe('eseguiPayoutImmediato', () => {
       }),
     );
     expect(txMock.wallet.update).not.toHaveBeenCalled();
+    expect(createGiustificativoPromoMock).not.toHaveBeenCalled();
   });
 
   it('payout automatico → tipo movimento PAYOUT_AUTOMATICO', async () => {
@@ -180,6 +189,15 @@ describe('eseguiPayoutImmediato', () => {
 
     expect(txMock.transazioneWallet.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ tipo: 'PAYOUT_AUTOMATICO' }) }),
+    );
+  });
+
+  it('aggancia anche il CREDITO_PROMO al payout (per il giustificativo interno)', async () => {
+    txMock.wallet.findUnique.mockResolvedValue({ id: 'w1', saldoCent: 80_000 });
+    await eseguiPayoutImmediato('w1');
+    const call = txMock.transazioneWallet.updateMany.mock.calls[0][0];
+    expect(call.where.tipo.in).toEqual(
+      expect.arrayContaining(['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE', 'CREDITO_PROMO']),
     );
   });
 });

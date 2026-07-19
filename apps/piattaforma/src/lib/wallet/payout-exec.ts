@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@pv/db';
 import { createDocBroker } from '@/lib/fatturazione/engine';
+import { createGiustificativoPromo } from '@/lib/fatturazione/giustificativo-promo';
 import { getPayment } from '@/lib/providers/payment';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { WALLET } from './config';
@@ -18,6 +19,9 @@ export type EseguiPayoutResult =
  * al saldo cassa erogato).
  */
 const TIPI_CREDITO_COMPENSO = ['CREDITO_PRATICA', 'CREDITO_AFFILIAZIONE'] as const;
+// Il promo NON è compenso (resta fuori dal documento broker), ma va agganciato
+// al payout per generare il giustificativo interno di costo (Documento 2).
+const TIPI_AGGANCIATI_AL_PAYOUT = [...TIPI_CREDITO_COMPENSO, 'CREDITO_PROMO'] as const;
 
 /** IBAN su cui erogare: wallet di sede → IBAN sede con fallback madre; wallet madre → IBAN madre. */
 function resolveIban(wallet: {
@@ -90,7 +94,7 @@ export async function settlePayout(payoutId: string): Promise<EseguiPayoutResult
     // Aggancia i compensi maturati (pratiche + affiliazione) a questo payout:
     // è ciò che il documento broker aggrega.
     await tx.transazioneWallet.updateMany({
-      where: { walletId: payout.walletId, payoutId: null, tipo: { in: [...TIPI_CREDITO_COMPENSO] } },
+      where: { walletId: payout.walletId, payoutId: null, tipo: { in: [...TIPI_AGGANCIATI_AL_PAYOUT] } },
       data: { payoutId },
     });
     const wallet = await tx.wallet.update({
@@ -119,6 +123,8 @@ export async function settlePayout(payoutId: string): Promise<EseguiPayoutResult
 
   // FT-A: documento broker (conto terzi) aggregato al payout (best-effort).
   await createDocBroker({ payoutId }).catch(() => undefined);
+  // Documento 2: giustificativo interno di costo per il bonus promo (best-effort).
+  await createGiustificativoPromo({ payoutId }).catch(() => undefined);
 
   return { ok: true, payoutId, importoCent: payout.importoCent };
 }

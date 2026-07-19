@@ -763,7 +763,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ---
 
-## Stato MVP al 2026-06-03
+## Stato MVP al 2026-07-20
 
 **Progresso complessivo (effort-weighted): ~95%** · **Production:** https://passaggio-veloce-piattaforma-cm8unpjkg-saiols-projects.vercel.app/
 

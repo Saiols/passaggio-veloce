@@ -27,7 +27,9 @@ chatbot_visibility: clients
 4. Carica i documenti richiesti — il wizard ti mostra **la lista esatta** in base alle tue
    risposte e non permette l'invio finché manca qualcosa.
 5. Quando tutto è completo, **conferma e invia**: la pratica viene distribuita
-   automaticamente alle agenzie della zona.
+   automaticamente alle agenzie più vicine al luogo di consegna, in cerchi
+   progressivamente più ampi e in più round; le agenzie già contattate restano
+   libere di accettare finché non viene presa in carico.
 
 ## Quali documenti servono
 

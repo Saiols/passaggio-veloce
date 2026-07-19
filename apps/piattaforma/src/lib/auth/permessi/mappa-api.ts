@@ -29,6 +29,7 @@ export const MAPPA_API: Record<string, Permesso | null> = {
   'src/app/api/admin/affiliazioni/export/route.ts': null, // isAdminPiattaforma
   'src/app/api/admin/companies/[id]/documenti-zip/route.ts': null, // isAdminPiattaforma
   'src/app/api/admin/contatti/export/route.ts': null, // isAdminOrAssistente
+  'src/app/api/admin/costi-promozionali/export/route.ts': null, // isAdminPiattaforma
   'src/app/api/admin/dashboard/export/route.ts': null, // canViewAggregatedFinancials
   'src/app/api/admin/fatturazione/export/route.ts': null, // isAdminPiattaforma
   'src/app/api/admin/mandato/[companyId]/pdf/route.ts': null, // isAdminOrAssistente

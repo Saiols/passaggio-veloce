@@ -31,4 +31,19 @@ describe('coordinate obbligatorie al submit', () => {
   it('rifiuta valori fuori range', () => {
     expect(praticaCoordsSchema.safeParse({ lat: '999', lng: '9' }).success).toBe(false);
   });
+
+  // Regressione: z.coerce.number() legge Number('') === 0, una coordinata
+  // valida e in range (0,0 "null island") — una stringa vuota NON deve essere
+  // accettata come se fosse 0.
+  it('rifiuta stringhe vuote (no null-island 0,0)', () => {
+    expect(praticaCoordsSchema.safeParse({ lat: '', lng: '' }).success).toBe(false);
+  });
+
+  it('rifiuta stringhe solo whitespace', () => {
+    expect(praticaCoordsSchema.safeParse({ lat: '  ', lng: '9' }).success).toBe(false);
+  });
+
+  it('rifiuta quando solo un campo è presente', () => {
+    expect(praticaCoordsSchema.safeParse({ lat: '45' }).success).toBe(false);
+  });
 });

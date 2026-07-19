@@ -465,9 +465,23 @@ export type CoAcquirenteInputData = z.infer<typeof coAcquirenteSchema>;
 // Esportato standalone (oltre a essere spalmato dentro `submitSchema` sotto)
 // così il test unit può validare la regola senza costruire l'intero FormData
 // del wizard.
+// Rifiuta stringhe vuote/whitespace PRIMA della coercizione: senza questo,
+// `z.coerce.number()` legge Number('') === 0, un valore valido e in range
+// (0,0 "null island"), trasformando un campo di fatto vuoto in una coordinata
+// accettata. Il preprocess mappa la stringa vuota/blank a `undefined`, che
+// coerce.number() converte in NaN → Number.isFinite fallisce → rejected
+// (stesso esito di una chiave del tutto mancante).
+const coordField = (min: number, max: number) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.coerce
+      .number()
+      .refine((n) => Number.isFinite(n) && n >= min && n <= max, 'coordinata non valida'),
+  );
+
 export const praticaCoordsSchema = z.object({
-  lat: z.coerce.number().refine((n) => n >= -90 && n <= 90, 'lat fuori range'),
-  lng: z.coerce.number().refine((n) => n >= -180 && n <= 180, 'lng fuori range'),
+  lat: coordField(-90, 90),
+  lng: coordField(-180, 180),
 });
 
 const submitSchema = z.object({

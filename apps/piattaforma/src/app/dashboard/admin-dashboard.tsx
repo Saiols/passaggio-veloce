@@ -5,7 +5,6 @@ import { runDistribuzioneTickAction } from '@/app/admin/actions';
 
 type TickBanner = {
   scanned?: string;
-  timeouts?: string;
   advanced?: string;
   escalated?: string;
 };
@@ -45,8 +44,7 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
       {tickBanner && (
         <div className="mb-5">
           <Alert variant="info" title="Tick distribuzione eseguito">
-            Pratiche ispezionate: <b>{tickBanner.scanned ?? '0'}</b> · TIMEOUT marcati:{' '}
-            <b>{tickBanner.timeouts ?? '0'}</b> · Round avanzati:{' '}
+            Pratiche ispezionate: <b>{tickBanner.scanned ?? '0'}</b> · Round avanzati:{' '}
             <b>{tickBanner.advanced ?? '0'}</b> · Escalation:{' '}
             <b>{tickBanner.escalated ?? '0'}</b>
           </Alert>

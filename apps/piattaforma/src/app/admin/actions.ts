@@ -16,7 +16,6 @@ export async function runDistribuzioneTickAction(): Promise<void> {
   const params = new URLSearchParams({
     tick: '1',
     scanned: String(result.scanned),
-    timeouts: String(result.timeoutsMarked),
     advanced: String(result.roundsAdvanced),
     escalated: String(result.escalated),
   });

@@ -24,17 +24,10 @@ export const RANKING = {
 } as const;
 
 /**
- * Anti-abuso ranking (A3).
- * - `REJECT_DECAY_PER_REJECT`: penalità (in stelle) sottratta dallo score
- *   ordering per ogni rifiuto consecutivo recente. Es. 3 rifiuti consecutivi
- *   → ratingAvg effettivo ridotto di 0.6 nel sort.
- * - `REJECT_DECAY_LOOKBACK`: numero massimo di assegnazioni recenti
- *   considerate per il calcolo dei "rifiuti consecutivi".
+ * Anti-abuso distribuzione (A3).
  * - `AUTO_SUSPEND_TIMEOUT_THRESHOLD`: dopo N TIMEOUT consecutivi (no-show),
  *   l'agenzia viene sospesa automaticamente con motivo audit.
  */
 export const ANTI_ABUSO = {
-  REJECT_DECAY_PER_REJECT: 0.2,
-  REJECT_DECAY_LOOKBACK: 10,
   AUTO_SUSPEND_TIMEOUT_THRESHOLD: 5,
 } as const;

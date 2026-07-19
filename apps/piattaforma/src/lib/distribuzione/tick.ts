@@ -25,7 +25,6 @@ const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
 
 export type TickResult =
   | { status: 'noop'; reason: string }
-  | { status: 'timeouts-marked'; count: number }
   | { status: 'advanced-round'; nextRound: 1 | 2 | 3; assegnazioni: number }
   | { status: 'escalated' }
   | { status: 'closed'; finalStato: 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
@@ -492,7 +491,6 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
 
 export async function tickAllPraticheInDistribuzione(): Promise<{
   scanned: number;
-  timeoutsMarked: number;
   roundsAdvanced: number;
   escalated: number;
 }> {
@@ -504,12 +502,11 @@ export async function tickAllPraticheInDistribuzione(): Promise<{
     select: { id: true },
   });
 
-  const counters = { scanned: 0, timeoutsMarked: 0, roundsAdvanced: 0, escalated: 0 };
+  const counters = { scanned: 0, roundsAdvanced: 0, escalated: 0 };
 
   for (const p of pratiche) {
     counters.scanned += 1;
     const r = await tickPratica(p.id);
-    if (r.status === 'timeouts-marked') counters.timeoutsMarked += r.count;
     if (r.status === 'advanced-round') counters.roundsAdvanced += 1;
     if (r.status === 'escalated') counters.escalated += 1;
   }

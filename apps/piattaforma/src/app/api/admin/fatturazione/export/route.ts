@@ -5,15 +5,10 @@ import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { parseFatturaFiltriFromUrl, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
+import { csvCell } from '@/lib/csv';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-/** Cella CSV con quoting se contiene separatori/virgolette/newline. */
-function csvCell(v: string | number | null | undefined): string {
-  const s = v == null ? '' : String(v);
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 export async function GET(req: Request): Promise<Response> {
   const session = await auth();

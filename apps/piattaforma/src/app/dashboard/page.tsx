@@ -15,7 +15,6 @@ export default async function DashboardPage({
   searchParams: Promise<{
     tick?: string;
     scanned?: string;
-    timeouts?: string;
     advanced?: string;
     escalated?: string;
   }>;
@@ -52,7 +51,6 @@ export default async function DashboardPage({
             sp.tick === '1'
               ? {
                   scanned: sp.scanned,
-                  timeouts: sp.timeouts,
                   advanced: sp.advanced,
                   escalated: sp.escalated,
                 }

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "pratiche" ADD COLUMN "lat" DOUBLE PRECISION;
+ALTER TABLE "pratiche" ADD COLUMN "lng" DOUBLE PRECISION;

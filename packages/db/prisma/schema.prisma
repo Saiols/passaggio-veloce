@@ -819,6 +819,13 @@ model Pratica {
   comune    String?
   provincia String?
 
+  // Coordinate del luogo di consegna (Google Places autocomplete). Nullable:
+  // le bozze non le hanno; valorizzate al submit (obbligatorie lato action).
+  // Guidano la distribuzione a raggio (lib/distribuzione). comune/provincia
+  // restano come metadati (notifiche/monitoraggio) ma non guidano più la scelta.
+  lat Float?
+  lng Float?
+
   // Attori (Company madre — legacy, mantenuti in fase expand)
   brokerId String  @db.Uuid
   broker   Company @relation("PraticheBroker", fields: [brokerId], references: [id])

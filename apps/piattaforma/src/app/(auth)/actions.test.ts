@@ -5,7 +5,7 @@ vi.mock('@pv/db', () => ({
   prisma: {
     $transaction: txMock,
     company: {},
-    user: { findMany: vi.fn(), update: vi.fn() },
+    user: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     verificationToken: {},
     promoCode: { findUnique: vi.fn() },
     promoCodeRedemption: { count: vi.fn() },
@@ -26,10 +26,15 @@ vi.mock('@/lib/crm/sync', () => ({ tryMatchCrmContact: vi.fn() }));
 vi.mock('@/lib/affiliazione/notifications', () => ({ notifyReferralSignup: vi.fn() }));
 vi.mock('@/lib/providers/storage', () => ({ getStorage: vi.fn() }));
 vi.mock('@/lib/providers/registro-imprese', () => ({ getRegistroImprese: vi.fn() }));
-// Rate limit: in test consentiamo sempre (deterministico, niente stato condiviso).
-vi.mock('@/lib/auth/rate-limit', () => ({
-  checkRateLimit: vi.fn(() => ({ allowed: true, remaining: 5 })),
-  resetRateLimit: vi.fn(),
+// Rate limit durevole: in test consentiamo sempre di default (deterministico,
+// niente stato condiviso/DB reale); i singoli test di throttle sovrascrivono
+// con mockResolvedValueOnce({ allowed: false }).
+vi.mock('@/lib/rate-limit/durable', () => ({
+  rateLimit: vi.fn(() => Promise.resolve({ allowed: true })),
+  resetRateLimit: vi.fn(() => Promise.resolve()),
+}));
+vi.mock('@/lib/rate-limit/client-ip', () => ({
+  getClientIp: vi.fn(() => '1.2.3.4'),
 }));
 // bcrypt.compare mockato per velocità/determinismo: il match è pilotato per-test.
 vi.mock('bcryptjs', () => ({
@@ -40,11 +45,18 @@ import bcrypt from 'bcryptjs';
 import { AuthError } from 'next-auth';
 import { prisma } from '@pv/db';
 import { signIn } from '@/auth';
-import { loginAction, registerAction, checkPromoCodeAction } from './actions';
+import { rateLimit } from '@/lib/rate-limit/durable';
+import {
+  loginAction,
+  registerAction,
+  checkPromoCodeAction,
+  requestPasswordResetAction,
+} from './actions';
 
 const findManyMock = vi.mocked(prisma.user.findMany);
 const compareMock = vi.mocked(bcrypt.compare);
 const signInMock = vi.mocked(signIn);
+const rateLimitMock = vi.mocked(rateLimit);
 
 const validPayload = {
   account: {
@@ -93,6 +105,14 @@ function fdWith(payload: unknown, opts: { omit?: string } = {}): FormData {
   }
   return fd;
 }
+
+// Ogni test riparte da "consentito" (default fail-open-friendly), così i test
+// che non riguardano il rate limit non sono influenzati da mockResolvedValueOnce
+// lasciati da un test precedente.
+beforeEach(() => {
+  rateLimitMock.mockReset();
+  rateLimitMock.mockResolvedValue({ allowed: true });
+});
 
 describe('registerAction (early returns)', () => {
   beforeEach(() => txMock.mockReset());
@@ -193,6 +213,11 @@ describe('loginAction', () => {
 });
 
 describe('checkPromoCodeAction', () => {
+  beforeEach(() => {
+    vi.mocked(prisma.promoCode.findUnique).mockReset();
+    vi.mocked(prisma.promoCodeRedemption.count).mockReset();
+  });
+
   it('codice inesistente', async () => {
     vi.mocked(prisma.promoCode.findUnique).mockResolvedValue(null as never);
     const r = await checkPromoCodeAction('NOPE');
@@ -203,5 +228,77 @@ describe('checkPromoCodeAction', () => {
     vi.mocked(prisma.promoCodeRedemption.count).mockResolvedValue(0 as never);
     const r = await checkPromoCodeAction(' benv ');
     expect(r).toEqual({ stato: 'valido', amountCent: 5000 });
+  });
+
+  it('throttle: se rateLimit blocca, ritorna "inesistente" senza interrogare il DB (niente enumerazione)', async () => {
+    rateLimitMock.mockResolvedValueOnce({ allowed: false });
+    const r = await checkPromoCodeAction('BENV10');
+    expect(r).toEqual({ stato: 'inesistente' });
+    expect(prisma.promoCode.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe('rate limit durevole sulle server action pubbliche', () => {
+  beforeEach(() => {
+    signInMock.mockReset();
+    findManyMock.mockReset();
+    compareMock.mockReset();
+    txMock.mockReset();
+    vi.mocked(prisma.user.findFirst).mockReset();
+  });
+
+  function loginForm(): FormData {
+    const fd = new FormData();
+    fd.set('email', 'mario@example.com');
+    fd.set('password', 'Password123');
+    return fd;
+  }
+
+  it('loginAction: se rateLimit blocca, ritorna l\'errore "troppi tentativi" e non chiama signIn né il lookup utente', async () => {
+    rateLimitMock.mockResolvedValueOnce({ allowed: false });
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r.error).toMatch(/Troppi tentativi/);
+    expect(signInMock).not.toHaveBeenCalled();
+    expect(findManyMock).not.toHaveBeenCalled();
+  });
+
+  it('loginAction: se rateLimit consente, procede normalmente (comportamento invariato)', async () => {
+    findManyMock.mockResolvedValue([{ passwordHash: 'hash', twoFactorEnabled: false }] as never);
+    compareMock.mockResolvedValue(true as never);
+    signInMock.mockResolvedValue(undefined as never);
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r).toEqual({});
+    expect(signInMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('registerAction: se rateLimit blocca, ritorna errore PRIMA di qualunque parsing/transazione', async () => {
+    rateLimitMock.mockResolvedValueOnce({ allowed: false });
+
+    const r = await registerAction(new FormData());
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/Troppi tentativi/);
+    expect(txMock).not.toHaveBeenCalled();
+  });
+
+  it('requestPasswordResetAction: se rateLimit blocca, ritorna { ok: true } senza toccare il DB (stessa forma della risposta "utente inesistente", niente enumeration)', async () => {
+    rateLimitMock.mockResolvedValueOnce({ allowed: false });
+
+    const r = await requestPasswordResetAction('vittima@example.com');
+
+    expect(r).toEqual({ ok: true });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('requestPasswordResetAction: se rateLimit consente ma l\'utente non esiste, ritorna comunque { ok: true } (comportamento invariato)', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+
+    const r = await requestPasswordResetAction('nessuno@example.com');
+
+    expect(r).toEqual({ ok: true });
   });
 });

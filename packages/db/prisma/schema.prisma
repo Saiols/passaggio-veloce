@@ -2213,6 +2213,21 @@ model ChatbotRateBucket {
   @@map("chatbot_rate_buckets")
 }
 
+/// Rate-limit durevole generico per endpoint pubblici sensibili (login, reset
+/// password, registrazione, OCR registrazione, verifica codici promo).
+/// Generalizzazione di ChatbotRateBucket: stesso pattern (Vercel serverless →
+/// store su DB, niente Map in-memory che si azzera ad ogni cold-start/scale).
+/// key es. "login:<ip>:<email>", "pwreset:<ip>", "register:<ip>", "ocr:<ip>",
+/// "promo:<ip>". @@index(expiresAt) supporta un eventuale cleanup periodico.
+model RateBucket {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("rate_buckets")
+}
+
 /// Metriche aggregate del chatbot + domande senza risposta (per migliorare i docs).
 /// Niente PII deliberata, niente trascrizioni complete. Retention ~90 giorni.
 model ChatbotInteraction {

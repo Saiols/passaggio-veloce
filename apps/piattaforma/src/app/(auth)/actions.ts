@@ -16,7 +16,8 @@ import { notifyReferralSignup } from '@/lib/affiliazione/notifications';
 import { geocodeCompanySedi } from '@/lib/geo/geocode-sedi';
 import { AFF_SPOT_COOKIE } from '@/lib/affiliazione/spot-cookie';
 import { anonymizeIp, clientIp } from '@/lib/net/ip';
-import { checkRateLimit, resetRateLimit } from '@/lib/auth/rate-limit';
+import { rateLimit, resetRateLimit } from '@/lib/rate-limit/durable';
+import { getClientIp } from '@/lib/rate-limit/client-ip';
 import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
 import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
 import { randomUUID } from 'node:crypto';
@@ -57,15 +58,18 @@ export async function loginAction(
     return { error: 'Email o password non valide' };
   }
 
-  // A9 rate limit: chiave per IP+email, 5 tentativi / 15 min poi 15 min block
+  // A9 rate limit (durevole, DB-backed): chiave per IP+email, 10 tentativi / 15
+  // min. Prima era un in-memory Map, azzerato ad ogni cold-start/scale su
+  // Vercel (di fatto inutile in serverless multi-istanza).
   const hdrs = await headers();
-  const ipRaw = hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? '';
-  const ip = anonymizeIp(ipRaw) ?? 'unknown';
+  const ip = getClientIp(hdrs);
   const emailLower = parsed.data.email.toLowerCase();
   const rateKey = `login:${ip}:${emailLower}`;
-  const rl = checkRateLimit(rateKey);
+  const LOGIN_LIMIT = 10;
+  const LOGIN_WINDOW_SEC = 15 * 60;
+  const rl = await rateLimit(rateKey, LOGIN_LIMIT, LOGIN_WINDOW_SEC);
   if (!rl.allowed) {
-    const minutes = Math.ceil(rl.retryAfterSeconds / 60);
+    const minutes = Math.ceil(LOGIN_WINDOW_SEC / 60);
     return {
       error: `Troppi tentativi. Riprova tra ${minutes} minut${minutes === 1 ? 'o' : 'i'}.`,
     };
@@ -107,7 +111,7 @@ export async function loginAction(
       totp,
       redirectTo: '/dashboard',
     });
-    resetRateLimit(rateKey);
+    await resetRateLimit(rateKey);
     return {};
   } catch (error) {
     if (error instanceof AuthError) {
@@ -225,6 +229,16 @@ function generateReferralCode(): string {
 export async function registerAction(
   formData: FormData,
 ): Promise<RegisterActionResult> {
+  // Rate limit anti spam-registrazioni (durevole, DB-backed): 5 registrazioni
+  // / ora per IP. Applicato PRIMA di qualunque parsing/OCR: la richiesta di
+  // headers() qui viene riusata più sotto anche per signupIp.
+  const hdrs = await headers();
+  const ip = getClientIp(hdrs);
+  const registerRl = await rateLimit(`register:${ip}`, 5, 60 * 60);
+  if (!registerRl.allowed) {
+    return { ok: false, error: 'Troppi tentativi di registrazione. Riprova più tardi.' };
+  }
+
   // 1. Parse del payload strutturato (account/company/payment/referral/visura).
   const payloadRaw = formData.get('payload');
   if (typeof payloadRaw !== 'string') {
@@ -323,6 +337,16 @@ export async function registerAction(
     } else {
       // Nessun token valido (es. chiamata API diretta o token scaduto): l'OCR è
       // autoritativo qui, così il gate non è bypassabile.
+      // Rate limit OCR (Document AI ha un costo per chiamata → DoS economico):
+      // 20 verifiche / giorno per IP, condiviso con verifyRegistrationDocumentsAction.
+      const ocrRl = await rateLimit(`ocr:${ip}`, 20, 24 * 60 * 60);
+      if (!ocrRl.allowed) {
+        return {
+          ok: false,
+          error: 'Troppe richieste di verifica documenti. Riprova più tardi.',
+        };
+      }
+
       const allowedAteco = await prisma.atecoAllowedCode.findMany({
         where: { companyType: company.type, active: true },
         select: { companyType: true, code: true, active: true },
@@ -417,7 +441,7 @@ export async function registerAction(
   const verificationToken = generateSecureToken();
 
   // AF-AC: cattura IP signup (anonymizzato GDPR) per il check anti-collusione.
-  const hdrs = await headers();
+  // (hdrs già letto in cima alla funzione per il rate limit di registrazione.)
   const signupIpRaw =
     hdrs.get('x-forwarded-for') ?? hdrs.get('x-real-ip') ?? null;
   const signupIp = anonymizeIp(signupIpRaw);
@@ -773,6 +797,14 @@ export async function verifyRegistrationDocumentsAction(
   // In DEMO_MODE l'OCR è simulato/bypassato (coerente col gate del submit).
   if (env.DEMO_MODE) return { ok: true };
 
+  // Rate limit OCR (Document AI ha un costo per chiamata → DoS economico):
+  // 20 verifiche / giorno per IP, condiviso con l'OCR dentro registerAction.
+  const ip = getClientIp(await headers());
+  const ocrRl = await rateLimit(`ocr:${ip}`, 20, 24 * 60 * 60);
+  if (!ocrRl.allowed) {
+    return { ok: false, error: 'Troppe richieste di verifica documenti. Riprova più tardi.' };
+  }
+
   const allowedAteco = await prisma.atecoAllowedCode.findMany({
     where: { companyType: company.type, active: true },
     select: { companyType: true, code: true, active: true },
@@ -870,6 +902,17 @@ export async function requestPasswordResetAction(
     return { ok: false, error: 'Email non valida' };
   }
 
+  // Rate limit (durevole, DB-backed): 5 richieste / ora per IP, per non far
+  // bombardare di email di reset una casella altrui. Applicato PRIMA di
+  // qualunque lookup/invio, e la risposta in caso di throttle resta identica
+  // a quella "utente inesistente" — non deve rivelare né l'esistenza
+  // dell'account né lo stato del rate limit.
+  const ip = getClientIp(await headers());
+  const rl = await rateLimit(`pwreset:${ip}`, 5, 60 * 60);
+  if (!rl.allowed) {
+    return { ok: true };
+  }
+
   const emailLower = email.toLowerCase().trim();
   // Multi-tenancy: con stessa email su piu' User, mandiamo email reset agli
   // admin platform per primi (priorita' di sicurezza), altrimenti al primo
@@ -961,6 +1004,15 @@ export async function confirmPasswordResetAction(
 // CODICI PROMOZIONALI
 // ============================================================
 export async function checkPromoCodeAction(codeRaw: string): Promise<PromoCheckResult> {
+  // Rate limit (durevole, DB-backed): 20 verifiche / 10 min per IP, contro
+  // l'enumerazione dei codici. Limite generoso: uno step wizard non richiede
+  // più di qualche tentativo umano in quella finestra.
+  const ip = getClientIp(await headers());
+  const rl = await rateLimit(`promo:${ip}`, 20, 10 * 60);
+  if (!rl.allowed) {
+    return { stato: 'inesistente' };
+  }
+
   const code = normalizePromoCode(codeRaw ?? '');
   if (!code) return { stato: 'inesistente' };
   const promo = await prisma.promoCode.findUnique({

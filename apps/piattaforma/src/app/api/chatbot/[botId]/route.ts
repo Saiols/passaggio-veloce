@@ -4,14 +4,10 @@ import { resolveTier } from '@/lib/providers/chatbot/tier-server';
 import { checkRateLimit } from '@/lib/providers/chatbot/rate-limit';
 import { dispatchChat, type ChatMessage } from '@/lib/providers/chatbot/dispatch';
 import { logInteraction } from '@/lib/providers/chatbot/log';
+import { getClientIp } from '@/lib/rate-limit/client-ip';
 
 const MAX_HISTORY = 12;
 const MAX_MSG_LEN = 1000;
-
-function clientIp(req: Request): string {
-  const xff = req.headers.get('x-forwarded-for');
-  return xff?.split(',')[0]?.trim() || 'unknown';
-}
 
 export async function POST(req: Request, ctx: { params: Promise<{ botId: string }> }) {
   const { botId } = await ctx.params;
@@ -41,7 +37,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ botId: string 
   }
 
   // Rate-limit (prima di tutto, anche prima del DB lookup del bot).
-  const rate = await checkRateLimit(clientIp(req));
+  // getClientIp (M3): preferisce x-real-ip, altrimenti l'ULTIMO valore di
+  // x-forwarded-for (non il primo, falsificabile dal client).
+  const rate = await checkRateLimit(getClientIp(req.headers));
   if (!rate.allowed) {
     return NextResponse.json(
       {

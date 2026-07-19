@@ -49,6 +49,7 @@ export async function createGiustificativoPromo(input: { payoutId: string }): Pr
     const redemptions = await tx.promoCodeRedemption.findMany({
       where: { transazioneWalletId: { in: promoTx.map((t) => t.id) } },
       include: { promoCode: { select: { code: true } } },
+      orderBy: { createdAt: 'asc' },
     });
     const righe: RigaGiustificativo[] = redemptions.map((r) => ({
       code: r.promoCode.code,

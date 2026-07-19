@@ -6,7 +6,9 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function normDate(v: unknown): string | null {
   if (typeof v !== 'string') return null;
   const s = v.trim();
-  return ISO_DATE.test(s) ? s : null;
+  if (!ISO_DATE.test(s)) return null;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : s;
 }
 
 export function parseGiustificativoFiltri(sp: { dataDa?: string; dataA?: string }): GiustificativoFiltri {

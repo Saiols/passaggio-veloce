@@ -91,8 +91,9 @@ export async function settlePayout(payoutId: string): Promise<EseguiPayoutResult
   }
 
   await prisma.$transaction(async (tx) => {
-    // Aggancia i compensi maturati (pratiche + affiliazione) a questo payout:
-    // è ciò che il documento broker aggrega.
+    // Aggancia al payout i compensi (pratiche + affiliazione) E il promo: solo i
+    // compensi alimentano il documento broker (createDocBroker filtra per tipo), il
+    // promo alimenta il giustificativo interno (createGiustificativoPromo).
     await tx.transazioneWallet.updateMany({
       where: { walletId: payout.walletId, payoutId: null, tipo: { in: [...TIPI_AGGANCIATI_AL_PAYOUT] } },
       data: { payoutId },

@@ -12,6 +12,10 @@ describe('parseGiustificativoFiltri', () => {
       dataA: null,
     });
   });
+
+  it('scarta una data di forma valida ma calendario invalido', () => {
+    expect(parseGiustificativoFiltri({ dataDa: '2026-13-40' }).dataDa).toBe(null);
+  });
 });
 
 describe('giustificativoWhere', () => {
@@ -25,6 +29,18 @@ describe('giustificativoWhere', () => {
         gte: new Date('2026-06-01T00:00:00.000Z'),
         lte: new Date('2026-06-30T23:59:59.999Z'),
       },
+    });
+  });
+
+  it('solo dataDa → where con solo gte', () => {
+    expect(giustificativoWhere(parseGiustificativoFiltri({ dataDa: '2026-06-01' }))).toEqual({
+      emessoAt: { gte: new Date('2026-06-01T00:00:00.000Z') },
+    });
+  });
+
+  it('solo dataA → where con solo lte', () => {
+    expect(giustificativoWhere(parseGiustificativoFiltri({ dataA: '2026-06-30' }))).toEqual({
+      emessoAt: { lte: new Date('2026-06-30T23:59:59.999Z') },
     });
   });
 });

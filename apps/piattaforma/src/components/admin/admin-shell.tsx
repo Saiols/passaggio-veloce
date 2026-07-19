@@ -94,6 +94,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/broker', label: 'Broker', icon: IconBroker },
       { href: '/admin/agenzie', label: 'Agenzie', icon: IconAgenzie },
+      { href: '/admin/sedi-non-geocodate', label: 'Sedi non geocodate', icon: IconMappa, adminOnly: true },
       { href: '/admin/utenti', label: 'Utenti', icon: IconUtenti },
     ],
   },

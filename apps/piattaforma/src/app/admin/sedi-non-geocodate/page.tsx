@@ -26,7 +26,12 @@ export default async function SediNonGeocodatePage() {
   // motore di distribuzione a raggio le esclude in silenzio, quindi non
   // ricevono mai nuove pratiche finché non vengono geocodate.
   const sedi = await prisma.sede.findMany({
-    where: { type: 'AGENZIA', deletedAt: null, suspendedAt: null, lat: null },
+    where: {
+      type: 'AGENZIA',
+      deletedAt: null,
+      suspendedAt: null,
+      OR: [{ lat: null }, { lng: null }],
+    },
     select: {
       id: true,
       nome: true,

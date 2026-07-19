@@ -334,10 +334,10 @@ export function tplN1BrokerInvio(p: N1BrokerInvioPayload): NotificaContent {
     `${p.numeroAgenzie} agenzie della ${luogo}. Ti notificheremo appena una accetta.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Pratica inviata</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la tua pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}
-      è stata inviata a <strong>${p.numeroAgenzie} agenzie</strong> nella zona ${luogo}.
+      è stata inviata a <strong>${p.numeroAgenzie} agenzie</strong> nella zona ${escapeHtml(luogo)}.
       Ti manderemo un aggiornamento non appena una accetta.
     </p>
     <p style="margin:0;color:#64748b;font-size:12px">Puoi monitorare lo stato dalla tua dashboard.</p>
@@ -364,17 +364,17 @@ export function tplN2BrokerAccettata(p: N2BrokerAccettataPayload): NotificaConte
     `Contatti: ${p.agenziaEmail}${p.agenziaTelefono ? ` · ${p.agenziaTelefono}` : ''}`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Pratica accettata 🎉</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      <strong>${p.agenziaNome}</strong> ha accettato la pratica
+      <strong>${escapeHtml(p.agenziaNome)}</strong> ha accettato la pratica
       <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.
     </p>
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
       <strong>Contatti agenzia</strong><br>
-      ${p.agenziaIndirizzo ? `${p.agenziaIndirizzo}<br>` : ''}
-      ${cittaRiga ? `${cittaRiga}<br>` : ''}
-      Email: <a href="mailto:${p.agenziaEmail}" style="color:#0054a6">${p.agenziaEmail}</a>
-      ${p.agenziaTelefono ? `<br>Tel: ${p.agenziaTelefono}` : ''}
+      ${p.agenziaIndirizzo ? `${escapeHtml(p.agenziaIndirizzo)}<br>` : ''}
+      ${cittaRiga ? `${escapeHtml(cittaRiga)}<br>` : ''}
+      Email: <a href="mailto:${escapeHtml(p.agenziaEmail)}" style="color:#0054a6">${escapeHtml(p.agenziaEmail)}</a>
+      ${p.agenziaTelefono ? `<br>Tel: ${escapeHtml(p.agenziaTelefono)}` : ''}
     </div>
   `);
   return { subject, html, text };
@@ -404,10 +404,10 @@ export function tplN4BrokerFirma(p: N4BrokerFirmaPayload): NotificaContent {
     : '';
   const chiHaConfermatoHtml = p.attestataDaPv
     ? `Il <strong>team Passaggio Veloce</strong> ha registrato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}${dataAttestazioneHtml}, avendone avuto conferma.`
-    : `<strong>${p.agenziaNome}</strong> ha confermato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.`;
+    : `<strong>${escapeHtml(p.agenziaNome)}</strong> ha confermato la firma della pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Firma confermata</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">${chiHaConfermatoHtml}</p>
     <div style="background:#ecfdf5;border:1px solid #16a34a33;border-radius:10px;padding:14px;font-size:14px;color:#0a2540">
       <strong style="color:#16a34a">+${formatCurrencyCent(p.creditoCent)}</strong> accreditati sul tuo wallet.<br>
@@ -431,14 +431,14 @@ export function tplN6AgenziaNuova(p: N6AgenziaNuovaPayload): NotificaContent {
     `Accedi alla dashboard per accettare o rifiutare.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Nuova pratica disponibile</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       una nuova pratica ti è stata assegnata. Altre <strong>${p.altreAgenzie}</strong>
       agenzie sono state contattate — chi accetta per primo vince.
     </p>
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
       <strong>${p.codicePratica}</strong>${p.targa ? ` &middot; ${p.targa}` : ''}<br>
-      Zona: ${p.comune ?? '—'}${p.provincia ? ` (${p.provincia})` : ''}<br>
+      Zona: ${escapeHtml(p.comune ?? '—')}${p.provincia ? ` (${escapeHtml(p.provincia)})` : ''}<br>
       Fee per te: <strong style="color:#0054a6">${formatCurrencyCent(p.feeCent)}</strong><br>
       Round ${p.round} &middot; ${scadenza ? `rispondi entro ${scadenza}` : 'nessuna scadenza'}
     </div>
@@ -471,7 +471,7 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
     : '';
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Fee pratica programmata</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       il fee per la pratica <strong>${p.codicePratica}</strong> è stato schedulato.
     </p>
@@ -525,10 +525,10 @@ export function tplN10AdminEscalation(p: N10AdminEscalationPayload): NotificaCon
       non ha trovato un'agenzia dopo <strong>${p.tentativi} tentativi</strong>.
     </p>
     <div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
-      Zona: ${p.comune ?? '—'}${p.provincia ? ` (${p.provincia})` : ''}<br>
-      Broker: <strong>${p.brokerRagioneSociale}</strong><br>
-      Email: <a href="mailto:${p.brokerEmail}" style="color:#0054a6">${p.brokerEmail}</a>
-      ${p.brokerTelefono ? `<br>Tel: ${p.brokerTelefono}` : ''}
+      Zona: ${escapeHtml(p.comune ?? '—')}${p.provincia ? ` (${escapeHtml(p.provincia)})` : ''}<br>
+      Broker: <strong>${escapeHtml(p.brokerRagioneSociale)}</strong><br>
+      Email: <a href="mailto:${escapeHtml(p.brokerEmail)}" style="color:#0054a6">${escapeHtml(p.brokerEmail)}</a>
+      ${p.brokerTelefono ? `<br>Tel: ${escapeHtml(p.brokerTelefono)}` : ''}
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Apri /admin/escalation per assegnare manualmente o contattare il broker.
@@ -546,10 +546,10 @@ export function tplN3BrokerSollecito(p: N3BrokerSollecitoPayload): NotificaConte
     `Accedi alla dashboard per monitorare lo stato o contattare l'agenzia.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Firma ancora in attesa</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}
-      accettata da <strong>${p.agenziaNome}</strong> non risulta ancora firmata.
+      accettata da <strong>${escapeHtml(p.agenziaNome)}</strong> non risulta ancora firmata.
     </p>
     <p style="margin:0;font-size:12px;color:#64748b">
       Accedi alla dashboard per monitorare lo stato o contattare l'agenzia.
@@ -569,7 +569,7 @@ export function tplN7AgenziaPromemoriaCountdown(p: N7AgenziaPromemoriaCountdownP
     `Accedi alla dashboard per segnare "firma avvenuta".`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Promemoria: firma in attesa</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}
       è ancora in attesa di conferma firma.
@@ -597,9 +597,9 @@ export function tplN12AffiliazioneCommissione(
     `Saldo wallet attuale: ${formatCurrencyCent(p.saldoWalletCent)}.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">+${formatCurrencyCent(p.importoAccreditatoCent)} da affiliazione 🎉</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeReferente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      una pratica completata da <strong>${p.referralRagioneSociale}</strong> (tuo referral
+      una pratica completata da <strong>${escapeHtml(p.referralRagioneSociale)}</strong> (tuo referral
       ${ruoloLabel}) ti ha generato una commissione di affiliazione.
     </p>
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
@@ -625,9 +625,9 @@ export function tplN13BrokerPraticaProcessata(
     `Manca solo la firma del cliente per concludere il passaggio.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Pratica processata</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      <strong>${p.agenziaNome}</strong> ha completato la lavorazione della pratica
+      <strong>${escapeHtml(p.agenziaNome)}</strong> ha completato la lavorazione della pratica
       <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}.
     </p>
     <div style="background:#fef3c7;border:1px solid #f59e0b33;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540">
@@ -762,13 +762,13 @@ export function tplN14AccountSospeso(
     `Per chiarimenti contatta assistenza@passaggioveloce.it.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Account sospeso</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeUtente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      il tuo account associato a <strong>${p.ragioneSociale}</strong> e&apos;
+      il tuo account associato a <strong>${escapeHtml(p.ragioneSociale)}</strong> e&apos;
       stato sospeso da un amministratore. Non puoi accedere alla piattaforma
       fino alla riattivazione.
     </p>
-    ${p.motivo ? `<div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540"><strong>Motivo:</strong> ${p.motivo}</div>` : ''}
+    ${p.motivo ? `<div style="background:#fef2f2;border:1px solid #dc262633;border-radius:10px;padding:12px 14px;font-size:13px;color:#0a2540"><strong>Motivo:</strong> ${escapeHtml(p.motivo)}</div>` : ''}
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Per chiarimenti scrivi a <a href="mailto:assistenza@passaggioveloce.it">assistenza@passaggioveloce.it</a>.
     </p>
@@ -792,9 +792,9 @@ export function tplN15AccountRiattivato(
     : '';
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#16a34a">Account riattivato</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeUtente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      l&apos;account associato a <strong>${p.ragioneSociale}</strong> e&apos;
+      l&apos;account associato a <strong>${escapeHtml(p.ragioneSociale)}</strong> e&apos;
       stato riattivato. Puoi accedere di nuovo a Passaggio Veloce con le
       tue credenziali abituali.
     </p>
@@ -815,9 +815,9 @@ export function tplN16AccountEliminato(
     `Per chiarimenti contatta assistenza@passaggioveloce.it.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Account eliminato</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeUtente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeUtente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      l&apos;account <strong>${p.ragioneSociale}</strong> e&apos; stato eliminato
+      l&apos;account <strong>${escapeHtml(p.ragioneSociale)}</strong> e&apos; stato eliminato
       definitivamente da un amministratore. Non potrai piu&apos; accedere alla
       piattaforma con le credenziali precedenti.
     </p>
@@ -900,7 +900,7 @@ export function tplN17BrokerPenaleAddebitata(
     `Per chiarimenti contatta assistenza@passaggioveloce.it.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#dc2626">Penale addebitata</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è
       stata annullata in seguito a segnalazione di <strong>${tipoLbl}</strong>
@@ -910,7 +910,7 @@ export function tplN17BrokerPenaleAddebitata(
       <strong style="color:#dc2626">−${formatCurrencyCent(p.importoPenaleCent)}</strong> detratti dal tuo wallet.<br>
       ${
         p.veicoliSegnalati.length > 0
-          ? `Veicoli segnalati (${p.veicoliSegnalati.length}): <strong>${p.veicoliSegnalati.join(', ')}</strong><br>`
+          ? `Veicoli segnalati (${p.veicoliSegnalati.length}): <strong>${escapeHtml(p.veicoliSegnalati.join(', '))}</strong><br>`
           : ''
       }
       Saldo attuale: <strong>${formatCurrencyCent(p.saldoWalletCent)}</strong>
@@ -939,7 +939,7 @@ export function tplN18AgenziaSegnalazioneConfermata(
     `La pratica e' annullata e nessun fee verra' addebitato. Grazie per la verifica.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#16a34a">Segnalazione confermata</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeAgenzia}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la tua segnalazione di <strong>${tipoLbl}</strong> sulla pratica
       <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
@@ -1042,9 +1042,9 @@ export function tplN19AdminNuovaSegnalazione(
     </p>
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
       Tipo: <strong>${tipoLbl}</strong><br>
-      Broker: ${p.brokerRagioneSociale}<br>
-      Agenzia: ${p.agenziaRagioneSociale}
-      ${p.notaSegnalazione ? `<br>Nota: <em>${p.notaSegnalazione}</em>` : ''}
+      Broker: ${escapeHtml(p.brokerRagioneSociale)}<br>
+      Agenzia: ${escapeHtml(p.agenziaRagioneSociale)}
+      ${p.notaSegnalazione ? `<br>Nota: <em>${escapeHtml(p.notaSegnalazione)}</em>` : ''}
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       Apri <strong>/admin/segnalazioni</strong> per verificare e confermare o respingere.
@@ -1080,7 +1080,7 @@ export function tplN20AdminRevisioneRichiesta(
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
       Pratica: <strong>${p.codicePratica}</strong><br>
       Motivo: <strong>${motivoLbl}</strong><br>
-      Note: <em>${p.note}</em>
+      Note: <em>${escapeHtml(p.note)}</em>
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       SLA interno 24-48h. Apri <strong>/admin/revisioni</strong> per chiudere o annullare.
@@ -1108,14 +1108,14 @@ export function tplN21BrokerRevisioneCompletata(
       : 'La pratica è stata annullata.\n');
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:${colorTitle}">Revisione ${esitoLbl}</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       il team ha chiuso la revisione manuale sulla pratica
       <strong>${p.codicePratica}</strong>.
     </p>
     <div style="background:${colorBg};border:1px solid ${colorBorder};border-radius:10px;padding:14px;font-size:13px;color:#0a2540">
       Esito: <strong>${esitoLbl.toUpperCase()}</strong>
-      ${p.noteEsito ? `<br><br>Note del team: <em>${p.noteEsito}</em>` : ''}
+      ${p.noteEsito ? `<br><br>Note del team: <em>${escapeHtml(p.noteEsito)}</em>` : ''}
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">
       ${
@@ -1136,7 +1136,7 @@ export function tplN11BrokerEscalation(p: N11BrokerEscalationPayload): NotificaC
     `dal nostro team. Ti contatteremo a breve con un aggiornamento.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Ti stiamo dando una mano</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''}
       richiede un nostro intervento manuale. Il team l'ha presa in carico e ti contatteremo a breve.
@@ -1204,10 +1204,10 @@ export function tplN22ReferralSignup(p: N22ReferralSignupPayload): NotificaConte
     `Da ora, ogni pratica che firmano genera per te una commissione automatica.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Nuovo referral 🎉</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeReferente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      <strong>${p.referralRagioneSociale}</strong> (${tipoLabel} di ${p.citta},
-      ${p.provincia}) si è appena registrato col tuo link affiliazione.
+      <strong>${escapeHtml(p.referralRagioneSociale)}</strong> (${tipoLabel} di ${escapeHtml(p.citta)},
+      ${escapeHtml(p.provincia)}) si è appena registrato col tuo link affiliazione.
     </p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       Da ora, ogni pratica firmata dal tuo referral genera per te una commissione
@@ -1232,9 +1232,9 @@ export function tplN23ReferralFirstPratica(
     `Hai guadagnato ${formatCurrencyCent(p.importoCommissioneCent)} di commissione affiliazione.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Prima pratica! 🚗</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeReferente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
-      <strong>${p.referralRagioneSociale}</strong> (tuo referral ${tipoLabel}) ha
+      <strong>${escapeHtml(p.referralRagioneSociale)}</strong> (tuo referral ${tipoLabel}) ha
       firmato la sua prima pratica <strong>${p.codicePratica}</strong>.
     </p>
     <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
@@ -1259,7 +1259,7 @@ export function tplN24PayoutAffiliationAvailable(
     `Puoi richiedere il payout dalla sezione Wallet quando vuoi.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Soglia payout raggiunta 💰</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeReferente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       Il tuo wallet ha superato la soglia di
       <strong>${formatCurrencyCent(p.sogliaCent)}</strong>.
@@ -1293,10 +1293,10 @@ export function tplN31ValutaAgenzia(p: N31ValutaAgenziaPayload): NotificaContent
     `Valuta qui: ${p.praticaUrl}`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Valuta l'agenzia</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeBroker}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       la pratica <strong>${p.codicePratica}</strong>${p.targa ? ` (${p.targa})` : ''} è stata
-      completata da <strong>${p.agenziaNome}</strong>. La tua valutazione aiuta gli altri broker.
+      completata da <strong>${escapeHtml(p.agenziaNome)}</strong>. La tua valutazione aiuta gli altri broker.
     </p>
     ${ctaButton(p.praticaUrl, "Valuta l'agenzia →")}
   `);
@@ -1316,7 +1316,7 @@ export function tplN25MonthlyAffiliationRecap(
     `Saldo wallet attuale: ${formatCurrencyCent(p.saldoWalletCent)}`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Recap affiliazione ${p.meseLabel}</h1>
-    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${p.nomeReferente}</strong>,</p>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeReferente)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">
       Ecco il recap del programma affiliazione per <strong>${p.meseLabel}</strong>:
     </p>

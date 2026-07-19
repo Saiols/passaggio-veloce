@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { numeroDocumento, labelTipoDocumento, messaggioTroncamento } from './format';
+import { numeroDocumento, labelTipoDocumento, messaggioTroncamento, numeroGiustificativo } from './format';
 
 describe('numeroDocumento', () => {
   it('FATTURA_PV → PV-<anno>-<5cifre>', () => {
@@ -53,5 +53,12 @@ describe('messaggioTroncamento (M-1)', () => {
     expect(messaggioTroncamento(100, 250)).toBe(
       'Mostrati i primi 100 di 250 documenti — affina i filtri per vederli tutti.',
     );
+  });
+});
+
+describe('numeroGiustificativo', () => {
+  it('formatta GI-<anno>-<5 cifre>', () => {
+    expect(numeroGiustificativo(2026, 1)).toBe('GI-2026-00001');
+    expect(numeroGiustificativo(2026, 47)).toBe('GI-2026-00047');
   });
 });

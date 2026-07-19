@@ -35,6 +35,11 @@ export function numeroDocumento(d: {
   }
 }
 
+/** Numero del giustificativo interno (registro "GI"): GI-<anno>-<5 cifre>. */
+export function numeroGiustificativo(anno: number, numeroProgressivo: number): string {
+  return `GI-${anno}-${pad(numeroProgressivo, 5)}`;
+}
+
 const LABELS: Record<DocumentoFiscaleTipo, string> = {
   FATTURA_PV: 'Fattura',
   DOC_BROKER: 'Compenso intermediazione',

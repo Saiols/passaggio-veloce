@@ -1,12 +1,11 @@
 import 'server-only';
 import { prisma, Prisma } from '@pv/db';
 import { DISTRIBUZIONE } from './constants';
-import { provinceLimitrofe } from './province-limitrofe';
 import { computeCountdown, loadOrariPerSedi } from './countdown';
-import { attachRating, rankCandidates } from './ranking';
 import { checkAutoSuspendForSedi } from './auto-suspend';
 import { sediDaEscludere } from './esclusioni';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
+import { distanceKm } from '@/lib/geo/coords';
 import {
   getAdminEmails,
   sendNotification,
@@ -101,16 +100,18 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
 
     if (currentRound < 3) {
       const nextRound = (currentRound + 1) as 1 | 2 | 3;
-      const { count, newAssegnazioniIds, escalated } = await avviaRound(tx, pratica, nextRound);
+      const { count, newAssegnazioniIds, escalated, round: reached } = await avviaRound(tx, pratica, nextRound);
       await logCambioStato(tx, {
         praticaId,
         statoDa: pratica.stato,
-        statoA: escalated ? 'IN_ESCALATION' : statoNomePerRound(nextRound),
+        statoA: escalated ? 'IN_ESCALATION' : statoNomePerRound(reached),
         tipoEvento: escalated ? STATO_EVENTO.ESCALATION : STATO_EVENTO.ROUND_ADVANCE,
-        meta: { round: nextRound, ciclo: pratica.distribuzioneCiclo },
+        meta: { round: escalated ? currentRound : reached, ciclo: pratica.distribuzioneCiclo },
       });
       return {
-        result: { status: 'advanced-round' as const, nextRound, assegnazioni: count },
+        result: escalated
+          ? { status: 'escalated' as const }
+          : { status: 'advanced-round' as const, nextRound: reached, assegnazioni: count },
         jobs: {
           newAssegnazioniIds,
           escalationPraticaId: escalated ? praticaId : null,
@@ -144,125 +145,95 @@ export async function avviaRound(
   tx: Prisma.TransactionClient,
   pratica: {
     id: string;
-    provincia: string | null;
+    lat: number | null;
+    lng: number | null;
     distribuzioneCiclo: number;
     assegnazioni: { sedeId: string | null; ciclo: number; esito: string }[];
   },
   round: 1 | 2 | 3,
-): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean }> {
+): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean; round: 1 | 2 | 3 }> {
   const now = new Date();
-  const provincia = (pratica.provincia ?? '').toUpperCase();
-  const sediContattate = new Set(sediDaEscludere(pratica));
+  const sediContattate = sediDaEscludere(pratica);
 
-  let provincieTarget: readonly string[];
-  if (round === 1 || round === 3) provincieTarget = [provincia];
-  else provincieTarget = provinceLimitrofe(provincia);
-
-  const maxPerRound =
-    round === 3
-      ? Math.max(0, DISTRIBUZIONE.N_MAX - sediContattate.size)
-      : DISTRIBUZIONE.N_PER_ROUND;
-
-  if (maxPerRound === 0 || provincieTarget.length === 0) {
-    return handleNoCandidates(tx, pratica.id, round, now);
+  // Senza coordinate della pratica non possiamo calcolare distanze → escalation.
+  // (Non dovrebbe accadere: il submit le rende obbligatorie; guardia difensiva.)
+  if (pratica.lat == null || pratica.lng == null) {
+    await tx.pratica.update({
+      where: { id: pratica.id },
+      data: { stato: 'IN_ESCALATION', escalationAt: now },
+    });
+    return { count: 0, newAssegnazioniIds: [], escalated: true, round: 3 };
   }
+  const origine = { lat: pratica.lat, lng: pratica.lng };
 
-  // Multi-sede: i candidati sono SEDI agenzia (non Company). Ogni sede
-  // compete in modo indipendente; `sediContattate` esclude le sedi già
-  // contattate (anche più sedi della stessa madre restano candidate).
-  const rawSedi = await tx.sede.findMany({
+  // Sedi agenzia idonee CON coordinate, non ancora contattate nel ciclo.
+  const sediIdonee = await tx.sede.findMany({
     where: {
       type: 'AGENZIA',
       deletedAt: null,
       suspendedAt: null,
-      provincia: { in: provincieTarget as string[] },
-      id: { notIn: Array.from(sediContattate) },
+      lat: { not: null },
+      lng: { not: null },
+      id: { notIn: sediContattate },
       company: {
         deletedAt: null,
         suspendedAt: null,
         bloccoPagamentoAt: null,
-        // Ciclo di vita visura: un'agenzia con visura scaduta non riceve nuove
-        // pratiche. La visura sta sulla MADRE → escludendo la madre escono tutte
-        // le sue sedi, che è il comportamento voluto (multi-sede, P.IVA unica).
-        // `null` = ESENTE, deve restare idonea: senza questo ramo escluderemmo
-        // tutte le aziende senza data (oggi 9 agenzie su 10, account demo/seed).
         OR: [
           { visuraCameraleData: null },
           { visuraCameraleData: { gt: limiteVisuraUtc(now) } },
         ],
       },
     },
-    select: { id: true, createdAt: true, nome: true, provincia: true, companyId: true },
+    select: { id: true, lat: true, lng: true, companyId: true },
   });
-  const raw = rawSedi.map((s) => ({
-    id: s.id,
-    companyId: s.companyId,
-    createdAt: s.createdAt,
-    ragioneSociale: s.nome,
-    provincia: s.provincia,
-  }));
-  const rankedCandidates = await attachRating(tx, raw);
-  const eligible = rankCandidates(rankedCandidates);
 
-  // Tutte le sedi idonee competono in modo indipendente (prima che accetta vince).
-  const candidate = eligible.slice(0, maxPerRound);
+  // Cascade: dal round richiesto fino al 3, il primo anello non vuoto vince
+  // (anello incrementale: le sedi dei round precedenti sono già escluse).
+  for (let r = round; r <= 3; r++) {
+    const raggio = DISTRIBUZIONE.RAGGI_KM[r - 1];
+    const inRing = sediIdonee.filter(
+      (s) =>
+        s.lat != null &&
+        s.lng != null &&
+        distanceKm(origine, { lat: s.lat, lng: s.lng }) <= raggio,
+    );
+    if (inRing.length === 0) continue;
 
-  if (candidate.length === 0) {
-    return handleNoCandidates(tx, pratica.id, round, now);
-  }
-
-  const orariMap = await loadOrariPerSedi(
-    candidate.map((c) => c.id),
-    tx,
-  );
-  const hours = ROUND_TO_HOURS[round];
-  const newIds: string[] = [];
-
-  for (const a of candidate) {
-    const orari = orariMap.get(a.id) ?? { fasce: {}, chiusure: [] };
-    const { inizio, fine } = computeCountdown(now, hours, orari);
-    const created = await tx.praticaAssegnazione.create({
-      data: {
-        praticaId: pratica.id,
-        agenziaId: a.companyId, // madre (colonna legacy, NOT NULL)
-        sedeId: a.id, // sede fisica assegnataria
-        round,
-        ciclo: pratica.distribuzioneCiclo,
-        esito: 'PENDING',
-        invioAt: now,
-        countdownInizioAt: inizio,
-        countdownFineAt: fine,
-      },
+    const orariMap = await loadOrariPerSedi(inRing.map((s) => s.id), tx);
+    const hours = ROUND_TO_HOURS[r as 1 | 2 | 3];
+    const newIds: string[] = [];
+    for (const s of inRing) {
+      const orari = orariMap.get(s.id) ?? { fasce: {}, chiusure: [] };
+      const { inizio, fine } = computeCountdown(now, hours, orari);
+      const created = await tx.praticaAssegnazione.create({
+        data: {
+          praticaId: pratica.id,
+          agenziaId: s.companyId, // madre (colonna legacy, NOT NULL)
+          sedeId: s.id,
+          round: r,
+          ciclo: pratica.distribuzioneCiclo,
+          esito: 'PENDING',
+          invioAt: now,
+          countdownInizioAt: inizio,
+          countdownFineAt: fine,
+        },
+      });
+      newIds.push(created.id);
+    }
+    await tx.pratica.update({
+      where: { id: pratica.id },
+      data: statoPerRound(r as 1 | 2 | 3, now),
     });
-    newIds.push(created.id);
+    return { count: inRing.length, newAssegnazioniIds: newIds, escalated: false, round: r as 1 | 2 | 3 };
   }
 
+  // Nessuna sede fino a 10 km → escalation.
   await tx.pratica.update({
     where: { id: pratica.id },
-    data: statoPerRound(round, now),
+    data: { stato: 'IN_ESCALATION', escalationAt: now },
   });
-
-  return { count: candidate.length, newAssegnazioniIds: newIds, escalated: false };
-}
-
-async function handleNoCandidates(
-  tx: Prisma.TransactionClient,
-  praticaId: string,
-  round: 1 | 2 | 3,
-  now: Date,
-): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean }> {
-  if (round === 3) {
-    await tx.pratica.update({
-      where: { id: praticaId },
-      data: { stato: 'IN_ESCALATION', escalationAt: now },
-    });
-    return { count: 0, newAssegnazioniIds: [], escalated: true };
-  }
-  await tx.pratica.update({
-    where: { id: praticaId },
-    data: statoPerRound(round, now),
-  });
-  return { count: 0, newAssegnazioniIds: [], escalated: false };
+  return { count: 0, newAssegnazioniIds: [], escalated: true, round: 3 };
 }
 
 function statoPerRound(
@@ -482,8 +453,8 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
       praticaId,
       statoDa: pratica.stato,
       statoA: updated!.stato,
-      tipoEvento: updated!.stato === 'IN_ESCALATION' ? STATO_EVENTO.ESCALATION : STATO_EVENTO.SUBMIT,
-      meta: { round: 1, ciclo: pratica.distribuzioneCiclo },
+      tipoEvento: r.escalated ? STATO_EVENTO.ESCALATION : STATO_EVENTO.SUBMIT,
+      meta: { round: r.round, ciclo: pratica.distribuzioneCiclo },
     });
     return {
       assegnazioni: r.count,

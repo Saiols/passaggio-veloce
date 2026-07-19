@@ -40,6 +40,8 @@ export async function revocaERimettiInCircoloAction(
           id: true,
           stato: true,
           provincia: true,
+          lat: true,
+          lng: true,
           processataAt: true,
           distribuzioneCiclo: true,
           agenziaAssegnataId: true,
@@ -98,7 +100,7 @@ export async function revocaERimettiInCircoloAction(
       // 4) riparti dal round 1 sul nuovo ciclo: ricontatta la zona, esclude la revocata
       const r = await avviaRound(
         tx,
-        { id: praticaId, provincia: pratica.provincia, distribuzioneCiclo: nuovoCiclo, assegnazioni },
+        { id: praticaId, lat: pratica.lat, lng: pratica.lng, distribuzioneCiclo: nuovoCiclo, assegnazioni },
         1,
       );
 

@@ -3,11 +3,10 @@
  * Sostituibili via DB admin config in Fase 9.
  */
 export const DISTRIBUZIONE = {
-  T1_HOURS: 8, // finestra round 1 — ore lavorative dell'agenzia
+  RAGGI_KM: [2, 5, 10] as const, // raggi round 1 / 2 / 3 (km)
+  T1_HOURS: 8, // finestra round 1
   T2_HOURS: 8, // finestra round 2
-  T3_HOURS: 16, // finestra round 3
-  N_PER_ROUND: 5, // agenzie per round 1 e 2
-  N_MAX: 15, // cap totale su round 3
+  T3_HOURS: 8, // finestra round 3
 } as const;
 
 /**

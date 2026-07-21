@@ -96,6 +96,14 @@ export type N11BrokerEscalationPayload = {
   nomeBroker: string;
 };
 
+export type N52BrokerZonaNonCopertaPayload = {
+  codicePratica: string;
+  targa: string | null;
+  nomeBroker: string;
+  /** Raggio massimo configurato (km) raggiunto senza nessuna agenzia disponibile */
+  raggioMaxKm: number;
+};
+
 export type N3BrokerSollecitoPayload = {
   codicePratica: string;
   targa: string | null;
@@ -1143,6 +1151,28 @@ export function tplN11BrokerEscalation(p: N11BrokerEscalationPayload): NotificaC
     </p>
     <p style="margin:0;font-size:12px;color:#64748b">
       Non devi fare nulla: ti aggiorneremo non appena avremo novità.
+    </p>
+  `);
+  return { subject, html, text };
+}
+
+export function tplN52BrokerZonaNonCoperta(p: N52BrokerZonaNonCopertaPayload): NotificaContent {
+  const subject = `Nessuna agenzia disponibile entro ${p.raggioMaxKm} km — pratica ${p.codicePratica}`;
+  const text =
+    `Ciao ${p.nomeBroker},\n` +
+    `nessuna agenzia disponibile entro ${p.raggioMaxKm} km dal luogo indicato per la pratica ` +
+    `${p.codicePratica}${p.targa ? ` (${p.targa})` : ''}.\n` +
+    `Puoi contattare direttamente un'agenzia di fiducia; la richiesta resta comunque attiva.`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Zona non coperta</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      nessuna agenzia disponibile entro <strong>${p.raggioMaxKm} km</strong> dal luogo indicato per la
+      pratica <strong>${escapeHtml(p.codicePratica)}</strong>${p.targa ? ` (${escapeHtml(p.targa)})` : ''}.
+    </p>
+    <p style="margin:0;font-size:12px;color:#64748b">
+      Puoi contattare direttamente un'agenzia di fiducia; la richiesta resta comunque attiva:
+      continueremo a cercare un'agenzia disponibile.
     </p>
   `);
   return { subject, html, text };

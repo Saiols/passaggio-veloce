@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito, tplN46VisuraInScadenza, tplN47VisuraScaduta, tplN48BrokerPraticaCongelata, tplN49AdminAtecoNonIdoneo } from './templates';
+import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito, tplN46VisuraInScadenza, tplN47VisuraScaduta, tplN48BrokerPraticaCongelata, tplN49AdminAtecoNonIdoneo, tplN52BrokerZonaNonCoperta } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 import { formatDate } from '@/lib/format';
 
@@ -536,5 +536,49 @@ describe('N49 admin ateco non idoneo', () => {
     });
     expect(c.html).not.toContain('<script>');
     expect(c.html).not.toContain('<img src=x');
+  });
+});
+
+describe('N52 broker zona non coperta', () => {
+  const base = {
+    codicePratica: 'PV-2026-004',
+    targa: 'AB123CD',
+    nomeBroker: 'Rossi Auto',
+    raggioMaxKm: 10,
+  } as const;
+
+  it('subject e body citano la pratica e il raggio massimo in km; passa dal layout istituzionale', () => {
+    const c = tplN52BrokerZonaNonCoperta(base);
+    expect(c.subject).toContain('PV-2026-004');
+    expect(c.subject).toContain('10 km');
+    expect(c.text).toContain('PV-2026-004');
+    expect(c.text).toContain('10 km');
+    expect(c.text.toLowerCase()).toContain('resta comunque attiva');
+    expect(c.html).toContain('PV-2026-004');
+    expect(c.html).toContain('10 km');
+    // layout istituzionale condiviso
+    expect(c.html).toContain('logo-email.png');
+    expect(c.html).toContain('Passaggio Veloce SRL');
+  });
+
+  it('senza targa: nessuna parentesi vuota nel testo', () => {
+    const c = tplN52BrokerZonaNonCoperta({ ...base, targa: null });
+    expect(c.text).not.toContain('()');
+    expect(c.html).not.toContain('()');
+  });
+
+  it('escapa l\'HTML in codicePratica, targa e nomeBroker (XSS stored)', () => {
+    const c = tplN52BrokerZonaNonCoperta({
+      codicePratica: '<script>alert(1)</script>',
+      targa: '<img src=x onerror=alert(2)>',
+      nomeBroker: '<b>Mario</b>',
+      raggioMaxKm: 10,
+    });
+    expect(c.html).not.toContain('<script>');
+    expect(c.html).not.toContain('<img src=x');
+    expect(c.html).not.toContain('<b>Mario</b>');
+    expect(c.html).toContain('&lt;script&gt;');
+    expect(c.html).toContain('&lt;img');
+    expect(c.html).toContain('&lt;b&gt;Mario&lt;/b&gt;');
   });
 });

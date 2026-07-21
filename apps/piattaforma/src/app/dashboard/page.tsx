@@ -15,8 +15,8 @@ export default async function DashboardPage({
   searchParams: Promise<{
     tick?: string;
     scanned?: string;
-    advanced?: string;
-    escalated?: string;
+    expanded?: string;
+    zonaNonCoperta?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -51,8 +51,8 @@ export default async function DashboardPage({
             sp.tick === '1'
               ? {
                   scanned: sp.scanned,
-                  advanced: sp.advanced,
-                  escalated: sp.escalated,
+                  expanded: sp.expanded,
+                  zonaNonCoperta: sp.zonaNonCoperta,
                 }
               : undefined
           }

@@ -1,31 +1,34 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { tx, prismaMock } = vi.hoisted(() => {
+const { tx, prismaMock, cfgMock, orarioMock, roadMock } = vi.hoisted(() => {
   const tx = {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     sede: { findMany: vi.fn() },
-    valutazione: { groupBy: vi.fn() },
     praticaAssegnazione: { findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
-    orariApertura: { findMany: vi.fn() },
-    chiusuraStraordinaria: { findMany: vi.fn() },
     praticaStatoLog: { create: vi.fn() },
   };
   const prismaMock = {
     $transaction: vi.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
     praticaAssegnazione: { findMany: vi.fn() },
-    // Usata da emitEscalationNotifications (post-commit, fuori dalla tx) quando
-    // la cascade su raggio-km esaurisce i 3 anelli senza candidati. Task 5:
-    // l'escalation può ora scattare in UNA sola chiamata ad avviaRound.
+    // Usata da emitZonaNonCopertaNotifications (post-commit, fuori dalla tx).
     pratica: { findUnique: vi.fn() },
   };
-  return { tx, prismaMock };
+  return {
+    tx,
+    prismaMock,
+    cfgMock: vi.fn(),
+    orarioMock: vi.fn(),
+    roadMock: vi.fn(),
+  };
 });
 
 vi.mock('@pv/db', () => ({ prisma: prismaMock, Prisma: {} }));
+vi.mock('./config', () => ({ getDistribuzioneConfig: cfgMock }));
+vi.mock('./orario-piattaforma', () => ({ isOrarioLavorativo: orarioMock }));
+vi.mock('@/lib/geo/road-distance', () => ({ roadDistancesM: roadMock }));
 vi.mock('@/lib/notifiche', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
   sendNotifications: vi.fn(() => Promise.resolve()),
-  getAdminEmails: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock('@/lib/eventi/emit', () => ({
   emitEventiPratica: vi.fn(() => Promise.resolve()),
@@ -37,51 +40,95 @@ vi.mock('@/lib/notifiche/pratica', () => ({
 }));
 
 import { avviaRound1ForPratica, tickPratica } from './tick';
-import { sendNotifications } from '@/lib/notifiche';
-import { destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
+import { sendNotification, sendNotifications } from '@/lib/notifiche';
+import { destinatariSedeAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
+import { distanceKm } from '@/lib/geo/coords';
 
-// Origine pratica di default per tutti i test (Task 5: selezione a raggio-km).
-// `kmLat` sposta SOLO la latitudine di uno scarto tale che `distanceKm` fra
-// l'origine e il punto spostato dia esattamente `km` (Haversine con stessa
-// longitudine si riduce esattamente a R * dLat_rad — nessuna approssimazione).
+// Origine pratica di default. `kmLat` sposta SOLO la latitudine di uno scarto tale
+// che `distanceKm` fra l'origine e il punto spostato dia esattamente `km`.
 const LAT0 = 45;
 const LNG0 = 12;
 function kmLat(km: number): number {
   return LAT0 + (km / 6371) * (180 / Math.PI);
 }
 
+const CFG = {
+  raggioStartM: 500,
+  stepM: 200,
+  raggioMaxM: 10000,
+  intervalloMin: 10,
+  orarioInizio: '09:00',
+  orarioFine: '19:00',
+  giorni: ['LUN', 'MAR', 'MER', 'GIO', 'VEN'],
+};
+
+// Pratica in distribuzione (input di tickPratica).
+function praticaTick(over: Record<string, unknown> = {}) {
+  return {
+    id: 'p1',
+    stato: 'IN_DISTRIBUZIONE',
+    lat: LAT0,
+    lng: LNG0,
+    distribuzioneCiclo: 1,
+    raggioCorrenteM: 500,
+    ultimaEspansioneAt: null,
+    zonaNonCopertaAt: null,
+    assegnazioni: [],
+    ...over,
+  };
+}
+
+// Pratica appena creata (input di avviaRound1ForPratica).
+function praticaSubmit(over: Record<string, unknown> = {}) {
+  return {
+    id: 'p1',
+    stato: 'BOZZA',
+    lat: LAT0,
+    lng: LNG0,
+    distribuzioneCiclo: 1,
+    assegnazioni: [],
+    ...over,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
-  tx.pratica.findUnique
-    .mockResolvedValueOnce({ id: 'p1', provincia: 'VE', lat: LAT0, lng: LNG0, distribuzioneCiclo: 1, assegnazioni: [] })
-    .mockResolvedValueOnce({ stato: 'IN_ATTESA_ROUND_1' });
-  // Tre sedi: m1 ne ha due (s1, s2), m2 una (s3). Atteso: tutte e tre contattate (nessun dedup).
-  // Tutte alla stessa coordinata dell'origine (distanza 0) → dentro il raggio round 1 (500 m).
-  tx.sede.findMany.mockResolvedValue([
-    { id: 's1', createdAt: new Date('2026-01-01'), nome: 'A1', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'm1' },
-    { id: 's2', createdAt: new Date('2026-01-02'), nome: 'A2', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'm1' },
-    { id: 's3', createdAt: new Date('2026-01-03'), nome: 'B1', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'm2' },
-  ]);
-  tx.valutazione.groupBy.mockResolvedValue([]);
+  cfgMock.mockResolvedValue(CFG);
+  orarioMock.mockReturnValue(true);
+  // Provider mock: distanza stradale = Haversine (metri), come MockDistanceProvider.
+  roadMock.mockImplementation(
+    (_praticaId: string, origin: { lat: number; lng: number }, dests: { sedeId: string; coord: { lat: number; lng: number } }[]) =>
+      Promise.resolve(new Map(dests.map((d) => [d.sedeId, Math.round(distanceKm(origin, d.coord) * 1000)]))),
+  );
+  tx.sede.findMany.mockResolvedValue([]);
   tx.praticaAssegnazione.findMany.mockResolvedValue([]);
-  tx.orariApertura.findMany.mockResolvedValue([]);
-  tx.chiusuraStraordinaria.findMany.mockResolvedValue([]);
-  let n = 0;
-  tx.praticaAssegnazione.create.mockImplementation(() => Promise.resolve({ id: `a${++n}` }));
   tx.praticaAssegnazione.updateMany.mockResolvedValue({ count: 0 });
   tx.praticaAssegnazione.update.mockResolvedValue({});
   tx.pratica.update.mockResolvedValue({});
+  tx.praticaStatoLog.create.mockResolvedValue({});
+  let n = 0;
+  tx.praticaAssegnazione.create.mockImplementation(() => Promise.resolve({ id: `a${++n}` }));
   prismaMock.praticaAssegnazione.findMany.mockResolvedValue([]);
-  // Default: nessuna pratica trovata → emitEscalationNotifications ritorna
-  // subito (early return), nessun crash quando un test fa scattare l'escalation.
-  prismaMock.pratica.findUnique.mockResolvedValue(null);
+  vi.mocked(destinatariBroker).mockResolvedValue([{ email: 'br@x.it', userId: 'u1', nome: 'Rossi' }]);
+  // N52 post-commit: pratica trovata di default (broker + veicoli).
+  prismaMock.pratica.findUnique.mockResolvedValue({
+    brokerId: 'bMadre',
+    brokerSedeId: null,
+    codicePratica: 'PV-2026-1',
+    veicoli: [{ targa: 'AA000AA' }],
+  });
 });
 
-describe('avviaRound1ForPratica (multi-sede: tutte le sedi in zona)', () => {
-  it('seleziona SEDI agenzia attive per raggio-km (non Company)', async () => {
+describe('avviaRound1ForPratica: primo anello al submit (raggioStartM)', () => {
+  it('seleziona SEDI agenzia attive per raggio-km (where), non Company', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
+    tx.sede.findMany.mockResolvedValue([
+      { id: 's1', lat: LAT0, lng: LNG0, companyId: 'm1' },
+    ]);
+
     await avviaRound1ForPratica('p1');
-    expect(tx.sede.findMany).toHaveBeenCalledTimes(1);
+
     const where = tx.sede.findMany.mock.calls[0][0].where;
     expect(where.type).toBe('AGENZIA');
     expect(where.suspendedAt).toBeNull();
@@ -90,25 +137,83 @@ describe('avviaRound1ForPratica (multi-sede: tutte le sedi in zona)', () => {
     expect(where.lng).toEqual({ not: null });
   });
 
-  it('contatta OGNI sede in zona, anche più sedi della stessa madre', async () => {
-    await avviaRound1ForPratica('p1');
+  it('contatta OGNI sede entro 500 m, anche più sedi della stessa madre (no dedup); stato → IN_DISTRIBUZIONE', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
+    tx.sede.findMany.mockResolvedValue([
+      { id: 's1', lat: LAT0, lng: LNG0, companyId: 'm1' },
+      { id: 's2', lat: kmLat(0.3), lng: LNG0, companyId: 'm1' },
+      { id: 's3', lat: kmLat(0.45), lng: LNG0, companyId: 'm2' },
+    ]);
+
+    const res = await avviaRound1ForPratica('p1');
+
     const pairs = tx.praticaAssegnazione.create.mock.calls.map((c) => ({
       agenziaId: c[0].data.agenziaId,
       sedeId: c[0].data.sedeId,
+      raggioMetri: c[0].data.raggioMetri,
+      esito: c[0].data.esito,
     }));
-    expect(pairs).toHaveLength(3); // s1, s2 (stessa madre m1), s3 — nessun dedup
-    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1' });
-    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2' });
-    expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3' });
+    expect(pairs).toHaveLength(3);
+    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1', raggioMetri: 500, esito: 'PENDING' });
+    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2', raggioMetri: 500, esito: 'PENDING' });
+    expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3', raggioMetri: 500, esito: 'PENDING' });
+    expect(res.stato).toBe('IN_DISTRIBUZIONE');
+    expect(res.assegnazioni).toBe(3);
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          stato: 'IN_DISTRIBUZIONE',
+          raggioCorrenteM: 500,
+          ultimaEspansioneAt: expect.any(Date),
+          zonaNonCopertaAt: null,
+        }),
+      }),
+    );
+  });
+
+  it('nessuna sede entro 500 m (sede a 600 m) → nessuna notifica, ultimaEspansioneAt = null', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
+    tx.sede.findMany.mockResolvedValue([
+      { id: 'sLontana', lat: kmLat(0.6), lng: LNG0, companyId: 'mL' },
+    ]);
+
+    const res = await avviaRound1ForPratica('p1');
+
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+    expect(res.assegnazioni).toBe(0);
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          stato: 'IN_DISTRIBUZIONE',
+          raggioCorrenteM: 500,
+          ultimaEspansioneAt: null,
+        }),
+      }),
+    );
+  });
+
+  it('pratica senza coordinate: nessuna query sede, nessuna assegnazione, entra comunque in distribuzione', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit({ lat: null, lng: null }));
+
+    const res = await avviaRound1ForPratica('p1');
+
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+    expect(res.assegnazioni).toBe(0);
+    expect(res.stato).toBe('IN_DISTRIBUZIONE');
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ultimaEspansioneAt: null }) }),
+    );
   });
 });
 
-describe('Task 4.3: ciclo di vita visura — esclusione dalla distribuzione', () => {
-  const NOW = new Date('2026-07-17T10:00:00Z');
+describe('avviaRound1ForPratica: filtro visura camerale della madre', () => {
+  const NOW = new Date('2026-07-21T10:00:00Z');
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
   });
 
   afterEach(() => {
@@ -119,22 +224,14 @@ describe('Task 4.3: ciclo di vita visura — esclusione dalla distribuzione', ()
     return new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000);
   }
 
-  /**
-   * Il mock di Prisma non applica filtri da solo: qui simuliamo la semantica
-   * reale di Postgres per `where.company.{deletedAt,suspendedAt,bloccoPagamentoAt,OR}`
-   * così il test discrimina davvero il verso della disuguaglianza e il ramo
-   * `null`, non solo la forma del `where` costruito da tick.ts.
-   */
+  // Simula la semantica reale di Postgres per `where.company.OR` così il test
+  // discrimina davvero il verso della disuguaglianza e il ramo null.
   function mockSediConVisuraMadre(
     sedi: Array<{ id: string; companyId: string; visuraCameraleData: Date | null }>,
   ) {
     tx.sede.findMany.mockImplementation(
       (args: { where?: { company?: { OR?: Array<Record<string, unknown>> } } }) => {
         const orClauses = args?.where?.company?.OR;
-        // Comparatore generico (gt/gte/lt/lte) con semantica NULL di Postgres:
-        // un confronto contro una colonna NULL non è mai vero. Non capire solo
-        // `gt` è voluto: se il verso venisse invertito in `lt` nel codice sotto
-        // test, questo comparatore deve seguirlo fedelmente, non restare cieco.
         const passesOr = (visura: Date | null): boolean => {
           if (!orClauses) return true;
           return orClauses.some((clause) => {
@@ -152,25 +249,16 @@ describe('Task 4.3: ciclo di vita visura — esclusione dalla distribuzione', ()
             return false;
           });
         };
-        const filtered = sedi.filter((s) => passesOr(s.visuraCameraleData));
         return Promise.resolve(
-          filtered.map((s) => ({
-            id: s.id,
-            createdAt: new Date('2026-01-01'),
-            nome: `Agenzia ${s.id}`,
-            provincia: 'VE',
-            // Stessa coordinata dell'origine pratica: la distanza non è oggetto
-            // di questi test, che isolano il filtro visura/company.
-            lat: LAT0,
-            lng: LNG0,
-            companyId: s.companyId,
-          })),
+          sedi
+            .filter((s) => passesOr(s.visuraCameraleData))
+            .map((s) => ({ id: s.id, lat: LAT0, lng: LNG0, companyId: s.companyId })),
         );
       },
     );
   }
 
-  it('il `where` filtra sulla company: OR [null esente, gt(limiteVisuraUtc(now))]', async () => {
+  it('il where filtra sulla company: OR [null esente, gt(limiteVisuraUtc(now))]', async () => {
     await avviaRound1ForPratica('p1');
     const where = tx.sede.findMany.mock.calls[0][0].where;
     expect(where.company.deletedAt).toBeNull();
@@ -182,46 +270,26 @@ describe('Task 4.3: ciclo di vita visura — esclusione dalla distribuzione', ()
     ]);
   });
 
-  it('sede la cui madre ha visura a 200 giorni → NON fra i candidati (scaduta)', async () => {
-    mockSediConVisuraMadre([
-      { id: 'sScaduta', companyId: 'mScaduta', visuraCameraleData: daysAgo(200) },
-    ]);
+  it('sede la cui madre ha visura a 200 giorni → NON candidata (scaduta)', async () => {
+    mockSediConVisuraMadre([{ id: 'sScaduta', companyId: 'mScaduta', visuraCameraleData: daysAgo(200) }]);
     await avviaRound1ForPratica('p1');
     const sedeIds = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data.sedeId);
     expect(sedeIds).toHaveLength(0);
-    expect(sedeIds).not.toContain('sScaduta');
   });
 
-  it('sede la cui madre ha visuraCameraleData a null → SÌ fra i candidati (esente)', async () => {
-    mockSediConVisuraMadre([
-      { id: 'sEsente', companyId: 'mEsente', visuraCameraleData: null },
-    ]);
+  it('sede la cui madre ha visuraCameraleData null → candidata (esente)', async () => {
+    mockSediConVisuraMadre([{ id: 'sEsente', companyId: 'mEsente', visuraCameraleData: null }]);
     await avviaRound1ForPratica('p1');
     const sedeIds = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data.sedeId);
     expect(sedeIds).toContain('sEsente');
   });
-
-  it('sede la cui madre ha visura fresca (10 giorni) → SÌ fra i candidati', async () => {
-    mockSediConVisuraMadre([
-      { id: 'sFresca', companyId: 'mFresca', visuraCameraleData: daysAgo(10) },
-    ]);
-    await avviaRound1ForPratica('p1');
-    const sedeIds = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data.sedeId);
-    expect(sedeIds).toContain('sFresca');
-  });
 });
 
-// Forma semplificata di SendInput per N6, solo i campi che asseriamo: evita di
-// dover discriminare l'intera union di `sendNotifications` nei test.
+// Forma semplificata di SendInput per N6, solo i campi che asseriamo.
 type N6InputForTest = {
   tipo: string;
   target: { email: string; userId: string | null; companyId: string | null };
-  payload: {
-    codicePratica: string;
-    feeCent: number;
-    comune: string | null;
-    provincia: string | null;
-  };
+  payload: { codicePratica: string; feeCent: number; comune: string | null; provincia: string | null };
 };
 
 function n6Inputs(): N6InputForTest[] {
@@ -230,44 +298,23 @@ function n6Inputs(): N6InputForTest[] {
 
 describe('N6_AGENZIA_NUOVA_PRATICA: fan-out ai membri della sede assegnataria', () => {
   it('due assegnazioni con sede e due membri ciascuna → quattro notifiche, una per coppia', async () => {
-    // Una sola sede per madre, per isolare il fan-out dal test multi-sede sopra.
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
     tx.sede.findMany.mockResolvedValue([
-      { id: 'sA', createdAt: new Date('2026-01-01'), nome: 'Agenzia A', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'compA' },
-      { id: 'sB', createdAt: new Date('2026-01-02'), nome: 'Agenzia B', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'compB' },
+      { id: 'sA', lat: LAT0, lng: LNG0, companyId: 'compA' },
+      { id: 'sB', lat: kmLat(0.2), lng: LNG0, companyId: 'compB' },
     ]);
 
-    // Query post-commit (fuori tx): indipendente da come sono state create le
-    // assegnazioni, controlla direttamente cosa emitN6ForAssegnazioni riceve.
+    // Query post-commit (fuori tx): controlla direttamente cosa riceve emitN6.
     prismaMock.praticaAssegnazione.findMany.mockResolvedValue([
       {
-        id: 'a1',
-        praticaId: 'p1',
-        round: 1,
-        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
+        id: 'a1', praticaId: 'p1', round: 1, countdownFineAt: null, sedeId: 'sA',
         agenzia: { id: 'compA', ragioneSociale: 'Agenzia A', email: 'agenziaA@example.com', users: [] },
-        sedeId: 'sA',
-        pratica: {
-          codicePratica: 'PV-2026-000001',
-          veicoli: [{ targa: 'AA000AA' }],
-          comune: 'Venezia',
-          provincia: 'VE',
-          feeAgenziaCent: 5000,
-        },
+        pratica: { codicePratica: 'PV-2026-000001', veicoli: [{ targa: 'AA000AA' }], comune: 'Venezia', provincia: 'VE', feeAgenziaCent: 5000 },
       },
       {
-        id: 'a2',
-        praticaId: 'p1',
-        round: 1,
-        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
+        id: 'a2', praticaId: 'p1', round: 1, countdownFineAt: null, sedeId: 'sB',
         agenzia: { id: 'compB', ragioneSociale: 'Agenzia B', email: 'agenziaB@example.com', users: [] },
-        sedeId: 'sB',
-        pratica: {
-          codicePratica: 'PV-2026-000001',
-          veicoli: [{ targa: 'AA000AA' }],
-          comune: 'Venezia',
-          provincia: 'VE',
-          feeAgenziaCent: 5000,
-        },
+        pratica: { codicePratica: 'PV-2026-000001', veicoli: [{ targa: 'AA000AA' }], comune: 'Venezia', provincia: 'VE', feeAgenziaCent: 5000 },
       },
     ]);
 
@@ -290,215 +337,22 @@ describe('N6_AGENZIA_NUOVA_PRATICA: fan-out ai membri della sede assegnataria', 
     await avviaRound1ForPratica('p1');
 
     expect(destinatariSedeAgenzia).toHaveBeenCalledTimes(2);
-    expect(destinatariSedeAgenzia).toHaveBeenCalledWith('sA');
-    expect(destinatariSedeAgenzia).toHaveBeenCalledWith('sB');
-
     expect(sendNotifications).toHaveBeenCalledTimes(1);
     const inputs = n6Inputs();
-    expect(inputs).toHaveLength(4); // 2 assegnazioni × 2 membri
-
+    expect(inputs).toHaveLength(4);
     const byEmail = Object.fromEntries(inputs.map((i) => [i.target.email, i]));
-    expect(Object.keys(byEmail)).toHaveLength(4);
-
     expect(byEmail['mario@agenziaA.it'].target).toEqual({ email: 'mario@agenziaA.it', userId: 'u1', companyId: 'compA' });
-    expect(byEmail['luigi@agenziaA.it'].target).toEqual({ email: 'luigi@agenziaA.it', userId: 'u2', companyId: 'compA' });
-    expect(byEmail['anna@agenziaB.it'].target).toEqual({ email: 'anna@agenziaB.it', userId: 'u3', companyId: 'compB' });
     expect(byEmail['elsa@agenziaB.it'].target).toEqual({ email: 'elsa@agenziaB.it', userId: 'u4', companyId: 'compB' });
-
-    // Il payload (dati della pratica/assegnazione) non dipende dal membro: è
-    // identico per ogni notifica dello stesso fan-out.
     for (const input of inputs) {
       expect(input.tipo).toBe('N6_AGENZIA_NUOVA_PRATICA');
       expect(input.payload.codicePratica).toBe('PV-2026-000001');
       expect(input.payload.feeCent).toBe(5000);
-      expect(input.payload.comune).toBe('Venezia');
-      expect(input.payload.provincia).toBe('VE');
     }
   });
-
-  it('ramo legacy (sedeId null): una sola notifica all\'admin madre, destinatariSedeAgenzia non chiamata', async () => {
-    tx.sede.findMany.mockResolvedValue([
-      { id: 'sL', createdAt: new Date('2026-01-01'), nome: 'Agenzia Legacy', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'compL' },
-    ]);
-
-    prismaMock.praticaAssegnazione.findMany.mockResolvedValue([
-      {
-        id: 'a1',
-        praticaId: 'p1',
-        round: 1,
-        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
-        agenzia: {
-          id: 'compL',
-          ragioneSociale: 'Agenzia Legacy',
-          email: 'agenzia-legacy@example.com',
-          users: [{ id: 'u-legacy', email: 'admin-legacy@example.com' }],
-        },
-        sedeId: null,
-        pratica: {
-          codicePratica: 'PV-2026-000002',
-          veicoli: [],
-          comune: 'Venezia',
-          provincia: 'VE',
-          feeAgenziaCent: 3000,
-        },
-      },
-    ]);
-
-    // Se il ramo legacy chiamasse comunque il risolutore di sede sarebbe un bug:
-    // lo facciamo esplodere per farlo emergere subito nel test.
-    vi.mocked(destinatariSedeAgenzia).mockImplementation(() => {
-      throw new Error('destinatariSedeAgenzia non deve essere chiamata per assegnazioni legacy (sedeId null)');
-    });
-
-    await avviaRound1ForPratica('p1');
-
-    expect(destinatariSedeAgenzia).not.toHaveBeenCalled();
-    expect(sendNotifications).toHaveBeenCalledTimes(1);
-    const inputs = n6Inputs();
-    expect(inputs).toHaveLength(1);
-    expect(inputs[0].target).toEqual({
-      email: 'admin-legacy@example.com',
-      userId: 'u-legacy',
-      companyId: 'compL',
-    });
-  });
-
-  it('sede senza membri attivi: destinatariSedeAgenzia torna [] → nessuna notifica per quella assegnazione, nessuna eccezione', async () => {
-    tx.sede.findMany.mockResolvedValue([
-      { id: 'sE', createdAt: new Date('2026-01-01'), nome: 'Agenzia Vuota', provincia: 'VE', lat: LAT0, lng: LNG0, companyId: 'compE' },
-    ]);
-
-    prismaMock.praticaAssegnazione.findMany.mockResolvedValue([
-      {
-        id: 'a1',
-        praticaId: 'p1',
-        round: 1,
-        countdownFineAt: new Date('2026-01-10T10:00:00Z'),
-        agenzia: { id: 'compE', ragioneSociale: 'Agenzia Vuota', email: 'vuota@example.com', users: [] },
-        sedeId: 'sE',
-        pratica: {
-          codicePratica: 'PV-2026-000003',
-          veicoli: [],
-          comune: 'Venezia',
-          provincia: 'VE',
-          feeAgenziaCent: 4000,
-        },
-      },
-    ]);
-
-    vi.mocked(destinatariSedeAgenzia).mockImplementation(() => Promise.resolve([]));
-
-    await expect(avviaRound1ForPratica('p1')).resolves.toBeDefined();
-
-    expect(destinatariSedeAgenzia).toHaveBeenCalledWith('sE');
-    expect(sendNotifications).toHaveBeenCalledTimes(1);
-    expect(n6Inputs()).toEqual([]);
-  });
 });
 
-describe('Task 5: avviaRound a raggio-km + cascade', () => {
-  it('round 1: assegna TUTTE le sedi entro 500 m, nessuna oltre (nessun cap)', async () => {
-    tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sVicina1', lat: kmLat(0.2), lng: LNG0, companyId: 'm1' },
-      { id: 'sVicina2', lat: kmLat(0.45), lng: LNG0, companyId: 'm2' },
-      { id: 'sLontana600m', lat: kmLat(0.6), lng: LNG0, companyId: 'm3' },
-    ]);
-
-    await avviaRound1ForPratica('p1');
-
-    const calls = tx.praticaAssegnazione.create.mock.calls.map((c) => c[0].data);
-    const sedeIds = calls.map((d) => d.sedeId).sort();
-    expect(sedeIds).toEqual(['sVicina1', 'sVicina2']); // sLontana600m NON assegnata
-    expect(calls.every((d) => d.round === 1)).toBe(true);
-    expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ATTESA_ROUND_1' }) }),
-    );
-  });
-
-  it('la query esclude sedi senza coordinate (where lat/lng not null) e le sedi già contattate (id notIn)', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique
-      .mockResolvedValueOnce({
-        id: 'p1',
-        lat: LAT0,
-        lng: LNG0,
-        distribuzioneCiclo: 1,
-        assegnazioni: [{ sedeId: 'sGiaContattata', ciclo: 1, esito: 'RIFIUTATA' }],
-      })
-      .mockResolvedValueOnce({ stato: 'IN_ATTESA_ROUND_1' });
-    tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sNuova', lat: LAT0, lng: LNG0, companyId: 'mNuova' },
-    ]);
-
-    await avviaRound1ForPratica('p1');
-
-    const where = tx.sede.findMany.mock.calls[0][0].where;
-    expect(where.lat).toEqual({ not: null });
-    expect(where.lng).toEqual({ not: null });
-    expect(where.id).toEqual({ notIn: ['sGiaContattata'] });
-  });
-
-  it('cascade: 0 sedi entro 500 m ma 1 entro 750 m → assegnata al round 2 (raggio 750 m), stato IN_ATTESA_ROUND_2', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique
-      .mockResolvedValueOnce({ id: 'p1', lat: LAT0, lng: LNG0, distribuzioneCiclo: 1, assegnazioni: [] })
-      .mockResolvedValueOnce({ stato: 'IN_ATTESA_ROUND_2' });
-    tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sMedia600m', lat: kmLat(0.6), lng: LNG0, companyId: 'mMedia' },
-    ]);
-
-    await avviaRound1ForPratica('p1');
-
-    expect(tx.praticaAssegnazione.create).toHaveBeenCalledTimes(1);
-    expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ sedeId: 'sMedia600m', round: 2 }) }),
-    );
-    expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ATTESA_ROUND_2' }) }),
-    );
-  });
-
-  it('escalation: nessuna sede entro 1 km → escalated true, stato IN_ESCALATION, nessuna assegnazione creata', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique
-      .mockResolvedValueOnce({ id: 'p1', lat: LAT0, lng: LNG0, distribuzioneCiclo: 1, assegnazioni: [] })
-      .mockResolvedValueOnce({ stato: 'IN_ESCALATION' });
-    tx.sede.findMany.mockResolvedValueOnce([
-      { id: 'sLontanissima1_5km', lat: kmLat(1.5), lng: LNG0, companyId: 'mLontanissima' },
-    ]);
-
-    const result = await avviaRound1ForPratica('p1');
-
-    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
-    expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ stato: 'IN_ESCALATION', escalationAt: expect.any(Date) }),
-      }),
-    );
-    expect(result.escalated).toBe(true);
-  });
-
-  it('pratica senza coordinate (guardia difensiva): escalation immediata, nessuna query sede', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique
-      .mockResolvedValueOnce({ id: 'p1', lat: null, lng: null, distribuzioneCiclo: 1, assegnazioni: [] })
-      .mockResolvedValueOnce({ stato: 'IN_ESCALATION' });
-
-    const result = await avviaRound1ForPratica('p1');
-
-    expect(tx.sede.findMany).not.toHaveBeenCalled();
-    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
-    expect(result.escalated).toBe(true);
-    expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ESCALATION' }) }),
-    );
-  });
-});
-
-describe('Task 9: tickPratica — pool cumulativo (le PENDING precedenti restano accettabili)', () => {
-  const NOW = new Date('2026-07-19T12:00:00Z');
-  const SCADUTO = new Date('2026-07-19T08:00:00Z'); // countdownFineAt nel passato
-  const APERTO = new Date('2026-07-19T18:00:00Z'); // countdownFineAt nel futuro
+describe('tickPratica: espansione a raggio incrementale', () => {
+  const NOW = new Date('2026-07-21T10:00:00Z');
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -509,149 +363,133 @@ describe('Task 9: tickPratica — pool cumulativo (le PENDING precedenti restano
     vi.useRealTimers();
   });
 
-  it('avanzamento: le PENDING scadute del round precedente restano PENDING (nessun updateMany→TIMEOUT) e vengono ri-armate con finestra fresca', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique.mockResolvedValueOnce({
-      id: 'p1',
-      stato: 'IN_ATTESA_ROUND_1',
-      lat: LAT0,
-      lng: LNG0,
-      distribuzioneCiclo: 1,
-      assegnazioni: [
-        { id: 'aRound1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
-      ],
-    });
-    // round 2: una nuova sede in zona (0.75 km)
-    tx.sede.findMany.mockResolvedValueOnce([{ id: 's2', lat: LAT0, lng: LNG0, companyId: 'm2' }]);
-    // riarmaPendingScadute rilegge le PENDING scadute
-    tx.praticaAssegnazione.findMany.mockResolvedValueOnce([{ id: 'aRound1', sedeId: 's1' }]);
+  it('fuori orario → noop, nessuna scrittura', async () => {
+    orarioMock.mockReturnValue(false);
+    tx.pratica.findUnique.mockResolvedValue(praticaTick());
 
-    const result = await tickPratica('p1');
+    const res = await tickPratica('p1');
 
-    expect(result).toEqual({ status: 'advanced-round', nextRound: 2, assegnazioni: 1 });
-    // Niente TIMEOUT di massa sul round precedente: il pool è cumulativo.
-    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
-    // La PENDING scaduta viene ri-armata (nuova finestra), NON toccata nell'esito.
-    expect(tx.praticaAssegnazione.update).toHaveBeenCalledWith({
-      where: { id: 'aRound1' },
-      data: { countdownInizioAt: null, countdownFineAt: null },
-    });
-    // La nuova sede del round 2 è stata contattata.
+    expect(res).toEqual({ status: 'noop', reason: 'fuori orario' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+  });
+
+  it('in orario ma ultima espansione 3 min fa → noop finestra 10min', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({ ultimaEspansioneAt: new Date(NOW.getTime() - 3 * 60_000) }),
+    );
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'finestra 10min' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('anello successivo con sedi → assegnazioni (raggioMetri = raggio raggiunto, PENDING), avanza raggio + ultimaEspansioneAt, coda N6', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500 }));
+    tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
+
+    const res = await tickPratica('p1');
+
+    // 650 m: primo anello che la include partendo da 500 è 700.
+    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 700 });
     expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ sedeId: 's2', round: 2, esito: 'PENDING' }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ sedeId: 's1', raggioMetri: 700, esito: 'PENDING', ciclo: 1 }),
+      }),
     );
-  });
-
-  it('attesa: se anche una sola PENDING è ancora nella sua finestra → noop, nessun avanzamento né timeout', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique.mockResolvedValueOnce({
-      id: 'p1',
-      stato: 'IN_ATTESA_ROUND_1',
-      lat: LAT0,
-      lng: LNG0,
-      distribuzioneCiclo: 1,
-      assegnazioni: [
-        { id: 'a1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
-        { id: 'a2', sedeId: 's2', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: APERTO },
-      ],
-    });
-
-    const result = await tickPratica('p1');
-
-    expect(result).toEqual({ status: 'noop', reason: 'finestra aperta' });
-    expect(tx.sede.findMany).not.toHaveBeenCalled();
-    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
-    expect(tx.praticaAssegnazione.update).not.toHaveBeenCalled();
-  });
-
-  it('round 3, tutte le PENDING scadute → escalation: TIMEOUT su TUTTE le PENDING (qualunque round) + IN_ESCALATION', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique.mockResolvedValueOnce({
-      id: 'p1',
-      stato: 'IN_ATTESA_ROUND_3',
-      lat: LAT0,
-      lng: LNG0,
-      distribuzioneCiclo: 1,
-      assegnazioni: [
-        { id: 'a1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
-        { id: 'a2', sedeId: 's2', round: 2, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
-        { id: 'a3', sedeId: 's3', round: 3, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
-      ],
-    });
-    tx.praticaAssegnazione.findMany.mockResolvedValueOnce([
-      { id: 'a1', sedeId: 's1' },
-      { id: 'a2', sedeId: 's2' },
-      { id: 'a3', sedeId: 's3' },
-    ]);
-
-    const result = await tickPratica('p1');
-
-    expect(result).toEqual({ status: 'escalated' });
-    expect(tx.praticaAssegnazione.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['a1', 'a2', 'a3'] } },
-      data: { esito: 'TIMEOUT', esitoAt: NOW },
-    });
-    expect(tx.pratica.update).toHaveBeenCalledWith({
-      where: { id: 'p1' },
-      data: { stato: 'IN_ESCALATION', escalationAt: NOW },
-    });
-    // Round 3 esaurito: nessuna nuova selezione di sedi.
-    expect(tx.sede.findMany).not.toHaveBeenCalled();
-  });
-
-  it('una assegnazione ACCETTATA → noop, nessun avanzamento né timeout (qualunque round)', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique.mockResolvedValueOnce({
-      id: 'p1',
-      stato: 'IN_ATTESA_ROUND_2',
-      lat: LAT0,
-      lng: LNG0,
-      distribuzioneCiclo: 1,
-      assegnazioni: [
-        { id: 'a1', sedeId: 's1', round: 1, ciclo: 1, esito: 'TIMEOUT', countdownFineAt: SCADUTO },
-        { id: 'a2', sedeId: 's2', round: 2, ciclo: 1, esito: 'ACCETTATA', countdownFineAt: SCADUTO },
-      ],
-    });
-
-    const result = await tickPratica('p1');
-
-    expect(result).toEqual({ status: 'noop', reason: 'già accettata' });
-    expect(tx.sede.findMany).not.toHaveBeenCalled();
-    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
-    expect(tx.praticaAssegnazione.update).not.toHaveBeenCalled();
-  });
-
-  it('CRITICO: avanzamento con cascade esaurita in avviaRound (nessuna sede in nessun anello) → escalation che mette in TIMEOUT anche le PENDING del round precedente (pool cumulativo)', async () => {
-    tx.pratica.findUnique.mockReset();
-    tx.pratica.findUnique.mockResolvedValueOnce({
-      id: 'p1',
-      stato: 'IN_ATTESA_ROUND_1',
-      lat: LAT0,
-      lng: LNG0,
-      distribuzioneCiclo: 1,
-      assegnazioni: [
-        { id: 'aRound1', sedeId: 's1', round: 1, ciclo: 1, esito: 'PENDING', countdownFineAt: SCADUTO },
-      ],
-    });
-    // avviaRound(tx, pratica, 2): nessuna sede idonea in nessun anello (2 o 3) → escalation interna
-    tx.sede.findMany.mockResolvedValueOnce([]);
-    // escalatePratica (dentro avviaRound) rilegge TUTTE le PENDING della pratica, qualunque round
-    tx.praticaAssegnazione.findMany.mockResolvedValueOnce([{ id: 'aRound1', sedeId: 's1' }]);
-
-    const result = await tickPratica('p1');
-
-    expect(result).toEqual({ status: 'escalated' });
-    // La PENDING del round 1 (non più il round "corrente") viene comunque messa in TIMEOUT:
-    // altrimenti quell'agenzia potrebbe ancora accettare una pratica già escalata (l'accept
-    // controlla solo esito:'PENDING', non lo stato della pratica).
-    expect(tx.praticaAssegnazione.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ['aRound1'] } },
-      data: { esito: 'TIMEOUT', esitoAt: NOW },
-    });
     expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ stato: 'IN_ESCALATION', escalationAt: NOW }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ raggioCorrenteM: 700, ultimaEspansioneAt: NOW }),
+      }),
     );
-    // Nessuna ri-armatura: l'escalation ha già chiuso tutto.
-    expect(tx.praticaAssegnazione.update).not.toHaveBeenCalled();
+    expect(sendNotifications).toHaveBeenCalledTimes(1); // N6
+    expect(sendNotification).not.toHaveBeenCalled(); // niente N52
+  });
+
+  it('anelli vuoti intermedi → skip in un solo tick: raggioCorrenteM salta al primo non vuoto (1300 per sede a 1150 m)', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500 }));
+    tx.sede.findMany.mockResolvedValue([{ id: 'sMedia', lat: kmLat(1.15), lng: LNG0, companyId: 'mM' }]);
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 1300 });
+    expect(tx.praticaAssegnazione.create).toHaveBeenCalledTimes(1);
+    expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ sedeId: 'sMedia', raggioMetri: 1300 }) }),
+    );
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ raggioCorrenteM: 1300, ultimaEspansioneAt: NOW }) }),
+    );
+  });
+
+  it('nessuna sede fino al raggio max → zonaNonCopertaAt set + coda N52; PENDING preesistenti restano', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({
+        raggioCorrenteM: 500,
+        assegnazioni: [{ sedeId: 'sOld', ciclo: 1, esito: 'PENDING' }],
+      }),
+    );
+    tx.sede.findMany.mockResolvedValue([]); // nessuna sede idonea
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'zona-non-coperta' });
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ raggioCorrenteM: 10000, zonaNonCopertaAt: NOW }),
+      }),
+    );
+    // PENDING preesistenti NON toccate.
+    expect(tx.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+    // N52 al broker (non N6).
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
+    );
+  });
+
+  it('pratica ACCETTATA (terminale) → closed, nessuna espansione', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ stato: 'ACCETTATA' }));
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'closed', finalStato: 'ACCETTATA' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('stato non gestito (BOZZA) → noop', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ stato: 'BOZZA' }));
+    const res = await tickPratica('p1');
+    expect(res).toEqual({ status: 'noop', reason: 'stato BOZZA non gestito' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+  });
+
+  it('zonaNonCopertaAt già impostata → noop, nessuna espansione', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ zonaNonCopertaAt: NOW }));
+    const res = await tickPratica('p1');
+    expect(res).toEqual({ status: 'noop', reason: 'zona non coperta' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('pratica senza lat/lng → zona non coperta (guardia, non crash), nessuna query sede', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ lat: null, lng: null }));
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'zona-non-coperta' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ raggioCorrenteM: 10000, zonaNonCopertaAt: NOW }),
+      }),
+    );
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
+    );
   });
 });

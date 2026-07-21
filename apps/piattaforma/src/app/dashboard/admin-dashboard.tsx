@@ -5,8 +5,8 @@ import { runDistribuzioneTickAction } from '@/app/admin/actions';
 
 type TickBanner = {
   scanned?: string;
-  advanced?: string;
-  escalated?: string;
+  expanded?: string;
+  zonaNonCoperta?: string;
 };
 
 export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }) {
@@ -44,9 +44,9 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
       {tickBanner && (
         <div className="mb-5">
           <Alert variant="info" title="Tick distribuzione eseguito">
-            Pratiche ispezionate: <b>{tickBanner.scanned ?? '0'}</b> · Round avanzati:{' '}
-            <b>{tickBanner.advanced ?? '0'}</b> · Escalation:{' '}
-            <b>{tickBanner.escalated ?? '0'}</b>
+            Pratiche ispezionate: <b>{tickBanner.scanned ?? '0'}</b> · Anelli espansi:{' '}
+            <b>{tickBanner.expanded ?? '0'}</b> · Zona non coperta:{' '}
+            <b>{tickBanner.zonaNonCoperta ?? '0'}</b>
           </Alert>
         </div>
       )}
@@ -67,8 +67,8 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
       <section className="rounded-[16px] border border-pv-slate-200 bg-white p-6 shadow-[var(--pv-shadow-card)]">
         <h2 className="text-[15px] font-bold text-pv-navy-800">Strumenti admin</h2>
         <p className="mt-1 text-[13px] text-pv-slate-500">
-          Il tick distribuzione fa avanzare automaticamente le pratiche scadute al round
-          successivo. In produzione diventerà un cron automatico.
+          Il tick distribuzione espande il raggio delle pratiche in distribuzione,
+          notificando le nuove agenzie in zona. In produzione è un cron automatico.
         </p>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Link

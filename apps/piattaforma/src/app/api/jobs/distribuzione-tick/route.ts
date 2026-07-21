@@ -5,8 +5,9 @@ import { requireAdminOrCron } from '@/lib/jobs/auth';
 export const maxDuration = 60;
 
 /**
- * Tick distribuzione: avanza pratiche in IN_ATTESA_ROUND_X scadute.
- * Schedule cron Vercel: ogni 30min (vercel.json).
+ * Tick distribuzione: espande il raggio delle pratiche IN_DISTRIBUZIONE in
+ * orario lavorativo (un anello non vuoto per tick, gate 10 min).
+ * Schedule cron Vercel: ogni 10min (vercel.json).
  */
 async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);

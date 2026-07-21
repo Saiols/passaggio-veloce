@@ -1,13 +1,13 @@
 import 'server-only';
 import { prisma, Prisma } from '@pv/db';
-import { DISTRIBUZIONE } from './constants';
-import { computeCountdown, loadOrariPerSedi } from './countdown';
-import { checkAutoSuspendForSedi } from './auto-suspend';
+import { getDistribuzioneConfig } from './config';
+import { isOrarioLavorativo } from './orario-piattaforma';
+import { prossimoAnello, type SedeConDistanza } from './anelli';
 import { sediDaEscludere } from './esclusioni';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
 import { distanceKm } from '@/lib/geo/coords';
+import { roadDistancesM, type LatLng } from '@/lib/geo/road-distance';
 import {
-  getAdminEmails,
   sendNotification,
   sendNotifications,
   type N6AgenziaNuovaPayload,
@@ -17,175 +17,56 @@ import { eventoNuovaPratica, eventoPraticaEscalation } from '@/lib/eventi/pratic
 import { destinatariBroker, destinatariSedeAgenzia } from '@/lib/notifiche/pratica';
 import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
-const ROUND_TO_HOURS: Record<1 | 2 | 3, number> = {
-  1: DISTRIBUZIONE.T1_HOURS,
-  2: DISTRIBUZIONE.T2_HOURS,
-  3: DISTRIBUZIONE.T3_HOURS,
-};
-
 export type TickResult =
   | { status: 'noop'; reason: string }
-  | { status: 'advanced-round'; nextRound: 1 | 2 | 3; assegnazioni: number }
-  | { status: 'escalated' }
+  | { status: 'notified'; assegnazioni: number; raggioM: number }
+  | { status: 'zona-non-coperta' }
   | { status: 'closed'; finalStato: 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
+
+const STATI_TERMINALI = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as const;
 
 /** Side-effect jobs accumulati dentro la transazione per esecuzione post-commit. */
 type PostCommitJobs = {
-  newAssegnazioniIds: string[]; // emette N6
-  escalationPraticaId: string | null; // emette N10 + N11
+  newAssegnazioniIds: string[]; // emette N6 + evento modale "nuova pratica"
+  zonaNonCopertaPraticaId: string | null; // emette N52 broker + evento modale
 };
 
-/** Escalation: mette in TIMEOUT TUTTE le PENDING della pratica (pool cumulativo →
- *  dopo l'escalation nessuno deve poter accettare), poi IN_ESCALATION. Scatta anche
- *  l'anti-abuso sui no-show. */
-async function escalatePratica(tx: Prisma.TransactionClient, praticaId: string, now: Date): Promise<void> {
-  const pending = await tx.praticaAssegnazione.findMany({
-    where: { praticaId, esito: 'PENDING' },
-    select: { id: true, sedeId: true },
-  });
-  if (pending.length > 0) {
-    await tx.praticaAssegnazione.updateMany({
-      where: { id: { in: pending.map((a) => a.id) } },
-      data: { esito: 'TIMEOUT', esitoAt: now },
-    });
-    const sedi = Array.from(new Set(pending.map((a) => a.sedeId).filter((x): x is string => x != null)));
-    await checkAutoSuspendForSedi(tx, sedi);
-  }
-  await tx.pratica.update({ where: { id: praticaId }, data: { stato: 'IN_ESCALATION', escalationAt: now } });
+function emptyJobs(): PostCommitJobs {
+  return { newAssegnazioniIds: [], zonaNonCopertaPraticaId: null };
 }
 
-/** Ri-arma le PENDING SCADUTE (le nuove appena create hanno già finestra fresca)
- *  con una nuova finestra di `hours` ore lavorative, per gli orari di ciascuna sede
- *  → scadenza allineata che avanza. NON tocca l'esito (restano PENDING). */
-async function riarmaPendingScadute(
+function noop(reason: string): TickResult {
+  return { status: 'noop', reason };
+}
+
+/** Forma minima della pratica necessaria a costruire i candidati. */
+type PraticaCandidati = {
+  id: string;
+  distribuzioneCiclo: number;
+  assegnazioni: { sedeId: string | null; ciclo: number; esito: string }[];
+};
+
+/**
+ * Sedi agenzia candidate con distanza STRADALE (m) entro `sogliaM`, escluse
+ * quelle già contattate nel ciclo / revocate permanentemente.
+ *
+ * Query `where` invariata rispetto al motore precedente (AGENZIA, non
+ * deleted/suspended, coord presenti, company non bloccata e con visura valida,
+ * `id notIn sediDaEscludere`). Poi il prefiltro Haversine (`distanceKm ≤
+ * sogliaM`, superset garantito perché la strada è sempre ≥ della linea d'aria)
+ * limita le chiamate al provider stradale; `roadDistancesM` (cache + Google +
+ * fail-open Haversine) dà i metri reali; si tengono solo le sedi con stradale
+ * ≤ sogliaM.
+ */
+async function candidatiEntro(
   tx: Prisma.TransactionClient,
-  praticaId: string,
+  pratica: PraticaCandidati,
+  origine: LatLng,
+  sogliaM: number,
   now: Date,
-  hours: number,
-): Promise<void> {
-  const scadute = await tx.praticaAssegnazione.findMany({
-    where: { praticaId, esito: 'PENDING', countdownFineAt: { lte: now } },
-    select: { id: true, sedeId: true },
-  });
-  if (scadute.length === 0) return;
-  const orariMap = await loadOrariPerSedi(
-    scadute.map((a) => a.sedeId).filter((x): x is string => x != null),
-    tx,
-  );
-  for (const a of scadute) {
-    const orari = a.sedeId ? (orariMap.get(a.sedeId) ?? { fasce: {}, chiusure: [] }) : { fasce: {}, chiusure: [] };
-    const { inizio, fine } = computeCountdown(now, hours, orari);
-    await tx.praticaAssegnazione.update({
-      where: { id: a.id },
-      data: { countdownInizioAt: inizio, countdownFineAt: fine },
-    });
-  }
-}
-
-export async function tickPratica(praticaId: string): Promise<TickResult> {
-  const { result, jobs } = await prisma.$transaction(async (tx) => {
-    const pratica = await tx.pratica.findUnique({
-      where: { id: praticaId },
-      include: {
-        assegnazioni: { orderBy: [{ round: 'asc' }, { invioAt: 'asc' }] },
-      },
-    });
-
-    if (!pratica) {
-      return { result: { status: 'noop' as const, reason: 'pratica non trovata' }, jobs: emptyJobs() };
-    }
-
-    const terminale = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as const;
-    if ((terminale as readonly string[]).includes(pratica.stato)) {
-      return {
-        result: { status: 'closed' as const, finalStato: pratica.stato as 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' },
-        jobs: emptyJobs(),
-      };
-    }
-
-    const currentRound = currentRoundFromStato(pratica.stato);
-    if (!currentRound) {
-      return { result: { status: 'noop' as const, reason: `stato ${pratica.stato} non gestito` }, jobs: emptyJobs() };
-    }
-
-    const now = new Date();
-
-    // Pool cumulativo: TUTTE le PENDING (qualunque round), non solo il round corrente.
-    const pending = pratica.assegnazioni.filter((a) => a.esito === 'PENDING');
-    const accettata = pratica.assegnazioni.some((a) => a.esito === 'ACCETTATA');
-    if (accettata) {
-      return { result: { status: 'noop' as const, reason: 'già accettata' }, jobs: emptyJobs() };
-    }
-
-    // Se almeno una PENDING è ancora nella sua finestra → attesa.
-    const ancoraAperta = pending.some((a) => a.countdownFineAt != null && a.countdownFineAt > now);
-    if (ancoraAperta) {
-      return { result: { status: 'noop' as const, reason: 'finestra aperta' }, jobs: emptyJobs() };
-    }
-
-    // Tutte le PENDING scadute (o nessuna) e nessuno ha accettato.
-    if (currentRound < 3) {
-      const nextRound = (currentRound + 1) as 1 | 2 | 3;
-      const { count, newAssegnazioniIds, escalated, round: reached } = await avviaRound(tx, pratica, nextRound);
-      if (!escalated) {
-        // Ri-arma le PENDING scadute (le nuove hanno già finestra fresca) con la
-        // finestra del round raggiunto → scadenza allineata che avanza.
-        await riarmaPendingScadute(tx, praticaId, now, ROUND_TO_HOURS[reached]);
-      }
-      await logCambioStato(tx, {
-        praticaId,
-        statoDa: pratica.stato,
-        statoA: escalated ? 'IN_ESCALATION' : statoNomePerRound(reached),
-        tipoEvento: escalated ? STATO_EVENTO.ESCALATION : STATO_EVENTO.ROUND_ADVANCE,
-        meta: { round: reached, ciclo: pratica.distribuzioneCiclo },
-      });
-      return {
-        result: escalated
-          ? { status: 'escalated' as const }
-          : { status: 'advanced-round' as const, nextRound: reached, assegnazioni: count },
-        jobs: { newAssegnazioniIds, escalationPraticaId: escalated ? praticaId : null },
-      };
-    }
-
-    // Round 3, tutte scadute, nessuno ha accettato → escalation (TIMEOUT a tutte).
-    await escalatePratica(tx, praticaId, now);
-    await logCambioStato(tx, {
-      praticaId,
-      statoDa: pratica.stato,
-      statoA: 'IN_ESCALATION',
-      tipoEvento: STATO_EVENTO.ESCALATION,
-      meta: { round: currentRound, ciclo: pratica.distribuzioneCiclo },
-    });
-    return { result: { status: 'escalated' as const }, jobs: { newAssegnazioniIds: [], escalationPraticaId: praticaId } };
-  });
-
-  await processPostCommitJobs(jobs);
-  return result;
-}
-
-export async function avviaRound(
-  tx: Prisma.TransactionClient,
-  pratica: {
-    id: string;
-    lat: number | null;
-    lng: number | null;
-    distribuzioneCiclo: number;
-    assegnazioni: { sedeId: string | null; ciclo: number; esito: string }[];
-  },
-  round: 1 | 2 | 3,
-): Promise<{ count: number; newAssegnazioniIds: string[]; escalated: boolean; round: 1 | 2 | 3 }> {
-  const now = new Date();
+): Promise<SedeConDistanza[]> {
   const sediContattate = sediDaEscludere(pratica);
 
-  // Senza coordinate della pratica non possiamo calcolare distanze → escalation.
-  // (Non dovrebbe accadere: il submit le rende obbligatorie; guardia difensiva.)
-  if (pratica.lat == null || pratica.lng == null) {
-    await escalatePratica(tx, pratica.id, now);
-    return { count: 0, newAssegnazioniIds: [], escalated: true, round: 3 };
-  }
-  const origine = { lat: pratica.lat, lng: pratica.lng };
-
-  // Sedi agenzia idonee CON coordinate, non ancora contattate nel ciclo.
   const sediIdonee = await tx.sede.findMany({
     where: {
       type: 'AGENZIA',
@@ -207,81 +88,297 @@ export async function avviaRound(
     select: { id: true, lat: true, lng: true, companyId: true },
   });
 
-  // Cascade: dal round richiesto fino al 3, il primo anello non vuoto vince
-  // (anello incrementale: le sedi dei round precedenti sono già escluse).
-  for (let r = round; r <= 3; r++) {
-    const raggio = DISTRIBUZIONE.RAGGI_KM[r - 1];
-    const inRing = sediIdonee.filter(
-      (s) =>
-        s.lat != null &&
-        s.lng != null &&
-        distanceKm(origine, { lat: s.lat, lng: s.lng }) <= raggio,
-    );
-    if (inRing.length === 0) continue;
+  // Prefiltro Haversine: condizione necessaria (strada ≥ linea d'aria) → superset.
+  const sogliaKm = sogliaM / 1000;
+  const prefiltrate = sediIdonee.filter(
+    (s) =>
+      s.lat != null &&
+      s.lng != null &&
+      distanceKm(origine, { lat: s.lat, lng: s.lng }) <= sogliaKm,
+  );
+  if (prefiltrate.length === 0) return [];
 
-    const orariMap = await loadOrariPerSedi(inRing.map((s) => s.id), tx);
-    const hours = ROUND_TO_HOURS[r as 1 | 2 | 3];
-    const newIds: string[] = [];
-    for (const s of inRing) {
-      const orari = orariMap.get(s.id) ?? { fasce: {}, chiusure: [] };
-      const { inizio, fine } = computeCountdown(now, hours, orari);
-      const created = await tx.praticaAssegnazione.create({
-        data: {
-          praticaId: pratica.id,
-          agenziaId: s.companyId, // madre (colonna legacy, NOT NULL)
-          sedeId: s.id,
-          round: r,
-          ciclo: pratica.distribuzioneCiclo,
-          esito: 'PENDING',
-          invioAt: now,
-          countdownInizioAt: inizio,
-          countdownFineAt: fine,
-        },
-      });
-      newIds.push(created.id);
+  const distanze = await roadDistancesM(
+    pratica.id,
+    origine,
+    prefiltrate.map((s) => ({ sedeId: s.id, coord: { lat: s.lat!, lng: s.lng! } })),
+    tx,
+  );
+
+  const out: SedeConDistanza[] = [];
+  for (const s of prefiltrate) {
+    const d = distanze.get(s.id);
+    if (d != null && d <= sogliaM) {
+      out.push({ sedeId: s.id, companyId: s.companyId, distanzaM: d });
     }
-    await tx.pratica.update({
-      where: { id: pratica.id },
-      data: statoPerRound(r as 1 | 2 | 3, now),
-    });
-    return { count: inRing.length, newAssegnazioniIds: newIds, escalated: false, round: r as 1 | 2 | 3 };
   }
-
-  // Nessuna sede fino a 1 km → escalation.
-  await escalatePratica(tx, pratica.id, now);
-  return { count: 0, newAssegnazioniIds: [], escalated: true, round: 3 };
+  return out;
 }
 
-function statoPerRound(
-  round: 1 | 2 | 3,
+/** Crea le PraticaAssegnazione PENDING per le sedi dell'anello raggiunto. */
+async function creaAssegnazioni(
+  tx: Prisma.TransactionClient,
+  praticaId: string,
+  ciclo: number,
+  raggioM: number,
+  sedi: SedeConDistanza[],
   now: Date,
-): Prisma.PraticaUncheckedUpdateInput {
-  if (round === 1) return { stato: 'IN_ATTESA_ROUND_1', round1StartedAt: now };
-  if (round === 2) return { stato: 'IN_ATTESA_ROUND_2', round2StartedAt: now };
-  return { stato: 'IN_ATTESA_ROUND_3', round3StartedAt: now };
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const s of sedi) {
+    const created = await tx.praticaAssegnazione.create({
+      data: {
+        praticaId,
+        agenziaId: s.companyId, // madre (colonna legacy, NOT NULL)
+        sedeId: s.sedeId,
+        // `round` resta NOT NULL nello schema: la v2 non ha più round, il
+        // raggio d'ingresso vive in `raggioMetri`. Valore fisso 1 per le righe v2.
+        round: 1,
+        ciclo,
+        raggioMetri: raggioM,
+        esito: 'PENDING',
+        invioAt: now,
+      },
+    });
+    ids.push(created.id);
+  }
+  return ids;
 }
 
-export function statoNomePerRound(round: 1 | 2 | 3): 'IN_ATTESA_ROUND_1' | 'IN_ATTESA_ROUND_2' | 'IN_ATTESA_ROUND_3' {
-  return round === 1 ? 'IN_ATTESA_ROUND_1' : round === 2 ? 'IN_ATTESA_ROUND_2' : 'IN_ATTESA_ROUND_3';
+/**
+ * Tick di espansione per UNA pratica in distribuzione.
+ *
+ * Guardie → gate orario → gate 10 min → costruzione candidati (stradale ≤
+ * raggioMaxM) → `prossimoAnello`:
+ *  - `notifica`: crea le assegnazioni dell'anello raggiunto, avanza
+ *    `raggioCorrenteM`, marca `ultimaEspansioneAt = now`, coda N6.
+ *  - `zona-non-coperta`: marca `zonaNonCopertaAt = now` (le PENDING restano
+ *    accettabili), coda N52 al broker.
+ */
+export async function tickPratica(praticaId: string): Promise<TickResult> {
+  const { result, jobs } = await prisma.$transaction(async (tx) => {
+    const pratica = await tx.pratica.findUnique({
+      where: { id: praticaId },
+      include: { assegnazioni: { select: { sedeId: true, ciclo: true, esito: true } } },
+    });
+    if (!pratica) {
+      return { result: noop('pratica non trovata'), jobs: emptyJobs() };
+    }
+
+    const cfg = await getDistribuzioneConfig(tx);
+    const now = new Date();
+
+    // Terminale (incl. ACCETTATA) → uscita dalla distribuzione.
+    if ((STATI_TERMINALI as readonly string[]).includes(pratica.stato)) {
+      return {
+        result: {
+          status: 'closed' as const,
+          finalStato: pratica.stato as 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA',
+        },
+        jobs: emptyJobs(),
+      };
+    }
+
+    // Stato non gestito da questo motore (es. BOZZA, PROCESSATA, IN_ATTESA_ROUND_* legacy).
+    if (pratica.stato !== 'IN_DISTRIBUZIONE') {
+      return { result: noop(`stato ${pratica.stato} non gestito`), jobs: emptyJobs() };
+    }
+
+    // Già dichiarata zona non coperta → l'espansione è ferma (accettazione tardiva
+    // resta possibile finché una PENDING è in giro, ma non tocca a questo motore).
+    if (pratica.zonaNonCopertaAt) {
+      return { result: noop('zona non coperta'), jobs: emptyJobs() };
+    }
+
+    // Coordinate mancanti → non calcolabile (guardia difensiva: il submit le rende
+    // obbligatorie). Zona non coperta immediata, senza crash.
+    if (pratica.lat == null || pratica.lng == null) {
+      await tx.pratica.update({
+        where: { id: praticaId },
+        data: { raggioCorrenteM: cfg.raggioMaxM, zonaNonCopertaAt: now },
+      });
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: 'IN_DISTRIBUZIONE',
+        statoA: 'IN_DISTRIBUZIONE',
+        tipoEvento: STATO_EVENTO.ESCALATION,
+        meta: { zonaNonCoperta: true, motivo: 'coordinate-mancanti', ciclo: pratica.distribuzioneCiclo },
+      });
+      return {
+        result: { status: 'zona-non-coperta' as const },
+        jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId },
+      };
+    }
+
+    // Fuori orario lavorativo piattaforma → pausa (nessuno stato cambia).
+    if (!isOrarioLavorativo(now, cfg)) {
+      return { result: noop('fuori orario'), jobs: emptyJobs() };
+    }
+
+    // Gate 10 min: se l'ultima notifica è troppo recente, attendi il prossimo tick.
+    if (
+      pratica.ultimaEspansioneAt &&
+      (now.getTime() - pratica.ultimaEspansioneAt.getTime()) / 60000 < cfg.intervalloMin
+    ) {
+      return { result: noop('finestra 10min'), jobs: emptyJobs() };
+    }
+
+    const origine: LatLng = { lat: pratica.lat, lng: pratica.lng };
+    const candidati = await candidatiEntro(tx, pratica, origine, cfg.raggioMaxM, now);
+    const res = prossimoAnello(candidati, pratica.raggioCorrenteM ?? cfg.raggioStartM, cfg);
+
+    if (res.tipo === 'notifica') {
+      const newIds = await creaAssegnazioni(
+        tx,
+        praticaId,
+        pratica.distribuzioneCiclo,
+        res.raggioRaggiuntoM,
+        res.sedi,
+        now,
+      );
+      await tx.pratica.update({
+        where: { id: praticaId },
+        data: { raggioCorrenteM: res.raggioRaggiuntoM, ultimaEspansioneAt: now },
+      });
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa: 'IN_DISTRIBUZIONE',
+        statoA: 'IN_DISTRIBUZIONE',
+        tipoEvento: STATO_EVENTO.ROUND_ADVANCE,
+        meta: { raggioM: res.raggioRaggiuntoM, ciclo: pratica.distribuzioneCiclo },
+      });
+      return {
+        result: { status: 'notified' as const, assegnazioni: newIds.length, raggioM: res.raggioRaggiuntoM },
+        jobs: { newAssegnazioniIds: newIds, zonaNonCopertaPraticaId: null },
+      };
+    }
+
+    // zona-non-coperta: nessuna sede entro il raggio massimo.
+    await tx.pratica.update({
+      where: { id: praticaId },
+      data: { raggioCorrenteM: cfg.raggioMaxM, zonaNonCopertaAt: now },
+    });
+    await logCambioStato(tx, {
+      praticaId,
+      statoDa: 'IN_DISTRIBUZIONE',
+      statoA: 'IN_DISTRIBUZIONE',
+      tipoEvento: STATO_EVENTO.ESCALATION,
+      meta: { zonaNonCoperta: true, raggioM: cfg.raggioMaxM, ciclo: pratica.distribuzioneCiclo },
+    });
+    return {
+      result: { status: 'zona-non-coperta' as const },
+      jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId },
+    };
+  });
+
+  await processPostCommitJobs(jobs);
+  return result;
 }
 
-function currentRoundFromStato(stato: string): 1 | 2 | 3 | null {
-  if (stato === 'IN_ATTESA_ROUND_1') return 1;
-  if (stato === 'IN_ATTESA_ROUND_2') return 2;
-  if (stato === 'IN_ATTESA_ROUND_3') return 3;
-  return null;
+/**
+ * Primo anello al submit (o al ricircolo dopo revoca): porta la pratica in
+ * `IN_DISTRIBUZIONE`, `raggioCorrenteM = raggioStartM`, e contatta le sedi entro
+ * il raggio iniziale. **Ignora l'orario lavorativo** (il primo anello parte a
+ * qualsiasi ora). Se nessuna sede è in zona → nessuna notifica e
+ * `ultimaEspansioneAt = null` (il primo tick in orario espanderà subito).
+ *
+ * Nome storicamente `avviaRound1ForPratica`: MANTENUTO perché il submit e la
+ * revoca lo importano.
+ */
+export async function avviaRound1ForPratica(praticaId: string): Promise<{
+  assegnazioni: number;
+  stato: string;
+  newAssegnazioniIds: string[];
+}> {
+  const { result, jobs } = await prisma.$transaction(async (tx) => {
+    const pratica = await tx.pratica.findUnique({
+      where: { id: praticaId },
+      include: { assegnazioni: { select: { sedeId: true, ciclo: true, esito: true } } },
+    });
+    if (!pratica) throw new Error('Pratica non trovata');
+
+    const cfg = await getDistribuzioneConfig(tx);
+    const now = new Date();
+    const statoDa = pratica.stato;
+
+    let newIds: string[] = [];
+    if (pratica.lat != null && pratica.lng != null) {
+      const origine: LatLng = { lat: pratica.lat, lng: pratica.lng };
+      const candidati = await candidatiEntro(tx, pratica, origine, cfg.raggioStartM, now);
+      newIds = await creaAssegnazioni(
+        tx,
+        praticaId,
+        pratica.distribuzioneCiclo,
+        cfg.raggioStartM,
+        candidati,
+        now,
+      );
+    }
+
+    await tx.pratica.update({
+      where: { id: praticaId },
+      data: {
+        stato: 'IN_DISTRIBUZIONE',
+        raggioCorrenteM: cfg.raggioStartM,
+        // Solo se abbiamo davvero notificato: altrimenti null → il primo tick espande.
+        ultimaEspansioneAt: newIds.length > 0 ? now : null,
+        zonaNonCopertaAt: null,
+      },
+    });
+
+    await logCambioStato(tx, {
+      praticaId,
+      statoDa,
+      statoA: 'IN_DISTRIBUZIONE',
+      tipoEvento: STATO_EVENTO.SUBMIT,
+      meta: { raggioM: cfg.raggioStartM, ciclo: pratica.distribuzioneCiclo, assegnazioni: newIds.length },
+    });
+
+    return {
+      result: {
+        assegnazioni: newIds.length,
+        stato: 'IN_DISTRIBUZIONE',
+        newAssegnazioniIds: newIds,
+      },
+      jobs: { newAssegnazioniIds: newIds, zonaNonCopertaPraticaId: null },
+    };
+  });
+
+  await processPostCommitJobs(jobs);
+  return result;
 }
 
-function emptyJobs(): PostCommitJobs {
-  return { newAssegnazioniIds: [], escalationPraticaId: null };
+/**
+ * Tick di tutte le pratiche in distribuzione (chiamato dal cron ogni 10 min).
+ * Paginazione difensiva: `take` cap per non fare esplodere un tick.
+ */
+export async function tickAllPraticheInDistribuzione(): Promise<{
+  scanned: number;
+  expanded: number;
+  zonaNonCoperta: number;
+}> {
+  const pratiche = await prisma.pratica.findMany({
+    where: { stato: 'IN_DISTRIBUZIONE', zonaNonCopertaAt: null, deletedAt: null },
+    select: { id: true },
+    take: 500,
+  });
+
+  const counters = { scanned: 0, expanded: 0, zonaNonCoperta: 0 };
+  for (const p of pratiche) {
+    counters.scanned += 1;
+    const r = await tickPratica(p.id);
+    if (r.status === 'notified') counters.expanded += 1;
+    if (r.status === 'zona-non-coperta') counters.zonaNonCoperta += 1;
+  }
+  return counters;
 }
 
 export async function processPostCommitJobs(jobs: PostCommitJobs): Promise<void> {
   if (jobs.newAssegnazioniIds.length > 0) {
     await emitN6ForAssegnazioni(jobs.newAssegnazioniIds);
   }
-  if (jobs.escalationPraticaId) {
-    await emitEscalationNotifications(jobs.escalationPraticaId);
+  if (jobs.zonaNonCopertaPraticaId) {
+    await emitZonaNonCopertaNotifications(jobs.zonaNonCopertaPraticaId);
   }
 }
 
@@ -374,142 +471,59 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
   ).catch(() => undefined);
 }
 
-async function emitEscalationNotifications(praticaId: string): Promise<void> {
+/**
+ * Zona non coperta: nessuna agenzia entro il raggio massimo. Avvisa SOLO il
+ * broker (N52 + evento modale, riusa `eventoPraticaEscalation`): gli admin la
+ * vedono nel monitoraggio, niente email admin. Le PENDING restano accettabili.
+ */
+async function emitZonaNonCopertaNotifications(praticaId: string): Promise<void> {
   const pratica = await prisma.pratica.findUnique({
     where: { id: praticaId },
-    include: {
-      broker: {
-        include: {
-          users: { where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null }, select: { email: true, nome: true, id: true }, take: 1 },
-        },
-      },
-      assegnazioni: { select: { id: true } },
+    select: {
+      brokerId: true,
+      brokerSedeId: true,
+      codicePratica: true,
       veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
     },
   });
   if (!pratica) return;
 
-  const tentativi = pratica.assegnazioni.length;
+  const cfg = await getDistribuzioneConfig();
+  const raggioMaxKm = cfg.raggioMaxM / 1000;
   const targaPratica =
     pratica.veicoli[0]?.targa
       ? pratica.veicoli.length > 1
         ? `${pratica.veicoli[0].targa} +${pratica.veicoli.length - 1}`
         : pratica.veicoli[0].targa
       : null;
-  const admins = await getAdminEmails();
 
-  const targets = admins.map((a) => ({
-    tipo: 'N10_ADMIN_ESCALATION' as const,
-    target: { email: a.email, userId: a.userId, companyId: null },
-    payload: {
-      codicePratica: pratica.codicePratica ?? '—',
-      targa: targaPratica,
-      comune: pratica.comune,
-      provincia: pratica.provincia,
-      tentativi,
-      brokerRagioneSociale: pratica.broker.ragioneSociale,
-      brokerEmail: pratica.broker.email,
-      brokerTelefono: pratica.broker.telefono,
-    },
-  }));
-
-  await sendNotifications(targets);
-
-  // Recapito: chi ha creato la pratica; se non è più raggiungibile la catena
+  // Recapito: chi ha creato la pratica; se non più raggiungibile la catena
   // scende alla sua sede, poi all'admin azienda. Vedi lib/notifiche/pratica.ts.
   const destinatari = await destinatariBroker(praticaId);
   for (const d of destinatari) {
     // Un destinatario che fallisce non deve azzerare l'invio agli altri.
     await sendNotification({
-      tipo: 'N11_BROKER_ESCALATION',
-      target: { email: d.email, userId: d.userId, companyId: pratica.broker.id },
+      tipo: 'N52_BROKER_ZONA_NON_COPERTA',
+      target: { email: d.email, userId: d.userId, companyId: pratica.brokerId },
       payload: {
         codicePratica: pratica.codicePratica ?? '—',
         targa: targaPratica,
         nomeBroker: d.nome,
+        raggioMaxKm,
       },
     }).catch(() => undefined);
   }
 
-  // Evento in-app (modale) per il broker: nessuna agenzia disponibile.
+  // Evento in-app (modale) per il broker: nessuna agenzia disponibile in zona.
   if (pratica.codicePratica) {
     await emitEventoPratica(
       prisma,
       eventoPraticaEscalation({
         praticaId,
-        brokerId: pratica.broker.id,
+        brokerId: pratica.brokerId,
         sedeId: pratica.brokerSedeId,
         codicePratica: pratica.codicePratica,
       }),
     ).catch(() => undefined);
   }
-}
-
-/**
- * Avvia il round 1 per una pratica appena creata.
- */
-export async function avviaRound1ForPratica(praticaId: string): Promise<{
-  assegnazioni: number;
-  stato: string;
-  newAssegnazioniIds: string[];
-  escalated: boolean;
-}> {
-  const result = await prisma.$transaction(async (tx) => {
-    const pratica = await tx.pratica.findUnique({
-      where: { id: praticaId },
-      include: { assegnazioni: { select: { sedeId: true, ciclo: true, esito: true } } },
-    });
-    if (!pratica) throw new Error('Pratica non trovata');
-    const r = await avviaRound(tx, pratica, 1);
-    const updated = await tx.pratica.findUnique({
-      where: { id: praticaId },
-      select: { stato: true },
-    });
-    await logCambioStato(tx, {
-      praticaId,
-      statoDa: pratica.stato,
-      statoA: updated!.stato,
-      tipoEvento: r.escalated ? STATO_EVENTO.ESCALATION : STATO_EVENTO.SUBMIT,
-      meta: { round: r.round, ciclo: pratica.distribuzioneCiclo },
-    });
-    return {
-      assegnazioni: r.count,
-      stato: updated!.stato,
-      newAssegnazioniIds: r.newAssegnazioniIds,
-      escalated: r.escalated,
-    };
-  });
-
-  // Post-commit: notifiche alle agenzie + escalation se nessuno
-  await processPostCommitJobs({
-    newAssegnazioniIds: result.newAssegnazioniIds,
-    escalationPraticaId: result.escalated ? praticaId : null,
-  });
-
-  return result;
-}
-
-export async function tickAllPraticheInDistribuzione(): Promise<{
-  scanned: number;
-  roundsAdvanced: number;
-  escalated: number;
-}> {
-  const pratiche = await prisma.pratica.findMany({
-    where: {
-      stato: { in: ['IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3'] },
-      deletedAt: null,
-    },
-    select: { id: true },
-  });
-
-  const counters = { scanned: 0, roundsAdvanced: 0, escalated: 0 };
-
-  for (const p of pratiche) {
-    counters.scanned += 1;
-    const r = await tickPratica(p.id);
-    if (r.status === 'advanced-round') counters.roundsAdvanced += 1;
-    if (r.status === 'escalated') counters.escalated += 1;
-  }
-
-  return counters;
 }

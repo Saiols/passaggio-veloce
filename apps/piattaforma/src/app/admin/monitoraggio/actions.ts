@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
-import { avviaRound, processPostCommitJobs, statoNomePerRound } from '@/lib/distribuzione/tick';
+import { avviaRound1ForPratica } from '@/lib/distribuzione/tick';
 import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariSedeAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
@@ -17,8 +17,11 @@ export type RevocaResult = { ok: true } | { ok: false; error: string };
 /**
  * Revoca una pratica accettata-non-lavorata e la rimette in distribuzione:
  * sgancia l'agenzia (esito REVOCATA_ADMIN, esclusione permanente), incrementa il
- * ciclo e riavvia il round 1 sulla zona. Poi informa agenzia revocata, broker e
- * clienti. Best-effort per email/eventi. Solo super-admin.
+ * ciclo, resetta lo stato di espansione (raggio corrente / ultima espansione /
+ * zona non coperta) e la riporta in `IN_DISTRIBUZIONE`; poi il primo anello
+ * riparte via `avviaRound1ForPratica` (transazione propria + N6/evento
+ * post-commit). Infine informa agenzia revocata, broker e clienti. Best-effort
+ * per email/eventi. Solo super-admin.
  */
 export async function revocaERimettiInCircoloAction(
   praticaId: string,
@@ -66,7 +69,8 @@ export async function revocaERimettiInCircoloAction(
         data: { esito: 'REVOCATA_ADMIN', esitoAt: new Date(), notaRifiuto: motivoPulito },
       });
 
-      // 2) sgancia l'agenzia e apri il nuovo ciclo (lo stato lo imposta avviaRound)
+      // 2) sgancia l'agenzia, apri il nuovo ciclo e riporta in IN_DISTRIBUZIONE
+      // azzerando lo stato di espansione (v2): ring1 riparte dopo il commit.
       // compare-and-set: ri-asserisce stato/ciclo per evitare doppia revoca in race
       const cas = await tx.pratica.updateMany({
         where: {
@@ -76,11 +80,17 @@ export async function revocaERimettiInCircoloAction(
           distribuzioneCiclo: pratica.distribuzioneCiclo,
         },
         data: {
+          stato: 'IN_DISTRIBUZIONE',
           agenziaAssegnataId: null,
           agenziaSedeId: null,
           accettataAt: null,
           accettataDaUserId: null,
           distribuzioneCiclo: nuovoCiclo,
+          // Reset stato espansione v2 (ring1 li reimposta correttamente).
+          raggioCorrenteM: null,
+          ultimaEspansioneAt: null,
+          zonaNonCopertaAt: null,
+          // Colonne timeline legacy: azzerate per pulizia (non più prodotte).
           round1StartedAt: null,
           round2StartedAt: null,
           round3StartedAt: null,
@@ -91,27 +101,14 @@ export async function revocaERimettiInCircoloAction(
         throw new Error('La pratica non è più in stato accettato/non lavorato');
       }
 
-      // 3) ricarica le assegnazioni (incl. la REVOCATA_ADMIN appena scritta)
-      const assegnazioni = await tx.praticaAssegnazione.findMany({
-        where: { praticaId },
-        select: { sedeId: true, ciclo: true, esito: true },
-      });
-
-      // 4) riparti dal round 1 sul nuovo ciclo: ricontatta la zona, esclude la revocata
-      const r = await avviaRound(
-        tx,
-        { id: praticaId, lat: pratica.lat, lng: pratica.lng, distribuzioneCiclo: nuovoCiclo, assegnazioni },
-        1,
-      );
-
       await logCambioStato(tx, {
         praticaId,
         statoDa: 'ACCETTATA',
-        statoA: r.escalated ? 'IN_ESCALATION' : statoNomePerRound(r.round),
+        statoA: 'IN_DISTRIBUZIONE',
         tipoEvento: STATO_EVENTO.RECIRCULATE,
         attoreUserId: adminId,
         motivo: motivoPulito,
-        meta: { ciclo: nuovoCiclo, revokedSedeId, round: r.round, escalated: r.escalated },
+        meta: { ciclo: nuovoCiclo, revokedSedeId },
       });
 
       const targa = pratica.veicoli[0]?.targa
@@ -121,8 +118,6 @@ export async function revocaERimettiInCircoloAction(
         : null;
 
       return {
-        newAssegnazioniIds: r.newAssegnazioniIds,
-        escalated: r.escalated,
         revokedSedeId,
         revokedCompanyId,
         brokerId: pratica.brokerId,
@@ -131,11 +126,10 @@ export async function revocaERimettiInCircoloAction(
       };
     });
 
-    // 5) N6 + popup alle nuove sedi in zona (la revocata è esclusa a monte)
-    await processPostCommitJobs({
-      newAssegnazioniIds: outcome.newAssegnazioniIds,
-      escalationPraticaId: outcome.escalated ? praticaId : null,
-    }).catch(() => undefined);
+    // 5) primo anello sul nuovo ciclo (transazione propria + N6/evento
+    // post-commit): ricontatta la zona escludendo la sede revocata. La pratica
+    // è già IN_DISTRIBUZIONE; se ring1 fallisce, il cron la espande comunque.
+    await avviaRound1ForPratica(praticaId).catch(() => undefined);
 
     // 6) email + evento all'agenzia revocata
     if (outcome.revokedSedeId && outcome.revokedCompanyId && outcome.codicePratica) {

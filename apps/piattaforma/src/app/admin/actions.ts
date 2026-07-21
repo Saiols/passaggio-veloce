@@ -16,8 +16,8 @@ export async function runDistribuzioneTickAction(): Promise<void> {
   const params = new URLSearchParams({
     tick: '1',
     scanned: String(result.scanned),
-    advanced: String(result.roundsAdvanced),
-    escalated: String(result.escalated),
+    expanded: String(result.expanded),
+    zonaNonCoperta: String(result.zonaNonCoperta),
   });
 
   revalidatePath('/dashboard');

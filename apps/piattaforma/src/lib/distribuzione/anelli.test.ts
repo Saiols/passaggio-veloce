@@ -36,4 +36,24 @@ describe('prossimoAnello', () => {
 
     expect(esito).toEqual({ tipo: 'zona-non-coperta', raggioRaggiuntoM: cfg.raggioMaxM });
   });
+
+  it('config malformata stepM:0 → TERMINA (zona-non-coperta), niente loop infinito', () => {
+    // stepM<=0 farebbe non avanzare mai il raggio: il clamp interno a ≥1 m
+    // garantisce la terminazione. raggioMaxM piccolo per un test istantaneo.
+    const cfgRotta = { ...cfg, stepM: 0, raggioMaxM: 1000 };
+
+    const esito = prossimoAnello([], 500, cfgRotta);
+
+    expect(esito).toEqual({ tipo: 'zona-non-coperta', raggioRaggiuntoM: 1000 });
+  });
+
+  it('config malformata stepM:0 con una sede in zona → notifica (avanza a passo 1 m)', () => {
+    const cfgRotta = { ...cfg, stepM: 0, raggioMaxM: 1000 };
+    const sede: SedeConDistanza = { sedeId: 's9', companyId: 'c9', distanzaM: 600 };
+
+    const esito = prossimoAnello([sede], 599, cfgRotta);
+
+    // Con clamp step=1 m, il primo anello che include la sede a 600 è 600.
+    expect(esito).toEqual({ tipo: 'notifica', raggioRaggiuntoM: 600, sedi: [sede] });
+  });
 });

@@ -29,9 +29,13 @@ export function prossimoAnello(
   raggioCorrenteM: number,
   cfg: DistribuzioneConfigDTO,
 ): ProssimoAnello {
+  // Guardia anti-hang: una config malformata con `stepM <= 0` (o non finito)
+  // manderebbe il `while` in loop infinito (il raggio non avanzerebbe mai).
+  // Clamp a ≥1 m: peggior caso l'espansione è lenta, ma il ciclo TERMINA sempre.
+  const step = Number.isFinite(cfg.stepM) && cfg.stepM >= 1 ? cfg.stepM : 1;
   let raggio = raggioCorrenteM;
   while (raggio < cfg.raggioMaxM) {
-    raggio = Math.min(raggio + cfg.stepM, cfg.raggioMaxM);
+    raggio = Math.min(raggio + step, cfg.raggioMaxM);
     const inRing = sediInMaxRaggio.filter((s) => s.distanzaM <= raggio);
     if (inRing.length > 0) return { tipo: 'notifica', raggioRaggiuntoM: raggio, sedi: inRing };
   }

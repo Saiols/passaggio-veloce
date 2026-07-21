@@ -9,9 +9,13 @@ const { tx, prismaMock, cfgMock, orarioMock, roadMock } = vi.hoisted(() => {
   };
   const prismaMock = {
     $transaction: vi.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+    // Le letture "Step 1" e la query candidati girano FUORI dalla tx sul client
+    // base: condividono i mock della tx così i test controllano un solo punto.
+    sede: tx.sede,
     praticaAssegnazione: { findMany: vi.fn() },
-    // Usata da emitZonaNonCopertaNotifications (post-commit, fuori dalla tx).
-    pratica: { findUnique: vi.fn() },
+    // pratica.findUnique: Step 1 (include → delega a tx) + N52 post-commit (select).
+    // pratica.findMany: usata da tickAllPraticheInDistribuzione.
+    pratica: { findUnique: vi.fn(), findMany: vi.fn() },
   };
   return {
     tx,
@@ -39,7 +43,7 @@ vi.mock('@/lib/notifiche/pratica', () => ({
   destinatariBroker: vi.fn(() => Promise.resolve([])),
 }));
 
-import { avviaRound1ForPratica, tickPratica } from './tick';
+import { avviaRound1ForPratica, tickPratica, tickAllPraticheInDistribuzione } from './tick';
 import { sendNotification, sendNotifications } from '@/lib/notifiche';
 import { destinatariSedeAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
@@ -111,12 +115,20 @@ beforeEach(() => {
   tx.praticaAssegnazione.create.mockImplementation(() => Promise.resolve({ id: `a${++n}` }));
   prismaMock.praticaAssegnazione.findMany.mockResolvedValue([]);
   vi.mocked(destinatariBroker).mockResolvedValue([{ email: 'br@x.it', userId: 'u1', nome: 'Rossi' }]);
-  // N52 post-commit: pratica trovata di default (broker + veicoli).
-  prismaMock.pratica.findUnique.mockResolvedValue({
-    brokerId: 'bMadre',
-    brokerSedeId: null,
-    codicePratica: 'PV-2026-1',
-    veicoli: [{ targa: 'AA000AA' }],
+  // prisma.pratica.findUnique (fuori tx) ha due usi distinti, discriminati dagli args:
+  //  - Step 1 di tick/ring1: usa `include` (assegnazioni) → delega al mock della tx,
+  //    così ogni test imposta solo `tx.pratica.findUnique` (Step 1 e re-read coincidono).
+  //  - N52 post-commit (emitZonaNonCoperta): usa `select` sui campi broker.
+  prismaMock.pratica.findUnique.mockImplementation((args: { select?: unknown }) => {
+    if (args?.select) {
+      return Promise.resolve({
+        brokerId: 'bMadre',
+        brokerSedeId: null,
+        codicePratica: 'PV-2026-1',
+        veicoli: [{ targa: 'AA000AA' }],
+      });
+    }
+    return tx.pratica.findUnique(args);
   });
 });
 
@@ -387,6 +399,34 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.pratica.update).not.toHaveBeenCalled();
   });
 
+  // Gate 10 min con grazia (intervalloMin=10, ESPANSIONE_GRACE_MIN=1 → soglia 9 min).
+  it('ultima espansione 8 min fa → ancora noop (sotto 10-grace)', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({ raggioCorrenteM: 500, ultimaEspansioneAt: new Date(NOW.getTime() - 8 * 60_000) }),
+    );
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'finestra 10min' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+  });
+
+  it('ultima espansione 9,2 min fa → espande (la grazia assorbe il jitter del cron)', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({ raggioCorrenteM: 500, ultimaEspansioneAt: new Date(NOW.getTime() - 9.2 * 60_000) }),
+    );
+    tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 700 });
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ raggioCorrenteM: 700, ultimaEspansioneAt: NOW }),
+      }),
+    );
+  });
+
   it('anello successivo con sedi → assegnazioni (raggioMetri = raggio raggiunto, PENDING), avanza raggio + ultimaEspansioneAt, coda N6', async () => {
     tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500 }));
     tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
@@ -491,5 +531,39 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(sendNotification).toHaveBeenCalledWith(
       expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
     );
+  });
+});
+
+describe('tickAllPraticheInDistribuzione: isolamento errori per-pratica', () => {
+  it('la pratica centrale che lancia non aborta il batch; errors conteggiato', async () => {
+    prismaMock.pratica.findMany.mockResolvedValue([{ id: 'pa' }, { id: 'pb' }, { id: 'pc' }]);
+
+    // Step 1 di ogni tickPratica passa da prisma.pratica.findUnique (include, no select):
+    // pa/pc → BOZZA (noop, nessuna scrittura/post-commit); pb → esplode.
+    prismaMock.pratica.findUnique.mockImplementation((args: { where?: { id?: string }; select?: unknown }) => {
+      if (args?.select) {
+        return Promise.resolve({ brokerId: 'b', brokerSedeId: null, codicePratica: 'X', veicoli: [] });
+      }
+      if (args?.where?.id === 'pb') return Promise.reject(new Error('boom DB'));
+      return Promise.resolve({
+        id: args?.where?.id,
+        stato: 'BOZZA',
+        lat: LAT0,
+        lng: LNG0,
+        distribuzioneCiclo: 1,
+        raggioCorrenteM: 500,
+        ultimaEspansioneAt: null,
+        zonaNonCopertaAt: null,
+        assegnazioni: [],
+      });
+    });
+
+    const res = await tickAllPraticheInDistribuzione();
+
+    expect(res.scanned).toBe(3);
+    expect(res.errors).toBe(1);
+    // pa e pc processate nonostante il crash di pb (nessun anello espanso, sono BOZZA).
+    expect(res.expanded).toBe(0);
+    expect(res.zonaNonCoperta).toBe(0);
   });
 });

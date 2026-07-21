@@ -419,8 +419,8 @@ await tx.$queryRaw`SELECT id FROM "pratiche" WHERE id = ${praticaId}::uuid FOR U
 
 **Interfaces:** nessuna (solo rimozioni).
 
-- [ ] **Step 1: Grep usi** — verifica che `auto-suspend`, `ANTI_ABUSO`, `DISTRIBUZIONE` (costanti), `riarmaPendingScadute`, `computeCountdown` (se orfano) non siano più referenziati dopo i task precedenti. `checkAutoSuspendForSedi` non deve avere più call-site.
-- [ ] **Step 2: Rimuovi** i file/simboli orfani. Se `countdown.ts` resta usato solo da codice morto, rimuovilo; `ore-lavorative.ts` resta (riusato da orario piattaforma).
+- [ ] **Step 1: Grep usi** — verifica che `auto-suspend`, `ANTI_ABUSO`, `DISTRIBUZIONE` (costanti), `riarmaPendingScadute`, `computeCountdown`/`loadOrariPerSedi` (se orfani) non siano più referenziati dopo i task precedenti. `checkAutoSuspendForSedi` non deve avere più call-site. **Nota:** `orario-piattaforma.ts` (Task 2) NON usa `ore-lavorative.ts` (usa la tecnica Rome-aware di `lib/date/rome-day.ts`); quindi dopo la rimozione del countdown 4h, `countdown.ts` **e** `ore-lavorative.ts` diventano probabilmente orfani → verificare TUTTI i loro consumer (grep) prima di rimuoverli. Se `OrariApertura`/orari-per-sede sono ancora usati da UI/admin, tenere solo ciò che serve.
+- [ ] **Step 2: Rimuovi** i file/simboli realmente orfani (`auto-suspend.ts`, costanti morte, e — se nessun consumer residuo — `countdown.ts` + `ore-lavorative.ts`). Non rimuovere nulla che abbia ancora un consumer vivo.
 - [ ] **Step 3: Verde** — `pnpm typecheck` (0 errori: prova che non ci sono riferimenti pendenti), `pnpm vitest run` (suite intera verde), build.
 - [ ] **Step 4: Commit** — `refactor(distribuzione): rimuovi auto-suspend no-show + costanti/countdown morti`.
 

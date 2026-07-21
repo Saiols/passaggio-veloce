@@ -75,6 +75,17 @@ export function IconMonitoraggio({ className }: AdminIconProps) {
   );
 }
 
+/** Cerchi concentrici → raggio di distribuzione (config /admin/distribuzione). */
+export function IconRaggio({ className }: AdminIconProps) {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="9" strokeDasharray="2.5 2.5" />
+    </Svg>
+  );
+}
+
 export function IconSegnalazioni({ className }: AdminIconProps) {
   return (
     <Svg className={className}>

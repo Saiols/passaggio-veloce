@@ -23,6 +23,7 @@ import {
   IconPermessi,
   IconPratiche,
   IconPromo,
+  IconRaggio,
   IconRevisioni,
   IconSales,
   IconSegnalazioni,
@@ -124,6 +125,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/ateco', label: 'ATECO', icon: IconAteco, adminOnly: true },
       { href: '/admin/assistenti', label: 'Assistenti', icon: IconAssistenti, adminOnly: true },
       { href: '/admin/tariffe', label: 'Tariffe', icon: IconFinance, adminOnly: true },
+      { href: '/admin/distribuzione', label: 'Distribuzione', icon: IconRaggio, adminOnly: true },
       // LISTINI DISABILITATI (feature nascosta 2026-06-12) — riattivare con /admin/listini:
       // { href: '/admin/listini', label: 'Listini', icon: IconListini, adminOnly: true },
       { href: '/admin/audit-log', label: 'Audit log', icon: IconAudit, adminOnly: true },

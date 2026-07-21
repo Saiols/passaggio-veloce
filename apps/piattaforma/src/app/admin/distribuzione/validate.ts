@@ -9,11 +9,6 @@ import { z } from 'zod';
 export const RAGGIO_MAX_MIN = 1000;
 export const RAGGIO_MAX_MAX = 50000;
 
-export type ConfigDistribuzioneFormInput = {
-  raggioMaxM: number;
-  raggioStartM: number;
-};
-
 /**
  * Validazione di `salvaConfigDistribuzione` (Task 10).
  *

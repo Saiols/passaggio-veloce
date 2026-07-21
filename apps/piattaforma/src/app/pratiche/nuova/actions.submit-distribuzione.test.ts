@@ -14,8 +14,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  *     nessun `prisma.pratica.update` avviene nell'action stessa — la
  *     transizione a `IN_DISTRIBUZIONE`/`raggioCorrenteM` è responsabilità
  *     esclusiva di `avviaRound1ForPratica` (già coperta da tick.test.ts).
- *  3. Il valore di ritorno di `avviaRound1ForPratica` guida correttamente le
- *     notifiche a valle (email cliente "AVVIATA" solo se stato non è BOZZA).
+ *  3. L'email cliente "AVVIATA" viene sempre inviata dopo `avviaRound1ForPratica`
+ *     (che porta sempre a IN_DISTRIBUZIONE — Task 12: rimosso il vecchio ramo
+ *     condizionale su uno stato BOZZA che non può più verificarsi qui).
  *  4. Submit senza coordinate continua a fallire la validazione PRIMA di
  *     invocare `avviaRound1ForPratica` (invariato).
  *

@@ -1713,11 +1713,10 @@ export async function submitNuovaPraticaAction(
     }
   }
 
-  // Email cliente: pratica avviata. Solo se è entrata in distribuzione
-  // (le pratiche "caso dubbio" restano BOZZA in attesa di revisione → niente email).
-  if (round1.stato !== 'BOZZA') {
-    await notifyClientiAvanzamento(pratica.id, 'AVVIATA').catch(() => undefined);
-  }
+  // Email cliente: pratica avviata. `avviaRound1ForPratica` porta sempre la
+  // pratica a IN_DISTRIBUZIONE (Task 6) — non esiste più un ramo che la lasci
+  // in BOZZA da questo punto, quindi l'invio non è più condizionale.
+  await notifyClientiAvanzamento(pratica.id, 'AVVIATA').catch(() => undefined);
 
   revalidatePath('/dashboard');
   revalidatePath('/pratiche');

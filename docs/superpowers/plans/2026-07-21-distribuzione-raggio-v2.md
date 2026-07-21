@@ -360,15 +360,19 @@ await tx.$queryRaw`SELECT id FROM "pratiche" WHERE id = ${praticaId}::uuid FOR U
 
 **Files:**
 - Modify: `apps/piattaforma/src/lib/pratiche/stati.ts`, `apps/piattaforma/src/lib/pratiche/tabs.ts`
+- Modify: `apps/piattaforma/src/components/ui/status-chip.tsx` (union `PraticaStato` duplicata a mano + mappa `styles` per-stato → va aggiunto `IN_DISTRIBUZIONE` + reso difensivo)
 - Modify: `apps/piattaforma/src/app/admin/monitoraggio/*` (page/data/label)
-- Test: `apps/piattaforma/src/lib/pratiche/stati.test.ts`, `tabs.test.ts` (+ monitoraggio se presente)
+- Test: `apps/piattaforma/src/lib/pratiche/stati.test.ts`, `tabs.test.ts` (+ monitoraggio se presente); test/verifica `status-chip`
+- **Vincolo:** al termine di questo task **la suite INTERA deve tornare verde** (i 3 fail in `stati.test.ts` introdotti dal Task 1 vanno chiusi qui).
 
 **Interfaces:**
-- Consumes: enum `IN_DISTRIBUZIONE`.
+- Consumes: enum `IN_DISTRIBUZIONE` (da `@pv/db`).
 
-- [ ] **Step 1: Test (fallisce)** — `stati.ts`/`tabs.ts`: `IN_DISTRIBUZIONE` classificato come "in corso / in distribuzione" (stesso gruppo dei vecchi ROUND). Ogni nuovo valore enum va classificato (memoria: fonte unica `stati.ts`). Monitoraggio: pratiche `IN_DISTRIBUZIONE` compaiono tra le "ferme"/in distribuzione; `zonaNonCopertaAt` mostrata con etichetta dedicata.
-- [ ] **Step 2: Implementa** — aggiungi `IN_DISTRIBUZIONE` alle mappe/label (fonte unica). In monitoraggio: filtro/etichetta "Zona non coperta" per `zonaNonCopertaAt != null`; label leggibile per lo stato. Mantieni i 3 ROUND legacy nelle mappe (difensivo).
-- [ ] **Step 3: Verde + commit** — vitest + typecheck. Commit: `feat(pratiche): classifica IN_DISTRIBUZIONE + zona non coperta nel monitoraggio`.
+- [ ] **Step 1: Test (fallisce)** — `stati.ts`/`tabs.ts`: `IN_DISTRIBUZIONE` classificato come "in corso / in distribuzione" (stesso gruppo dei vecchi ROUND). Ogni nuovo valore enum va classificato (memoria: fonte unica `stati.ts` → il test di esaustività è già rosso dal Task 1, deve tornare verde). Monitoraggio: pratiche `IN_DISTRIBUZIONE` compaiono tra le "in distribuzione"; `zonaNonCopertaAt` mostrata con etichetta dedicata.
+- [ ] **Step 2: `stati.ts`/`tabs.ts`** — aggiungi `IN_DISTRIBUZIONE` alle mappe/label (fonte unica). Mantieni i 3 ROUND legacy (difensivo).
+- [ ] **Step 3: `status-chip.tsx` (bug-fix di correttezza)** — `components/ui/status-chip.tsx` ha una union `PraticaStato` duplicata (10 literal) e `styles[stato].cls`: con l'enum a 11 valori, una pratica `IN_DISTRIBUZIONE` renderizzerebbe `styles['IN_DISTRIBUZIONE'].cls` → `undefined.cls` → **TypeError** su ~8 pagine (pratiche/inbox/dashboard/admin). Fix: (a) aggiungi la voce di stile per `IN_DISTRIBUZIONE` (+ etichetta/colore coerenti col gruppo "in distribuzione", token `pv-*`); (b) rendi la lookup **difensiva** — `const s = styles[stato] ?? NEUTRAL` — così un futuro enum non classificato degrada a chip neutro invece di crashare. Preferibile derivare la union da `@pv/db` (`PraticaStato`) per intercettare a compile-time i prossimi valori. Test: rendering con `IN_DISTRIBUZIONE` → chip valido (no throw); stato ignoto → chip neutro.
+- [ ] **Step 4: Monitoraggio** — filtro/etichetta "Zona non coperta" per `zonaNonCopertaAt != null`; label leggibile per lo stato `IN_DISTRIBUZIONE`.
+- [ ] **Step 5: Verde intero + commit** — `pnpm vitest run` (SUITE COMPLETA verde, i 3 fail di `stati.test.ts` chiusi) + typecheck. Commit: `feat(pratiche): classifica IN_DISTRIBUZIONE (stati/tabs/chip/monitoraggio) + zona non coperta`.
 
 ---
 

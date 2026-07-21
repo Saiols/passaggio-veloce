@@ -23,7 +23,7 @@ export function buildFaqItems(compensoBrokerEuro: number): readonly FaqItem[] {
     },
     {
       q: 'Cosa succede se nessuna agenzia accetta la pratica?',
-      a: 'Il sistema estende la ricerca prima ai comuni limitrofi, poi all\'intera provincia. In ultima istanza, il nostro team si attiva manualmente per garantire la chiusura.',
+      a: 'Il sistema allarga progressivamente il raggio di ricerca fino a 10 km, coinvolgendo le agenzie via via più vicine finché una accetta. Se nella zona non c\'è copertura ti avvisiamo, così puoi contattare direttamente un\'agenzia di fiducia: la richiesta resta comunque attiva.',
     },
     {
       q: 'I dati dei miei clienti sono al sicuro?',

@@ -159,7 +159,7 @@ export default async function HomePage() {
             <StepCard
               n={2}
               title="Distribuiamo la pratica"
-              text="Il sistema invia la richiesta alle agenzie partner della tua zona ordinate per affidabilità. La prima che accetta vince."
+              text="Il sistema invia la richiesta alle agenzie partner più vicine al luogo di consegna, allargando il raggio finché una accetta. La prima che accetta vince."
             />
             <StepCard
               n={3}
@@ -188,12 +188,12 @@ export default async function HomePage() {
           />
           <PersonaCard
             badge="Per agenzie pratiche auto"
-            title="Nuovo flusso di pratiche, già verificate, dalla tua provincia"
+            title="Nuovo flusso di pratiche, già verificate, vicine alla tua sede"
             features={[
               'Ricevi solo pratiche complete: zero rilavorazione',
               'Decidi quali accettare in base ai tuoi orari di apertura',
               'Pagamento commissioni automatizzato a 20 giorni dalla firma',
-              'Sistema di ranking trasparente basato sulle valutazioni reali',
+              'Ricevi le pratiche più vicine alla tua sede, per raggio stradale reale',
               "Importi le tue tariffe una volta, l'osservatorio prezzi le aggiorna",
             ]}
             ctaLabel={landingOnly ? 'Richiedi accesso' : 'Diventa agenzia partner'}

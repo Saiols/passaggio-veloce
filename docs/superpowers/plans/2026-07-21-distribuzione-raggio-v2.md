@@ -386,7 +386,7 @@ await tx.$queryRaw`SELECT id FROM "pratiche" WHERE id = ${praticaId}::uuid FOR U
 **Interfaces:**
 - Consumes: `getDistribuzioneConfig`; permessi admin (super-admin, come `/admin/tariffe`/`monitoraggio`).
 
-- [ ] **Step 1: Test (fallisce)** — l'action `salvaConfigDistribuzione` richiede permesso admin; valida `raggioMaxM` (es. 500..50000, multiplo/positivo) con `noValidate` + field-errors pattern; scrive la riga singleton (`upsert` id `singleton`); invalida la cache config.
+- [ ] **Step 1: Test (fallisce)** — l'action `salvaConfigDistribuzione` richiede permesso admin; valida `raggioMaxM` con `noValidate` + field-errors pattern. **Validazione cross-field obbligatoria** (il motore `prossimoAnello` andrebbe in hang o zona-non-coperta immediata con valori malformati): `raggioMaxM > raggioStartM` (altrimenti tutte le pratiche → zona non coperta subito) e, se un giorno si esporranno editabili, `stepM > 0` e `intervalloMin > 0`. Range ragionevole `raggioMaxM` es. 1000..50000. Scrive la riga singleton (`upsert` id `singleton`); invalida la cache config.
 - [ ] **Step 2: Implementa page** — form con `raggioMaxM` editabile (gli altri campi read-only o editabili opzionali), pattern `components/forms/` (useFieldErrorsState, mai rossi all'apertura, SubmitButton con spinner). Rispetta design system.
 - [ ] **Step 3: Implementa action** — gate permesso, zod, `upsert`, invalida cache di `getDistribuzioneConfig`, `revalidatePath`.
 - [ ] **Step 4: Nav** — voce in `admin-shell.tsx` (NAV_GROUPS) verso `/admin/distribuzione` (evita pagina orfana — memoria).

@@ -15,6 +15,8 @@ const { prismaMock, authMock, getSessionContextMock, redirectMock, visuraScaduta
   prismaMock: {
     praticaAssegnazione: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     pratica: { findUnique: vi.fn(), update: vi.fn() },
+    praticaStatoLog: { create: vi.fn() },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
   },
   authMock: vi.fn(),
@@ -79,6 +81,8 @@ beforeEach(() => {
   // Default: visura non scaduta, mai bloccata. Il test dedicato sotto la
   // sovrascrive a `true`.
   visuraScadutaMock.mockResolvedValue(false);
+  // Lock FOR UPDATE: no-op nel mock (nessuna vera concorrenza in unit test).
+  prismaMock.$queryRaw.mockResolvedValue([{ id: PID }]);
 });
 
 describe('acceptPratica — capability', () => {
@@ -166,6 +170,79 @@ describe('acceptPratica — guard visura scaduta (clausola 8)', () => {
       ok: false,
       error: 'Pratica non disponibile: già accettata da un altra agenzia o non assegnata a te.',
     });
+  });
+});
+
+/**
+ * Task 8: l'engine (Task 6) produce `stato='IN_DISTRIBUZIONE'`; `acceptPratica`
+ * deve accettare quello stato (non più i legacy `IN_ATTESA_ROUND_*`) e prendere
+ * un row lock `FOR UPDATE` sulla pratica prima di leggere assegnazione/stato,
+ * così due accept concorrenti si serializzano ("primo atomico": vince chi
+ * accetta per primo, non chi ha il raggio minore). La race vera non è
+ * unit-testabile (nessuna concorrenza reale nel mock Prisma): qui si asserisce
+ * che la query di lock viene eseguita, PRIMA delle letture, e che il gate usa
+ * `IN_DISTRIBUZIONE`.
+ */
+describe('acceptPratica — lock FOR UPDATE + stato IN_DISTRIBUZIONE', () => {
+  const ASSEGNAZIONE = { id: 'assign-1', agenziaId: AGENZIA, sedeId: SEDE_MIA };
+
+  it('pratica IN_DISTRIBUZIONE con PENDING per la mia sede → ACCETTATA, altre PENDING → ASSEGNATA_ALTRO, pratica ACCETTATA', async () => {
+    prismaMock.praticaAssegnazione.findFirst.mockResolvedValue(ASSEGNAZIONE);
+    prismaMock.pratica.findUnique.mockResolvedValue({ id: PID, stato: 'IN_DISTRIBUZIONE' });
+
+    const res = await acceptPratica(PID);
+
+    expect(res).toEqual({ ok: true });
+    expect(prismaMock.praticaAssegnazione.update).toHaveBeenCalledWith({
+      where: { id: ASSEGNAZIONE.id },
+      data: expect.objectContaining({ esito: 'ACCETTATA' }),
+    });
+    expect(prismaMock.praticaAssegnazione.updateMany).toHaveBeenCalledWith({
+      where: { praticaId: PID, esito: 'PENDING', id: { not: ASSEGNAZIONE.id } },
+      data: expect.objectContaining({ esito: 'ASSEGNATA_ALTRO' }),
+    });
+    expect(prismaMock.pratica.update).toHaveBeenCalledWith({
+      where: { id: PID },
+      data: expect.objectContaining({
+        stato: 'ACCETTATA',
+        agenziaAssegnataId: ASSEGNAZIONE.agenziaId,
+        agenziaSedeId: ASSEGNAZIONE.sedeId,
+        accettataDaUserId: 'u1',
+      }),
+    });
+  });
+
+  it('pratica non IN_DISTRIBUZIONE (es. già ACCETTATA) → "non più in distribuzione", nessuna scrittura', async () => {
+    prismaMock.praticaAssegnazione.findFirst.mockResolvedValue(ASSEGNAZIONE);
+    prismaMock.pratica.findUnique.mockResolvedValue({ id: PID, stato: 'ACCETTATA' });
+
+    const res = await acceptPratica(PID);
+
+    expect(res).toEqual({ ok: false, error: 'Pratica non più in distribuzione' });
+    expect(prismaMock.praticaAssegnazione.update).not.toHaveBeenCalled();
+    expect(prismaMock.praticaAssegnazione.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
+  });
+
+  it('prende un row lock FOR UPDATE sulla pratica, PRIMA di leggere assegnazione e stato', async () => {
+    prismaMock.praticaAssegnazione.findFirst.mockResolvedValue(ASSEGNAZIONE);
+    prismaMock.pratica.findUnique.mockResolvedValue({ id: PID, stato: 'IN_DISTRIBUZIONE' });
+
+    await acceptPratica(PID);
+
+    expect(prismaMock.$queryRaw).toHaveBeenCalledTimes(1);
+    const [strings, id] = prismaMock.$queryRaw.mock.calls[0] as [string[], string];
+    expect(strings.join('')).toMatch(/FOR UPDATE/);
+    expect(strings.join('')).toMatch(/"pratiche"/);
+    expect(id).toBe(PID);
+
+    // Il lock precede sia la lettura dell'assegnazione sia quella della pratica:
+    // è lui a serializzare, non le findFirst/findUnique.
+    const lockOrder = prismaMock.$queryRaw.mock.invocationCallOrder[0];
+    const findAssegnazioneOrder = prismaMock.praticaAssegnazione.findFirst.mock.invocationCallOrder[0];
+    const findPraticaOrder = prismaMock.pratica.findUnique.mock.invocationCallOrder[0];
+    expect(lockOrder).toBeLessThan(findAssegnazioneOrder);
+    expect(lockOrder).toBeLessThan(findPraticaOrder);
   });
 });
 

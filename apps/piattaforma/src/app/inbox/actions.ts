@@ -63,6 +63,16 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Serializzazione anti doppia-accettazione: prende un row lock Postgres
+      // sulla riga pratica PRIMA di leggere assegnazione/stato. Senza, due
+      // accept concorrenti sulla stessa pratica leggerebbero entrambe
+      // "PENDING per la mia sede" e "stato IN_DISTRIBUZIONE" (READ COMMITTED)
+      // e vincerebbero entrambe. Con il `FOR UPDATE` il secondo accept blocca
+      // finché il primo non committa, poi rilegge stato='ACCETTATA' → rifiutato
+      // qui sotto. "Primo atomico": vince chi accetta per primo, non chi ha il
+      // raggio minore.
+      await tx.$queryRaw`SELECT id FROM "pratiche" WHERE id = ${praticaId}::uuid FOR UPDATE`;
+
       const assegnazione = await tx.praticaAssegnazione.findFirst({
         where: { praticaId, sedeId: { in: scopeIds }, esito: 'PENDING' },
       });
@@ -74,11 +84,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
 
       const pratica = await tx.pratica.findUnique({ where: { id: praticaId } });
       if (!pratica) throw new Error('Pratica non trovata');
-      if (
-        pratica.stato !== 'IN_ATTESA_ROUND_1' &&
-        pratica.stato !== 'IN_ATTESA_ROUND_2' &&
-        pratica.stato !== 'IN_ATTESA_ROUND_3'
-      ) {
+      if (pratica.stato !== 'IN_DISTRIBUZIONE') {
         throw new Error('Pratica non più in distribuzione');
       }
 

@@ -217,6 +217,7 @@ describe('opzioniStatoAdmin (I-1)', () => {
     const valori = opzioniStatoAdmin().map((o) => o.value);
     expect(valori).toEqual(
       expect.arrayContaining([
+        'IN_DISTRIBUZIONE',
         'IN_ATTESA_ROUND_1',
         'IN_ATTESA_ROUND_2',
         'IN_ATTESA_ROUND_3',

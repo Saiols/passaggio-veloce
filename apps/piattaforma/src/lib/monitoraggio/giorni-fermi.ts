@@ -1,3 +1,4 @@
+import type { PraticaStato } from '@pv/db';
 import { romeYmd } from '@/lib/date/rome-day';
 
 /**
@@ -26,4 +27,55 @@ export function fermaLevel(giorni: number | null): FermaLevel {
   if (giorni >= FERMA_SOGLIA_ROSSO) return 'urgent';
   if (giorni >= FERMA_SOGLIA_AMBRA) return 'warn';
   return 'ok';
+}
+
+/**
+ * Categorie della pagina di monitoraggio. Distribuzione v2 (raggio
+ * incrementale) ha introdotto un secondo modo di essere "ferma", diverso dal
+ * caso storico:
+ *  - `ACCETTATA_FERMA`: un'agenzia ha accettato ma non lavora la pratica
+ *    (`stato = ACCETTATA`, `processataAt = null`) — c'è un'agenzia da revocare.
+ *  - `ZONA_NON_COPERTA`: il motore ha esaurito l'espansione del raggio senza
+ *    trovare nessuna agenzia in zona (`stato = IN_DISTRIBUZIONE`,
+ *    `zonaNonCopertaAt` valorizzato) — non c'è nessuna agenzia da sganciare,
+ *    serve un intervento manuale (contattare un'agenzia fuori raggio, alzare
+ *    il raggio massimo di config, ecc.).
+ *
+ * Le due categorie non si sovrappongono mai: `zonaNonCopertaAt` vive solo su
+ * pratiche `IN_DISTRIBUZIONE` (lib/distribuzione/tick.ts), mai su `ACCETTATA`.
+ */
+export type CategoriaMonitoraggio = 'ACCETTATA_FERMA' | 'ZONA_NON_COPERTA';
+
+export const CATEGORIA_MONITORAGGIO_LABEL: Record<CategoriaMonitoraggio, string> = {
+  ACCETTATA_FERMA: 'Accettata, ferma',
+  ZONA_NON_COPERTA: 'Zona non coperta',
+};
+
+/**
+ * Classifica una pratica candidata alla pagina di monitoraggio. `null` se non
+ * rientra in nessuna delle due categorie: la query a monte (`page.tsx`) filtra
+ * già solo le pratiche pertinenti, ma questa funzione resta corretta anche se
+ * il chiamante cambia (difensiva, niente `!` a valle).
+ */
+export function categoriaMonitoraggio(p: {
+  stato: PraticaStato;
+  processataAt: Date | null;
+  zonaNonCopertaAt: Date | null;
+}): CategoriaMonitoraggio | null {
+  if (p.stato === 'ACCETTATA' && p.processataAt === null) return 'ACCETTATA_FERMA';
+  if (p.stato === 'IN_DISTRIBUZIONE' && p.zonaNonCopertaAt !== null) return 'ZONA_NON_COPERTA';
+  return null;
+}
+
+/**
+ * Data da cui contare i giorni fermi, coerente con la categoria: per
+ * `ACCETTATA_FERMA` è da quando l'agenzia ha accettato (comportamento
+ * invariato); per `ZONA_NON_COPERTA` è da quando il motore ha dichiarato la
+ * zona scoperta (l'istante in cui l'espansione si è fermata).
+ */
+export function dataFermaDa(
+  p: { accettataAt: Date | null; zonaNonCopertaAt: Date | null },
+  categoria: CategoriaMonitoraggio,
+): Date | null {
+  return categoria === 'ACCETTATA_FERMA' ? p.accettataAt : p.zonaNonCopertaAt;
 }

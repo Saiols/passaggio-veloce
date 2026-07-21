@@ -12,12 +12,21 @@ import type { PraticaStato, Prisma } from '@pv/db';
  * in silenzio dai conteggi.
  */
 
-/** Round di distribuzione + escalation: per l'utente sono tutti "In attesa". */
+/**
+ * Round di distribuzione + escalation: per l'utente sono tutti "In attesa".
+ *
+ * `IN_DISTRIBUZIONE` è lo stato del motore v2 (raggio incrementale): sostituisce
+ * il vecchio ciclo ROUND_1→ROUND_2→ROUND_3→ESCALATION con un solo stato che si
+ * espande internamente (raggioCorrenteM), quindi va nello stesso gruppo. I tre
+ * ROUND_* restano qui in modo difensivo: eventuali righe legacy pre-v2 ancora in
+ * quello stato continuano a classificarsi come "in attesa/in corso".
+ */
 export const STATI_IN_ATTESA = [
   'IN_ATTESA_ROUND_1',
   'IN_ATTESA_ROUND_2',
   'IN_ATTESA_ROUND_3',
   'IN_ESCALATION',
+  'IN_DISTRIBUZIONE',
 ] as const satisfies readonly PraticaStato[];
 
 /** Pratiche vive: inviate e non ancora concluse. Nessuna bozza. */

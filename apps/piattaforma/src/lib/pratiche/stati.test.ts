@@ -67,6 +67,10 @@ describe('isInCorso', () => {
     expect(isInCorso('IN_ESCALATION')).toBe(true);
   });
 
+  it('IN_DISTRIBUZIONE (motore v2) è in corso: sostituisce i round legacy', () => {
+    expect(isInCorso('IN_DISTRIBUZIONE')).toBe(true);
+  });
+
   it('accettata e processata sono in corso', () => {
     expect(isInCorso('ACCETTATA')).toBe(true);
     expect(isInCorso('PROCESSATA')).toBe(true);
@@ -97,9 +101,15 @@ describe('whereStato', () => {
     expect(whereStato('CONCLUSE')).toEqual({ in: [...STATI_CONCLUSI] });
   });
 
-  it('IN_ATTESA espande sui round + escalation (aggregato già esistente)', () => {
+  it('IN_ATTESA espande sui round + escalation + distribuzione v2 (aggregato già esistente)', () => {
     expect(whereStato('IN_ATTESA')).toEqual({
-      in: ['IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3', 'IN_ESCALATION'],
+      in: [
+        'IN_ATTESA_ROUND_1',
+        'IN_ATTESA_ROUND_2',
+        'IN_ATTESA_ROUND_3',
+        'IN_ESCALATION',
+        'IN_DISTRIBUZIONE',
+      ],
     });
   });
 
@@ -117,9 +127,12 @@ describe('whereStato', () => {
 
   it('gli stati interni del motore non sono selezionabili dall utente', () => {
     // R1/R2/R3 ed escalation non sono esposti singolarmente nella UI utente:
-    // passarli a mano nell'URL non deve produrre un filtro.
+    // passarli a mano nell'URL non deve produrre un filtro. Lo stesso vale per
+    // IN_DISTRIBUZIONE (motore v2): è un dettaglio interno, non un valore che
+    // il broker/agenzia sceglie dalla select.
     expect(whereStato('IN_ATTESA_ROUND_2')).toBeUndefined();
     expect(whereStato('IN_ESCALATION')).toBeUndefined();
+    expect(whereStato('IN_DISTRIBUZIONE')).toBeUndefined();
   });
 });
 
@@ -146,7 +159,7 @@ describe('whereStato con insieme admin', () => {
   // l'insieme di default (SINGOLI, pensato per il broker), tornerebbe undefined
   // = nessun filtro: la select direbbe "Escalation" e la lista mostrerebbe
   // tutto. Silenzioso, e quindi peggio di un errore.
-  it.each(['IN_ESCALATION', 'IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3'])(
+  it.each(['IN_ESCALATION', 'IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3', 'IN_DISTRIBUZIONE'])(
     '%s filtra davvero con SINGOLI_ADMIN (e non filtrerebbe con SINGOLI)',
     (stato) => {
       expect(whereStato(stato, SINGOLI_ADMIN)).toBe(stato);

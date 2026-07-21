@@ -142,6 +142,7 @@ export function opzioniStatoAdmin(): { value: string; label: string }[] {
     { value: 'CONCLUSE', label: 'Concluse' },
     { value: 'ATTESA_FIRMA', label: 'In attesa di firma' },
     { value: 'IN_ESCALATION', label: 'Escalation' },
+    { value: 'IN_DISTRIBUZIONE', label: 'In distribuzione' },
     { value: 'IN_ATTESA_ROUND_1', label: 'In attesa · R1' },
     { value: 'IN_ATTESA_ROUND_2', label: 'In attesa · R2' },
     { value: 'IN_ATTESA_ROUND_3', label: 'In attesa · R3' },

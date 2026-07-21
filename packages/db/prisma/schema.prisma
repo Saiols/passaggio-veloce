@@ -86,6 +86,7 @@ enum PraticaStato {
   IN_ATTESA_ROUND_2
   IN_ATTESA_ROUND_3
   IN_ESCALATION
+  IN_DISTRIBUZIONE
   ACCETTATA
   PROCESSATA
   FIRMATA
@@ -827,6 +828,14 @@ model Pratica {
   lat Float?
   lng Float?
 
+  // Distribuzione v2 (raggio incrementale + distanza stradale): raggio
+  // corrente raggiunto (metri), istante ultima notifica realmente inviata
+  // (governa il gate dei 10 minuti; gli anelli vuoti skippati non lo toccano),
+  // istante in cui il raggio massimo è stato raggiunto senza accettazione.
+  raggioCorrenteM    Int?
+  ultimaEspansioneAt DateTime?
+  zonaNonCopertaAt   DateTime?
+
   // Attori (Company madre — legacy, mantenuti in fase expand)
   brokerId String  @db.Uuid
   broker   Company @relation("PraticheBroker", fields: [brokerId], references: [id])
@@ -960,6 +969,11 @@ model PraticaAssegnazione {
   // Ciclo di distribuzione (Pratica.distribuzioneCiclo) di questo tentativo.
   ciclo Int @default(1)
 
+  // Distribuzione v2: anello (raggio, metri) d'ingresso di questo tentativo.
+  // Sostituisce concettualmente `round` per la v2 (round resta per le righe
+  // legacy / countdown ora inutilizzati).
+  raggioMetri Int @default(0)
+
   invioAt           DateTime  @default(now())
   notificaInviataAt DateTime?
 
@@ -982,6 +996,38 @@ model PraticaAssegnazione {
   @@index([sedeId, esito])
   @@index([round, esito])
   @@map("pratiche_assegnazioni")
+}
+
+// Distribuzione v2: parametri dell'espansione a raggio, riga singleton
+// editabile da admin (getDistribuzioneConfig(), cache-aware come il
+// tariffario). Nessuna FK: config platform-level, non per-azienda.
+model DistribuzioneConfig {
+  id            String   @id @default("singleton")
+  raggioStartM  Int      @default(500)
+  stepM         Int      @default(200)
+  raggioMaxM    Int      @default(10000)
+  intervalloMin Int      @default(10)
+  orarioInizio  String   @default("09:00")
+  orarioFine    String   @default("19:00")
+  giorni        String   @default("LUN,MAR,MER,GIO,VEN")
+  updatedAt     DateTime @updatedAt
+
+  @@map("distribuzione_config")
+}
+
+// Cache distanza stradale (pratica, sede): persiste SOLO i risultati reali
+// del provider Google (coordinate fisse → cache valida indefinitamente,
+// anche tra cicli/revoca). I fallback Haversine non vengono cachati qui.
+model RoadDistanceCache {
+  id         String   @id @default(uuid()) @db.Uuid
+  praticaId  String   @db.Uuid
+  sedeId     String   @db.Uuid
+  distanzaM  Int
+  computedAt DateTime @default(now())
+
+  @@unique([praticaId, sedeId])
+  @@index([praticaId])
+  @@map("road_distance_cache")
 }
 
 // Storico append-only dei cambi di stato di una pratica: fonte di verità per

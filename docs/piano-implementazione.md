@@ -84,6 +84,8 @@
 - **Nessuna informazione** su orari delle singole agenzie o tempi attesi (rumore inutile, le agenzie hanno orari diversi)
 - La dashboard mostra lo stato corrente (`in_attesa`, `accettata`, `in_escalation`) ma non countdown visibili al broker
 
+> ⚠️ **SUPERATO da v2 (2026-07-21)** — il motore a 3 round fissi (500/750/1000 m @ 4h) descritto qui sotto è stato **sostituito** da un motore a **raggio incrementale** (500 m → 10 km, +200 m ogni 10 min), **distanza stradale reale** (Google Distance Matrix, ibrido + fail-open), **notifiche cumulative eterne** (niente più countdown 4h/TIMEOUT), **pausa notturna** (lun-ven 9-19), stato unico **`IN_DISTRIBUZIONE`**, **zona non coperta** (email broker N52) al posto dell'escalation, **accept con lock `FOR UPDATE`** (primo atomico). L'**auto-sospensione no-show è stata rimossa** (le notifiche non scadono più → niente trigger TIMEOUT). Vedi changelog **A13** e `superpowers/specs/2026-07-21-distribuzione-raggio-v2-design.md`. Quanto descritto sotto **non riflette più il codice attuale** (lasciato per storico).
+
 #### Parametri (`lib/distribuzione/constants.ts`)
 - `RAGGI_KM = [0.5, 0.75, 1]` → round 1 = **500 m**, round 2 = **750 m**, round 3 = **1000 m** dal luogo di consegna (distanza reale Haversine, non provincia/comune)
 - `T1_HOURS`/`T2_HOURS`/`T3_HOURS` = **4h / 4h / 4h** lavorative (~12h totali, non più 8h/8h/16h)
@@ -393,7 +395,7 @@
 - [x] Calcolo rating medio agenzia (`attachRating` con GROUP BY on-demand)
 - [x] Soglia minima 5 valutazioni (`RANKING.MIN_RATINGS_FOR_RANK`)
 - [x] ~~Integrazione rating nell'algoritmo distribuzione (`rankCandidates` in `avviaRound`)~~ **rimosso 2026-07-19**: `lib/distribuzione/ranking.ts` eliminato, la selezione è solo a raggio-km (vedi §0.5); il rating resta calcolato ma non entra più in `avviaRound`
-- [x] ~~Sospensione automatica rating <2.5~~ **non più operativo**: rating basso è solo evidenza visiva in `/admin/agenzie` (badge "⚠ Rating basso"), nessuna sospensione automatica per rating — la sospensione automatica resta solo su 5 TIMEOUT consecutivi (`ANTI_ABUSO.AUTO_SUSPEND_TIMEOUT_THRESHOLD`, `lib/distribuzione/auto-suspend.ts`)
+- [x] ~~Sospensione automatica rating <2.5~~ **non più operativo**: rating basso è solo evidenza visiva in `/admin/agenzie` (badge "⚠ Rating basso"). ⚠️ **Aggiornamento v2 (2026-07-21):** anche la sospensione automatica su 5 TIMEOUT no-show è stata **rimossa** (`auto-suspend.ts` cancellato) — nel modello a notifiche cumulative eterne non esiste più il TIMEOUT no-show che la innescava
 - [ ] Review admin per agenzie sospese (UI di unsuspension / note)
 - [x] Ranking NON pubblico (visibile solo lato admin, badge senza effetto operativo sulla distribuzione)
 
@@ -774,7 +776,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 | 2 Auth | ~96% | Login, wizard split dealer/agenzia, invito utenti team, reset password, **2FA TOTP ora ENFORCED al sign-in (TOTP + backup code), non più solo setup (A9)** + rate-limit login attivo. Manca solo email reale (Resend) |
 | 2.5 Design system | 100% | Palette Trust Blue, componenti UI, layout role-based, restyle completo |
 | 3 Documenti/OCR/Pratiche | ~88% | Storage+OCR mock + Vercel Blob ready, wizard nuova pratica con scansione mobile, schema documentale v7 (SD-A/B/C in prod), **gating documentale UI rule-based + override admin (A4)**, **hard-block pre-invio su doc FAILED + fallback OCR manuale + download ZIP pratica + retention/purge cron**, **OCR Mindee provider integrato (Fase 1 sprint OCR 2026-05) — pronto per swap su prod test appena env vars disponibili**. Document AI custom-trained in attesa di raccolta libretti reali dal beta (Fase 2 sprint OCR). |
-| 4 Distribuzione + agenzia | 100% | Engine **raggio-km reale (500/750/1000 m) + pool cumulativo, no cap, escalation (A12, 2026-07-19)** — sostituisce il vecchio comune/limitrofi/provincia + ranking (A3); ore lavorative, auto-suspend 5 timeout, cron automatico (A2). Tutto pronto |
+| 4 Distribuzione + agenzia | 100% | Engine **v2 (A13, 2026-07-21): raggio incrementale 500 m→10 km (+200 m/10 min) + distanza stradale Google (ibrido/fail-open) + notifiche cumulative eterne + pausa notturna + zona-non-coperta (N52) + accept FOR UPDATE**; stato unico `IN_DISTRIBUZIONE`; auto-suspend no-show rimosso. Sostituisce v1 3-round (A12) e comune/limitrofi/ranking (A3). MERGEATA locale, NON deployata |
 | 5 Pagamenti/Wallet/SDI | ~35% | Wallet completo, FeeAddebito SCHEDULED, payout job, MockPaymentProvider, **rendiconto PDF AF-PDF (A6)**. Blocca Stripe → commercialista (B1). Modello fatturazione delegata in spec — vedi `sistema-fatturazione.md` (5 bundle FT-A/B/C/D/E) |
 | 6 Notifiche | ~98% | **25 NotificaTipo cablati** (N1-N25 incluso N25 recap mensile A6) + N31 valuta agenzia post-firma. Cron Vercel automatico (A2). **Unsubscribe granulare + preferenze opt-out ora implementati** |
 | 7 Valutazioni/Ranking | 100% | Form 5⭐, **ranking dal 2026-07-19 è solo badge visivo admin (A12) — nessun effetto su distribuzione/sospensione**, sospensione auto solo su timeout, **unsuspend UI con nota motivazione + banner valuta dashboard dealer (A7)** |
@@ -835,7 +837,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - ~~`ANTI_ABUSO` constants: `REJECT_DECAY_PER_REJECT=0.2`, `REJECT_DECAY_LOOKBACK=10`, `AUTO_SUSPEND_TIMEOUT_THRESHOLD=5`~~ — resta solo `AUTO_SUSPEND_TIMEOUT_THRESHOLD=5`, il decay è stato rimosso
 - ~~`effectiveScore = ratingAvg − recentRejects × 0.2`~~ — rimosso, nessuna selezione per ranking
 - ~~`attachRating` carica le ultime 10 assegnazioni e conta i rifiuti consecutivi~~ — rimosso insieme a `ranking.ts`
-- `checkAutoSuspendForAgenzie` (oggi `checkAutoSuspendForSedi`, multi-sede) resta cablato nel tick dopo updateMany TIMEOUT: se 5 timeout consecutivi → sospensione automatica + nota audit — **questa parte è rimasta invariata**
+- ~~`checkAutoSuspendForAgenzie` (oggi `checkAutoSuspendForSedi`) resta cablato nel tick dopo updateMany TIMEOUT~~ — ⚠️ **RIMOSSO da v2 (2026-07-21)**: con le notifiche cumulative eterne non c'è più TIMEOUT no-show → l'auto-sospensione anti-abuso è stata eliminata (`auto-suspend.ts` cancellato). Decisione approvata.
 - ~~`province-limitrofe.ts` espanso da 7 voci Veneto a 110 province italiane complete~~ — file **rimosso** il 2026-07-19 (sostituito da `distanceKm` su coordinate reali)
 - Backlog risolto da A12: raggio km vero (Haversine su lat/lng) — implementato il 2026-07-19
 
@@ -927,6 +929,19 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - Auto-sospensione (`auto-suspend.ts`) rimane ma **solo timeout/no-show** (5 TIMEOUT consecutivi sulla sede), nessun decay per rifiuti
 - N6 inviata solo alle sedi **nuove** che entrano nel raggio del round; le sedi già contattate restano nella loro inbox senza nuova email
 - Spec: `docs/superpowers/specs/2026-07-19-distribuzione-raggio-km-design.md` · Plan: `docs/superpowers/plans/2026-07-19-distribuzione-raggio-km.md`
+
+**A13. ✅ DONE — [2026-07-21] Distribuzione v2: raggio incrementale + distanza stradale (sostituisce v1 3-round A12)**
+- Motore riscritto (`lib/distribuzione/tick.ts` + nuovi `anelli.ts`, `config.ts`, `orario-piattaforma.ts`; `lib/geo/road-distance.ts` + provider google/mock): espansione continua 500 m→10 km a passi di 200 m ogni 10 min, **skip immediato** degli anelli vuoti, notifiche **cumulative eterne** (rimosso countdown 4h)
+- **Distanza stradale reale** (Google Distance Matrix) con prefiltro Haversine + cache `RoadDistanceCache` + **fail-open** su Haversine; chiamata di rete **fuori transazione** (evita P2028: timeout tx interattiva 5s vs provider 8s)
+- **Pausa notturna** lun-ven 9-19 Europe/Rome; il primo anello al submit parte a qualsiasi ora
+- **Zona non coperta** al raggio max: `Pratica.zonaNonCopertaAt` + email broker **N52** (nuovo `NotificaTipo`), le `PENDING` restano attive; sostituisce l'escalation→TIMEOUT
+- **Accept con lock `FOR UPDATE`** sulla riga pratica (primo atomico) — chiude una race di doppia-assegnazione latente
+- Stato unico **`IN_DISTRIBUZIONE`** (i `IN_ATTESA_ROUND_*` restano nell'enum per storico); config DB `DistribuzioneConfig` singleton editabile da **/admin/distribuzione** (`raggioMaxM`, valida `> raggioStartM`)
+- **Auto-sospensione no-show RIMOSSA** (`auto-suspend.ts` cancellato): senza scadenza notifiche non c'è più il TIMEOUT che la innescava (decisione approvata)
+- `status-chip.tsx` reso a prova di crash (deriva `PraticaStato` da `@pv/db` + fallback neutro); cleanup codice morto (countdown, ore-lavorative ridotto a `GiornoSettimana`, costanti)
+- 12 task SDD (implementer + reviewer per-task) + review whole-branch opus = **READY TO MERGE, 0 Critical/Important**. Suite 2064/0, tsc 0, build 0. **MERGEATA su main in locale (fast-forward), NON pushata** (go-live in pausa)
+- ⚠️ Prereq deploy: migration Neon (`20260721120000_distribuzione_v2` + `20260721130000_notifica_n52`) **prima** del codice; env `DISTANCE_PROVIDER=google` + Distance Matrix API su Vercel; Vercel Pro (cron `*/10`); backfill pratiche `IN_ATTESA_ROUND_*`→`IN_DISTRIBUZIONE`
+- Spec: `docs/superpowers/specs/2026-07-21-distribuzione-raggio-v2-design.md` · Plan: `docs/superpowers/plans/2026-07-21-distribuzione-raggio-v2.md`
 - Aggiorna §0.5, FASE 4.1, FASE 7 sopra (dettagli completi lì)
 
 **A13. ✅ DONE — [2026-07-19] Giustificativo interno costo promo ("Documento 2", art. 108 TUIR)**

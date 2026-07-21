@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { prisma } from '@pv/db';
 import { Alert, StatCard, SubmitButton } from '@/components/ui';
 import { runDistribuzioneTickAction } from '@/app/admin/actions';
+import { STATI_IN_DISTRIBUZIONE } from '@/lib/pratiche/stati';
 
 type TickBanner = {
   scanned?: string;
@@ -17,7 +18,7 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
     prisma.pratica.count({ where: { stato: 'IN_ESCALATION', deletedAt: null } }),
     prisma.pratica.count({
       where: {
-        stato: { in: ['IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3'] },
+        stato: { in: [...STATI_IN_DISTRIBUZIONE] },
         deletedAt: null,
       },
     }),

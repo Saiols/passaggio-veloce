@@ -1,4 +1,5 @@
 import { prisma } from '@pv/db';
+import { STATI_IN_DISTRIBUZIONE } from '@/lib/pratiche/stati';
 
 export async function Counters() {
   const now = new Date();
@@ -12,7 +13,7 @@ export async function Counters() {
       }),
       prisma.payout.count({ where: { stato: 'RICHIESTO' } }),
       prisma.pratica.count({
-        where: { stato: { in: ['IN_ATTESA_ROUND_1', 'IN_ATTESA_ROUND_2', 'IN_ATTESA_ROUND_3'] } },
+        where: { stato: { in: [...STATI_IN_DISTRIBUZIONE] } },
       }),
       prisma.pratica.count({ where: { stato: 'IN_ESCALATION' } }),
       prisma.notificaInviata.count({ where: { sentAt: { gte: last24h } } }),
@@ -21,7 +22,7 @@ export async function Counters() {
   const cards = [
     { label: 'Addebiti SCHEDULED', value: feeScheduled, hint: `${feeOverdue} pronti` },
     { label: 'Payout RICHIESTI', value: payoutsRichiesti, hint: 'da processare' },
-    { label: 'Pratiche in attesa', value: praticheAttesa, hint: 'round 1/2/3' },
+    { label: 'Pratiche in attesa', value: praticheAttesa, hint: 'round legacy + distribuzione v2' },
     { label: 'In escalation', value: praticheEscalation, hint: 'gestione manuale' },
     { label: 'Email ultime 24h', value: emails24h, hint: 'inviate' },
   ];

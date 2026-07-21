@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { PraticaStato } from '@pv/db';
 import {
   STATI_IN_ATTESA,
+  STATI_IN_DISTRIBUZIONE,
   STATI_IN_CORSO,
   STATI_CONCLUSI,
   SINGOLI,
@@ -55,6 +56,34 @@ describe('partizione degli stati', () => {
   it('SINGOLI e STATI_IN_ATTESA non si sovrappongono', () => {
     const overlap = SINGOLI.filter((s) => (STATI_IN_ATTESA as readonly PraticaStato[]).includes(s));
     expect(overlap).toEqual([]);
+  });
+});
+
+describe('STATI_IN_DISTRIBUZIONE', () => {
+  // Le card admin (dashboard, demo-control) affiancano "In distribuzione" ed
+  // "Escalation" come due contatori distinti: se l'escalation finisse anche
+  // qui dentro, verrebbe sommata due volte tra le due card. Per questo
+  // STATI_IN_DISTRIBUZIONE è STATI_IN_ATTESA MENO l'escalation, non lo stesso
+  // insieme (a differenza di contaGruppi/tab utente, dove l'escalation è
+  // trasversale e resta dentro "in attesa"/"in corso").
+  it('non include IN_ESCALATION', () => {
+    expect(STATI_IN_DISTRIBUZIONE).not.toContain('IN_ESCALATION');
+  });
+
+  it('include i round legacy e il motore v2', () => {
+    expect(STATI_IN_DISTRIBUZIONE).toEqual(
+      expect.arrayContaining([
+        'IN_ATTESA_ROUND_1',
+        'IN_ATTESA_ROUND_2',
+        'IN_ATTESA_ROUND_3',
+        'IN_DISTRIBUZIONE',
+      ]),
+    );
+  });
+
+  it('è esattamente STATI_IN_ATTESA meno IN_ESCALATION', () => {
+    const atteso = STATI_IN_ATTESA.filter((s) => s !== 'IN_ESCALATION');
+    expect([...STATI_IN_DISTRIBUZIONE].sort()).toEqual([...atteso].sort());
   });
 });
 

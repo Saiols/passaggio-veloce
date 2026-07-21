@@ -29,6 +29,22 @@ export const STATI_IN_ATTESA = [
   'IN_DISTRIBUZIONE',
 ] as const satisfies readonly PraticaStato[];
 
+/**
+ * Round di distribuzione (legacy + motore v2), SENZA l'escalation.
+ *
+ * Diverso da `STATI_IN_ATTESA`: lì l'escalation è trasversale (un sottoinsieme
+ * che si somma comunque dentro "in attesa"/"in corso" per i tab utente, vedi
+ * `contaGruppi`). Qui invece serve l'insieme ESCLUSIVO: le card admin
+ * (dashboard, demo-control) affiancano "In distribuzione" ed "Escalation"
+ * come due contatori distinti — se includessero anche l'escalation nel primo,
+ * le pratiche in escalation verrebbero contate due volte tra le due card.
+ * Derivato da `STATI_IN_ATTESA` (non ridichiarato): un domani stato aggiunto
+ * lì arriva qui automaticamente, a meno che non sia proprio l'escalation.
+ */
+export const STATI_IN_DISTRIBUZIONE = STATI_IN_ATTESA.filter(
+  (s) => s !== 'IN_ESCALATION',
+) as readonly PraticaStato[];
+
 /** Pratiche vive: inviate e non ancora concluse. Nessuna bozza. */
 export const STATI_IN_CORSO = [
   ...STATI_IN_ATTESA,

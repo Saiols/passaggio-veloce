@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
+import { STATI_IN_DISTRIBUZIONE } from '@/lib/pratiche/stati';
 
 type Periodo = 'giorno' | 'settimana' | 'mese' | 'anno';
 type TipoFiltro = '' | 'SEMPLICE' | 'MINIVOLTURA';
@@ -26,12 +27,6 @@ function periodoLabel(p: Periodo): string {
   if (p === 'mese') return 'Ultimo mese';
   return 'Ultimo anno';
 }
-
-const STATI_DISTRIBUZIONE = [
-  'IN_ATTESA_ROUND_1',
-  'IN_ATTESA_ROUND_2',
-  'IN_ATTESA_ROUND_3',
-] as const;
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -77,7 +72,7 @@ export default async function AdminDashboardPage({
     prisma.pratica.count({ where }),
     prisma.pratica.count({ where: { ...where, stato: 'FIRMATA' } }),
     prisma.pratica.count({
-      where: { ...where, stato: { in: [...STATI_DISTRIBUZIONE] } },
+      where: { ...where, stato: { in: [...STATI_IN_DISTRIBUZIONE] } },
     }),
     prisma.pratica.count({ where: { ...where, stato: 'IN_ESCALATION' } }),
     prisma.pratica.count({ where: { ...where, stato: 'ANNULLATA' } }),

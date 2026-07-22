@@ -13,7 +13,7 @@ import {
   registerSedeSchema,
 } from '@/lib/auth/schemas';
 import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
-import { Alert, Button, Checkbox, Field, Input, PasswordInput, Select } from '@/components/ui';
+import { Alert, Button, Checkbox, Field, Input, Modal, PasswordInput, Select } from '@/components/ui';
 import { AddressAutocomplete, type AddressParts } from '@/components/address-autocomplete';
 import { WizardProgress } from '@/components/wizard-progress';
 import { DocCard } from '@/components/doc-card';
@@ -120,6 +120,9 @@ export function RegisterWizard({
   // "già da aggiornare" (non blocca: il wizard avanza comunque).
   const [visuraGiorni, setVisuraGiorni] = useState<number | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  // Successo registrazione: apre la modale di conferma + CTA login. In prod è
+  // l'UNICA UX di successo (il box "DEMO" col token esiste solo in DEMO_MODE).
+  const [registered, setRegistered] = useState(false);
   const [promoOutcome, setPromoOutcome] = useState<
     { applied: true; amountCent: number } | { applied: false } | null
   >(null);
@@ -318,6 +321,7 @@ export function RegisterWizard({
         // → `token` resta null → il box "Modalità DEMO" non viene renderizzato.
         setToken(result.emailVerificationToken ?? null);
         setPromoOutcome(result.promo ?? null);
+        setRegistered(true); // apre la modale di conferma (unica UX di successo in prod)
       } else if (result.kycFailures && result.kycFailures.length > 0) {
         // Gate KYC non superato: torna allo step Documenti e mostra i motivi
         // di blocco per documento, così l'utente sa esattamente cosa correggere.
@@ -390,6 +394,49 @@ export function RegisterWizard({
             </Alert>
           )}
           {submitError && <Alert variant="error">{submitError}</Alert>}
+
+          <Modal
+            open={registered}
+            onClose={() => {
+              window.location.href = '/login';
+            }}
+            title="Registrazione completata 🎉"
+          >
+            <div className="space-y-3 text-[14px] leading-relaxed text-pv-slate-700">
+              <p>
+                Il tuo account è stato creato. Ti abbiamo inviato un&apos;email di verifica
+                {data.account?.email ? (
+                  <>
+                    {' '}
+                    a <strong>{data.account.email}</strong>
+                  </>
+                ) : null}
+                .
+              </p>
+              <p>Verifica la tua email, poi accedi con le credenziali che hai scelto.</p>
+              {promoOutcome?.applied === true && (
+                <div className="rounded-lg border border-pv-green-500 bg-pv-green-50 p-3 text-pv-navy-900">
+                  🎁 Promozione applicata:{' '}
+                  <strong>{formatCurrencyCent(promoOutcome.amountCent)}</strong> accreditati sul
+                  tuo wallet.
+                </div>
+              )}
+              {token && (
+                <p className="text-[12px] text-pv-slate-500">
+                  (DEMO) Link di verifica:{' '}
+                  <a
+                    href={`/verify-email?token=${token}`}
+                    className="break-all text-pv-navy-700 underline"
+                  >
+                    {`/verify-email?token=${token}`}
+                  </a>
+                </p>
+              )}
+              <a href="/login" className="mt-2 block">
+                <Button fullWidth>Vai al login</Button>
+              </a>
+            </div>
+          </Modal>
 
           {step === 1 && <AccountStep defaultValues={data.account} onNext={handleAccount} />}
           {step === 2 && (

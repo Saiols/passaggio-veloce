@@ -16,7 +16,7 @@ let worker: Worker | null = null;
 let seq = 0;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 
-function getWorker(): Worker {
+export function getWorker(): Worker {
   if (worker) return worker;
   worker = new Worker(new URL('./scanner.worker.ts', import.meta.url));
   worker.onmessage = (e: MessageEvent) => {
@@ -30,8 +30,44 @@ function getWorker(): Worker {
   worker.onerror = (e) => {
     for (const [, p] of pending) p.reject(new Error(e.message || 'scanner worker crashed'));
     pending.clear();
+    // Auto-heal: se il worker notifica un crash, il prossimo getWorker() ne
+    // creerà uno fresco invece di riusare quello morto.
+    worker = null;
   };
   return worker;
+}
+
+/**
+ * Termina il worker corrente e ne forza la ricreazione (lazy) al prossimo uso.
+ * Rigetta subito le pending, così un modale in attesa non resta appeso fino al
+ * timeout. Idempotente (no-op se il worker non esiste).
+ */
+export function disposeWorker(): void {
+  if (!worker) return;
+  try {
+    worker.terminate();
+  } catch {
+    // worker già morto: ignora
+  }
+  worker = null;
+  for (const [, p] of pending) p.reject(new Error('scanner riavviato'));
+  pending.clear();
+}
+
+// iOS Safari TERMINA i Web Worker quando la pagina va in background: al ritorno
+// in foreground (o da bfcache) il singleton `worker` punterebbe a un worker
+// morto e ogni postMessage cadrebbe nel vuoto → il modale scanner resta in
+// "Elaborazione…" fino al timeout, sbloccabile solo chiudendo e riaprendo la
+// tab (fresh JS → worker nuovo). Quando la pagina torna visibile buttiamo il
+// worker: la ricreazione è lazy (getWorker), quindi costo nullo se non si
+// scannerizza. Guardia SSR (typeof window).
+if (typeof window !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') disposeWorker();
+  });
+  window.addEventListener('pageshow', (e) => {
+    if ((e as PageTransitionEvent).persisted) disposeWorker();
+  });
 }
 
 function call<T>(type: string, payload: Record<string, unknown>, transfer: Transferable[] = []): Promise<T> {

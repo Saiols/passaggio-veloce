@@ -190,6 +190,30 @@ describe('loginAction', () => {
     expect(signInMock).not.toHaveBeenCalled();
   });
 
+  it('account PENDING (email non verificata) + password corretta → { needsEmailVerification, email }, niente signIn', async () => {
+    // 1ª query = utenti ATTIVI (vuota: l'account non è ancora ACTIVE).
+    // 2ª query = utenti PENDING_EMAIL_VERIFICATION (match sull'email+password).
+    findManyMock
+      .mockResolvedValueOnce([] as never)
+      .mockResolvedValueOnce([{ passwordHash: 'hash' }] as never);
+    compareMock.mockResolvedValue(true as never);
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r).toEqual({ needsEmailVerification: true, email: 'mario@example.com' });
+    expect(signInMock).not.toHaveBeenCalled();
+  });
+
+  it('email sconosciuta (nessun utente attivo né pending) → { error: "Credenziali non valide" }', async () => {
+    // Entrambe le query vuote: non si rivela nulla, messaggio generico.
+    findManyMock.mockResolvedValue([] as never);
+
+    const r = await loginAction({}, loginForm());
+
+    expect(r).toEqual({ error: 'Credenziali non valide' });
+    expect(signInMock).not.toHaveBeenCalled();
+  });
+
   it('utente 2FA + password corretta + totp errato → signIn lancia AuthError → { error: "Codice 2FA non valido", needTotp: true }', async () => {
     findManyMock.mockResolvedValue([candidate(true)] as never);
     compareMock.mockResolvedValue(true as never);

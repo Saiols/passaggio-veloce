@@ -13,10 +13,13 @@ describe('activeUserCredentialsQuery', () => {
     expect(q.where.email).toBe('mario@example.it');
   });
 
-  it('filtra utenti non eliminati e non sospesi', () => {
+  it('filtra utenti non eliminati e SOLO attivi (gate verifica email)', () => {
+    // Solo ACTIVE: un account PENDING_EMAIL_VERIFICATION (email non confermata)
+    // o SUSPENDED non deve poter autenticarsi. La regressione a `{ not:
+    // 'SUSPENDED' }` riaprirebbe il login ai PENDING.
     const q = activeUserCredentialsQuery('mario@example.it');
     expect(q.where.deletedAt).toBeNull();
-    expect(q.where.status).toEqual({ not: 'SUSPENDED' });
+    expect(q.where.status).toBe('ACTIVE');
   });
 
   it('ordina per companyId poi createdAt (l\'ordine conta: companyId per primo)', () => {

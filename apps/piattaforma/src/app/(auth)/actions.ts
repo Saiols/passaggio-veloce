@@ -43,6 +43,15 @@ export type LoginActionState = {
   error?: string;
   /** true quando la password è corretta ma serve il codice 2FA. */
   needTotp?: boolean;
+  /**
+   * true quando email+password combaciano ma l'account non ha ancora
+   * verificato l'email (`PENDING_EMAIL_VERIFICATION`): il login è bloccato
+   * finché non conferma. Il form mostra un messaggio dedicato + il reinvio del
+   * link, invece del generico "credenziali non valide".
+   */
+  needsEmailVerification?: boolean;
+  /** email dell'account non verificato, per il pulsante di reinvio. */
+  email?: string;
 };
 
 export async function loginAction(
@@ -92,6 +101,25 @@ export async function loginAction(
     }
   }
   if (!matched) {
+    // Nessun utente ATTIVO combacia. Prima di rispondere "credenziali non
+    // valide", verifica se esiste un account con la stessa email+password ma
+    // ancora in attesa di verifica email: in tal caso il problema è la
+    // verifica, non le credenziali, e va comunicato in modo esplicito (con il
+    // reinvio del link). Il controllo richiede la password corretta, quindi non
+    // rivela nulla a chi non possiede l'account.
+    const pendingCandidates = await prisma.user.findMany({
+      where: {
+        email: emailLower,
+        deletedAt: null,
+        status: 'PENDING_EMAIL_VERIFICATION',
+      },
+      select: { passwordHash: true },
+    });
+    for (const c of pendingCandidates) {
+      if (await bcrypt.compare(parsed.data.password, c.passwordHash)) {
+        return { needsEmailVerification: true, email: emailLower };
+      }
+    }
     return { error: 'Credenziali non valide' };
   }
   if (matched.twoFactorEnabled && !totp) {
@@ -885,6 +913,97 @@ export async function verifyEmailAction(token: string): Promise<VerifyEmailResul
   });
 
   return { ok: true };
+}
+
+// ============================================================
+// RESEND EMAIL VERIFICATION
+// ============================================================
+
+export type ResendVerificationResult =
+  | { ok: true; demoToken?: string }
+  | { ok: false; error: string };
+
+/**
+ * Reinvia il link di verifica email a un account ancora in attesa. Serve a non
+ * lasciare bloccato chi non ha ricevuto (o ha perso) l'email di registrazione,
+ * ora che il login richiede la verifica. Non rivela se l'account esiste: la
+ * risposta è sempre `ok` a meno di input malformato o throttle (rate limit).
+ */
+export async function resendVerificationAction(
+  email: string,
+): Promise<ResendVerificationResult> {
+  if (!email || typeof email !== 'string') {
+    return { ok: false, error: 'Email non valida' };
+  }
+
+  // Rate limit (durevole, DB-backed): 5 richieste / ora per IP, come il reset
+  // password — non deve permettere di bombardare una casella. Risposta identica
+  // ("ok") a prescindere dall'esito del lookup: nessuna enumeration.
+  const ip = getClientIp(await headers());
+  const rl = await rateLimit(`resendverify:${ip}`, 5, 60 * 60);
+  if (!rl.allowed) {
+    return { ok: true };
+  }
+
+  const emailLower = email.toLowerCase().trim();
+
+  // Solo account ancora in attesa di verifica. Se non ce ne sono (email
+  // sconosciuta, già verificata, sospesa) rispondiamo comunque ok.
+  const user = await prisma.user.findFirst({
+    where: {
+      email: emailLower,
+      deletedAt: null,
+      status: 'PENDING_EMAIL_VERIFICATION',
+    },
+    orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      nome: true,
+      company: { select: { ragioneSociale: true, type: true } },
+    },
+  });
+
+  if (!user || !user.company) {
+    return { ok: true };
+  }
+
+  // Nuovo token EMAIL_VERIFICATION. I vecchi restano validi finché non scadono
+  // (verifyEmailAction accetta qualunque token non usato/non scaduto per
+  // l'email): reinviare non invalida un link già in mano all'utente.
+  const token = generateSecureToken();
+  await prisma.verificationToken.create({
+    data: {
+      token,
+      type: 'EMAIL_VERIFICATION',
+      email: emailLower,
+      expiresAt: expiresIn(24),
+    },
+  });
+
+  // Email (best-effort: un errore d'invio non deve rivelare nulla al client).
+  try {
+    const { getEmail } = await import('@/lib/providers/email');
+    const { tplRegistrazioneConferma } = await import('@/lib/auth/email-templates');
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+    const mail = tplRegistrazioneConferma({
+      nome: user.nome,
+      ragioneSociale: user.company.ragioneSociale,
+      tipo: user.company.type,
+      verifyUrl: `${appUrl}/verify-email?token=${token}`,
+      loginUrl: `${appUrl}/login`,
+      needsVerification: true,
+    });
+    await getEmail().send({
+      to: emailLower,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      tag: 'registrazione',
+    });
+  } catch (e) {
+    console.warn('[resend-verify] invio email verifica fallito', (e as Error).message);
+  }
+
+  return env.DEMO_MODE ? { ok: true, demoToken: token } : { ok: true };
 }
 
 // ============================================================

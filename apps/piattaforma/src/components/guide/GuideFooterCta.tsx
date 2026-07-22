@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
-import { isGatedHost } from '@/lib/landing-gate';
+import { isLandingOnlyHost } from '@/lib/landing-gate';
 
 const CONTATTACI_HREF =
   'mailto:info@passaggioveloce.it?subject=' +
@@ -9,7 +9,7 @@ const CONTATTACI_HREF =
 
 export async function GuideFooterCta() {
   const host = (await headers()).get('host');
-  const landingOnly = isGatedHost(host);
+  const landingOnly = isLandingOnlyHost(host);
 
   return (
     <section className="mx-auto my-14 w-full max-w-3xl px-5 sm:px-6">

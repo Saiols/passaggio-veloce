@@ -4,7 +4,7 @@ import { Button, Card } from '@/components/ui';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { UtmCapture } from '@/components/utm-capture';
-import { isGatedHost } from '@/lib/landing-gate';
+import { isLandingOnlyHost } from '@/lib/landing-gate';
 import type { Metadata } from 'next';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { BRAND } from '@/lib/seo/brand';
@@ -44,7 +44,7 @@ function richiediAccessoHref(contesto?: string) {
 
 export default async function HomePage() {
   const host = (await headers()).get('host');
-  const landingOnly = isGatedHost(host);
+  const landingOnly = isLandingOnlyHost(host);
   const tariffario = await getTariffarioCorrente();
   const FAQ_ITEMS = buildFaqItems(tariffario.SEMPLICE.creditoBrokerCent / 100);
 

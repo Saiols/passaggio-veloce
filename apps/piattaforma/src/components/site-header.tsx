@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
-import { isGatedHost } from '@/lib/landing-gate';
+import { isLandingOnlyHost } from '@/lib/landing-gate';
 
 const CONTATTACI_HREF =
   'mailto:info@passaggioveloce.it?subject=' +
@@ -14,7 +14,7 @@ type Props = {
 
 export async function SiteHeader({ variant = 'marketing' }: Props) {
   const host = (await headers()).get('host');
-  const landingOnly = isGatedHost(host);
+  const landingOnly = isLandingOnlyHost(host);
 
   return (
     <header className="sticky top-0 z-30 border-b border-pv-slate-200 bg-white/90 backdrop-blur">

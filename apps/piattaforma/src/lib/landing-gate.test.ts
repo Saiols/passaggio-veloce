@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPublicPath, isGatedHost, PUBLIC_PATHS } from './landing-gate';
+import { isPublicPath, isGatedHost, isLandingOnlyHost, PUBLIC_PATHS } from './landing-gate';
 
 describe('isPublicPath', () => {
   it('considera pubbliche le pagine legali storiche', () => {
@@ -61,5 +61,17 @@ describe('isGatedHost', () => {
   it('gestisce host null/undefined', () => {
     expect(isGatedHost(null)).toBe(false);
     expect(isGatedHost(undefined)).toBe(false);
+  });
+});
+
+describe('isLandingOnlyHost (gate app)', () => {
+  // Go-live 2026-07-22: LANDING_ONLY=false → nessun host è in modalità vetrina,
+  // l'app è servita ovunque. isGatedHost resta invariato (host-id per la SEO:
+  // robots/sitemap/llms continuano a riconoscere passaggioveloce.it come prod).
+  it('con LANDING_ONLY spento, nessun host è "solo vetrina"', () => {
+    expect(isLandingOnlyHost('passaggioveloce.it')).toBe(false);
+    expect(isLandingOnlyHost('www.passaggioveloce.it')).toBe(false);
+    expect(isLandingOnlyHost('passaggio-veloce-piattaforma.vercel.app')).toBe(false);
+    expect(isLandingOnlyHost(null)).toBe(false);
   });
 });

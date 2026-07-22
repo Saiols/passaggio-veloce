@@ -49,3 +49,17 @@ export function isGatedHost(host: string | null | undefined): host is string {
   const bare = host.split(':')[0].toLowerCase();
   return GATED_HOSTS.has(bare);
 }
+
+// ── Gate APP (modalità vetrina pre-lancio) ──────────────────────────────────
+// Go-live 2026-07-22: false = app completa servita OVUNQUE (dominio incluso);
+// true = solo vetrina marketing sui GATED_HOSTS. Per aprire/chiudere l'app usare
+// SOLO questo flag. ⚠️ NON svuotare GATED_HOSTS: isGatedHost resta la fonte
+// "host di produzione canonico" per la SEO (robots/sitemap/llms) — svuotarlo
+// farebbe restituire a robots `Disallow: /`, de-indicizzando il sito.
+export const LANDING_ONLY = false;
+
+// Vero solo se la modalità vetrina è ATTIVA E l'host è di produzione. Consumato
+// dai gate APP (auth.config, page.tsx, site-header, GuideFooterCta), NON dalla SEO.
+export function isLandingOnlyHost(host: string | null | undefined): boolean {
+  return LANDING_ONLY && isGatedHost(host);
+}

@@ -1,5 +1,5 @@
 import type { NextAuthConfig } from 'next-auth';
-import { isGatedHost, isPublicPath } from '@/lib/landing-gate';
+import { isLandingOnlyHost, isPublicPath } from '@/lib/landing-gate';
 
 // Edge-compatible config (no Node-only modules like bcryptjs).
 // Used by middleware.ts. Full config with Credentials provider lives in auth.ts.
@@ -18,10 +18,10 @@ export const authConfig = {
       const { nextUrl } = request;
       const path = nextUrl.pathname;
 
-      // Gate pre-lancio host-based: sui domini in GATED_HOSTS
-      // (vedi src/lib/landing-gate.ts) è raggiungibile solo la vetrina
-      // marketing pubblica. Sugli altri host (Vercel default + preview)
-      // l'app è completamente accessibile.
+      // Gate vetrina pre-lancio (flag LANDING_ONLY in src/lib/landing-gate.ts):
+      // quando ATTIVO, sui domini di produzione (GATED_HOSTS) è raggiungibile
+      // solo la vetrina marketing pubblica. A go-live avvenuto (LANDING_ONLY=
+      // false) e sugli altri host (Vercel + preview) l'app è accessibile ovunque.
       //
       // Importante: il redirect usa esplicitamente `https://${host}/`
       // invece di `new URL('/', nextUrl)`. Su Vercel, quando AUTH_URL
@@ -30,7 +30,7 @@ export const authConfig = {
       // chi tenta /login su passaggioveloce.it finirebbe su .vercel.app
       // dove il gate è spento, vanificando il gate stesso.
       const host = request.headers.get('host');
-      if (isGatedHost(host) && !isPublicPath(path)) {
+      if (isLandingOnlyHost(host) && !isPublicPath(path)) {
         return Response.redirect(`https://${host}/`);
       }
 

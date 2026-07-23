@@ -15,7 +15,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@pv/db', () => ({ prisma: {}, Prisma: {} }));
 vi.mock('@/auth', () => ({ auth: vi.fn() }));
 
-import { praticaCoordsSchema } from './actions';
+import { praticaCoordsSchema } from './coords-schema';
 
 describe('coordinate obbligatorie al submit', () => {
   it('accetta lat/lng validi (stringa da FormData)', () => {

@@ -23,6 +23,7 @@ import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariBroker } from '@/lib/notifiche/pratica';
 import { findBlockingDocuments, type GatingCandidate } from '@/lib/documenti/gating-block';
 import { crossCheckPerVeicolo } from './venditori-per-veicolo';
+import { praticaCoordsSchema } from './coords-schema';
 import {
   delegaDocsComplete,
   delegatoDocKey,
@@ -465,25 +466,6 @@ export type CoAcquirenteInputData = z.infer<typeof coAcquirenteSchema>;
 // Esportato standalone (oltre a essere spalmato dentro `submitSchema` sotto)
 // così il test unit può validare la regola senza costruire l'intero FormData
 // del wizard.
-// Rifiuta stringhe vuote/whitespace PRIMA della coercizione: senza questo,
-// `z.coerce.number()` legge Number('') === 0, un valore valido e in range
-// (0,0 "null island"), trasformando un campo di fatto vuoto in una coordinata
-// accettata. Il preprocess mappa la stringa vuota/blank a `undefined`, che
-// coerce.number() converte in NaN → Number.isFinite fallisce → rejected
-// (stesso esito di una chiave del tutto mancante).
-const coordField = (min: number, max: number) =>
-  z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.coerce
-      .number()
-      .refine((n) => Number.isFinite(n) && n >= min && n <= max, 'coordinata non valida'),
-  );
-
-export const praticaCoordsSchema = z.object({
-  lat: coordField(-90, 90),
-  lng: coordField(-180, 180),
-});
-
 const submitSchema = z.object({
   tipo: z.enum(['SEMPLICE', 'MINIVOLTURA']),
   numeroVeicoli: z.coerce.number().int().min(1).max(50).default(1),

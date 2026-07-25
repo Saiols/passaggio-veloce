@@ -31,6 +31,27 @@ import {
 
 const sede = (id: string) => ({ id, nome: id, type: 'AGENZIA' as const });
 
+/** Contesto di sessione con sedi/ruoli/permessi indicati. `sospensione` sempre
+ * assente (operativo): questo file copre lo scoping per sede, non la sospensione. */
+function ctxSede(over: {
+  accessibleSedi: { id: string; nome: string; type: 'AGENZIA' }[];
+  membershipRuoli: Record<string, string>;
+  permessi?: string[];
+}) {
+  return {
+    user: { id: 'u1', role: 'UTENTE_AZIENDA' },
+    companyId: 'c1',
+    companyType: 'AGENZIA',
+    isOwner: false,
+    accessibleSedi: over.accessibleSedi,
+    membershipRuoli: over.membershipRuoli,
+    permessi: new Set(over.permessi ?? []),
+    sospensione: { sospeso: false, motivo: null, origine: null },
+  };
+}
+
+const PERMESSI_TEAM_COMPLETI = ['team.view', 'team.crea', 'team.modifica', 'team.disabilita', 'team.permessi'];
+
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.user.findFirst.mockResolvedValue(null); // nessun duplicato email
@@ -39,15 +60,13 @@ beforeEach(() => {
 
 describe('createUserDirectAction — autorizzazione sede-aware', () => {
   it('ADMIN_SEDE crea un OPERATORE nella propria sede', async () => {
-    getSessionContextMock.mockResolvedValue({
-      user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-      companyId: 'c1',
-      companyType: 'AGENZIA',
-      isOwner: false,
-      accessibleSedi: [sede('s1')],
-      membershipRuoli: { s1: 'ADMIN_SEDE' },
-      permessi: new Set(['team.view', 'team.crea', 'team.modifica', 'team.disabilita', 'team.permessi']),
-    });
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({
+        accessibleSedi: [sede('s1')],
+        membershipRuoli: { s1: 'ADMIN_SEDE' },
+        permessi: PERMESSI_TEAM_COMPLETI,
+      }),
+    );
     const res = await createUserDirectAction('x@y.it', 'Ann', 'Bee', 'Password1', 's1', 'OPERATORE');
     expect(res).toEqual({ ok: true });
     expect(prismaMock.userSede.create).toHaveBeenCalledWith(
@@ -56,30 +75,22 @@ describe('createUserDirectAction — autorizzazione sede-aware', () => {
   });
 
   it('OPERATORE non può creare account', async () => {
-    getSessionContextMock.mockResolvedValue({
-      user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-      companyId: 'c1',
-      companyType: 'AGENZIA',
-      isOwner: false,
-      accessibleSedi: [sede('s1')],
-      membershipRuoli: { s1: 'OPERATORE' },
-      permessi: new Set(),
-    });
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({ accessibleSedi: [sede('s1')], membershipRuoli: { s1: 'OPERATORE' } }),
+    );
     const res = await createUserDirectAction('x@y.it', 'Ann', 'Bee', 'Password1', 's1', 'OPERATORE');
     expect(res.ok).toBe(false);
     expect(prismaMock.user.create).not.toHaveBeenCalled();
   });
 
   it('ADMIN_SEDE non può creare su una sede che non amministra', async () => {
-    getSessionContextMock.mockResolvedValue({
-      user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-      companyId: 'c1',
-      companyType: 'AGENZIA',
-      isOwner: false,
-      accessibleSedi: [sede('s1'), sede('s2')],
-      membershipRuoli: { s1: 'ADMIN_SEDE', s2: 'OPERATORE' },
-      permessi: new Set(['team.view', 'team.crea', 'team.modifica', 'team.disabilita', 'team.permessi']),
-    });
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({
+        accessibleSedi: [sede('s1'), sede('s2')],
+        membershipRuoli: { s1: 'ADMIN_SEDE', s2: 'OPERATORE' },
+        permessi: PERMESSI_TEAM_COMPLETI,
+      }),
+    );
     const res = await createUserDirectAction('x@y.it', 'Ann', 'Bee', 'Password1', 's2', 'OPERATORE');
     expect(res.ok).toBe(false);
     expect(prismaMock.user.create).not.toHaveBeenCalled();
@@ -88,15 +99,13 @@ describe('createUserDirectAction — autorizzazione sede-aware', () => {
 
 describe('updateTeamUserAction — autorizzazione sede-aware (target esistente)', () => {
   it('ADMIN_SEDE non può spostare un utente su una sede che non amministra', async () => {
-    getSessionContextMock.mockResolvedValue({
-      user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-      companyId: 'c1',
-      companyType: 'AGENZIA',
-      isOwner: false,
-      accessibleSedi: [sede('s1'), sede('s2')],
-      membershipRuoli: { s1: 'ADMIN_SEDE', s2: 'OPERATORE' },
-      permessi: new Set(['team.view', 'team.crea', 'team.modifica', 'team.disabilita', 'team.permessi']),
-    });
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({
+        accessibleSedi: [sede('s1'), sede('s2')],
+        membershipRuoli: { s1: 'ADMIN_SEDE', s2: 'OPERATORE' },
+        permessi: PERMESSI_TEAM_COMPLETI,
+      }),
+    );
     // Target è un UTENTE_AZIENDA con membership in s1 → authorizeTeamTargetUser passa.
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'target1',
@@ -118,15 +127,13 @@ describe('updateTeamUserAction — autorizzazione sede-aware (target esistente)'
 
 describe('disableTeamUserAction — autorizzazione sede-aware (target esistente)', () => {
   it('ADMIN_SEDE non può disabilitare il proprietario (nessuna membership → non gestibile)', async () => {
-    getSessionContextMock.mockResolvedValue({
-      user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-      companyId: 'c1',
-      companyType: 'AGENZIA',
-      isOwner: false,
-      accessibleSedi: [sede('s1')],
-      membershipRuoli: { s1: 'ADMIN_SEDE' },
-      permessi: new Set(['team.view', 'team.crea', 'team.modifica', 'team.disabilita', 'team.permessi']),
-    });
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({
+        accessibleSedi: [sede('s1')],
+        membershipRuoli: { s1: 'ADMIN_SEDE' },
+        permessi: PERMESSI_TEAM_COMPLETI,
+      }),
+    );
     // Target è il proprietario: ADMIN_AZIENDA, senza UserSede.
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'owner1',
@@ -143,15 +150,13 @@ describe('disableTeamUserAction — autorizzazione sede-aware (target esistente)
 
 describe('revokeInvitationAction — autorizzazione sede-aware (invito)', () => {
   it('ADMIN_SEDE non può revocare un invito di una sede che non amministra', async () => {
-    getSessionContextMock.mockResolvedValue({
-      user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-      companyId: 'c1',
-      companyType: 'AGENZIA',
-      isOwner: false,
-      accessibleSedi: [sede('s1')],
-      membershipRuoli: { s1: 'ADMIN_SEDE' },
-      permessi: new Set(['team.view', 'team.crea', 'team.modifica', 'team.disabilita', 'team.permessi']),
-    });
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({
+        accessibleSedi: [sede('s1')],
+        membershipRuoli: { s1: 'ADMIN_SEDE' },
+        permessi: PERMESSI_TEAM_COMPLETI,
+      }),
+    );
     // Invito PENDING per la sede s2, non gestita dall'ADMIN_SEDE di s1.
     prismaMock.invitation.findUnique.mockResolvedValue({
       id: 'inv1',

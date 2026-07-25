@@ -31,6 +31,7 @@ import {
   disableTeamUserAction,
   revokeInvitationAction,
 } from './actions';
+import { ERRORE_SOSPENSIONE } from '@/lib/auth/sospensione';
 
 const sede = (id: string) => ({ id, nome: id, type: 'AGENZIA' as const });
 
@@ -42,6 +43,7 @@ const ctxAdminSede = (permessi: string[]) => ({
   accessibleSedi: [sede('s1')],
   membershipRuoli: { s1: 'ADMIN_SEDE' as const },
   permessi: new Set(permessi),
+  sospensione: { sospeso: false, motivo: null, origine: null } as const,
 });
 
 const ctxOwner = () => ({
@@ -52,6 +54,15 @@ const ctxOwner = () => ({
   accessibleSedi: [sede('s1')],
   membershipRuoli: {},
   permessi: new Set<string>(),
+  sospensione: { sospeso: false, motivo: null, origine: null } as const,
+});
+
+/** Stesso titolare, ma sospeso: regressione Critical #1 (review round 1) — un
+ * ADMIN_AZIENDA sospeso passava tutti i gate del modulo team perché un
+ * adattatore locale a `PermessiCtx` ignorava `sospensione`. */
+const ctxOwnerSospeso = () => ({
+  ...ctxOwner(),
+  sospensione: { sospeso: true, motivo: 'Sospeso per test', origine: 'UTENTE' as const },
 });
 
 beforeEach(() => {
@@ -275,6 +286,27 @@ describe('gate di capability — lo scope ok non basta senza il permesso specifi
     const res = await revokeInvitationAction('inv1');
     expect(res.ok).toBe(false);
     expect(prismaMock.invitation.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Regressione Critical #1 (review round 1, 2026-07-25): `team/actions.ts`
+ * aveva un `toPermessiCtx` locale che non popolava `soloLettura`. Per un
+ * non-owner l'omissione era mascherata (i permessi arrivano già filtrati da
+ * `filtraSoloLettura` a monte, in `session-context.ts`); per l'OWNER no — il
+ * suo set è vuoto per progetto, quindi l'unica cosa che può fermarlo è
+ * `ctx.soloLettura` in `can()`. Un titolare sospeso passava tutti e sei i gate
+ * del modulo team. Ora tutti i siti passano dall'unico adattatore
+ * `toPermessiCtx()` esportato da `permessi/guard.ts`, che legge
+ * `ctx.sospensione.sospeso`: questo test copre `team.crea` (il caso citato
+ * dalla review), gli altri cinque gate condividono la stessa `gateCapability`.
+ */
+describe('titolare sospeso — regressione Critical #1', () => {
+  it('il titolare sospeso non passa team.crea: creazione utente rifiutata col messaggio di sospensione', async () => {
+    getSessionContextMock.mockResolvedValue(ctxOwnerSospeso());
+    const res = await createUserDirectAction('x@y.it', 'Ann', 'Bee', 'Password1', 's1', 'OPERATORE');
+    expect(res).toEqual({ ok: false, error: ERRORE_SOSPENSIONE });
+    expect(prismaMock.user.create).not.toHaveBeenCalled();
   });
 });
 

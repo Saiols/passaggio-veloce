@@ -6,7 +6,7 @@ const ATTIVO = {
   userNote: null,
   companySuspendedAt: null,
   companyNote: null,
-};
+} as const;
 
 describe('calcolaSospensione', () => {
   it('utente attivo e azienda attiva → non sospeso', () => {

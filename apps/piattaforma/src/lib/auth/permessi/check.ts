@@ -9,10 +9,13 @@ export type PermessiCtx = {
   permessi: Set<Permesso>;
   /**
    * Utente o azienda sospesi: sopravvivono solo le chiavi di lettura.
-   * Opzionale perché le fixture di test esistenti costruiscono il contesto
-   * con tre sole chiavi. Assente = operativo.
+   * Obbligatorio: un campo opzionale può essere dimenticato da un adattatore
+   * locale (è già successo — un titolare sospeso passava comunque i gate del
+   * modulo team). L'unico modo lecito di costruire un `PermessiCtx` in
+   * produzione è `toPermessiCtx()` in `./guard`, che lo popola sempre da
+   * `SessionContext.sospensione`.
    */
-  soloLettura?: boolean;
+  soloLettura: boolean;
 };
 
 /**

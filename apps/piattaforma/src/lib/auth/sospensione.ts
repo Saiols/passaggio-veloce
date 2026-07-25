@@ -36,7 +36,11 @@ export const ERRORE_SOSPENSIONE =
  * `PENDING_EMAIL_VERIFICATION` NON è una sospensione: ha il suo gate al login.
  */
 export function calcolaSospensione(input: {
-  userStatus: string | undefined;
+  // Union letterale locale (il modulo resta puro, niente import di Prisma):
+  // con `string` un domani rinominasse il membro dell'enum, il confronto
+  // `=== 'SUSPENDED'` diventerebbe silenziosamente sempre falso — fail-OPEN
+  // su un controllo di sicurezza. Così il compilatore lo segnala.
+  userStatus: 'ACTIVE' | 'SUSPENDED' | 'PENDING_EMAIL_VERIFICATION' | undefined;
   userNote: string | null | undefined;
   companySuspendedAt: Date | null | undefined;
   companyNote: string | null | undefined;

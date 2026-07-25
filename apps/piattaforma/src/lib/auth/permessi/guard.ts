@@ -1,21 +1,32 @@
 import 'server-only';
 import { redirect } from 'next/navigation';
-import { getSessionContext } from '@/lib/auth/session-context';
+import { getSessionContext, type SessionContext } from '@/lib/auth/session-context';
 import { ERRORE_SOSPENSIONE } from '@/lib/auth/sospensione';
 import { can, type PermessiCtx } from './check';
 import { isLettura } from './sola-lettura';
 import type { Permesso } from './catalogo';
 
-/** Il contesto ridotto che serve a `can()`. Null se non autenticato. */
-export async function permessiCtx(): Promise<PermessiCtx | null> {
-  const ctx = await getSessionContext();
-  if (!ctx?.user) return null;
+/**
+ * UNICO adattatore da `SessionContext` a `PermessiCtx`. Ogni sito di
+ * produzione che chiama `can()` / `assignablePermessi()` / `validaPermessi()`
+ * fuori da questo modulo deve passare da qui — un adattatore locale può
+ * dimenticare `soloLettura` (è già successo: il modulo team ne aveva uno che
+ * lasciava un titolare sospeso operativo su tutti i gate team).
+ */
+export function toPermessiCtx(ctx: SessionContext): PermessiCtx {
   return {
     userId: ctx.user.id,
     isOwner: ctx.isOwner,
     permessi: ctx.permessi,
     soloLettura: ctx.sospensione.sospeso,
   };
+}
+
+/** Il contesto ridotto che serve a `can()`. Null se non autenticato. */
+export async function permessiCtx(): Promise<PermessiCtx | null> {
+  const ctx = await getSessionContext();
+  if (!ctx?.user) return null;
+  return toPermessiCtx(ctx);
 }
 
 export async function hasPermesso(p: Permesso): Promise<boolean> {

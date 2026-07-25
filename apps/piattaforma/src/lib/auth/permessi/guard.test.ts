@@ -10,7 +10,8 @@ const { getSessionContextMock, redirectMock } = vi.hoisted(() => ({
 vi.mock('@/lib/auth/session-context', () => ({ getSessionContext: getSessionContextMock }));
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 
-import { hasPermesso, requirePermesso, assertPermesso } from './guard';
+import { hasPermesso, requirePermesso, assertPermesso, toPermessiCtx } from './guard';
+import { ERRORE_SOSPENSIONE } from '@/lib/auth/sospensione';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -63,6 +64,46 @@ describe('requirePermesso', () => {
     getSessionContextMock.mockResolvedValue(null);
     const res = await requirePermesso('wallet.view');
     expect(res.ok).toBe(false);
+  });
+});
+
+/**
+ * IMPORTANT #2/#3 (review round 1): senza questi test le tre giunzioni che il
+ * Task 3 introduce — `sospensione` popolata, `ctx.sospensione.sospeso →
+ * soloLettura` in `toPermessiCtx()`, messaggio dedicato — non avevano nessuna
+ * copertura di regressione al di fuori del mock a mano di `check.test.ts`.
+ */
+describe('requirePermesso — sospensione', () => {
+  const ctxSospeso = () =>
+    ctx({
+      permessi: new Set(['wallet.view', 'wallet.payout']),
+      sospensione: { sospeso: true, motivo: 'Uso improprio della piattaforma.', origine: 'UTENTE' },
+    });
+
+  it('sospeso: una chiave di scrittura viene negata col messaggio dedicato, non quello generico', async () => {
+    getSessionContextMock.mockResolvedValue(ctxSospeso());
+    const res = await requirePermesso('wallet.payout');
+    expect(res).toEqual({ ok: false, error: ERRORE_SOSPENSIONE });
+  });
+
+  it('sospeso: una chiave di lettura resta concessa', async () => {
+    getSessionContextMock.mockResolvedValue(ctxSospeso());
+    const res = await requirePermesso('wallet.view');
+    expect(res).toEqual({ ok: true });
+  });
+});
+
+describe('toPermessiCtx — mappatura ctx.sospensione.sospeso → soloLettura', () => {
+  it('sospensione.sospeso true → soloLettura true', () => {
+    const pctx = toPermessiCtx(
+      ctx({ sospensione: { sospeso: true, motivo: 'x', origine: 'UTENTE' } }) as never,
+    );
+    expect(pctx.soloLettura).toBe(true);
+  });
+
+  it('sospensione.sospeso false → soloLettura false', () => {
+    const pctx = toPermessiCtx(ctx() as never);
+    expect(pctx.soloLettura).toBe(false);
   });
 });
 

@@ -15,6 +15,9 @@ import {
   type SedeRole,
 } from '@/lib/sedi/scope';
 import { can, permessiPerNuovoUtente, validaPermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
+import { toPermessiCtx } from '@/lib/auth/permessi/guard';
+import { isLettura } from '@/lib/auth/permessi/sola-lettura';
+import { ERRORE_SOSPENSIONE } from '@/lib/auth/sospensione';
 import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
 import type { Role } from '@/lib/auth/permissions';
 
@@ -51,11 +54,6 @@ async function resolveTargetSede(
 
 type RuoloSedeInput = 'ADMIN_SEDE' | 'OPERATORE';
 
-/** Il contesto di permessi del chiamante, dal SessionContext. */
-function toPermessiCtx(ctx: { user: { id: string }; isOwner: boolean; permessi: Set<Permesso> }): PermessiCtx {
-  return { userId: ctx.user.id, isOwner: ctx.isOwner, permessi: ctx.permessi };
-}
-
 /**
  * Gate di capability: SOLO autenticazione + permesso, prima di qualunque
  * risoluzione di scope (sede, target). Regola del progetto: autenticazione →
@@ -64,6 +62,11 @@ function toPermessiCtx(ctx: { user: { id: string }; isOwner: boolean; permessi: 
  * non è autorizzato. `getSessionContext()` è `cache()`-ato per richiesta
  * (session-context.ts): richiamarlo qui e poi dentro `authorizeTeamCreate` /
  * `authorizeTeamTargetUser` non costa una seconda query.
+ *
+ * Il contesto di permessi passa SEMPRE da `toPermessiCtx()` (unico adattatore,
+ * in `permessi/guard.ts`): un adattatore locale può dimenticare `soloLettura`
+ * ed è esattamente cosa succedeva qui prima — un titolare sospeso passava
+ * questo gate su tutte e sei le azioni del modulo team.
  */
 async function gateCapability(
   p: Permesso,
@@ -71,8 +74,12 @@ async function gateCapability(
 ): Promise<{ ok: false; error: string } | null> {
   const ctx = await getSessionContext();
   if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
-  if (!can(toPermessiCtx(ctx), p)) return { ok: false, error: errorMessage };
-  return null;
+  const pctx = toPermessiCtx(ctx);
+  if (can(pctx, p)) return null;
+  // Diniego per sospensione: messaggio dedicato, non il generico "non hai i
+  // permessi" (l'utente i permessi li ha, li ha persi solo temporaneamente).
+  if (pctx.soloLettura && !isLettura(p)) return { ok: false, error: ERRORE_SOSPENSIONE };
+  return { ok: false, error: errorMessage };
 }
 
 /**

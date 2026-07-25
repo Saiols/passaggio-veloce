@@ -90,11 +90,61 @@ describe('getSessionContext', () => {
 
   it('owner (ADMIN_AZIENDA): legge comunque lo status (serve alla sospensione), ma il set permessi resta vuoto', async () => {
     authMock.mockResolvedValue({ user: { id: 'u1', role: 'ADMIN_AZIENDA', companyId: 'c1' } });
+    // Permessi DELIBERATAMENTE non vuoti (il beforeEach globale li darebbe già
+    // `[]`): con `permessi: []` questo test passerebbe anche cancellando il
+    // ternario `isOwner ? new Set() : ...` di session-context.ts, diventando
+    // un'asserzione vacua. Così, se il ternario sparisse, il set risulterebbe
+    // `['pratiche.view']` e l'expect sotto diventerebbe rosso.
+    userFindUnique.mockResolvedValue({
+      permessi: ['pratiche.view'],
+      status: 'ACTIVE',
+      suspensionLastNote: null,
+    } as never);
     const ctx = await getSessionContext();
     // La lettura ora serve anche per `status`/`suspensionLastNote`, che riguardano
     // pure il titolare: non è più saltata.
     expect(userFindUnique).toHaveBeenCalled();
-    // Il set permessi deve restare vuoto: l'owner ha poteri impliciti (isOwner in can()).
+    // Il set permessi deve restare vuoto: l'owner ha poteri impliciti (isOwner in
+    // can()), MALGRADO il DB contenga permessi (vedi commento sopra).
     expect([...ctx!.permessi].sort()).toEqual([]);
+  });
+
+  describe('sospensione', () => {
+    it('utente sospeso: precedenza AZIENDA su UTENTE e permessi filtrati alla sola lettura', async () => {
+      authMock.mockResolvedValue({ user: { id: 'u2', role: 'UTENTE_AZIENDA', companyId: 'c1' } });
+      userSedeFindMany.mockResolvedValue([{ sedeId: 'a' }] as never);
+      // Entrambe le note sono presenti apposta (individuale precedente + aziendale):
+      // scambiare `userNote: dbUser?.suspensionLastNote` con `company?.suspensionLastNote`
+      // in session-context.ts (i due campi sono omonimi) supererebbe il resto della
+      // suite mostrando all'utente il motivo sbagliato — questo test lo intercetta.
+      userFindUnique.mockResolvedValue({
+        permessi: ['pratiche.view', 'pratiche.create', 'wallet.payout'],
+        status: 'SUSPENDED',
+        suspensionLastNote: 'Nota individuale precedente.',
+      } as never);
+      companyFindUnique.mockResolvedValue({
+        type: 'AGENZIA',
+        suspendedAt: new Date('2026-07-25T10:00:00Z'),
+        suspensionLastNote: 'Nota aziendale.',
+      } as never);
+      const ctx = await getSessionContext();
+      expect(ctx!.sospensione).toEqual({ sospeso: true, motivo: 'Nota aziendale.', origine: 'AZIENDA' });
+      // pratiche.create e wallet.payout sono di scrittura: spariscono. pratiche.view resta.
+      expect([...ctx!.permessi].sort()).toEqual(['pratiche.view']);
+    });
+
+    it('utente attivo, azienda attiva: sospensione popolata NON_SOSPESO, permessi intatti', async () => {
+      authMock.mockResolvedValue({ user: { id: 'u2', role: 'UTENTE_AZIENDA', companyId: 'c1' } });
+      userSedeFindMany.mockResolvedValue([{ sedeId: 'a' }] as never);
+      userFindUnique.mockResolvedValue({
+        permessi: ['pratiche.view', 'pratiche.create'],
+        status: 'ACTIVE',
+        suspensionLastNote: null,
+      } as never);
+      companyFindUnique.mockResolvedValue({ type: 'AGENZIA', suspendedAt: null, suspensionLastNote: null } as never);
+      const ctx = await getSessionContext();
+      expect(ctx!.sospensione).toEqual({ sospeso: false, motivo: null, origine: null });
+      expect([...ctx!.permessi].sort()).toEqual(['pratiche.create', 'pratiche.view']);
+    });
   });
 });

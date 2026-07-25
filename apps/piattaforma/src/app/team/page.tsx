@@ -4,8 +4,8 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
-import { can, assignablePermessi, type PermessiCtx } from '@/lib/auth/permessi/check';
-import { assertPermesso } from '@/lib/auth/permessi/guard';
+import { can, assignablePermessi } from '@/lib/auth/permessi/check';
+import { assertPermesso, toPermessiCtx } from '@/lib/auth/permessi/guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { riconoscePreset, PRESET_ETICHETTE } from '@/lib/auth/permessi/preset';
 import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
@@ -30,7 +30,7 @@ export default async function TeamPage() {
   const companyId = ctx.companyId;
   const companyType = ctx.companyType;
   const manageableIds = manageable.map((s) => s.id);
-  const permessiCtx: PermessiCtx = { userId: ctx.user.id, isOwner: ctx.isOwner, permessi: ctx.permessi };
+  const permessiCtx = toPermessiCtx(ctx);
   const assegnabili = assignablePermessi(permessiCtx, companyType);
   const puoScegliere = can(permessiCtx, 'team.permessi');
 

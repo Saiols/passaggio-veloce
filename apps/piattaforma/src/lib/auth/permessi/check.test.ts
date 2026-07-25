@@ -3,11 +3,12 @@ import { can, assignablePermessi, validaPermessi, permessiPerNuovoUtente, type P
 import { permessiPerTipo, type Permesso } from './catalogo';
 import { preset } from './preset';
 
-const owner: PermessiCtx = { userId: 'owner1', isOwner: true, permessi: new Set() };
+const owner: PermessiCtx = { userId: 'owner1', isOwner: true, permessi: new Set(), soloLettura: false };
 const adminSede = (permessi: Permesso[]): PermessiCtx => ({
   userId: 'admin1',
   isOwner: false,
   permessi: new Set(permessi),
+  soloLettura: false,
 });
 
 /** Una chiave rimossa dal catalogo ma ancora presente su una riga vecchia del DB. */
@@ -75,8 +76,8 @@ describe('can — sola lettura da sospensione', () => {
     expect(can(ctx, 'wallet.view')).toBe(false);
   });
 
-  it('senza il flag il comportamento è identico a prima (non regredire)', () => {
-    const ctx: PermessiCtx = { userId: 'owner1', isOwner: true, permessi: new Set() };
+  it('con soloLettura: false il comportamento è quello operativo normale (non regredire)', () => {
+    const ctx: PermessiCtx = { userId: 'owner1', isOwner: true, permessi: new Set(), soloLettura: false };
     expect(can(ctx, 'wallet.payout')).toBe(true);
   });
 });
@@ -142,7 +143,12 @@ describe('validaPermessi — anti-escalation', () => {
   // impatto nullo in pratica perché gli id reali sono uuid, ma qui lo
   // dimostriamo esplicitamente).
   it("rifiuta anche quando l'id è la stringa vuota (guardia per disuguaglianza, non per truthiness)", () => {
-    const ctx: PermessiCtx = { userId: '', isOwner: false, permessi: new Set(['team.view', 'team.permessi', 'fatture.view']) };
+    const ctx: PermessiCtx = {
+      userId: '',
+      isOwner: false,
+      permessi: new Set(['team.view', 'team.permessi', 'fatture.view']),
+      soloLettura: false,
+    };
     const res = validaPermessi({
       ctx,
       companyType: 'AGENZIA',

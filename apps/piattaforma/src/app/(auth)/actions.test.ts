@@ -4,13 +4,18 @@ const { txMock } = vi.hoisted(() => ({ txMock: vi.fn() }));
 vi.mock('@pv/db', () => ({
   prisma: {
     $transaction: txMock,
-    company: {},
+    company: { findUnique: vi.fn() },
     user: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
     verificationToken: {},
     promoCode: { findUnique: vi.fn() },
     promoCodeRedemption: { count: vi.fn() },
     atecoAllowedCode: { findMany: vi.fn().mockResolvedValue([]) },
   },
+  // Fittizio ma condiviso: actions.ts ed email-univoca.ts importano ENTRAMBI
+  // `Prisma` da questo stesso modulo mockato, quindi `instanceof
+  // Prisma.PrismaClientKnownRequestError` combacia in entrambi i punti finché
+  // l'errore di test è istanziato con QUESTA classe (vedi describe più sotto
+  // "registerAction (catch P2002)").
   Prisma: { PrismaClientKnownRequestError: class {} },
 }));
 vi.mock('next-auth', () => ({ AuthError: class AuthError extends Error {} }));
@@ -36,16 +41,19 @@ vi.mock('@/lib/rate-limit/durable', () => ({
 vi.mock('@/lib/rate-limit/client-ip', () => ({
   getClientIp: vi.fn(() => '1.2.3.4'),
 }));
-// bcrypt.compare mockato per velocità/determinismo: il match è pilotato per-test.
+// bcrypt.compare/hash mockati per velocità/determinismo: il match di compare
+// è pilotato per-test; hash serve solo a superare hashPassword() nel path di
+// registrazione, il valore di ritorno è irrilevante.
 vi.mock('bcryptjs', () => ({
-  default: { compare: vi.fn() },
+  default: { compare: vi.fn(), hash: vi.fn().mockResolvedValue('hashed-password') },
 }));
 
 import bcrypt from 'bcryptjs';
 import { AuthError } from 'next-auth';
-import { prisma } from '@pv/db';
+import { prisma, Prisma } from '@pv/db';
 import { signIn } from '@/auth';
 import { rateLimit } from '@/lib/rate-limit/durable';
+import { getStorage } from '@/lib/providers/storage';
 import {
   loginAction,
   registerAction,
@@ -57,6 +65,7 @@ const findFirstMock = vi.mocked(prisma.user.findFirst);
 const compareMock = vi.mocked(bcrypt.compare);
 const signInMock = vi.mocked(signIn);
 const rateLimitMock = vi.mocked(rateLimit);
+const getStorageMock = vi.mocked(getStorage);
 
 const validPayload = {
   account: {
@@ -171,6 +180,71 @@ describe('registerAction (early returns)', () => {
   });
 });
 
+/**
+ * Il catch P2002 di registerAction (dopo il check applicativo, chiude la
+ * finestra TOCTOU) è l'unica logica nuova del branch email-univoca senza
+ * copertura: le altre nove scritture passano da `scriviUtente`, già testato
+ * in `email-univoca.test.ts`. Qui si arriva fino alla `prisma.$transaction`
+ * (mockata a rigettare direttamente con l'errore fittizio, senza eseguire il
+ * callback reale) per esercitare il catch com'è scritto in actions.ts.
+ */
+describe('registerAction (catch P2002)', () => {
+  beforeEach(() => {
+    txMock.mockReset();
+    vi.mocked(prisma.user.findFirst).mockReset();
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never); // email libera al check applicativo
+    vi.mocked(prisma.company.findUnique).mockReset();
+    vi.mocked(prisma.company.findUnique).mockResolvedValue(null as never); // P.IVA libera al check applicativo
+    getStorageMock.mockReset();
+    getStorageMock.mockReturnValue({ name: 'vercel-blob' } as never);
+  });
+
+  /**
+   * `Prisma` in questo file è il mock `{ PrismaClientKnownRequestError: class {} }`
+   * dichiarato in cima (vedi vi.mock('@pv/db')) — NON il vero import come in
+   * email-univoca.test.ts. Sia `isViolazioneEmailUnica` (email-univoca.ts) sia
+   * il check locale in actions.ts leggono `Prisma` dallo STESSO modulo
+   * mockato, quindi `instanceof` combacia in entrambi comunque. Ma il
+   * costruttore reale è ignorato dal mock (`class {}` non fa nulla con gli
+   * argomenti): `code`/`meta` vanno assegnati a mano perché l'istanza sia
+   * riconoscibile a runtime.
+   */
+  function fakeP2002(target: string[] | string) {
+    const err = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002',
+      clientVersion: '5.22.0',
+      meta: { target },
+    });
+    return Object.assign(err, { code: 'P2002' as const, meta: { target } });
+  }
+
+  it('P2002 con target email (race TOCTOU) → EMAIL_GIA_REGISTRATA sul campo account.email', async () => {
+    txMock.mockRejectedValueOnce(fakeP2002(['email']));
+
+    const r = await registerAction(fdWith(validPayload));
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toBe(
+        "Questa email è già registrata. Accedi con l'account esistente o usa un'altra email.",
+      );
+      expect(r.field).toBe('account.email');
+    }
+  });
+
+  it('P2002 con target partitaIva (race TOCTOU) → errore P.IVA sul campo company.partitaIva', async () => {
+    txMock.mockRejectedValueOnce(fakeP2002(['partitaIva']));
+
+    const r = await registerAction(fdWith(validPayload));
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toBe('P.IVA già registrata');
+      expect(r.field).toBe('company.partitaIva');
+    }
+  });
+});
+
 describe('loginAction', () => {
   function loginForm(opts: { email?: string; password?: string; totp?: string } = {}): FormData {
     const fd = new FormData();
@@ -180,8 +254,10 @@ describe('loginAction', () => {
     return fd;
   }
 
-  // Candidate fittizio: passwordHash è irrilevante perché bcrypt.compare è mockato.
-  function candidate(twoFactorEnabled: boolean) {
+  // Utente fittizio (email univoca: al più un record combacia, vedi
+  // activeUserCredentialsQuery). passwordHash è irrilevante perché
+  // bcrypt.compare è mockato.
+  function utente(twoFactorEnabled: boolean) {
     return { passwordHash: 'hash', twoFactorEnabled };
   }
 
@@ -192,7 +268,7 @@ describe('loginAction', () => {
   });
 
   it('utente 2FA + password corretta senza totp → { needTotp: true }, niente signIn', async () => {
-    findFirstMock.mockResolvedValue(candidate(true) as never);
+    findFirstMock.mockResolvedValue(utente(true) as never);
     compareMock.mockResolvedValue(true as never);
 
     const r = await loginAction({}, loginForm());
@@ -202,7 +278,7 @@ describe('loginAction', () => {
   });
 
   it('utente senza 2FA + password corretta → chiama signIn e ritorna {}', async () => {
-    findFirstMock.mockResolvedValue(candidate(false) as never);
+    findFirstMock.mockResolvedValue(utente(false) as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockResolvedValue(undefined as never);
 
@@ -220,8 +296,8 @@ describe('loginAction', () => {
     );
   });
 
-  it('password errata (nessun candidate combacia) → { error: "Credenziali non valide" }, niente signIn', async () => {
-    findFirstMock.mockResolvedValue(candidate(false) as never);
+  it('password errata → { error: "Credenziali non valide" }, niente signIn', async () => {
+    findFirstMock.mockResolvedValue(utente(false) as never);
     compareMock.mockResolvedValue(false as never);
 
     const r = await loginAction({}, loginForm({ password: 'Sbagliata9' }));
@@ -244,18 +320,22 @@ describe('loginAction', () => {
     expect(signInMock).not.toHaveBeenCalled();
   });
 
-  it('email sconosciuta (nessun utente attivo né pending) → { error: "Credenziali non valide" }', async () => {
-    // Entrambe le query vuote: non si rivela nulla, messaggio generico.
+  it('email sconosciuta (nessun utente attivo né pending) → { error: "Credenziali non valide" }, bcrypt.compare mai chiamato', async () => {
+    // Entrambe le query vuote: non si rivela nulla, messaggio generico. E
+    // bcrypt.compare deve restare non invocato: è quello a impedire a un
+    // attaccante di distinguere per tempistica un'email esistente da una
+    // inesistente (invariante di sicurezza, non un vezzo di copertura).
     findFirstMock.mockResolvedValue(null as never);
 
     const r = await loginAction({}, loginForm());
 
     expect(r).toEqual({ error: 'Credenziali non valide' });
     expect(signInMock).not.toHaveBeenCalled();
+    expect(compareMock).not.toHaveBeenCalled();
   });
 
   it('utente 2FA + password corretta + totp errato → signIn lancia AuthError → { error: "Codice 2FA non valido", needTotp: true }', async () => {
-    findFirstMock.mockResolvedValue(candidate(true) as never);
+    findFirstMock.mockResolvedValue(utente(true) as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockRejectedValueOnce(new AuthError());
 
@@ -265,7 +345,7 @@ describe('loginAction', () => {
   });
 
   it('utente senza 2FA + signIn lancia AuthError → { error: "Credenziali non valide" } e needTotp undefined', async () => {
-    findFirstMock.mockResolvedValue(candidate(false) as never);
+    findFirstMock.mockResolvedValue(utente(false) as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockRejectedValueOnce(new AuthError());
 

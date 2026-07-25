@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { formatDate } from '@/lib/format';
+import { statoSospensione } from '@/lib/auth/sospensione-guard';
 import { logoutAction } from '@/app/(auth)/actions';
 
 export default async function ProfiloPage() {
@@ -29,6 +30,9 @@ export default async function ProfiloPage() {
   }
 
   const company = user.company;
+  // Sotto sospensione /profilo/azienda redirige (pagina di pura modifica): senza
+  // nascondere il CTA resterebbe un bottone che rimbalza in silenzio.
+  const sospensione = await statoSospensione();
 
   return (
     <AppShell session={session} activePath="/profilo">
@@ -105,7 +109,7 @@ export default async function ProfiloPage() {
                 <h2 className="text-[15px] font-bold text-pv-navy-800">
                   Azienda · {labelCompanyType(company.type)}
                 </h2>
-                {user.role === 'ADMIN_AZIENDA' && (
+                {user.role === 'ADMIN_AZIENDA' && !sospensione.sospeso && (
                   <Link
                     href="/profilo/azienda"
                     className="rounded-[8px] border border-pv-slate-300 bg-white px-3 py-1 text-[12px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"

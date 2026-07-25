@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
+import { statoSospensione } from '@/lib/auth/sospensione-guard';
 import { SediClient, type SedeRow } from './sedi-client';
 
 export default async function SediPage() {
@@ -27,6 +28,7 @@ export default async function SediPage() {
     ...s,
     suspendedAt: s.suspendedAt ? s.suspendedAt.toISOString() : null,
   }));
+  const sospensione = await statoSospensione();
 
   return (
     <AppShell session={session} activePath="/sedi">
@@ -42,7 +44,7 @@ export default async function SediPage() {
           </p>
         </header>
 
-        <SediClient sedi={sedi} />
+        <SediClient sedi={sedi} soloLettura={sospensione.sospeso} />
       </div>
     </AppShell>
   );

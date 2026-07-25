@@ -17,7 +17,18 @@ export type SedeRow = {
 
 type StatoFilter = 'tutte' | 'attive' | 'sospese';
 
-export function SediClient({ sedi }: { sedi: SedeRow[] }) {
+export function SediClient({
+  sedi,
+  soloLettura = false,
+}: {
+  sedi: SedeRow[];
+  /**
+   * Account sospeso: la lista resta consultabile, «+ Aggiungi sede» no.
+   * `createSedeAction` è BLOCCA, quindi il modale si aprirebbe solo per
+   * rifiutare al submit — e aprire una sede da sospesi sarebbe espansione.
+   */
+  soloLettura?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [stato, setStato] = useState<StatoFilter>('tutte');
@@ -55,9 +66,11 @@ export function SediClient({ sedi }: { sedi: SedeRow[] }) {
             <option value="sospese">Sospese</option>
           </Select>
         </div>
-        <Button size="md" onClick={() => setOpen(true)} className="sm:self-end">
-          + Aggiungi sede
-        </Button>
+        {!soloLettura && (
+          <Button size="md" onClick={() => setOpen(true)} className="sm:self-end">
+            + Aggiungi sede
+          </Button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-pv-slate-200 bg-white">

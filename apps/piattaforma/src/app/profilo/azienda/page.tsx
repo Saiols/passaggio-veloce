@@ -4,12 +4,19 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { CompanyEditForm } from '@/components/company-edit-form';
+import { assertOperativita } from '@/lib/auth/sospensione-guard';
 import { updateCompanyProfileAction } from './actions';
 
 export default async function ModificaProfiloAziendalePage() {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (session.user.role !== 'ADMIN_AZIENDA') redirect('/profilo');
+  // Pagina di PURA modifica, come /team/[userId]/edit: gli stessi dati si
+  // leggono già su /profilo, quindi sotto sospensione qui non c'è nulla da
+  // consultare — solo un form che `updateCompanyProfileAction` (BLOCCA)
+  // rifiuterebbe al submit. Il CTA "Modifica" su /profilo è nascosto in
+  // parallelo, così il redirect non diventa un vicolo cieco cliccabile.
+  await assertOperativita();
   const companyId = session.user.companyId;
   if (!companyId) redirect('/profilo');
 

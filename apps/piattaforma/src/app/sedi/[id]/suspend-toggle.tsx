@@ -17,9 +17,19 @@ import { suspendSedeAction, reactivateSedeAction } from '../actions';
 export function SuspendToggle({
   sedeId,
   suspended,
+  soloLettura = false,
 }: {
   sedeId: string;
   suspended: boolean;
+  /**
+   * Account sospeso: il badge Attiva/Sospesa resta (è lettura), il bottone no.
+   * Stesso schema di `SedeEdit`, e per la stessa ragione: `suspendSedeAction` e
+   * `reactivateSedeAction` sono BLOCCA, quindi il bottone rifiuterebbe al clic.
+   * Lasciarlo vivo accanto al «Modifica» già nascosto era l'incoerenza più
+   * stridente del branch — due CTA gemelle nello stesso file, una chiusa e una
+   * aperta.
+   */
+  soloLettura?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -38,6 +48,8 @@ export function SuspendToggle({
       router.refresh();
     });
   };
+
+  if (soloLettura) return null;
 
   return (
     <div className="flex flex-col items-end gap-2">

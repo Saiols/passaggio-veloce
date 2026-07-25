@@ -56,7 +56,11 @@ export default async function SedeDetailPage({
                 Attiva
               </span>
             )}
-            <SuspendToggle sedeId={sede.id} suspended={Boolean(sede.suspendedAt)} />
+            <SuspendToggle
+              sedeId={sede.id}
+              suspended={Boolean(sede.suspendedAt)}
+              soloLettura={sospensione.sospeso}
+            />
           </div>
         </header>
 

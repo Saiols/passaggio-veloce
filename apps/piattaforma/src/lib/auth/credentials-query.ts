@@ -4,7 +4,11 @@
  *
  * Usata sia dal pre-check in `loginAction` (decide se serve il 2FA) sia da
  * `authorize` in auth.ts (fonte autoritativa). Estratta qui per evitare che le
- * due query divergano: filtro `where` e `orderBy` devono restare identici.
+ * due query divergano: il filtro `where` deve restare identico.
+ *
+ * Email univoca su tutta la piattaforma (spec 2026-07-25): al più un record
+ * può combaciare, quindi nessun `orderBy`/tie-break è necessario — entrambi i
+ * chiamanti usano `findFirst`.
  *
  * Gate verifica email: accettiamo SOLO `status: 'ACTIVE'`. Un account
  * `PENDING_EMAIL_VERIFICATION` (registrato ma email non ancora confermata) o
@@ -21,6 +25,5 @@ export function activeUserCredentialsQuery(emailLower: string) {
       deletedAt: null,
       status: 'ACTIVE' as const,
     },
-    orderBy: [{ companyId: 'asc' as const }, { createdAt: 'asc' as const }],
   };
 }

@@ -23,6 +23,22 @@ const ROW = {
   festivi: [{ data: '2026-12-25', nome: 'Natale' }],
 };
 
+describe('DISTRIBUZIONE_DEFAULT', () => {
+  // Valori di prodotto, non dettagli implementativi: 1 km iniziale, +1 km per
+  // round, un round all'ora, max 10 km → al più 10 round ≈ una giornata
+  // lavorativa. Cambiarli è una decisione, non un refactor.
+  it('è 1 km / +1 km / 1 h / max 10 km', () => {
+    expect(DISTRIBUZIONE_DEFAULT.raggioStartM).toBe(1000);
+    expect(DISTRIBUZIONE_DEFAULT.stepM).toBe(1000);
+    expect(DISTRIBUZIONE_DEFAULT.intervalloMin).toBe(60);
+    expect(DISTRIBUZIONE_DEFAULT.raggioMaxM).toBe(10000);
+  });
+
+  it('il raggio massimo è maggiore di quello iniziale (altrimenti tutto zona non coperta)', () => {
+    expect(DISTRIBUZIONE_DEFAULT.raggioMaxM).toBeGreaterThan(DISTRIBUZIONE_DEFAULT.raggioStartM);
+  });
+});
+
 // Nota: reset del mock inline in ogni test, non in `beforeEach`. In Vitest
 // 4.1.5 un `beforeEach(() => findFirstMock.mockReset())` seguito da un test
 // che rigetta la promise del mock produce un falso "unhandled rejection"

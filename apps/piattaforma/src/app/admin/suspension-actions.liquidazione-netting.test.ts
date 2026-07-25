@@ -24,6 +24,10 @@ const { authMock, prismaMock, redirectMock, eseguiPayoutImmediatoMock } = vi.hoi
   prismaMock: {
     company: { findUnique: vi.fn(), update: vi.fn() },
     wallet: { findMany: vi.fn(), findFirst: vi.fn() },
+    // Righe RICHIESTO residue (vedi suspension-actions.saldo-residuo.test.ts):
+    // default "nessuna riga residua", non l'oggetto di questo file (che
+    // copre il blocco per debito, non le righe residue).
+    payout: { findMany: vi.fn(), update: vi.fn() },
     user: { updateMany: vi.fn() },
     $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
   },
@@ -57,6 +61,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN_PIATTAFORMA' } });
   mockCompanyFindUnique();
+  prismaMock.payout.findMany.mockResolvedValue([]);
+  prismaMock.payout.update.mockResolvedValue({});
   prismaMock.company.update.mockResolvedValue({});
   prismaMock.user.updateMany.mockResolvedValue({ count: 0 });
   eseguiPayoutImmediatoMock.mockResolvedValue({ ok: true, payoutId: 'p1', importoCent: 1 });

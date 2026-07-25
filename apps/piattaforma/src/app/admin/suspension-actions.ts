@@ -6,7 +6,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminOrAssistente, isAdminPiattaforma } from '@/lib/auth/permissions';
 import { sendNotification } from '@/lib/notifiche';
-import { eseguiPayoutImmediato } from '@/lib/wallet/payout-exec';
+import { eseguiPayoutImmediato, settlePayout, type EseguiPayoutResult } from '@/lib/wallet/payout-exec';
 import { hasNegativeCompanyWallet } from '@/lib/wallet/negative-wallet-guard';
 
 /**
@@ -337,6 +337,70 @@ export async function deleteCompanyAction(
   try {
     const debito = await hasNegativeCompanyWallet(prisma, companyId);
     if (!debito) {
+      // PRIMA di liquidare, salda le eventuali righe Payout RICHIESTO residue
+      // di questa azienda (madre o di una sua sede). Non sono un caso raro:
+      // sopravvivono al batch di `processPayouts` (oltre BATCH_SIZE), a un
+      // run del cron fallito, o alla finestra fra i due cron (`trigger` alle
+      // 01:00, `settlement` alle 01:30) — sulla copia locale di prod ne è
+      // stata trovata una ferma da 12 giorni. Se nel frattempo l'azienda
+      // viene sospesa, `processPayouts` la salta a ogni giro finché la
+      // sospensione dura (guard corretto, lib/jobs/process-payouts.ts): e
+      // un'azienda che stiamo per cancellare non verrà MAI più riattivata,
+      // quindi quella riga resterebbe RICHIESTO in eterno.
+      //
+      // Alla cessazione (clausola 12.4 dei Termini: "il saldo residuo è
+      // liquidato integralmente") saldarla qui è il comportamento corretto:
+      // `ignoraSoglia`, poco sotto, stabilisce già che i blocchi da
+      // sospensione/visura non si applicano a questo percorso, quindi non
+      // stiamo aggirando nulla. Ed è ANCHE necessario: se la riga resta
+      // RICHIESTO, il controllo anti-doppio-payout dentro la transazione di
+      // reserve (`lib/wallet/payout-exec.ts`, righe ~269-273 — NON va reso
+      // condizionale: impedisce di svuotare due volte lo stesso wallet) la
+      // trova ancora in-flight e rifiuta l'INTERO wallet con "Payout già in
+      // corso, attendi", bloccando anche la liquidazione del resto del
+      // saldo.
+      //
+      // Riusiamo `settlePayout` — lo stesso motore di settlement usato da
+      // `processPayouts` per queste identiche righe (nessuna
+      // reimplementazione: IBAN, provider, transazione di saldo, documento
+      // broker restano un unico posto) — con la stessa transizione a
+      // IN_LAVORAZIONE prima di saldare (stesso "lock" morbido del job).
+      // Dopo, il ciclo esistente sotto liquida il RESTO del saldo: il
+      // settlement ha già decrementato il wallet dell'importo della riga
+      // saldata, quindi ciò che rimane è il residuo vero.
+      //
+      // MAI le righe IN_LAVORAZIONE: significano un settlement DAVVERO in
+      // corso (stesso motore, non un processo fantasma) — risaldarle
+      // rischierebbe di pagare due volte. Il filtro sotto (`stato:
+      // 'RICHIESTO'`) le esclude a priori: non vengono nemmeno lette, non
+      // vengono toccate.
+      const richiesteResidue = await prisma.payout.findMany({
+        where: {
+          stato: 'RICHIESTO',
+          wallet: { OR: [{ companyId }, { sede: { companyId } }] },
+        },
+        select: { id: true, walletId: true },
+      });
+      for (const p of richiesteResidue) {
+        try {
+          await prisma.payout.update({
+            where: { id: p.id },
+            data: { stato: 'IN_LAVORAZIONE' },
+          });
+          const esito = await settlePayout(p.id);
+          if (!esito.ok) {
+            console.error(
+              `[deleteCompanyAction] saldo riga RICHIESTO residua non riuscito (payoutId=${p.id}, walletId=${p.walletId}, company=${companyId}): ${esito.error}`,
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[deleteCompanyAction] saldo riga RICHIESTO residua: eccezione (payoutId=${p.id}, walletId=${p.walletId}, company=${companyId}):`,
+            err,
+          );
+        }
+      }
+
       const wallets = await prisma.wallet.findMany({
         where: {
           OR: [{ companyId }, { sede: { companyId } }],
@@ -345,7 +409,25 @@ export async function deleteCompanyAction(
         select: { id: true },
       });
       for (const w of wallets) {
-        await eseguiPayoutImmediato(w.id, { ignoraSoglia: true }).catch(() => undefined);
+        // Best-effort per design (non deve bloccare la cancellazione), ma il
+        // fallimento non può più sparire in silenzio: sia un'eccezione sia un
+        // esito `{ ok: false }` (es. proprio "Payout già in corso" se il
+        // saldo delle righe residue sopra fosse fallito) vengono loggati con
+        // wallet ed errore, così restano diagnosticabili.
+        const esito = await eseguiPayoutImmediato(w.id, { ignoraSoglia: true }).catch(
+          (err): EseguiPayoutResult => {
+            console.error(
+              `[deleteCompanyAction] liquidazione cessazione: eccezione su wallet ${w.id} (company ${companyId}):`,
+              err,
+            );
+            return { ok: false, error: err instanceof Error ? err.message : String(err) };
+          },
+        );
+        if (!esito.ok) {
+          console.error(
+            `[deleteCompanyAction] liquidazione cessazione non riuscita per wallet ${w.id} (company ${companyId}): ${esito.error}`,
+          );
+        }
       }
     }
   } catch {

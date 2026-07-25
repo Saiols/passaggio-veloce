@@ -22,6 +22,10 @@ const { authMock, prismaMock, redirectMock, eseguiPayoutImmediatoMock } = vi.hoi
   prismaMock: {
     company: { findUnique: vi.fn(), update: vi.fn() },
     wallet: { findMany: vi.fn(), findFirst: vi.fn() },
+    // Righe RICHIESTO residue (vedi suspension-actions.saldo-residuo.test.ts):
+    // qui il default è "nessuna riga residua", che è esattamente il caso che
+    // questo file esercita (liquidazione "normale").
+    payout: { findMany: vi.fn(), update: vi.fn() },
     user: { updateMany: vi.fn() },
     $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
   },
@@ -61,6 +65,8 @@ beforeEach(() => {
   authMock.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN_PIATTAFORMA' } });
   mockCompanyFindUnique();
   prismaMock.wallet.findMany.mockResolvedValue([]);
+  prismaMock.payout.findMany.mockResolvedValue([]);
+  prismaMock.payout.update.mockResolvedValue({});
   // Nessun wallet negativo di default: la maggior parte dei test qui esercita
   // il percorso "liquidazione normale" (IMPORTANT, review finale pre-merge —
   // vedi suspension-actions.liquidazione-netting.test.ts per il caso con

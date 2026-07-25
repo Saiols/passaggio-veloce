@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth, unstable_update } from '@/auth';
 import { prisma } from '@pv/db';
 import { hashPassword, verifyPassword, validatePasswordPolicy } from '@/lib/auth/password';
+import { normalizzaEmail, emailGiaInUso, EMAIL_GIA_IN_USO, scriviUtente } from '@/lib/auth/email-univoca';
 
 export type UpdateOwnProfileResult =
   | { ok: true }
@@ -12,8 +13,9 @@ export type UpdateOwnProfileResult =
 
 /**
  * Modifica i dati personali del proprio User account (item 04 release
- * 2026-05). Funziona per qualsiasi ruolo. Email scope-company:
- * la nuova email non deve collidere con altri user nella stessa azienda.
+ * 2026-05). Funziona per qualsiasi ruolo. Email univoca su tutta la
+ * piattaforma (spec 2026-07-25): la nuova email non deve appartenere a
+ * nessun altro account, in nessuna azienda.
  */
 export async function updateOwnProfileAction(
   email: string,
@@ -28,7 +30,7 @@ export async function updateOwnProfileAction(
   const me = await prisma.user.findUnique({ where: { id: userId } });
   if (!me) return { ok: false, error: 'Account non trovato' };
 
-  const emailLower = email.toLowerCase().trim();
+  const emailLower = normalizzaEmail(email);
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
     return { ok: false, error: 'Email non valida' };
   }
@@ -37,32 +39,23 @@ export async function updateOwnProfileAction(
   }
 
   if (emailLower !== me.email) {
-    const conflict = await prisma.user.findFirst({
-      where: {
-        email: emailLower,
-        companyId: me.companyId,
-        NOT: { id: userId },
-      },
-    });
-    if (conflict) {
-      return {
-        ok: false,
-        error: me.companyId
-          ? 'Esiste già un altro utente con questa email nella tua azienda'
-          : 'Esiste già un altro account amministrativo con questa email',
-      };
+    if (await emailGiaInUso(emailLower, { escludiUserId: userId })) {
+      return { ok: false, error: EMAIL_GIA_IN_USO };
     }
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      email: emailLower,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-      codiceFiscale: codiceFiscale.trim() || null,
-    },
-  });
+  const scritto = await scriviUtente(() =>
+    prisma.user.update({
+      where: { id: userId },
+      data: {
+        email: emailLower,
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+        codiceFiscale: codiceFiscale.trim() || null,
+      },
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   // Allinea subito la sessione (JWT) al nuovo recapito/nome, così header e menu
   // si aggiornano senza dover ri-loggare. Best-effort: se fallisce i dati sono

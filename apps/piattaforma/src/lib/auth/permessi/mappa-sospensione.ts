@@ -38,7 +38,13 @@ export const MAPPA_SOSPENSIONE: Record<string, Record<string, 'BLOCCA' | 'CONSEN
   },
   'src/app/visura/actions.ts': {
     verificaVisuraAction: 'CONSENTI', // rimedio
-    aggiornaVisuraAction: 'CONSENTI', // rimedio
+    // Rimedio, ma con una conseguenza che va detta perché `BLOCCA // atto
+    // societario` qui sotto fa credere il contrario: `aggiornaVisura` riscrive
+    // ragione sociale e sede legale della Company (visura/actions.ts:137-139),
+    // quindi l'identità fiscale NON è del tutto congelata da una sospensione.
+    // La classificazione resta giusta: il dato non è digitato dall'utente, è
+    // ri-estratto lato server dal camerale caricato — e l'IBAN non è toccato.
+    aggiornaVisuraAction: 'CONSENTI',
   },
   'src/app/sedi/actions.ts': {
     // Creare o riorganizzare sedi da sospesi è espansione, cioè operatività.
@@ -47,7 +53,14 @@ export const MAPPA_SOSPENSIONE: Record<string, Record<string, 'BLOCCA' | 'CONSEN
     reactivateSedeAction: 'BLOCCA',
   },
   'src/app/team/actions.ts': {
-    acceptInvitationAction: 'CONSENTI', // flusso pubblico: l'invitato non ha sessione
+    // Flusso pubblico: l'invitato non ha sessione, quindi non c'è nulla da
+    // gatare. Conseguenza da registrare: è l'unica via per cui un'azienda
+    // sospesa può ancora ACQUISIRE un utente, tramite un invito pendente
+    // emesso prima della misura. Nessuna fuga di privilegi — `Company.suspendedAt`
+    // rende sospesi tutti i suoi utenti, quindi il nuovo nasce in sola lettura —
+    // ma se un domani la sospensione dovesse impedire anche questo, il punto in
+    // cui intervenire è la validità dell'invito, non questa action.
+    acceptInvitationAction: 'CONSENTI',
   },
   'src/app/profilo/personale/actions.ts': {
     // Proprio account: bloccare il cambio password a un utente le cui

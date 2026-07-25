@@ -43,6 +43,7 @@ export function BrokerShell({
   isOwner = false,
   permessi = [],
   puoGestireTeam = false,
+  soloLettura,
   ruoloLabel,
   sedeLabel,
   banners,
@@ -54,12 +55,23 @@ export function BrokerShell({
   isOwner?: boolean;
   permessi?: Permesso[];
   puoGestireTeam?: boolean;
+  /**
+   * Account sospeso. Senza default, a differenza di `isOwner`/`permessi`: un
+   * default `false` qui sarebbe fail-OPEN (nav più permissiva del dovuto),
+   * mentre dimenticare gli altri due mostra semplicemente meno voci.
+   */
+  soloLettura: boolean;
   ruoloLabel: string;
   sedeLabel: string | null;
   banners?: ReactNode;
   children: ReactNode;
 }) {
-  const groups: SidebarNavGroup[] = gruppiBroker({ isOwner, permessi, puoGestireTeam }).map((g) => ({
+  const groups: SidebarNavGroup[] = gruppiBroker({
+    isOwner,
+    permessi,
+    puoGestireTeam,
+    soloLettura,
+  }).map((g) => ({
     label: g.label,
     items: g.items.map((item) => ({
       href: item.href,

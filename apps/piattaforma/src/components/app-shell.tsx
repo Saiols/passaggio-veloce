@@ -174,6 +174,10 @@ export async function AppShell({
   const ctx = await getSessionContext();
   const isOwner = ctx?.isOwner ?? false;
   const permessi = ctx ? [...ctx.permessi] : [];
+  // La nav delega a `can()`, che valuta la sola lettura PRIMA dello
+  // short-circuit sull'owner: senza questo flag un titolare sospeso vedrebbe
+  // comunque una futura voce gated su una chiave di scrittura.
+  const soloLettura = ctx?.sospensione.sospeso ?? false;
 
   // Ruolo e sede della card utente. Il ruolo SEGUE la sede corrente: per i
   // non-owner `User.role` è sempre UTENTE_AZIENDA e non distingue un admin di
@@ -208,6 +212,7 @@ export async function AppShell({
         isOwner={isOwner}
         permessi={permessi}
         puoGestireTeam={puoGestireTeam}
+        soloLettura={soloLettura}
         ruoloLabel={ruoloLabel}
         sedeLabel={sedeLabel}
         banners={<ChromeBanners isAdmin={false} />}
@@ -230,6 +235,7 @@ export async function AppShell({
         isOwner={isOwner}
         permessi={permessi}
         puoGestireTeam={puoGestireTeam}
+        soloLettura={soloLettura}
         ruoloLabel={ruoloLabel}
         sedeLabel={sedeLabel}
         banners={<ChromeBanners isAdmin={false} />}

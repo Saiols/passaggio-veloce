@@ -24,7 +24,7 @@ export async function SuspensionBanner() {
       creare o gestire pratiche, prelevare dal wallet o modificare le impostazioni. Il saldo del
       wallet resta a tuo credito.{' '}
       {s.motivo ? <>Motivo indicato da Passaggio Veloce: «{s.motivo}».{' '}</> : null}
-      Per chiedere il riesame della misura rispondi all&apos;email che hai ricevuto.
+      Per chiedere il riesame della misura rispondi all’email che hai ricevuto.
     </Alert>
   );
 }

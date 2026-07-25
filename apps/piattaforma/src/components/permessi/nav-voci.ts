@@ -10,6 +10,13 @@ export type NavInput = {
   permessi: readonly Permesso[];
   /** `getManageableSedi().length > 0`. Senza sedi gestibili, i permessi team sono inerti. */
   puoGestireTeam: boolean;
+  /**
+   * Account sospeso. Obbligatorio come su `NavCtx`, e per la stessa ragione: le
+   * voci di nav oggi sono tutte gated su chiavi di lettura, ma la prima gated su
+   * una chiave di scrittura non deve poter comparire a un titolare sospeso solo
+   * perché qualcuno ha dimenticato di propagare il flag.
+   */
+  soloLettura: boolean;
 };
 
 /**
@@ -47,7 +54,7 @@ function vociSede(isOwner: boolean): VoceNav[] {
 }
 
 export function gruppiBroker(input: NavInput): GruppoNav[] {
-  const { isOwner, permessi, puoGestireTeam } = input;
+  const { isOwner, permessi, puoGestireTeam, soloLettura } = input;
   const gruppi: { label: string; items: VoceNav[] }[] = [
     {
       label: 'Panoramica',
@@ -87,11 +94,11 @@ export function gruppiBroker(input: NavInput): GruppoNav[] {
       ],
     },
   ];
-  return filtraGruppi<VoceNav>(gruppi, { isOwner, permessi });
+  return filtraGruppi<VoceNav>(gruppi, { isOwner, permessi, soloLettura });
 }
 
 export function gruppiAgenzia(input: NavInput): GruppoNav[] {
-  const { isOwner, permessi, puoGestireTeam } = input;
+  const { isOwner, permessi, puoGestireTeam, soloLettura } = input;
   const gruppi: { label: string; items: VoceNav[] }[] = [
     {
       label: 'Panoramica',
@@ -140,5 +147,5 @@ export function gruppiAgenzia(input: NavInput): GruppoNav[] {
       ],
     },
   ];
-  return filtraGruppi<VoceNav>(gruppi, { isOwner, permessi });
+  return filtraGruppi<VoceNav>(gruppi, { isOwner, permessi, soloLettura });
 }

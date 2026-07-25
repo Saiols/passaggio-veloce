@@ -12,18 +12,35 @@ vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 
 import { hasPermesso, requirePermesso, assertPermesso, toPermessiCtx } from './guard';
 import { ERRORE_SOSPENSIONE } from '@/lib/auth/sospensione';
+// Type-only: `@/lib/auth/session-context` è mockato sopra, ma un `import type`
+// viene cancellato in compilazione e non passa dal mock.
+import type { SessionContext } from '@/lib/auth/session-context';
+import type { Permesso } from './catalogo';
 
 beforeEach(() => vi.clearAllMocks());
 
-const ctx = (over: Record<string, unknown> = {}) => ({
-  user: { id: 'u1', role: 'UTENTE_AZIENDA' },
-  companyId: 'c1',
-  companyType: 'AGENZIA',
-  isOwner: false,
-  permessi: new Set(['wallet.view']),
-  sospensione: { sospeso: false, motivo: null, origine: null },
-  ...over,
-});
+/**
+ * Fixture TIPIZZATA di `SessionContext`. Prima era un oggetto parziale passato a
+ * `toPermessiCtx()` con `as never`, e quel cast annullava proprio la garanzia
+ * che rendere `soloLettura` obbligatorio aveva comprato: il compilatore non
+ * enumerava più i contesti incompleti in questo test. Con la factory, un campo
+ * nuovo su `SessionContext` fa fallire QUI la compilazione — che è il punto.
+ */
+function ctx(over: Partial<SessionContext> = {}): SessionContext {
+  return {
+    user: { id: 'u1', role: 'UTENTE_AZIENDA' },
+    companyId: 'c1',
+    isOwner: false,
+    accessibleSedi: [],
+    currentSede: null,
+    scopeIds: [],
+    membershipRuoli: {},
+    companyType: 'AGENZIA',
+    permessi: new Set<Permesso>(['wallet.view']),
+    sospensione: { sospeso: false, motivo: null, origine: null },
+    ...over,
+  };
+}
 
 describe('hasPermesso', () => {
   it('vero se il permesso è nel set', async () => {
@@ -37,7 +54,7 @@ describe('hasPermesso', () => {
   });
 
   it("vero sempre per l'owner", async () => {
-    getSessionContextMock.mockResolvedValue(ctx({ isOwner: true, permessi: new Set() }));
+    getSessionContextMock.mockResolvedValue(ctx({ isOwner: true, permessi: new Set<Permesso>() }));
     expect(await hasPermesso('wallet.payout')).toBe(true);
   });
 
@@ -76,7 +93,7 @@ describe('requirePermesso', () => {
 describe('requirePermesso — sospensione', () => {
   const ctxSospeso = () =>
     ctx({
-      permessi: new Set(['wallet.view', 'wallet.payout']),
+      permessi: new Set<Permesso>(['wallet.view', 'wallet.payout']),
       sospensione: { sospeso: true, motivo: 'Uso improprio della piattaforma.', origine: 'UTENTE' },
     });
 
@@ -95,14 +112,12 @@ describe('requirePermesso — sospensione', () => {
 
 describe('toPermessiCtx — mappatura ctx.sospensione.sospeso → soloLettura', () => {
   it('sospensione.sospeso true → soloLettura true', () => {
-    const pctx = toPermessiCtx(
-      ctx({ sospensione: { sospeso: true, motivo: 'x', origine: 'UTENTE' } }) as never,
-    );
+    const pctx = toPermessiCtx(ctx({ sospensione: { sospeso: true, motivo: 'x', origine: 'UTENTE' } }));
     expect(pctx.soloLettura).toBe(true);
   });
 
   it('sospensione.sospeso false → soloLettura false', () => {
-    const pctx = toPermessiCtx(ctx() as never);
+    const pctx = toPermessiCtx(ctx());
     expect(pctx.soloLettura).toBe(false);
   });
 });

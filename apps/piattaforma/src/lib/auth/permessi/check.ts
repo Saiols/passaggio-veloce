@@ -19,6 +19,15 @@ export type PermessiCtx = {
 };
 
 /**
+ * Ciò che serve DAVVERO a `can()`. Esiste perché la nav (`components/permessi/
+ * nav-filter.ts`) deve poter delegare qui senza inventarsi un `userId` finto:
+ * il suo contesto attraversa il boundary server→client e non porta l'utente.
+ * `PermessiCtx` vi è assegnabile, quindi tutti i chiamanti esistenti restano
+ * validi — e nessuno può più riscrivere la regola a mano per aggirare la firma.
+ */
+export type CanCtx = Pick<PermessiCtx, 'isOwner' | 'permessi' | 'soloLettura'>;
+
+/**
  * Owner: sempre vero. Altrimenti la chiave dev'essere nel set E nel catalogo.
  * Il secondo controllo non è ridondante: difende dalle righe vecchie del DB, in
  * cui può essere rimasta una chiave che il catalogo non conosce più.
@@ -27,7 +36,7 @@ export type PermessiCtx = {
  * parte delle aziende clienti l'ADMIN_AZIENDA è l'UNICA utenza, quindi esentarlo
  * lascerebbe la sospensione senza effetto nel caso più comune.
  */
-export function can(ctx: PermessiCtx, p: Permesso): boolean {
+export function can(ctx: CanCtx, p: Permesso): boolean {
   if (ctx.soloLettura && !isLettura(p)) return false;
   if (ctx.isOwner) return true;
   return isPermesso(p) && ctx.permessi.has(p);

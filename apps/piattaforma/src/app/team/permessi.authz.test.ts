@@ -308,6 +308,20 @@ describe('titolare sospeso — regressione Critical #1', () => {
     expect(res).toEqual({ ok: false, error: ERRORE_SOSPENSIONE });
     expect(prismaMock.user.create).not.toHaveBeenCalled();
   });
+
+  /**
+   * MINOR M3: «gli altri cinque gate condividono la stessa `gateCapability`»
+   * era vero per quattro. `revokeInvitationAction` faceva `can(...)` inline e
+   * rispondeva «Non hai i permessi per revocare inviti» a un sospeso — l'unico
+   * punto del branch che diceva a un utente che gli mancano permessi che invece
+   * ha. Ora passa da `gateCapability` come le sorelle, e questo test lo tiene.
+   */
+  it('il titolare sospeso non revoca inviti, e sente dire il perché giusto', async () => {
+    getSessionContextMock.mockResolvedValue(ctxOwnerSospeso());
+    const res = await revokeInvitationAction('inv1');
+    expect(res).toEqual({ ok: false, error: ERRORE_SOSPENSIONE });
+    expect(prismaMock.invitation.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('acceptInvitationAction — porta i permessi scelti al momento dell’invito', () => {

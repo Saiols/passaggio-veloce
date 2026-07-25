@@ -22,7 +22,7 @@ export const NON_SOSPESO: StatoSospensione = { sospeso: false, motivo: null, ori
  * a cercare un problema che non esiste.
  */
 export const ERRORE_SOSPENSIONE =
-  'Il tuo account è sospeso: puoi consultare i tuoi dati ma non svolgere operazioni. Il motivo è indicato nell\'email che hai ricevuto.';
+  'Il tuo account è sospeso: puoi consultare i tuoi dati ma non svolgere operazioni. Il motivo è indicato nell’email che hai ricevuto.';
 
 /**
  * `SUSPENDED` sull'utente OPPURE `suspendedAt` sull'azienda.

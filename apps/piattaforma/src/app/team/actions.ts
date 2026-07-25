@@ -629,11 +629,15 @@ export async function disableTeamUserAction(
 export type RevokeInviteResult = { ok: true } | { ok: false; error: string };
 
 export async function revokeInvitationAction(invitationId: string): Promise<RevokeInviteResult> {
+  // `gateCapability` e non `can(...)` inline (com'era): era l'unico dei sei gate
+  // del modulo a rispondere «Non hai i permessi per revocare inviti» a un
+  // sospeso, cioè esattamente la cosa che ERRORE_SOSPENSIONE esiste per evitare
+  // — dire a un utente che gli mancano permessi che invece ha. La chiave resta
+  // citata qui, così `mappa-enforcement.test.ts` la vede.
+  const gate = await gateCapability('team.disabilita', 'Non hai i permessi per revocare inviti');
+  if (gate) return gate;
   const ctx = await getSessionContext();
   if (!ctx?.companyId) return { ok: false, error: 'Non autenticato' };
-  if (!can(toPermessiCtx(ctx), 'team.disabilita')) {
-    return { ok: false, error: 'Non hai i permessi per revocare inviti' };
-  }
   const manageable = manageableSedi({
     isOwner: ctx.isOwner,
     accessibleSedi: ctx.accessibleSedi,

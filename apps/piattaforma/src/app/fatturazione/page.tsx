@@ -8,7 +8,6 @@ import { formatCurrencyCent, formatDate } from '@/lib/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { SedeCell } from '@/components/fatturazione/sede-cell';
 import { BannerFatturazioneAutomatica } from '@/components/fatturazione/banner-fatturazione-automatica';
-import { SuspensionBanner } from '@/components/suspension-banner';
 import { DownloadDocumentiButton } from '@/app/pratiche/download-documenti-button';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { assertPermesso, hasPermesso } from '@/lib/auth/permessi/guard';
@@ -142,9 +141,6 @@ export default async function FatturazionePage({
   return (
     <AppShell session={session} activePath="/fatturazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6 empty:hidden">
-          <SuspensionBanner />
-        </div>
         <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">

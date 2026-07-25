@@ -46,7 +46,7 @@ export function AgenziaShell({
   puoGestireTeam = false,
   ruoloLabel,
   sedeLabel,
-  demoBanner,
+  banners,
   children,
 }: {
   session: AgenziaShellSession;
@@ -57,7 +57,7 @@ export function AgenziaShell({
   puoGestireTeam?: boolean;
   ruoloLabel: string;
   sedeLabel: string | null;
-  demoBanner?: ReactNode;
+  banners?: ReactNode;
   children: ReactNode;
 }) {
   const groups: SidebarNavGroup[] = gruppiAgenzia({ isOwner, permessi, puoGestireTeam }).map((g) => ({
@@ -84,7 +84,7 @@ export function AgenziaShell({
       activePath={activePath}
       buildSha={buildSha}
       scrollKey="pv-agenzia-sidebar-scroll"
-      demoBanner={demoBanner}
+      banners={banners}
     >
       <ToastProvider>
         <EventoPraticaWatcher />

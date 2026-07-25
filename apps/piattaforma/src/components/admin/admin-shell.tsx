@@ -137,13 +137,13 @@ export function AdminShell({
   session,
   activePath,
   buildSha,
-  demoBanner,
+  banners,
   children,
 }: {
   session: AdminShellSession;
   activePath?: string;
   buildSha?: string;
-  demoBanner?: ReactNode;
+  banners?: ReactNode;
   children: ReactNode;
 }) {
   const isFullAdmin = session.user.role === 'ADMIN_PIATTAFORMA';
@@ -165,7 +165,7 @@ export function AdminShell({
       activePath={activePath}
       buildSha={buildSha}
       scrollKey="pv-admin-sidebar-scroll"
-      demoBanner={demoBanner}
+      banners={banners}
     >
       {children}
     </SidebarShell>

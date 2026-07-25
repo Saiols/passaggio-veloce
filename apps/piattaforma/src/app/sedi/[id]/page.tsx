@@ -6,7 +6,6 @@ import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatDate } from '@/lib/format';
 import { statoSospensione } from '@/lib/auth/sospensione-guard';
-import { SuspensionBanner } from '@/components/suspension-banner';
 import { SedeEdit } from './sede-edit';
 import { SuspendToggle } from './suspend-toggle';
 
@@ -33,9 +32,6 @@ export default async function SedeDetailPage({
   return (
     <AppShell session={session} activePath="/sedi">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6 empty:hidden">
-          <SuspensionBanner />
-        </div>
         <Link href="/sedi" className="text-[13px] font-semibold text-pv-navy-600 hover:underline">
           ← Tutte le sedi
         </Link>

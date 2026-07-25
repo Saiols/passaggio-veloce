@@ -45,7 +45,7 @@ export function BrokerShell({
   puoGestireTeam = false,
   ruoloLabel,
   sedeLabel,
-  demoBanner,
+  banners,
   children,
 }: {
   session: BrokerShellSession;
@@ -56,7 +56,7 @@ export function BrokerShell({
   puoGestireTeam?: boolean;
   ruoloLabel: string;
   sedeLabel: string | null;
-  demoBanner?: ReactNode;
+  banners?: ReactNode;
   children: ReactNode;
 }) {
   const groups: SidebarNavGroup[] = gruppiBroker({ isOwner, permessi, puoGestireTeam }).map((g) => ({
@@ -83,7 +83,7 @@ export function BrokerShell({
       activePath={activePath}
       buildSha={buildSha}
       scrollKey="pv-broker-sidebar-scroll"
-      demoBanner={demoBanner}
+      banners={banners}
     >
       <ToastProvider>
         <EventoPraticaWatcher />

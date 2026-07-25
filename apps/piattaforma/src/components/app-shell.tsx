@@ -5,6 +5,7 @@ import { cn, ToastProvider } from '@/components/ui';
 import { NavBadge } from '@/components/nav-badge';
 import { LogoutButton } from '@/components/logout-button';
 import { DemoBanner } from '@/components/demo-banner';
+import { SuspensionBanner } from '@/components/suspension-banner';
 import { AdminShell } from '@/components/admin/admin-shell';
 import { AgenziaShell } from '@/components/agenzia/agenzia-shell';
 import { BrokerShell } from '@/components/broker/broker-shell';
@@ -91,6 +92,45 @@ function navForRole(
   return links;
 }
 
+/**
+ * Il banner della sospensione dentro la chrome, con il proprio contenitore:
+ * `{banners}` è renderizzato a tutta larghezza fra header e `<main>`, mentre
+ * l'Alert vuole le stesse gutter del contenuto di pagina.
+ *
+ * `empty:hidden` toglie il contenitore — e con esso il padding — quando
+ * `SuspensionBanner` si auto-annulla, cioè nella quasi totalità delle richieste:
+ * senza, ogni pagina della piattaforma guadagnerebbe un gap fantasma in cima.
+ */
+function SuspensionBannerChrome() {
+  return (
+    <div className="mx-auto w-full max-w-6xl px-5 pt-6 empty:hidden sm:px-6">
+      <SuspensionBanner />
+    </div>
+  );
+}
+
+/**
+ * Banner globali della chrome, montati UNA volta per tutte le pagine che passano
+ * da AppShell (57 su 78). Prima la sospensione era montata pagina per pagina,
+ * sulla premessa — falsa — che non esistesse un posto unico: `DemoBanner` era già
+ * qui, nello stesso ruolo. Il costo di quella scelta era che le pagine dove
+ * un'agenzia lavora davvero (`/pratiche/[id]`, `/inbox/[id]`, `/team`,
+ * `/addebiti`, `/profilo/*`, …) non dicevano nulla.
+ *
+ * ATTENZIONE: le 21 pagine che NON passano da AppShell restano scoperte. Le due
+ * raggiungibili da un utente azienda con sessione — `/blocco-pagamento` e
+ * `/visura`, due interstiziali senza chrome — montano il banner da sé. Le altre
+ * 19 sono pre-sessione, admin (fuori scope) o pubbliche.
+ */
+function ChromeBanners({ isAdmin }: { isAdmin: boolean }) {
+  return (
+    <>
+      <DemoBanner isAdmin={isAdmin} />
+      <SuspensionBannerChrome />
+    </>
+  );
+}
+
 function initials(name?: string | null): string {
   if (!name) return 'U';
   const parts = name.trim().split(/\s+/);
@@ -115,7 +155,7 @@ export async function AppShell({
         session={session}
         activePath={activePath}
         buildSha={buildSha}
-        demoBanner={<DemoBanner isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />}
+        banners={<ChromeBanners isAdmin={session.user.role === 'ADMIN_PIATTAFORMA'} />}
       >
         {children}
       </AdminShell>
@@ -170,7 +210,7 @@ export async function AppShell({
         puoGestireTeam={puoGestireTeam}
         ruoloLabel={ruoloLabel}
         sedeLabel={sedeLabel}
-        demoBanner={<DemoBanner isAdmin={false} />}
+        banners={<ChromeBanners isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} ragioneSociale={session.user.companyName} />
         {children}
@@ -192,7 +232,7 @@ export async function AppShell({
         puoGestireTeam={puoGestireTeam}
         ruoloLabel={ruoloLabel}
         sedeLabel={sedeLabel}
-        demoBanner={<DemoBanner isAdmin={false} />}
+        banners={<ChromeBanners isAdmin={false} />}
       >
         <SedeSwitcher activePath={activePath} ragioneSociale={session.user.companyName} />
         {children}
@@ -246,6 +286,10 @@ export async function AppShell({
         </nav>
       </header>
       </div>
+
+      {/* Fuori dal contenitore sticky: il banner della sospensione si legge una
+          volta, non deve restare incollato in cima allo scroll come la top-bar. */}
+      <SuspensionBannerChrome />
 
       <main className="flex-1">
         <ToastProvider>

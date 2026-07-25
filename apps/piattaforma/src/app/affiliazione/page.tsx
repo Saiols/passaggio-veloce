@@ -8,7 +8,6 @@ import { resolveReferralLink } from '@/lib/affiliazione/link';
 import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
-import { SuspensionBanner } from '@/components/suspension-banner';
 import { formatCurrencyCent, formatDate, formatRelative } from '@/lib/format';
 import { computeFees } from '@/lib/pricing';
 import { getTariffarioCorrente } from '@/lib/tariffario';
@@ -243,9 +242,6 @@ export default async function AffiliazionePage() {
   return (
     <AppShell session={session} activePath="/affiliazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6 empty:hidden">
-          <SuspensionBanner />
-        </div>
         <header className="mb-7">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
             Programma affiliazione

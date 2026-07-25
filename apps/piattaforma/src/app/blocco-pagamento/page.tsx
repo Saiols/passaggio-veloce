@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
 import { isOwner } from '@/lib/auth/permissions';
+import { SuspensionBanner } from '@/components/suspension-banner';
 import { BloccoPagamentoClient } from './client';
 
 export default async function BloccoPagamentoPage() {
@@ -30,11 +31,24 @@ export default async function BloccoPagamentoPage() {
   const titolare = isOwner(u.role);
 
   return (
-    <BloccoPagamentoClient
-      isOwner={titolare}
-      ibanAttuale={titolare ? (agenzia.iban ?? '') : ''}
-      motivo={agenzia.bloccoPagamentoMotivo ?? null}
-      inElaborazione={inElaborazione}
-    />
+    <>
+      {/* Questa pagina NON passa da AppShell (è un interstiziale senza chrome),
+          quindi il banner globale montato là non la copre — e proprio qui finisce
+          chi è sospeso E bloccato per addebito: `redirectSeAgenziaBloccata()`
+          manda in questo punto da /dashboard, /pratiche e /inbox, cioè dai tre
+          ancoraggi dove il banner si leggerebbe. Senza questo montaggio, l'unica
+          sospensione di cui la pagina parla è quella per il pagamento, e il
+          rifiuto di "Aggiorna IBAN" (ora BLOCCA) resterebbe inspiegato.
+          `empty:hidden`: nessuno spazio residuo quando il banner si annulla. */}
+      <div className="mx-auto max-w-xl px-4 pt-10 empty:hidden">
+        <SuspensionBanner />
+      </div>
+      <BloccoPagamentoClient
+        isOwner={titolare}
+        ibanAttuale={titolare ? (agenzia.iban ?? '') : ''}
+        motivo={agenzia.bloccoPagamentoMotivo ?? null}
+        inElaborazione={inElaborazione}
+      />
+    </>
   );
 }

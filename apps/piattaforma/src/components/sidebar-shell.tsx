@@ -60,7 +60,7 @@ export function SidebarShell({
   activePath,
   buildSha,
   scrollKey,
-  demoBanner,
+  banners,
   children,
 }: {
   groups: SidebarNavGroup[];
@@ -77,7 +77,11 @@ export function SidebarShell({
   buildSha?: string;
   /** Chiave sessionStorage per conservare lo scroll della sidebar (univoca per shell). */
   scrollKey: string;
-  demoBanner?: ReactNode;
+  /**
+   * Banner globali della chrome (demo, sospensione): montati QUI una volta sola,
+   * non pagina per pagina. Li compone `AppShell` — vedi `ChromeBanners`.
+   */
+  banners?: ReactNode;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -273,7 +277,7 @@ export function SidebarShell({
           </div>
         </header>
 
-        {demoBanner}
+        {banners}
 
         <main className="flex-1">{children}</main>
 

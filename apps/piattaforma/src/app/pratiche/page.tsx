@@ -21,7 +21,6 @@ import { whereStato, contaGruppi, isInCorso } from '@/lib/pratiche/stati';
 import { tabsPratiche, tabAttivo, opzioniStato, hrefPaginaPratiche } from '@/lib/pratiche/tabs';
 import { PraticheTabs } from './tabs';
 import { VisuraBanner } from '@/components/visura-banner';
-import { SuspensionBanner } from '@/components/suspension-banner';
 
 const PAGE_SIZE = 15;
 
@@ -188,8 +187,7 @@ export default async function PratichePage({
     <AppShell session={session} activePath="/pratiche">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         {companyId && (
-          <div className="mb-6 space-y-3">
-            <SuspensionBanner />
+          <div className="mb-6">
             <VisuraBanner
               companyId={companyId}
               companyType={companyType === 'AGENZIA' ? 'AGENZIA' : 'DEALER'}

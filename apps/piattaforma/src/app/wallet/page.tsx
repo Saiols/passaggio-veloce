@@ -33,7 +33,6 @@ import {
   type SegnalazioneTipo,
 } from '@/lib/pratiche/stato-extra';
 import { VisuraBanner } from '@/components/visura-banner';
-import { SuspensionBanner } from '@/components/suspension-banner';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 
 const THRESHOLD_PAYOUT_MIN_CENT = WALLET.MIN_PAYOUT_CENT;
@@ -227,8 +226,7 @@ export default async function WalletPage({
           </header>
 
           {ctx.companyId && (
-            <div className="mb-6 space-y-3">
-              <SuspensionBanner />
+            <div className="mb-6">
               <VisuraBanner
                 companyId={ctx.companyId}
                 companyType={session.user.companyType === 'AGENZIA' ? 'AGENZIA' : 'DEALER'}
@@ -425,8 +423,7 @@ export default async function WalletPage({
         </header>
 
         {session.user.companyId && (
-          <div className="mb-6 space-y-3">
-            <SuspensionBanner />
+          <div className="mb-6">
             <VisuraBanner
               companyId={session.user.companyId}
               companyType={session.user.companyType === 'AGENZIA' ? 'AGENZIA' : 'DEALER'}

@@ -32,6 +32,55 @@ describe('can', () => {
   });
 });
 
+describe('can — sola lettura da sospensione', () => {
+  const ownerSospeso: PermessiCtx = {
+    userId: 'owner1',
+    isOwner: true,
+    permessi: new Set(),
+    soloLettura: true,
+  };
+
+  it("il titolare sospeso perde le chiavi di scrittura malgrado isOwner", () => {
+    expect(can(ownerSospeso, 'pratiche.create')).toBe(false);
+    expect(can(ownerSospeso, 'pratiche.firma')).toBe(false);
+    expect(can(ownerSospeso, 'wallet.payout')).toBe(false);
+    expect(can(ownerSospeso, 'sede.edit')).toBe(false);
+    expect(can(ownerSospeso, 'team.permessi')).toBe(false);
+  });
+
+  it('il titolare sospeso conserva le chiavi di lettura', () => {
+    expect(can(ownerSospeso, 'pratiche.view')).toBe(true);
+    expect(can(ownerSospeso, 'wallet.view')).toBe(true);
+    expect(can(ownerSospeso, 'fatture.xml')).toBe(true);
+  });
+
+  it('un non-owner sospeso conserva solo le chiavi di lettura che possedeva', () => {
+    const ctx: PermessiCtx = {
+      userId: 'u1',
+      isOwner: false,
+      permessi: new Set(['pratiche.view', 'pratiche.create']),
+      soloLettura: true,
+    };
+    expect(can(ctx, 'pratiche.view')).toBe(true);
+    expect(can(ctx, 'pratiche.create')).toBe(false);
+  });
+
+  it('un non-owner sospeso non guadagna chiavi di lettura che non aveva', () => {
+    const ctx: PermessiCtx = {
+      userId: 'u1',
+      isOwner: false,
+      permessi: new Set(['pratiche.view']),
+      soloLettura: true,
+    };
+    expect(can(ctx, 'wallet.view')).toBe(false);
+  });
+
+  it('senza il flag il comportamento è identico a prima (non regredire)', () => {
+    const ctx: PermessiCtx = { userId: 'owner1', isOwner: true, permessi: new Set() };
+    expect(can(ctx, 'wallet.payout')).toBe(true);
+  });
+});
+
 describe('assignablePermessi', () => {
   it("l'owner può concedere tutto il catalogo del suo companyType", () => {
     expect(assignablePermessi(owner, 'AGENZIA').sort()).toEqual(permessiPerTipo('AGENZIA').sort());

@@ -1,4 +1,5 @@
 import { dipendenzaDi, isPermesso, permessiPerTipo, type CompanyTypeP, type Permesso } from './catalogo';
+import { isLettura } from './sola-lettura';
 import { preset } from './preset';
 import type { Role } from '@/lib/auth/permissions';
 
@@ -6,14 +7,25 @@ export type PermessiCtx = {
   userId: string;
   isOwner: boolean;
   permessi: Set<Permesso>;
+  /**
+   * Utente o azienda sospesi: sopravvivono solo le chiavi di lettura.
+   * Opzionale perché le fixture di test esistenti costruiscono il contesto
+   * con tre sole chiavi. Assente = operativo.
+   */
+  soloLettura?: boolean;
 };
 
 /**
  * Owner: sempre vero. Altrimenti la chiave dev'essere nel set E nel catalogo.
  * Il secondo controllo non è ridondante: difende dalle righe vecchie del DB, in
  * cui può essere rimasta una chiave che il catalogo non conosce più.
+ *
+ * La sola lettura si valuta PRIMA dello short-circuit sull'owner: nella maggior
+ * parte delle aziende clienti l'ADMIN_AZIENDA è l'UNICA utenza, quindi esentarlo
+ * lascerebbe la sospensione senza effetto nel caso più comune.
  */
 export function can(ctx: PermessiCtx, p: Permesso): boolean {
+  if (ctx.soloLettura && !isLettura(p)) return false;
   if (ctx.isOwner) return true;
   return isPermesso(p) && ctx.permessi.has(p);
 }

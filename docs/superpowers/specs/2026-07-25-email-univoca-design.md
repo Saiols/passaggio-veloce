@@ -74,8 +74,11 @@ ridiventa deterministico — un'email, un account, un `bcrypt.compare`.
 1. **Unicità globale, staff incluso.** Nessuna eccezione per gli admin di
    piattaforma. È la lettura letterale del requisito ed è ciò che rende il login
    non ambiguo.
-2. **L'eliminazione di un utente NON libera l'email.** Vincolo secco, senza
-   filtro su `deletedAt`. Vedi "Conseguenze accettate" per il prezzo.
+2. **L'eliminazione di un utente NON libera l'email da subito.** Vincolo secco
+   sul check applicativo e sul DB, senza filtro su `deletedAt`: l'email resta
+   occupata finché il job di purge GDPR non anonimizza l'utente (fino a 90
+   giorni, vedi "Conseguenze accettate" per il dettaglio e il prezzo nel
+   frattempo).
 3. **Nessun backfill né periodo di grazia.** I dati in prod sono usa-e-getta
    (tutti si ri-registrano): niente eccezioni per i record esistenti.
 
@@ -256,11 +259,17 @@ mai stato rosso non dimostra niente.
 
 - Chi opera **sia come dealer sia come agenzia** deve usare due email diverse.
   Nessuno lo sta facendo oggi (0 duplicati in prod).
-- **Eliminare un utente brucia la sua email per sempre**, su tutta la
-  piattaforma. `disableTeamUserAction` (`app/team/actions.ts:620`) fa
-  `status: SUSPENDED` + `deletedAt: now()`, e **non esiste alcun percorso di
-  riattivazione**: il rimedio a un'eliminazione sbagliata richiede un intervento
-  a mano sul DB. Scelta esplicita, presa consapevolmente.
+- **Eliminare un utente occupa la sua email fino a 90 giorni**, su tutta la
+  piattaforma — non per sempre. `disableTeamUserAction` (`app/team/actions.ts:620`)
+  fa `status: SUSPENDED` + `deletedAt: now()`, e **non esiste alcun percorso di
+  riattivazione**: il rimedio a un'eliminazione sbagliata nei 90 giorni richiede
+  un intervento a mano sul DB. Dopo `RETENTION_DAYS = 90`, il job
+  `lib/jobs/purge-deleted-team-users.ts` (schedulato ogni giorno alle 03:00,
+  vedi `vercel.json`, path `/api/jobs/purge-deleted-team-users`) anonimizza
+  l'utente per conformità GDPR — riscrive l'email in
+  `deleted-<id>@deleted.invalid` — e da quel momento l'email originale torna
+  libera. Scelta esplicita, presa consapevolmente: il prezzo è la finestra fino
+  a 90 giorni, non un blocco permanente.
 
 ## Fuori scope
 
@@ -276,7 +285,14 @@ mai stato rosso non dimostra niente.
 ## Rilascio
 
 Ordine obbligato, migration **prima** del codice: il codice nuovo assume il
-vincolo, il codice vecchio funziona anche con il vincolo attivo.
+vincolo, il codice vecchio **sopravvive** al vincolo attivo — ma non tutto allo
+stesso modo. Nella finestra fra la migration e il deploy, la vecchia
+`registerAction` cattura P2002 genericamente e risponde `'Dato gia esistente'`
+(brutto ma innocuo), mentre `acceptInvitationAction`, `createUserDirectAction`,
+`updateTeamUserAction` e le quattro action admin **non avevano alcuna
+gestione di P2002**: una collisione su una di queste lancia e l'utente vede un
+500. La finestra è quindi accettabile ma non benigna su tutti i path; va
+tenuta il più corta possibile.
 
 1. Pre-flight duplicati su Neon prod → deve dare zero righe.
 2. `migrate deploy` su Neon prod.

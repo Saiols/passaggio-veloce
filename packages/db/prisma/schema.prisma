@@ -517,12 +517,12 @@ model Company {
 
 model User {
   id              String    @id @default(uuid()) @db.Uuid
-  // Multi-tenancy email scope-company (item 07 release 2026-05): la stessa
-  // email puo' esistere in piu' aziende (es. consulente esterno). Unique
-  // compound (companyId, email). Per gli admin platform (companyId=null)
-  // un partial index garantisce comunque l'unicita' tra di loro: vedi
-  // migration team_email_per_company.
-  email           String
+  // Email univoca su TUTTA la piattaforma (spec 2026-07-25): un'email = un
+  // account, aziende e staff nello stesso spazio dei nomi. Revoca la
+  // multi-tenancy introdotta da team_email_per_company (2026-05).
+  // L'eliminazione (deletedAt) NON libera l'email.
+  // Il DB impone anche `email = lower(email)`: vedi migration user_email_unique.
+  email           String    @unique
   passwordHash    String
   emailVerifiedAt DateTime?
 
@@ -617,10 +617,8 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  @@unique([companyId, email])
   @@index([companyId])
   @@index([status])
-  @@index([email])
   @@map("users")
 }
 

@@ -1,43 +1,56 @@
 /**
- * Gate "orario lavorativo piattaforma" per l'espansione della distribuzione a raggio.
+ * Gate "calendario piattaforma" per l'espansione della distribuzione a raggio.
  *
- * Puro, senza accessi DB — riceve `now` e la config già risolta (`DistribuzioneConfigDTO`,
- * v. `./config.ts`).
+ * Puro, senza accessi DB: riceve `now` e il calendario già risolto.
  *
- * Fuso orario: la finestra (`orarioInizio`/`orarioFine`, es. 09:00-19:00) è pensata in ora
- * locale italiana (Europe/Rome), ma su Vercel il server gira in UTC. Il giorno-settimana e
- * i minuti-dal-mezzanotte di `now` vengono quindi calcolati nel fuso Europe/Rome (stessa
- * tecnica di `lib/date/rome-day.ts`: `Intl.DateTimeFormat` con `timeZone: 'Europe/Rome'`),
- * NON con `now.getHours()/getDay()` diretti (quelli userebbero il fuso del processo).
+ * Tre livelli, in quest'ordine: il giorno è attivo? la data non è un festivo?
+ * l'ora cade nella fascia di quel giorno? Basta un no per fermare l'espansione.
+ *
+ * Fuso: le fasce sono ore di parete italiane, ma su Vercel il processo gira in
+ * UTC. Giorno e minuti si calcolano quindi in `Europe/Rome` tramite
+ * `lib/date/rome-day.ts`, mai con `now.getHours()/getDay()`.
  */
 
+import { romeYmd } from '@/lib/date/rome-day';
 import type { GiornoSettimana } from './ore-lavorative';
-import type { DistribuzioneConfigDTO } from './config';
+import { hhmmToMinuti, type CalendarioPiattaforma } from './calendario';
 
-const ROME_TZ = 'Europe/Rome';
+/** Mapping in ordine `getUTCDay()`: domenica = 0. */
+const GIORNI_GETDAY: readonly GiornoSettimana[] = [
+  'DOM', 'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB',
+];
 
-/** Stesso ordine/mapping (privato) usato in `ore-lavorative.ts`: getDay()-style, domenica=0. */
-const GIORNI_ORDER: GiornoSettimana[] = ['DOM', 'LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB'];
-
-function parseHHMMToMinuti(s: string): number {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
-  if (!m) throw new Error(`Orario malformato: ${s}`);
-  const h = Number(m[1]!);
-  const mm = Number(m[2]!);
-  if (h < 0 || h > 23 || mm < 0 || mm > 59) {
-    throw new Error(`Orario fuori range: ${s}`);
-  }
-  return h * 60 + mm;
+/** Giorno della settimana di una data di calendario (già risolta a Roma). */
+export function giornoSettimanaDa([y, mo, d]: [number, number, number]): GiornoSettimana {
+  // Date.UTC qui è solo un modo neutro di ricavare il weekday da (y, mo, d):
+  // il fuso è già stato applicato a monte da romeYmd.
+  return GIORNI_GETDAY[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()]!;
 }
 
-/** Giorno-settimana + minuti-dalla-mezzanotte di `instant`, nel fuso Europe/Rome. */
-function romeGiornoEMinuti(instant: Date): { giorno: GiornoSettimana; minuti: number } {
+/** Chiave `YYYY-MM-DD` di una data di calendario, per il confronto coi festivi. */
+export function ymdKey([y, mo, d]: [number, number, number]): string {
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/**
+ * True se `now` (in ora di Roma) cade in un giorno attivo, non festivo, e
+ * dentro `[inizio, fine)` — l'estremo di fine è ESCLUSO (19:00 → false).
+ */
+export function isOrarioLavorativo(now: Date, cal: CalendarioPiattaforma): boolean {
+  const ymd = romeYmd(now);
+  const fascia = cal.orariSettimana[giornoSettimanaDa(ymd)];
+  if (!fascia.attivo) return false;
+  if (cal.festivi.some((f) => f.data === ymdKey(ymd))) return false;
+
+  const minuti = minutiDelGiornoRoma(now);
+  return minuti >= hhmmToMinuti(fascia.inizio) && minuti < hhmmToMinuti(fascia.fine);
+}
+
+/** Minuti dalla mezzanotte di `instant`, letti nel fuso di Roma. */
+function minutiDelGiornoRoma(instant: Date): number {
   const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: ROME_TZ,
+    timeZone: 'Europe/Rome',
     hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -45,23 +58,5 @@ function romeGiornoEMinuti(instant: Date): { giorno: GiornoSettimana; minuti: nu
   for (const p of dtf.formatToParts(instant)) {
     if (p.type !== 'literal') g[p.type] = Number(p.value);
   }
-  // Il giorno della settimana dipende solo dalla data di calendario (già risolta nel fuso
-  // di Roma sopra), non dall'ora: Date.UTC qui è solo un modo neutro per ricavare il
-  // weekday da (anno, mese, giorno) senza reintrodurre il fuso della macchina locale.
-  const giorno = GIORNI_ORDER[new Date(Date.UTC(g.year!, g.month! - 1, g.day!)).getUTCDay()]!;
-  const minuti = g.hour! * 60 + g.minute!;
-  return { giorno, minuti };
-}
-
-/**
- * True se `now` (in ora di Roma) cade in un giorno di `cfg.giorni` E nella finestra
- * `[orarioInizio, orarioFine)` — l'estremo di fine è ESCLUSO (es. 19:00 → false).
- */
-export function isOrarioLavorativo(now: Date, cfg: DistribuzioneConfigDTO): boolean {
-  const { giorno, minuti } = romeGiornoEMinuti(now);
-  if (!cfg.giorni.includes(giorno)) return false;
-
-  const inizio = parseHHMMToMinuti(cfg.orarioInizio);
-  const fine = parseHHMMToMinuti(cfg.orarioFine);
-  return minuti >= inizio && minuti < fine;
+  return g.hour! * 60 + g.minute!;
 }

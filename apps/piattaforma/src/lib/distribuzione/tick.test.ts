@@ -61,9 +61,16 @@ const CFG = {
   stepM: 200,
   raggioMaxM: 10000,
   intervalloMin: 10,
-  orarioInizio: '09:00',
-  orarioFine: '19:00',
-  giorni: ['LUN', 'MAR', 'MER', 'GIO', 'VEN'],
+  orariSettimana: {
+    LUN: { attivo: true, inizio: '09:00', fine: '19:00' },
+    MAR: { attivo: true, inizio: '09:00', fine: '19:00' },
+    MER: { attivo: true, inizio: '09:00', fine: '19:00' },
+    GIO: { attivo: true, inizio: '09:00', fine: '19:00' },
+    VEN: { attivo: true, inizio: '09:00', fine: '19:00' },
+    SAB: { attivo: false, inizio: '09:00', fine: '13:00' },
+    DOM: { attivo: false, inizio: '09:00', fine: '19:00' },
+  },
+  festivi: [],
 };
 
 // Pratica in distribuzione (input di tickPratica).

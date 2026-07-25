@@ -1,67 +1,51 @@
 import { cache } from 'react';
 import { prisma, type Prisma, type PrismaClient } from '@pv/db';
-import type { GiornoSettimana } from './ore-lavorative';
+import {
+  CALENDARIO_DEFAULT,
+  parseFestivi,
+  parseOrariSettimana,
+  type CalendarioPiattaforma,
+} from './calendario';
 
 /** Accetta sia il client globale sia una transazione. */
 type DistribuzioneConfigClient = PrismaClient | Prisma.TransactionClient;
 
-const GIORNI_VALIDI: readonly GiornoSettimana[] = ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
-
-export type DistribuzioneConfigDTO = {
+/**
+ * Config del motore. Estende `CalendarioPiattaforma`, così le funzioni che
+ * hanno bisogno solo del calendario (`isOrarioLavorativo`, `minutiLavorativiTra`)
+ * accettano il DTO senza che il DTO le costringa a dipendere da raggi e durate.
+ */
+export type DistribuzioneConfigDTO = CalendarioPiattaforma & {
   raggioStartM: number;
   stepM: number;
   raggioMaxM: number;
   intervalloMin: number;
-  orarioInizio: string;
-  orarioFine: string;
-  giorni: GiornoSettimana[];
 };
 
 /**
  * Default: primo anello 1 km, +1 km per round, un round all'ora, max 10 km,
- * LUN-VEN 09-19. Fino a 10 round, che coprono ~una giornata lavorativa.
+ * calendario LUN-VEN 09-19 senza festivi.
  *
- * Tutti e quattro i parametri di raggio/tempo sono editabili da
- * `/admin/distribuzione`: questi valori valgono solo finché la riga singleton
- * non esiste (o non è leggibile).
+ * Valgono solo finché la riga singleton non esiste (o non è leggibile).
  */
 export const DISTRIBUZIONE_DEFAULT: DistribuzioneConfigDTO = {
   raggioStartM: 1000,
   stepM: 1000,
   raggioMaxM: 10000,
   intervalloMin: 60,
-  orarioInizio: '09:00',
-  orarioFine: '19:00',
-  giorni: ['LUN', 'MAR', 'MER', 'GIO', 'VEN'],
+  ...CALENDARIO_DEFAULT,
 };
-
-/**
- * Converte il CSV persistito (`DistribuzioneConfig.giorni`) in un array di
- * `GiornoSettimana`. Difensivo: scarta token vuoti/non riconosciuti invece di
- * lanciare — una riga config malformata non deve far crashare la distribuzione.
- */
-export function parseGiorni(raw: string): GiornoSettimana[] {
-  return raw
-    .split(',')
-    .map((token) => token.trim().toUpperCase())
-    .filter((token): token is GiornoSettimana =>
-      (GIORNI_VALIDI as readonly string[]).includes(token),
-    );
-}
 
 /**
  * Config distribuzione corrente: la riga singleton `distribuzione_config`
  * (fallback a `DISTRIBUZIONE_DEFAULT` se assente).
  *
  * Avvolto in React `cache()` → dedup per-request, NESSUNA cache persistente:
- * ogni modifica dall'admin (raggio max, orari) si riflette subito al tick
- * successivo. Stesso pattern di `getTariffarioCorrente`.
+ * ogni modifica dall'admin si riflette al tick successivo.
  *
- * Fail-open su qualunque errore della query: la distribuzione non deve mai
- * bloccarsi per un blip del DB, usa i default finché il DB torna disponibile.
- *
- * `client` opzionale: passa la transazione (`tx`) quando chiamata dentro una
- * `$transaction` (es. `tickPratica`), altrimenti usa il client globale.
+ * Fail-open su qualunque errore: la distribuzione non deve mai bloccarsi per un
+ * blip del DB. Stesso principio dentro il calendario, dove un JSON malformato
+ * ricade sui default invece che su "chiuso".
  */
 export const getDistribuzioneConfig = cache(
   async (client: DistribuzioneConfigClient = prisma): Promise<DistribuzioneConfigDTO> => {
@@ -73,9 +57,8 @@ export const getDistribuzioneConfig = cache(
         stepM: row.stepM,
         raggioMaxM: row.raggioMaxM,
         intervalloMin: row.intervalloMin,
-        orarioInizio: row.orarioInizio,
-        orarioFine: row.orarioFine,
-        giorni: parseGiorni(row.giorni),
+        orariSettimana: parseOrariSettimana(row.orariSettimana),
+        festivi: parseFestivi(row.festivi),
       };
     } catch {
       return DISTRIBUZIONE_DEFAULT;

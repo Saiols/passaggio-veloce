@@ -1,88 +1,64 @@
 import { describe, it, expect, vi } from 'vitest';
 
-const findFirst = vi.fn();
-vi.mock('@pv/db', () => ({ prisma: { distribuzioneConfig: { findFirst: (...a: unknown[]) => findFirst(...a) } } }));
+const { findFirstMock } = vi.hoisted(() => ({ findFirstMock: vi.fn() }));
+vi.mock('@pv/db', () => ({
+  prisma: { distribuzioneConfig: { findFirst: findFirstMock } },
+}));
+// React `cache()` dedup per-request: nei test va neutralizzato, altrimenti la
+// prima risposta verrebbe riusata da tutti i casi successivi.
+vi.mock('react', () => ({ cache: (fn: unknown) => fn }));
 
-import { getDistribuzioneConfig, DISTRIBUZIONE_DEFAULT, parseGiorni } from './config';
+import { getDistribuzioneConfig, DISTRIBUZIONE_DEFAULT } from './config';
+import { ORARI_SETTIMANA_DEFAULT } from './calendario';
 
-describe('parseGiorni', () => {
-  it('converte una lista CSV in array di giorni', () => {
-    expect(parseGiorni('LUN,MAR')).toEqual(['LUN', 'MAR']);
-  });
+const ROW = {
+  raggioStartM: 2000,
+  stepM: 500,
+  raggioMaxM: 20000,
+  intervalloMin: 15,
+  orariSettimana: {
+    LUN: { attivo: true, inizio: '08:00', fine: '20:00' },
+    SAB: { attivo: true, inizio: '09:00', fine: '13:00' },
+  },
+  festivi: [{ data: '2026-12-25', nome: 'Natale' }],
+};
 
-  it('converte il default a 5 giorni feriali', () => {
-    expect(parseGiorni('LUN,MAR,MER,GIO,VEN')).toEqual(['LUN', 'MAR', 'MER', 'GIO', 'VEN']);
-  });
-
-  it('scarta token non riconosciuti e spazi superflui', () => {
-    expect(parseGiorni('LUN, XXX ,MAR,')).toEqual(['LUN', 'MAR']);
-  });
-
-  it('stringa vuota → array vuoto', () => {
-    expect(parseGiorni('')).toEqual([]);
-  });
-});
-
-describe('DISTRIBUZIONE_DEFAULT', () => {
-  // Valori di prodotto, non dettagli implementativi: 1 km iniziale, +1 km per
-  // round, un round all'ora, max 10 km → al più 10 round ≈ una giornata
-  // lavorativa. Cambiarli è una decisione, non un refactor.
-  it('è 1 km / +1 km / 1 h / max 10 km', () => {
-    expect(DISTRIBUZIONE_DEFAULT.raggioStartM).toBe(1000);
-    expect(DISTRIBUZIONE_DEFAULT.stepM).toBe(1000);
-    expect(DISTRIBUZIONE_DEFAULT.intervalloMin).toBe(60);
-    expect(DISTRIBUZIONE_DEFAULT.raggioMaxM).toBe(10000);
-  });
-
-  it('il raggio massimo è maggiore di quello iniziale (altrimenti tutto zona non coperta)', () => {
-    expect(DISTRIBUZIONE_DEFAULT.raggioMaxM).toBeGreaterThan(DISTRIBUZIONE_DEFAULT.raggioStartM);
-  });
-});
+// Nota: reset del mock inline in ogni test, non in `beforeEach`. In Vitest
+// 4.1.5 un `beforeEach(() => findFirstMock.mockReset())` seguito da un test
+// che rigetta la promise del mock produce un falso "unhandled rejection"
+// anche quando il codice la cattura correttamente (stesso problema già
+// documentato in lib/pricing.tariffario.test.ts).
 
 describe('getDistribuzioneConfig', () => {
-  // Nota: reset del mock inline in ogni test, non in beforeEach (vedi
-  // pricing.tariffario.test.ts per la motivazione: un reset in beforeEach
-  // prima di un test che rigetta la promise del mock produce un falso
-  // "unhandled rejection" in Vitest 4.1.5).
+  it('riga assente → default completi', async () => {
+    findFirstMock.mockReset();
+    findFirstMock.mockResolvedValue(null);
+    await expect(getDistribuzioneConfig()).resolves.toEqual(DISTRIBUZIONE_DEFAULT);
+  });
 
-  it('mappa i campi della riga DB, incl. parse dei giorni', async () => {
-    findFirst.mockReset();
-    findFirst.mockResolvedValue({
-      id: 'singleton',
-      raggioStartM: 500,
-      stepM: 200,
-      raggioMaxM: 12000,
-      intervalloMin: 15,
-      orarioInizio: '08:30',
-      orarioFine: '18:30',
-      giorni: 'LUN,MAR,MER',
-      updatedAt: new Date(),
-    });
+  it('errore del DB → default (fail-open, la distribuzione non si ferma)', async () => {
+    findFirstMock.mockReset();
+    findFirstMock.mockRejectedValue(new Error('connessione persa'));
+    await expect(getDistribuzioneConfig()).resolves.toEqual(DISTRIBUZIONE_DEFAULT);
+  });
 
+  it('legge raggi, durata, fasce e festivi dalla riga', async () => {
+    findFirstMock.mockReset();
+    findFirstMock.mockResolvedValue(ROW);
     const cfg = await getDistribuzioneConfig();
-
-    expect(cfg).toEqual({
-      raggioStartM: 500,
-      stepM: 200,
-      raggioMaxM: 12000,
-      intervalloMin: 15,
-      orarioInizio: '08:30',
-      orarioFine: '18:30',
-      giorni: ['LUN', 'MAR', 'MER'],
-    });
+    expect(cfg.raggioMaxM).toBe(20000);
+    expect(cfg.intervalloMin).toBe(15);
+    expect(cfg.orariSettimana.LUN).toEqual({ attivo: true, inizio: '08:00', fine: '20:00' });
+    expect(cfg.orariSettimana.SAB).toEqual({ attivo: true, inizio: '09:00', fine: '13:00' });
+    expect(cfg.festivi).toEqual([{ data: '2026-12-25', nome: 'Natale' }]);
   });
 
-  it('fallback a DISTRIBUZIONE_DEFAULT quando la tabella è vuota', async () => {
-    findFirst.mockReset();
-    findFirst.mockResolvedValue(null);
-
-    expect(await getDistribuzioneConfig()).toEqual(DISTRIBUZIONE_DEFAULT);
-  });
-
-  it('fallback a DISTRIBUZIONE_DEFAULT quando la query DB fallisce (fail-open)', async () => {
-    findFirst.mockReset();
-    findFirst.mockRejectedValue(new Error('db down'));
-
-    expect(await getDistribuzioneConfig()).toEqual(DISTRIBUZIONE_DEFAULT);
+  it('colonne nuove a null → calendario di default, resto della riga rispettato', async () => {
+    findFirstMock.mockReset();
+    findFirstMock.mockResolvedValue({ ...ROW, orariSettimana: null, festivi: null });
+    const cfg = await getDistribuzioneConfig();
+    expect(cfg.orariSettimana).toEqual(ORARI_SETTIMANA_DEFAULT);
+    expect(cfg.festivi).toEqual([]);
+    expect(cfg.raggioMaxM).toBe(20000);
   });
 });

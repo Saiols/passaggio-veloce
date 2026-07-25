@@ -5,6 +5,7 @@ import { Alert, Button, Field, NumberInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import type { DistribuzioneConfigDTO } from '@/lib/distribuzione/config';
+import { GIORNI_ORDINE } from '@/lib/distribuzione/calendario';
 import { salvaConfigDistribuzione } from './actions';
 import {
   configDistribuzioneSchema,
@@ -207,16 +208,12 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
           Altri parametri (fissi, sola lettura)
         </h2>
         <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
-          <div>
-            <dt className="text-pv-slate-500">Orario</dt>
+          <div className="col-span-2">
+            <dt className="text-pv-slate-500">Calendario</dt>
             <dd className="font-semibold text-pv-navy-800">
-              {config.orarioInizio}–{config.orarioFine}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-pv-slate-500">Giorni</dt>
-            <dd className="font-semibold text-pv-navy-800">
-              {config.giorni.map((g) => GIORNI_LABEL[g] ?? g).join(', ') || '—'}
+              {GIORNI_ORDINE.filter((g) => config.orariSettimana[g].attivo)
+                .map((g) => `${GIORNI_LABEL[g]} ${config.orariSettimana[g].inizio}–${config.orariSettimana[g].fine}`)
+                .join(' · ') || 'Nessun giorno attivo'}
             </dd>
           </div>
           <div>

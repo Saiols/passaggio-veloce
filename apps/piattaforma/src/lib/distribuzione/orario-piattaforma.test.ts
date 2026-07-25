@@ -1,54 +1,72 @@
 import { describe, it, expect } from 'vitest';
 import { isOrarioLavorativo } from './orario-piattaforma';
-import { DISTRIBUZIONE_DEFAULT, type DistribuzioneConfigDTO } from './config';
+import { CALENDARIO_DEFAULT, type CalendarioPiattaforma } from './calendario';
 
-// DISTRIBUZIONE_DEFAULT: LUN-VEN, 09:00-19:00.
-const CFG = DISTRIBUZIONE_DEFAULT;
-
-// Tutte le date sono costruite come istanti UTC fissi (mai Date.now()/orologio del
-// runner) e scelte in luglio (Europe/Rome = CEST, UTC+2) così l'ora "di parete" a
-// Roma è UTC+2h. Verificate a monte con Intl.DateTimeFormat({timeZone:'Europe/Rome'}):
-// 2026-07-22 è un mercoledì, 2026-07-25 un sabato.
+// Istanti UTC fissi (mai l'orologio del runner), scelti in luglio: a Roma è
+// CEST (UTC+2), quindi l'ora di parete è UTC+2h. Weekday verificati con
+// Intl: 2026-07-22 mercoledì, 24 venerdì, 25 sabato, 26 domenica.
 function utc(h: number, m: number, day = 22): Date {
   return new Date(Date.UTC(2026, 6, day, h, m, 0));
 }
 
+const CAL = CALENDARIO_DEFAULT;
+
 describe('isOrarioLavorativo', () => {
-  it('mercoledì 10:00 (Rome) con LUN-VEN 9-19 → true', () => {
-    expect(isOrarioLavorativo(utc(8, 0), CFG)).toBe(true); // 08:00 UTC = 10:00 Rome
+  it('mercoledì 10:00 (Rome) → true', () => {
+    expect(isOrarioLavorativo(utc(8, 0), CAL)).toBe(true);
   });
 
-  it('mercoledì 20:00 (Rome) → false (fuori finestra)', () => {
-    expect(isOrarioLavorativo(utc(18, 0), CFG)).toBe(false); // 18:00 UTC = 20:00 Rome
+  it('mercoledì 20:00 (Rome) → false (dopo la fine)', () => {
+    expect(isOrarioLavorativo(utc(18, 0), CAL)).toBe(false);
   });
 
-  it('mercoledì 08:59 (Rome) → false (prima di orarioInizio)', () => {
-    expect(isOrarioLavorativo(utc(6, 59), CFG)).toBe(false); // 06:59 UTC = 08:59 Rome
+  it('bordo 09:00 incluso, bordo 19:00 escluso', () => {
+    expect(isOrarioLavorativo(utc(7, 0), CAL)).toBe(true);
+    expect(isOrarioLavorativo(utc(17, 0), CAL)).toBe(false);
   });
 
-  it('sabato 10:00 (Rome), giorni default LUN-VEN → false', () => {
-    expect(isOrarioLavorativo(utc(8, 0, 25), CFG)).toBe(false); // 2026-07-25 = sabato
+  it('sabato e domenica spenti nei default → false', () => {
+    expect(isOrarioLavorativo(utc(8, 0, 25), CAL)).toBe(false);
+    expect(isOrarioLavorativo(utc(8, 0, 26), CAL)).toBe(false);
   });
 
-  it('bordo 09:00 (Rome) → true (orarioInizio incluso)', () => {
-    expect(isOrarioLavorativo(utc(7, 0), CFG)).toBe(true); // 07:00 UTC = 09:00 Rome
+  it('sabato corto: attivo 09:00-13:00 → true alle 10:00, false alle 14:00', () => {
+    const cal: CalendarioPiattaforma = {
+      ...CAL,
+      orariSettimana: {
+        ...CAL.orariSettimana,
+        SAB: { attivo: true, inizio: '09:00', fine: '13:00' },
+      },
+    };
+    expect(isOrarioLavorativo(utc(8, 0, 25), cal)).toBe(true); // 10:00 Rome
+    expect(isOrarioLavorativo(utc(12, 0, 25), cal)).toBe(false); // 14:00 Rome
   });
 
-  it('bordo 19:00 (Rome) → false (orarioFine escluso)', () => {
-    expect(isOrarioLavorativo(utc(17, 0), CFG)).toBe(false); // 17:00 UTC = 19:00 Rome
+  it('un festivo spegne un giorno altrimenti attivo', () => {
+    const cal: CalendarioPiattaforma = {
+      ...CAL,
+      festivi: [{ data: '2026-07-22', nome: 'Test' }],
+    };
+    expect(isOrarioLavorativo(utc(8, 0), CAL)).toBe(true);
+    expect(isOrarioLavorativo(utc(8, 0), cal)).toBe(false);
   });
 
-  it('sabato 10:00 (Rome), config con SAB incluso → true', () => {
-    const cfgConSabato: DistribuzioneConfigDTO = { ...CFG, giorni: [...CFG.giorni, 'SAB'] };
-    expect(isOrarioLavorativo(utc(8, 0, 25), cfgConSabato)).toBe(true);
+  it('il festivo si valuta sul GIORNO DI ROMA, non su quello UTC', () => {
+    // 2026-07-22T22:30Z = 23 luglio 00:30 a Roma: se il festivo è il 23, il
+    // gate deve essere chiuso anche se in UTC è ancora il 22.
+    const cal: CalendarioPiattaforma = {
+      ...CAL,
+      festivi: [{ data: '2026-07-23', nome: 'Test' }],
+      orariSettimana: {
+        ...CAL.orariSettimana,
+        GIO: { attivo: true, inizio: '00:00', fine: '23:59' },
+      },
+    };
+    expect(isOrarioLavorativo(new Date(Date.UTC(2026, 6, 22, 22, 30)), cal)).toBe(false);
   });
 
-  it('fuso orario: un istante UTC "naive fuori orario" ma dentro la finestra a Roma → true', () => {
-    // 07:30 UTC: getHours() server-local (se il processo gira in UTC, come su Vercel)
-    // leggerebbe le 7:30, FUORI dalla finestra 9-19 se calcolato ingenuamente.
-    // In Europe/Rome (CEST, +2h) sono le 09:30: DENTRO la finestra.
-    const naiveUtcHour = utc(7, 30).getUTCHours();
-    expect(naiveUtcHour).toBeLessThan(9); // conferma che il "naive" fallirebbe
-    expect(isOrarioLavorativo(utc(7, 30), CFG)).toBe(true);
+  it('fuso: 07:30 UTC è dentro la finestra perché a Roma sono le 09:30', () => {
+    expect(utc(7, 30).getUTCHours()).toBeLessThan(9); // il calcolo naive fallirebbe
+    expect(isOrarioLavorativo(utc(7, 30), CAL)).toBe(true);
   });
 });

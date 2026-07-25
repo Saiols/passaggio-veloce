@@ -1,21 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { primoAnello, prossimoAnello, type SedeConDistanza } from './anelli';
 import type { DistribuzioneConfigDTO } from './config';
+import { CALENDARIO_DEFAULT } from './calendario';
 
 /**
  * Config esplicita, NON `DISTRIBUZIONE_DEFAULT`: i valori di default sono
  * editabili da admin e cambiarli non deve rendere falsi questi test, che
  * verificano la meccanica degli anelli. `raggioStartM` (500) è diverso da
  * `stepM` (200) apposta: così i test distinguono il primo anello dai successivi.
+ * Il calendario è irrilevante qui (`prossimoAnello` non lo legge): preso da
+ * `CALENDARIO_DEFAULT` solo per soddisfare la forma del DTO.
  */
 const cfg: DistribuzioneConfigDTO = {
   raggioStartM: 500,
   stepM: 200,
   raggioMaxM: 10000,
   intervalloMin: 60,
-  orarioInizio: '09:00',
-  orarioFine: '19:00',
-  giorni: ['LUN', 'MAR', 'MER', 'GIO', 'VEN'],
+  ...CALENDARIO_DEFAULT,
 };
 
 describe('prossimoAnello', () => {

@@ -20,7 +20,9 @@
 - **Staff di piattaforma fuori scope.** `ADMIN_PIATTAFORMA`, `ASSISTENTE` e i ruoli CRM non sono toccati da questo piano: hanno `companyId` null, `getSessionContext` esce prima, e le loro autorizzazioni passano da funzioni pure sul ruolo in `permissions.ts`. Il buco su quegli account resta aperto per scelta, spec separata.
 - **Nessun colore hardcodato.** Usa i componenti di `src/components/ui` e i token del design system.
 - **Il motivo della sospensione è testo libero scritto dall'admin.** Va reso solo come figlio JSX. Mai `dangerouslySetInnerHTML`, in nessun punto di questo piano.
-- **`soloLettura` su `PermessiCtx` deve essere opzionale** (`soloLettura?: boolean`): decine di fixture di test esistenti costruiscono `PermessiCtx` a mano con tre sole chiavi e devono continuare a compilare.
+- **`soloLettura` su `PermessiCtx` è OBBLIGATORIO** (`soloLettura: boolean`), e la conversione da `SessionContext` passa da un **unico** adattatore esportato `toPermessiCtx()` in `permessi/guard.ts`.
+
+  Il piano diceva l'opposto («opzionale, per non rompere le fixture di test»). La review del Task 3 ha dimostrato che quel vincolo era sbagliato: esistono **quattro** adattatori verso `PermessiCtx` in produzione, il Task 3 ne aggiornò uno, e poiché il campo era opzionale il compilatore non poteva segnalare i tre mancanti. Conseguenza reale: un titolare (`ADMIN_AZIENDA`) sospeso conservava l'amministrazione completa del modulo team — creare utenti, resettare password, disabilitare, riassegnare permessi — perché il suo set di permessi è vuoto per progetto e quindi l'intersezione non lo fermava. Decisione del committente (2026-07-25): il campo diventa obbligatorio e l'adattatore unico, così il compilatore enumera ogni sito residuo. Le fixture si aggiornano di conseguenza; non è la produzione a doversi adattare ai test.
 
 ---
 

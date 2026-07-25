@@ -176,9 +176,33 @@ export async function eseguiPayoutImmediato(
   if (!ignoraSoglia) {
     const walletOwner = await prisma.wallet.findUnique({
       where: { id: walletId },
-      select: { companyId: true, sede: { select: { companyId: true } } },
+      select: {
+        companyId: true,
+        company: { select: { suspendedAt: true } },
+        sede: { select: { companyId: true, company: { select: { suspendedAt: true } } } },
+      },
     });
     const ownerCompanyId = walletOwner?.companyId ?? walletOwner?.sede?.companyId ?? null;
+
+    // Sospensione dell'AZIENDA (non dell'utente): un payout è un movimento di
+    // denaro aziendale, e se è sospeso un solo utente i colleghi restano
+    // legittimati. L'utente sospeso singolarmente non può comunque arrivare
+    // qui dall'action, perché `wallet.payout` è una chiave di scrittura.
+    //
+    // Come il guard visura sotto, è escluso da `ignoraSoglia`: la liquidazione
+    // di cessazione (clausola 12.4) deve restare possibile, e `deleteCompanyAction`
+    // marca `suspendedAt` insieme a `deletedAt` — bloccare qui intrappolerebbe
+    // per sempre il denaro dovuto.
+    const suspendedAt =
+      walletOwner?.company?.suspendedAt ?? walletOwner?.sede?.company?.suspendedAt ?? null;
+    if (suspendedAt) {
+      return {
+        ok: false,
+        error:
+          'Il tuo account è sospeso: i prelievi dal wallet sono bloccati finché la sospensione non viene revocata. Il saldo resta a tuo credito.',
+      };
+    }
+
     if (ownerCompanyId && (await isVisuraScadutaCompany(ownerCompanyId))) {
       return {
         ok: false,

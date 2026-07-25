@@ -4,7 +4,9 @@ import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
 import { getDistribuzioneConfig } from '@/lib/distribuzione/config';
+import { getStatisticheRound } from '@/lib/distribuzione/statistiche';
 import { DistribuzioneConfigClient } from './client';
+import { RoundStats } from './round-stats';
 
 export default async function AdminDistribuzionePage() {
   const session = await auth();
@@ -21,7 +23,7 @@ export default async function AdminDistribuzionePage() {
     );
   }
 
-  const config = await getDistribuzioneConfig();
+  const [config, stats] = await Promise.all([getDistribuzioneConfig(), getStatisticheRound()]);
 
   return (
     <AppShell session={session} activePath="/admin/distribuzione">
@@ -31,10 +33,13 @@ export default async function AdminDistribuzionePage() {
           Distribuzione pratiche
         </h1>
         <p className="mt-2 text-[14px] text-pv-slate-500">
-          Il raggio massimo di ricerca agenzie: entro quanti metri il motore cerca
-          un&apos;agenzia prima di dichiarare la pratica &quot;zona non coperta&quot;. Vale da
-          subito per il prossimo tick di distribuzione.
+          Il motore cerca agenzie in un raggio in linea d&apos;aria che si allarga a ogni
+          round, finché una accetta o si raggiunge il raggio massimo (&quot;zona non
+          coperta&quot;). Le modifiche valgono dal prossimo tick di distribuzione.
         </p>
+        <div className="mt-6">
+          <RoundStats stats={stats} intervalloMin={config.intervalloMin} />
+        </div>
         <div className="mt-6">
           <DistribuzioneConfigClient config={config} />
         </div>

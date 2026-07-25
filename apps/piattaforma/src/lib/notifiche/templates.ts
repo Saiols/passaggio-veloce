@@ -51,13 +51,17 @@ export type N4BrokerFirmaPayload = {
   attestataDaPvAt?: Date | null;
 };
 
+/**
+ * Nessun `round`: il numero di round è un dato interno (serve alla media admin
+ * "entro quanto vengono accettate"). Dirlo all'agenzia equivarrebbe a dirle che
+ * non era la prima scelta.
+ */
 export type N6AgenziaNuovaPayload = {
   codicePratica: string;
   targa: string | null;
   comune: string | null;
   provincia: string | null;
   feeCent: number;
-  round: number;
   altreAgenzie: number;
   countdownFineAt: Date | null;
   nomeAgenzia: string;
@@ -448,7 +452,7 @@ export function tplN6AgenziaNuova(p: N6AgenziaNuovaPayload): NotificaContent {
       <strong>${p.codicePratica}</strong>${p.targa ? ` &middot; ${p.targa}` : ''}<br>
       Zona: ${escapeHtml(p.comune ?? '—')}${p.provincia ? ` (${escapeHtml(p.provincia)})` : ''}<br>
       Fee per te: <strong style="color:#0054a6">${formatCurrencyCent(p.feeCent)}</strong><br>
-      Round ${p.round} &middot; ${scadenza ? `rispondi entro ${scadenza}` : 'nessuna scadenza'}
+      ${scadenza ? `Rispondi entro ${scadenza}` : 'Nessuna scadenza'}
     </div>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">Apri la dashboard per accettare o rifiutare.</p>
   `);

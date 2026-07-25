@@ -27,6 +27,7 @@ import { AttestaFirmaButton } from './attesta-firma-button';
 import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
+import { formatKm } from '@/lib/distribuzione/format';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
@@ -741,6 +742,18 @@ export default async function PraticaDetailPage({
                 session.user.role === 'ASSISTENTE') && (
                 <Card>
                   <h2 className="text-[15px] font-bold text-pv-navy-800">Round distribuzione</h2>
+                  {pratica.roundAccettazione !== null && (
+                    <p className="mt-3 rounded-[10px] bg-pv-navy-100 px-3 py-2 text-[12.5px] text-pv-navy-800">
+                      Accettata al{' '}
+                      <strong>round {pratica.roundAccettazione}</strong>
+                      {(() => {
+                        const vincente = pratica.assegnazioni.find((a) => a.esito === 'ACCETTATA');
+                        return vincente && vincente.raggioMetri > 0
+                          ? ` · raggio ${formatKm(vincente.raggioMetri)}`
+                          : '';
+                      })()}
+                    </p>
+                  )}
                   <ul className="mt-3 space-y-2 text-[13px]">
                     {pratica.assegnazioni.map((a) => (
                       <li
@@ -752,7 +765,9 @@ export default async function PraticaDetailPage({
                             {a.agenzia.ragioneSociale}
                           </p>
                           <p className="text-[11px] text-pv-slate-500">
-                            R{a.round} · {formatDateTime(a.invioAt)}
+                            R{a.round}
+                            {a.raggioMetri > 0 ? ` · ${formatKm(a.raggioMetri)}` : ''} ·{' '}
+                            {formatDateTime(a.invioAt)}
                           </p>
                         </div>
                         <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">

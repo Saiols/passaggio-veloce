@@ -1,10 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { prossimoAnello, type SedeConDistanza } from './anelli';
-import { DISTRIBUZIONE_DEFAULT } from './config';
+import { primoAnello, prossimoAnello, type SedeConDistanza } from './anelli';
+import type { DistribuzioneConfigDTO } from './config';
 
-// cfg default v2: start 500, step 200, max 10000 (irrilevante qui: prossimoAnello
-// usa solo stepM e raggioMaxM, raggioStartM è responsabilità del chiamante).
-const cfg = DISTRIBUZIONE_DEFAULT;
+/**
+ * Config esplicita, NON `DISTRIBUZIONE_DEFAULT`: i valori di default sono
+ * editabili da admin e cambiarli non deve rendere falsi questi test, che
+ * verificano la meccanica degli anelli. `raggioStartM` (500) è diverso da
+ * `stepM` (200) apposta: così i test distinguono il primo anello dai successivi.
+ */
+const cfg: DistribuzioneConfigDTO = {
+  raggioStartM: 500,
+  stepM: 200,
+  raggioMaxM: 10000,
+  intervalloMin: 60,
+  orarioInizio: '09:00',
+  orarioFine: '19:00',
+  giorni: ['LUN', 'MAR', 'MER', 'GIO', 'VEN'],
+};
 
 describe('prossimoAnello', () => {
   it('sede a 650m con raggioCorrente=500 → notifica al primo anello che la include (700)', () => {
@@ -55,5 +67,44 @@ describe('prossimoAnello', () => {
 
     // Con clamp step=1 m, il primo anello che include la sede a 600 è 600.
     expect(esito).toEqual({ tipo: 'notifica', raggioRaggiuntoM: 600, sedi: [sede] });
+  });
+});
+
+describe('primoAnello', () => {
+  it('sede entro il raggio iniziale → notifica a raggioStartM, NON a stepM', () => {
+    const sede: SedeConDistanza = { sedeId: 's1', companyId: 'c1', distanzaM: 450 };
+
+    const esito = primoAnello([sede], cfg);
+
+    // 200 (stepM) escluderebbe la sede: il primo anello vale raggioStartM.
+    expect(esito).toEqual({ tipo: 'notifica', raggioRaggiuntoM: 500, sedi: [sede] });
+  });
+
+  it('raggio iniziale vuoto → prosegue a step nello stesso calcolo (sede a 650 → 700)', () => {
+    const sede: SedeConDistanza = { sedeId: 's2', companyId: 'c2', distanzaM: 650 };
+
+    const esito = primoAnello([sede], cfg);
+
+    expect(esito).toEqual({ tipo: 'notifica', raggioRaggiuntoM: 700, sedi: [sede] });
+  });
+
+  it('include tutte le sedi entro il raggio raggiunto, non solo la più vicina', () => {
+    const vicina: SedeConDistanza = { sedeId: 'sA', companyId: 'cA', distanzaM: 100 };
+    const media: SedeConDistanza = { sedeId: 'sB', companyId: 'cB', distanzaM: 480 };
+    const oltre: SedeConDistanza = { sedeId: 'sC', companyId: 'cC', distanzaM: 900 };
+
+    const esito = primoAnello([vicina, media, oltre], cfg);
+
+    expect(esito).toEqual({
+      tipo: 'notifica',
+      raggioRaggiuntoM: 500,
+      sedi: [vicina, media],
+    });
+  });
+
+  it('nessuna sede entro il raggio massimo → zona-non-coperta', () => {
+    const esito = primoAnello([], cfg);
+
+    expect(esito).toEqual({ tipo: 'zona-non-coperta', raggioRaggiuntoM: cfg.raggioMaxM });
   });
 });

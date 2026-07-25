@@ -68,6 +68,9 @@ export async function GET(req: Request) {
     'feeAgenziaEur',
     'creditoBrokerEur',
     'nostroLordoEur',
+    // Round di distribuzione in cui la pratica è stata accettata (vuoto per le
+    // pratiche mai accettate o assegnate a mano dall'admin).
+    'roundAccettazione',
     'createdAt',
     'firmaAvvenutaAt',
   ];
@@ -83,6 +86,7 @@ export async function GET(req: Request) {
     (p.feeAgenziaCent / 100).toFixed(2),
     (p.creditoBrokerCent / 100).toFixed(2),
     ((p.feeAgenziaCent - p.creditoBrokerCent) / 100).toFixed(2),
+    p.roundAccettazione ?? '',
     p.createdAt.toISOString(),
     p.firmaAvvenutaAt?.toISOString() ?? '',
   ]);

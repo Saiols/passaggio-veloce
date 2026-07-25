@@ -829,13 +829,24 @@ model Pratica {
   lat Float?
   lng Float?
 
-  // Distribuzione v2 (raggio incrementale + distanza stradale): raggio
-  // corrente raggiunto (metri), istante ultima notifica realmente inviata
-  // (governa il gate dei 10 minuti; gli anelli vuoti skippati non lo toccano),
-  // istante in cui il raggio massimo è stato raggiunto senza accettazione.
+  // Distribuzione a raggio (linea d'aria): raggio corrente raggiunto (metri),
+  // istante ultima notifica realmente inviata (governa il gate della durata
+  // round; gli anelli vuoti skippati non lo toccano), istante in cui il raggio
+  // massimo è stato raggiunto senza accettazione.
   raggioCorrenteM    Int?
   ultimaEspansioneAt DateTime?
   zonaNonCopertaAt   DateTime?
+
+  // Round = ordinale del batch di notifiche realmente inviato, NON del raggio:
+  // gli anelli vuoti fanno avanzare `raggioCorrenteM` ma non il round e non
+  // consumano tempo, quindi `round N ≈ (N-1) × durata round`.
+  //
+  // `roundCorrente` riparte da 1 a ogni ciclo (ricircolo dopo revoca admin).
+  // `roundAccettazione` è scritto all'accettazione copiando il round
+  // dell'assegnazione vincente: dato admin-only, serve alla media "entro
+  // quanto vengono accettate" (lib/distribuzione/statistiche.ts).
+  roundCorrente     Int  @default(0)
+  roundAccettazione Int?
 
   // Attori (Company madre — legacy, mantenuti in fase expand)
   brokerId String  @db.Uuid
@@ -965,14 +976,17 @@ model PraticaAssegnazione {
   sedeId String? @db.Uuid
   sede   Sede?   @relation(fields: [sedeId], references: [id])
 
-  round Int // 1, 2, 3
+  // Round del batch di notifiche che ha contattato questa sede, relativo al
+  // `ciclo`. Copiato da Pratica.roundCorrente. Le assegnazioni manuali di
+  // escalation usano ESCALATION_ROUND = 99 (lib/distribuzione/constants.ts).
+  round Int
 
   // Ciclo di distribuzione (Pratica.distribuzioneCiclo) di questo tentativo.
   ciclo Int @default(1)
 
-  // Distribuzione v2: anello (raggio, metri) d'ingresso di questo tentativo.
-  // Sostituisce concettualmente `round` per la v2 (round resta per le righe
-  // legacy / countdown ora inutilizzati).
+  // Anello (raggio, metri, linea d'aria) d'ingresso di questo tentativo. Con
+  // gli anelli vuoti saltati il raggio non è derivabile dal round: servono
+  // entrambi (il round dice "entro quanto", il raggio "a che distanza").
   raggioMetri Int @default(0)
 
   invioAt           DateTime  @default(now())
@@ -999,36 +1013,24 @@ model PraticaAssegnazione {
   @@map("pratiche_assegnazioni")
 }
 
-// Distribuzione v2: parametri dell'espansione a raggio, riga singleton
-// editabile da admin (getDistribuzioneConfig(), cache-aware come il
-// tariffario). Nessuna FK: config platform-level, non per-azienda.
+// Parametri dell'espansione a raggio, riga singleton editabile da admin
+// (getDistribuzioneConfig(), cache-aware come il tariffario). Nessuna FK:
+// config platform-level, non per-azienda.
+//
+// Unità di persistenza: metri e minuti. Il form admin espone km e ore e
+// converte — nel motore non esiste ambiguità di unità.
 model DistribuzioneConfig {
   id            String   @id @default("singleton")
-  raggioStartM  Int      @default(500)
-  stepM         Int      @default(200)
+  raggioStartM  Int      @default(1000)
+  stepM         Int      @default(1000)
   raggioMaxM    Int      @default(10000)
-  intervalloMin Int      @default(10)
+  intervalloMin Int      @default(60)
   orarioInizio  String   @default("09:00")
   orarioFine    String   @default("19:00")
   giorni        String   @default("LUN,MAR,MER,GIO,VEN")
   updatedAt     DateTime @updatedAt
 
   @@map("distribuzione_config")
-}
-
-// Cache distanza stradale (pratica, sede): persiste SOLO i risultati reali
-// del provider Google (coordinate fisse → cache valida indefinitamente,
-// anche tra cicli/revoca). I fallback Haversine non vengono cachati qui.
-model RoadDistanceCache {
-  id         String   @id @default(uuid()) @db.Uuid
-  praticaId  String   @db.Uuid
-  sedeId     String   @db.Uuid
-  distanzaM  Int
-  computedAt DateTime @default(now())
-
-  @@unique([praticaId, sedeId])
-  @@index([praticaId])
-  @@map("road_distance_cache")
 }
 
 // Storico append-only dei cambi di stato di una pratica: fonte di verità per

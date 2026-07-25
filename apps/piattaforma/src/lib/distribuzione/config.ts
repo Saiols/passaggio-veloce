@@ -17,12 +17,19 @@ export type DistribuzioneConfigDTO = {
   giorni: GiornoSettimana[];
 };
 
-/** Default v2 (paper Alberto): primo anello 500m, +200m/10min, max 10km, LUN-VEN 09-19. */
+/**
+ * Default: primo anello 1 km, +1 km per round, un round all'ora, max 10 km,
+ * LUN-VEN 09-19. Fino a 10 round, che coprono ~una giornata lavorativa.
+ *
+ * Tutti e quattro i parametri di raggio/tempo sono editabili da
+ * `/admin/distribuzione`: questi valori valgono solo finché la riga singleton
+ * non esiste (o non è leggibile).
+ */
 export const DISTRIBUZIONE_DEFAULT: DistribuzioneConfigDTO = {
-  raggioStartM: 500,
-  stepM: 200,
+  raggioStartM: 1000,
+  stepM: 1000,
   raggioMaxM: 10000,
-  intervalloMin: 10,
+  intervalloMin: 60,
   orarioInizio: '09:00',
   orarioFine: '19:00',
   giorni: ['LUN', 'MAR', 'MER', 'GIO', 'VEN'],

@@ -5,27 +5,30 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
-import { getDistribuzioneConfig } from '@/lib/distribuzione/config';
-import { configDistribuzioneSchema } from './validate';
+import {
+  configDistribuzioneSchema,
+  toConfigPersistita,
+  type ConfigDistribuzioneInput,
+} from './validate';
 
 export type SalvaConfigDistribuzioneResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Salva `raggioMaxM` nella riga singleton `distribuzione_config` (Task 10).
- * Solo ADMIN_PIATTAFORMA (stesso gate di `/admin/tariffe` e
- * `/admin/monitoraggio`).
+ * Salva i parametri di raggio e tempo nella riga singleton
+ * `distribuzione_config`. Solo ADMIN_PIATTAFORMA (stesso gate di
+ * `/admin/tariffe` e `/admin/monitoraggio`).
  *
- * Cross-valida contro il `raggioStartM` corrente, letto da DB via
- * `getDistribuzioneConfig()` — non dal client — vedi il commento in
- * validate.ts sul perché.
+ * L'input arriva in km e ore (le unità del form) e viene convertito in metri e
+ * minuti da `toConfigPersistita` DOPO la validazione: i limiti e i messaggi
+ * d'errore restano espressi nelle unità che l'admin vede.
  *
  * `getDistribuzioneConfig` è avvolta in React `cache()`: dedup SOLO
- * per-request, nessuna cache persistente da invalidare esplicitamente. Il
- * prossimo request (dopo `revalidatePath`) rilegge già il valore fresco dal
- * DB — stesso pattern di `salvaTariffarioAction`.
+ * per-request, nessuna cache persistente da invalidare. Il prossimo request
+ * (dopo `revalidatePath`) rilegge già il valore fresco dal DB — stesso pattern
+ * di `salvaTariffarioAction`.
  */
 export async function salvaConfigDistribuzione(
-  raggioMaxM: number,
+  input: ConfigDistribuzioneInput,
 ): Promise<SalvaConfigDistribuzioneResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -36,20 +39,18 @@ export async function salvaConfigDistribuzione(
     };
   }
 
-  const corrente = await getDistribuzioneConfig();
-  const parsed = configDistribuzioneSchema.safeParse({
-    raggioMaxM,
-    raggioStartM: corrente.raggioStartM,
-  });
+  const parsed = configDistribuzioneSchema.safeParse(input);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     return { ok: false, error: first?.message ?? 'Dati non validi' };
   }
 
+  const data = toConfigPersistita(parsed.data);
+
   await prisma.distribuzioneConfig.upsert({
     where: { id: 'singleton' },
-    create: { id: 'singleton', raggioMaxM: parsed.data.raggioMaxM },
-    update: { raggioMaxM: parsed.data.raggioMaxM },
+    create: { id: 'singleton', ...data },
+    update: data,
   });
 
   revalidatePath('/admin/distribuzione');

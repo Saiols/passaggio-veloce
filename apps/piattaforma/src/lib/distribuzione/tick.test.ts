@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { tx, prismaMock, cfgMock, orarioMock, roadMock } = vi.hoisted(() => {
+const { tx, prismaMock, cfgMock, orarioMock } = vi.hoisted(() => {
   const tx = {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     sede: { findMany: vi.fn() },
@@ -22,14 +22,12 @@ const { tx, prismaMock, cfgMock, orarioMock, roadMock } = vi.hoisted(() => {
     prismaMock,
     cfgMock: vi.fn(),
     orarioMock: vi.fn(),
-    roadMock: vi.fn(),
   };
 });
 
 vi.mock('@pv/db', () => ({ prisma: prismaMock, Prisma: {} }));
 vi.mock('./config', () => ({ getDistribuzioneConfig: cfgMock }));
 vi.mock('./orario-piattaforma', () => ({ isOrarioLavorativo: orarioMock }));
-vi.mock('@/lib/geo/road-distance', () => ({ roadDistancesM: roadMock }));
 vi.mock('@/lib/notifiche', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
   sendNotifications: vi.fn(() => Promise.resolve()),
@@ -47,7 +45,6 @@ import { avviaRound1ForPratica, tickPratica, tickAllPraticheInDistribuzione } fr
 import { sendNotification, sendNotifications } from '@/lib/notifiche';
 import { destinatariSedeAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
-import { distanceKm } from '@/lib/geo/coords';
 
 // Origine pratica di default. `kmLat` sposta SOLO la latitudine di uno scarto tale
 // che `distanceKm` fra l'origine e il punto spostato dia esattamente `km`.
@@ -57,6 +54,8 @@ function kmLat(km: number): number {
   return LAT0 + (km / 6371) * (180 / Math.PI);
 }
 
+// Config di test: raggio iniziale e passo DIVERSI fra loro, così i test
+// distinguono davvero il primo anello (raggioStartM) dai successivi (stepM).
 const CFG = {
   raggioStartM: 500,
   stepM: 200,
@@ -78,6 +77,7 @@ function praticaTick(over: Record<string, unknown> = {}) {
     raggioCorrenteM: 500,
     ultimaEspansioneAt: null,
     zonaNonCopertaAt: null,
+    roundCorrente: 1,
     assegnazioni: [],
     ...over,
   };
@@ -91,6 +91,7 @@ function praticaSubmit(over: Record<string, unknown> = {}) {
     lat: LAT0,
     lng: LNG0,
     distribuzioneCiclo: 1,
+    roundCorrente: 0,
     assegnazioni: [],
     ...over,
   };
@@ -100,11 +101,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   cfgMock.mockResolvedValue(CFG);
   orarioMock.mockReturnValue(true);
-  // Provider mock: distanza stradale = Haversine (metri), come MockDistanceProvider.
-  roadMock.mockImplementation(
-    (_praticaId: string, origin: { lat: number; lng: number }, dests: { sedeId: string; coord: { lat: number; lng: number } }[]) =>
-      Promise.resolve(new Map(dests.map((d) => [d.sedeId, Math.round(distanceKm(origin, d.coord) * 1000)]))),
-  );
   tx.sede.findMany.mockResolvedValue([]);
   tx.praticaAssegnazione.findMany.mockResolvedValue([]);
   tx.praticaAssegnazione.updateMany.mockResolvedValue({ count: 0 });
@@ -132,7 +128,7 @@ beforeEach(() => {
   });
 });
 
-describe('avviaRound1ForPratica: primo anello al submit (raggioStartM)', () => {
+describe('avviaRound1ForPratica: primo round al submit', () => {
   it('seleziona SEDI agenzia attive per raggio-km (where), non Company', async () => {
     tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
     tx.sede.findMany.mockResolvedValue([
@@ -163,12 +159,13 @@ describe('avviaRound1ForPratica: primo anello al submit (raggioStartM)', () => {
       agenziaId: c[0].data.agenziaId,
       sedeId: c[0].data.sedeId,
       raggioMetri: c[0].data.raggioMetri,
+      round: c[0].data.round,
       esito: c[0].data.esito,
     }));
     expect(pairs).toHaveLength(3);
-    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1', raggioMetri: 500, esito: 'PENDING' });
-    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2', raggioMetri: 500, esito: 'PENDING' });
-    expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3', raggioMetri: 500, esito: 'PENDING' });
+    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's1', raggioMetri: 500, round: 1, esito: 'PENDING' });
+    expect(pairs).toContainEqual({ agenziaId: 'm1', sedeId: 's2', raggioMetri: 500, round: 1, esito: 'PENDING' });
+    expect(pairs).toContainEqual({ agenziaId: 'm2', sedeId: 's3', raggioMetri: 500, round: 1, esito: 'PENDING' });
     expect(res.stato).toBe('IN_DISTRIBUZIONE');
     expect(res.assegnazioni).toBe(3);
     expect(tx.pratica.update).toHaveBeenCalledWith(
@@ -178,12 +175,15 @@ describe('avviaRound1ForPratica: primo anello al submit (raggioStartM)', () => {
           raggioCorrenteM: 500,
           ultimaEspansioneAt: expect.any(Date),
           zonaNonCopertaAt: null,
+          roundCorrente: 1,
         }),
       }),
     );
   });
 
-  it('nessuna sede entro 500 m (sede a 600 m) → nessuna notifica, ultimaEspansioneAt = null', async () => {
+  // Il punto 2 della richiesta: un round vuoto non fa aspettare. Prima questa
+  // pratica non notificava nessuno e restava ferma fino al primo tick del cron.
+  it('raggio iniziale vuoto (sede a 600 m): notifica SUBITO al primo anello non vuoto (700 m), resta round 1', async () => {
     tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
     tx.sede.findMany.mockResolvedValue([
       { id: 'sLontana', lat: kmLat(0.6), lng: LNG0, companyId: 'mL' },
@@ -191,20 +191,55 @@ describe('avviaRound1ForPratica: primo anello al submit (raggioStartM)', () => {
 
     const res = await avviaRound1ForPratica('p1');
 
-    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
-    expect(res.assegnazioni).toBe(0);
+    expect(res.assegnazioni).toBe(1);
+    expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ sedeId: 'sLontana', raggioMetri: 700, round: 1 }),
+      }),
+    );
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           stato: 'IN_DISTRIBUZIONE',
-          raggioCorrenteM: 500,
-          ultimaEspansioneAt: null,
+          raggioCorrenteM: 700,
+          ultimaEspansioneAt: expect.any(Date),
+          roundCorrente: 1,
         }),
       }),
     );
+    // La query candidati guarda fino al raggio MASSIMO, non a quello iniziale:
+    // è ciò che permette di saltare gli anelli vuoti in un colpo solo.
+    expect(tx.sede.findMany).toHaveBeenCalledTimes(1);
   });
 
-  it('pratica senza coordinate: nessuna query sede, nessuna assegnazione, entra comunque in distribuzione', async () => {
+  it('nessuna sede entro il raggio massimo (sede a 12 km) → zona non coperta subito + N52, nessuna assegnazione', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaSubmit());
+    tx.sede.findMany.mockResolvedValue([
+      { id: 'sFuoriZona', lat: kmLat(12), lng: LNG0, companyId: 'mF' },
+    ]);
+
+    const res = await avviaRound1ForPratica('p1');
+
+    expect(res.assegnazioni).toBe(0);
+    expect(res.stato).toBe('IN_DISTRIBUZIONE');
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          stato: 'IN_DISTRIBUZIONE',
+          raggioCorrenteM: 10000,
+          zonaNonCopertaAt: expect.any(Date),
+          ultimaEspansioneAt: null,
+          roundCorrente: 0,
+        }),
+      }),
+    );
+    expect(sendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
+    );
+  });
+
+  it('pratica senza coordinate: nessuna query sede, nessuna assegnazione, zona non coperta', async () => {
     tx.pratica.findUnique.mockResolvedValue(praticaSubmit({ lat: null, lng: null }));
 
     const res = await avviaRound1ForPratica('p1');
@@ -214,7 +249,33 @@ describe('avviaRound1ForPratica: primo anello al submit (raggioStartM)', () => {
     expect(res.assegnazioni).toBe(0);
     expect(res.stato).toBe('IN_DISTRIBUZIONE');
     expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ ultimaEspansioneAt: null }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ultimaEspansioneAt: null,
+          zonaNonCopertaAt: expect.any(Date),
+        }),
+      }),
+    );
+  });
+
+  it('ricircolo dopo revoca (ciclo 2): il round riparte da 1', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaSubmit({
+        stato: 'IN_DISTRIBUZIONE',
+        distribuzioneCiclo: 2,
+        roundCorrente: 0,
+        assegnazioni: [{ sedeId: 'sRevocata', ciclo: 1, esito: 'REVOCATA_ADMIN' }],
+      }),
+    );
+    tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: LAT0, lng: LNG0, companyId: 'm1' }]);
+
+    await avviaRound1ForPratica('p1');
+
+    expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ round: 1, ciclo: 2 }) }),
+    );
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ roundCorrente: 1 }) }),
     );
   });
 });
@@ -387,14 +448,14 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
   });
 
-  it('in orario ma ultima espansione 3 min fa → noop finestra 10min', async () => {
+  it('in orario ma ultima espansione 3 min fa → noop, durata round non trascorsa', async () => {
     tx.pratica.findUnique.mockResolvedValue(
       praticaTick({ ultimaEspansioneAt: new Date(NOW.getTime() - 3 * 60_000) }),
     );
 
     const res = await tickPratica('p1');
 
-    expect(res).toEqual({ status: 'noop', reason: 'finestra 10min' });
+    expect(res).toEqual({ status: 'noop', reason: 'durata round non trascorsa' });
     expect(tx.sede.findMany).not.toHaveBeenCalled();
     expect(tx.pratica.update).not.toHaveBeenCalled();
   });
@@ -407,7 +468,7 @@ describe('tickPratica: espansione a raggio incrementale', () => {
 
     const res = await tickPratica('p1');
 
-    expect(res).toEqual({ status: 'noop', reason: 'finestra 10min' });
+    expect(res).toEqual({ status: 'noop', reason: 'durata round non trascorsa' });
     expect(tx.sede.findMany).not.toHaveBeenCalled();
   });
 
@@ -419,7 +480,7 @@ describe('tickPratica: espansione a raggio incrementale', () => {
 
     const res = await tickPratica('p1');
 
-    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 700 });
+    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 700, round: 2 });
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ raggioCorrenteM: 700, ultimaEspansioneAt: NOW }),
@@ -427,41 +488,60 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     );
   });
 
-  it('anello successivo con sedi → assegnazioni (raggioMetri = raggio raggiunto, PENDING), avanza raggio + ultimaEspansioneAt, coda N6', async () => {
-    tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500 }));
+  it('anello successivo con sedi → assegnazioni (raggioMetri = raggio raggiunto, PENDING), avanza raggio + round + ultimaEspansioneAt, coda N6', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500, roundCorrente: 1 }));
     tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
 
     const res = await tickPratica('p1');
 
     // 650 m: primo anello che la include partendo da 500 è 700.
-    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 700 });
+    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 700, round: 2 });
     expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ sedeId: 's1', raggioMetri: 700, esito: 'PENDING', ciclo: 1 }),
+        data: expect.objectContaining({
+          sedeId: 's1',
+          raggioMetri: 700,
+          round: 2,
+          esito: 'PENDING',
+          ciclo: 1,
+        }),
       }),
     );
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ raggioCorrenteM: 700, ultimaEspansioneAt: NOW }),
+        data: expect.objectContaining({
+          raggioCorrenteM: 700,
+          ultimaEspansioneAt: NOW,
+          roundCorrente: 2,
+        }),
       }),
     );
     expect(sendNotifications).toHaveBeenCalledTimes(1); // N6
     expect(sendNotification).not.toHaveBeenCalled(); // niente N52
   });
 
-  it('anelli vuoti intermedi → skip in un solo tick: raggioCorrenteM salta al primo non vuoto (1300 per sede a 1150 m)', async () => {
-    tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500 }));
+  // Il round conta le notifiche, non i raggi: 3 anelli attraversati, 1 round.
+  it('anelli vuoti intermedi → skip in un solo tick: raggio salta a 1300 (sede a 1150 m) ma il round avanza di UNO solo', async () => {
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ raggioCorrenteM: 500, roundCorrente: 1 }));
     tx.sede.findMany.mockResolvedValue([{ id: 'sMedia', lat: kmLat(1.15), lng: LNG0, companyId: 'mM' }]);
 
     const res = await tickPratica('p1');
 
-    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 1300 });
+    expect(res).toEqual({ status: 'notified', assegnazioni: 1, raggioM: 1300, round: 2 });
     expect(tx.praticaAssegnazione.create).toHaveBeenCalledTimes(1);
     expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ sedeId: 'sMedia', raggioMetri: 1300 }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ sedeId: 'sMedia', raggioMetri: 1300, round: 2 }),
+      }),
     );
     expect(tx.pratica.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ raggioCorrenteM: 1300, ultimaEspansioneAt: NOW }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          raggioCorrenteM: 1300,
+          ultimaEspansioneAt: NOW,
+          roundCorrente: 2,
+        }),
+      }),
     );
   });
 

@@ -34,12 +34,12 @@ describe('PRATICHE_GRID — le tracce combaciano con le celle visibili', () => {
     });
   });
 
-  it('admin: nessuna colonna nuova su sm, broker+agenzia da md, sede+fee da lg', () => {
+  it('admin: nessuna colonna nuova su sm, broker+agenzia da md, sede+round+fee da lg', () => {
     expect(traccePerBreakpoint(PRATICHE_GRID.admin)).toEqual({
       base: 4,
       sm: 4,
       md: 6,
-      lg: 8,
+      lg: 9,
     });
   });
 });

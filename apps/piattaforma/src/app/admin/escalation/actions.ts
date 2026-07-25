@@ -10,6 +10,7 @@ import { emitEventoPratica } from '@/lib/eventi/emit';
 import { eventoPraticaAssegnata } from '@/lib/eventi/pratica-eventi';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
+import { ESCALATION_ROUND } from '@/lib/distribuzione/constants';
 
 export type AssignResult = { ok: true } | { ok: false; error: string };
 
@@ -21,12 +22,6 @@ type NotificaData = {
   provincia: string | null;
   feeCent: number;
 };
-
-/**
- * Round convenzionale per le assegnazioni manuali da parte dell'admin.
- * Valore alto per non collidere con i round 1/2/3 standard.
- */
-const ESCALATION_ROUND = 99;
 
 export async function assegnaEscalationAction(
   praticaId: string,
@@ -153,7 +148,6 @@ export async function assegnaEscalationAction(
             comune: notificaData.comune,
             provincia: notificaData.provincia,
             feeCent: notificaData.feeCent,
-            round: ESCALATION_ROUND,
             altreAgenzie: 0,
             countdownFineAt: null,
             nomeAgenzia: notificaData.agenziaRagioneSociale,

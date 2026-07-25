@@ -163,6 +163,9 @@ export default async function AdminPratichePage({
                   <div className="hidden px-3 py-3 md:block">Agenzia</div>
                   <div className="hidden px-3 py-3 lg:block">Sede</div>
                   <div className="px-3 py-3">Stato</div>
+                  <div className="hidden px-3 py-3 lg:block" title="Round in cui è stata accettata">
+                    Round
+                  </div>
                   <div className="hidden px-3 py-3 lg:block">Fee</div>
                   <div className="py-3 pl-3 pr-5 text-right">
                     {isTabAttesaFirma ? 'In attesa da' : 'Quando'}
@@ -217,6 +220,9 @@ export default async function AdminPratichePage({
                         <span className="relative z-10 inline-flex flex-wrap items-center gap-2">
                           <StatusChip stato={p.stato as PraticaStato} />
                         </span>
+                      </div>
+                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
+                        {p.roundAccettazione ?? '—'}
                       </div>
                       <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
                         {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}

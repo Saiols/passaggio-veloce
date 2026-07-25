@@ -86,10 +86,15 @@ export async function revocaERimettiInCircoloAction(
           accettataAt: null,
           accettataDaUserId: null,
           distribuzioneCiclo: nuovoCiclo,
-          // Reset stato espansione v2 (ring1 li reimposta correttamente).
+          // Reset stato espansione (ring1 li reimposta correttamente).
           raggioCorrenteM: null,
           ultimaEspansioneAt: null,
           zonaNonCopertaAt: null,
+          // Il round è relativo al ciclo: il nuovo giro riparte da 1 e la
+          // pratica non è più accettata, quindi il round di accettazione del
+          // ciclo revocato non deve sopravvivergli (falserebbe la media).
+          roundCorrente: 0,
+          roundAccettazione: null,
           // Colonne timeline legacy: azzerate per pulizia (non più prodotte).
           round1StartedAt: null,
           round2StartedAt: null,

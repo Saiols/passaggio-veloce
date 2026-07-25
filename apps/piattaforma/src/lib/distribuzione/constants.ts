@@ -11,3 +11,14 @@ export const RANKING = {
   MIN_RATINGS_FOR_RANK: 5,
   LOW_RATING_THRESHOLD: 2.5,
 } as const;
+
+/**
+ * Round convenzionale delle assegnazioni create a mano dall'admin
+ * (`/admin/escalation`). Valore alto per non collidere con i round reali della
+ * distribuzione, che partono da 1 e crescono di uno per batch notificato.
+ *
+ * Le pratiche accettate su un'assegnazione con questo round sono **escluse**
+ * dalla media dei round (`lib/distribuzione/statistiche.ts`): un'assegnazione
+ * manuale non dice nulla sulla velocità della distribuzione automatica.
+ */
+export const ESCALATION_ROUND = 99;

@@ -2,11 +2,13 @@ import 'server-only';
 import { prisma, type Prisma, type PrismaClient } from '@pv/db';
 import { getDistribuzioneConfig, type DistribuzioneConfigDTO } from './config';
 import { isOrarioLavorativo } from './orario-piattaforma';
-import { prossimoAnello, type SedeConDistanza } from './anelli';
+import { primoAnello, prossimoAnello, type SedeConDistanza } from './anelli';
 import { sediDaEscludere } from './esclusioni';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
 import { distanceKm } from '@/lib/geo/coords';
-import { roadDistancesM, type LatLng } from '@/lib/geo/road-distance';
+
+/** Coppia di coordinate (origine pratica o sede). */
+export type LatLng = { lat: number; lng: number };
 import {
   sendNotification,
   sendNotifications,
@@ -19,19 +21,19 @@ import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 
 export type TickResult =
   | { status: 'noop'; reason: string }
-  | { status: 'notified'; assegnazioni: number; raggioM: number }
+  | { status: 'notified'; assegnazioni: number; raggioM: number; round: number }
   | { status: 'zona-non-coperta' }
   | { status: 'closed'; finalStato: 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
 
 const STATI_TERMINALI = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as const;
 
 /**
- * Grazia (min) sul gate dei 10 minuti. Il cron gira ogni `intervalloMin` (10),
- * ma con jitter dello scheduler un tick può arrivare a T+9,9min: senza grazia
- * il gate `minutesSince < intervalloMin` lo respingerebbe e l'espansione
- * slitterebbe al giro dopo (~T+20min invece di ~T+10). La grazia assorbe il
- * jitter (gate su `< intervalloMin - GRACE`) senza mai anticipare in modo
- * sensibile la cadenza reale.
+ * Grazia (min) sul gate della durata round. Il cron gira ogni 10 minuti, ma con
+ * jitter dello scheduler un tick può arrivare appena prima della scadenza:
+ * senza grazia il gate `minutesSince < intervalloMin` lo respingerebbe e il
+ * round slitterebbe di un intero giro di cron. La grazia assorbe il jitter
+ * (gate su `< intervalloMin - GRACE`) senza mai anticipare in modo sensibile
+ * la cadenza reale.
  */
 const ESPANSIONE_GRACE_MIN = 1;
 
@@ -65,23 +67,18 @@ type PraticaCandidati = {
 };
 
 /**
- * Sedi agenzia candidate con distanza STRADALE (m) entro `sogliaM`, escluse
- * quelle già contattate nel ciclo / revocate permanentemente.
+ * Sedi agenzia candidate con distanza in LINEA D'ARIA (m) entro `sogliaM`,
+ * escluse quelle già contattate nel ciclo / revocate permanentemente.
  *
- * ⚠️ Gira SEMPRE FUORI da `prisma.$transaction`: contiene una chiamata di rete
- * (Google Distance Matrix, AbortController 8s in `roadDistancesM`) che, dentro
- * la tx interattiva (timeout default 5s), la abortirebbe (P2028) — vedi la
- * riscrittura di `tickPratica`/`avviaRound1ForPratica`. Il `client` passato è
- * quindi il client base: la scrittura in cache di `roadDistancesM` persiste
- * anche se la tx corta successiva fa rollback (niente ricorsione).
+ * Il raggio è per definizione in linea d'aria: `distanceKm` (Haversine) è la
+ * misura, non un prefiltro di un calcolo stradale. Nessuna chiamata di rete,
+ * quindi nessun rischio di P2028 — la funzione resta comunque chiamata FUORI
+ * da `prisma.$transaction` perché il compare-and-set della tx corta, che
+ * protegge da accettazioni/revoche in race, si basa sui candidati calcolati
+ * prima di aprirla.
  *
- * Query `where` invariata rispetto al motore precedente (AGENZIA, non
- * deleted/suspended, coord presenti, company non bloccata e con visura valida,
- * `id notIn sediDaEscludere`). Poi il prefiltro Haversine (`distanceKm ≤
- * sogliaM`, superset garantito perché la strada è sempre ≥ della linea d'aria)
- * limita le chiamate al provider stradale; `roadDistancesM` (cache + Google +
- * fail-open Haversine) dà i metri reali; si tengono solo le sedi con stradale
- * ≤ sogliaM.
+ * Query `where` invariata: AGENZIA, non deleted/suspended, coord presenti,
+ * company non bloccata e con visura valida, `id notIn sediDaEscludere`.
  */
 async function candidatiEntro(
   client: DistribClient,
@@ -113,28 +110,12 @@ async function candidatiEntro(
     select: { id: true, lat: true, lng: true, companyId: true },
   });
 
-  // Prefiltro Haversine: condizione necessaria (strada ≥ linea d'aria) → superset.
-  const sogliaKm = sogliaM / 1000;
-  const prefiltrate = sediIdonee.filter(
-    (s) =>
-      s.lat != null &&
-      s.lng != null &&
-      distanceKm(origine, { lat: s.lat, lng: s.lng }) <= sogliaKm,
-  );
-  if (prefiltrate.length === 0) return [];
-
-  const distanze = await roadDistancesM(
-    pratica.id,
-    origine,
-    prefiltrate.map((s) => ({ sedeId: s.id, coord: { lat: s.lat!, lng: s.lng! } })),
-    client,
-  );
-
   const out: SedeConDistanza[] = [];
-  for (const s of prefiltrate) {
-    const d = distanze.get(s.id);
-    if (d != null && d <= sogliaM) {
-      out.push({ sedeId: s.id, companyId: s.companyId, distanzaM: d });
+  for (const s of sediIdonee) {
+    if (s.lat == null || s.lng == null) continue;
+    const distanzaM = Math.round(distanceKm(origine, { lat: s.lat, lng: s.lng }) * 1000);
+    if (distanzaM <= sogliaM) {
+      out.push({ sedeId: s.id, companyId: s.companyId, distanzaM });
     }
   }
   return out;
@@ -143,11 +124,15 @@ async function candidatiEntro(
 /**
  * Crea le PraticaAssegnazione PENDING per le sedi dell'anello raggiunto.
  * Ritorna gli id creati (per la N6 post-commit).
+ *
+ * `round` è il numero del batch, non del raggio: gli anelli vuoti attraversati
+ * per arrivare a `raggioM` non lo hanno fatto avanzare.
  */
 async function creaAssegnazioni(
   tx: Prisma.TransactionClient,
   praticaId: string,
   ciclo: number,
+  round: number,
   raggioM: number,
   sedi: SedeConDistanza[],
   now: Date,
@@ -159,9 +144,7 @@ async function creaAssegnazioni(
         praticaId,
         agenziaId: s.companyId, // madre (colonna legacy, NOT NULL)
         sedeId: s.sedeId,
-        // `round` resta NOT NULL nello schema: la v2 non ha più round, il
-        // raggio d'ingresso vive in `raggioMetri`. Valore fisso 1 per le righe v2.
-        round: 1,
+        round,
         ciclo,
         raggioMetri: raggioM,
         esito: 'PENDING',
@@ -208,10 +191,10 @@ function isUniqueViolation(e: unknown): boolean {
 /**
  * Tick di espansione per UNA pratica in distribuzione.
  *
- * Struttura anti-P2028 (nessuna I/O di rete dentro la tx):
+ * Struttura in tre fasi (la tx resta corta e senza I/O):
  *  1. FUORI tx: config + lettura pratica + guardie (terminale/stato/zona non
- *     coperta/coord-null) + gate orario + gate 10 min → noop early.
- *  2. FUORI tx: `candidatiEntro` (query sede + Haversine + chiamata stradale).
+ *     coperta/coord-null) + gate orario + gate durata round → noop early.
+ *  2. FUORI tx: `candidatiEntro` (query sede + distanza in linea d'aria).
  *  3. Tx CORTA: re-legge la pratica fresca, ri-verifica le guardie e che
  *     `raggioCorrenteM`/`distribuzioneCiclo` non siano cambiati (accept/tick/
  *     revoca in race → noop, nessuna scrittura), ricalcola le esclusioni sulle
@@ -265,15 +248,17 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
     return noop('fuori orario');
   }
 
-  // Gate 10 min (con grazia): se l'ultima notifica è troppo recente, attendi.
+  // Gate durata round (con grazia): se l'ultima notifica è troppo recente,
+  // attendi. Solo le notifiche reali muovono `ultimaEspansioneAt`, quindi un
+  // round vuoto non consuma tempo.
   if (
     pratica.ultimaEspansioneAt &&
     minutesSince(now, pratica.ultimaEspansioneAt) < cfg.intervalloMin - ESPANSIONE_GRACE_MIN
   ) {
-    return noop('finestra 10min');
+    return noop('durata round non trascorsa');
   }
 
-  // ---- Step 2: candidati (query sede + Haversine + chiamata stradale) FUORI tx ----
+  // ---- Step 2: candidati (query sede + distanza in linea d'aria) FUORI tx ----
   const origine: LatLng = { lat: pratica.lat, lng: pratica.lng };
   const candidati = await candidatiEntro(prisma, pratica, origine, cfg.raggioMaxM, now);
 
@@ -312,27 +297,40 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
       );
 
       if (res.tipo === 'notifica') {
+        // Il round avanza SOLO qui, dove parte un batch reale: gli anelli vuoti
+        // attraversati da `prossimoAnello` non lo consumano.
+        const round = fresh.roundCorrente + 1;
         const newIds = await creaAssegnazioni(
           tx,
           praticaId,
           fresh.distribuzioneCiclo,
+          round,
           res.raggioRaggiuntoM,
           res.sedi,
           now,
         );
         await tx.pratica.update({
           where: { id: praticaId },
-          data: { raggioCorrenteM: res.raggioRaggiuntoM, ultimaEspansioneAt: now },
+          data: {
+            raggioCorrenteM: res.raggioRaggiuntoM,
+            ultimaEspansioneAt: now,
+            roundCorrente: round,
+          },
         });
         await logCambioStato(tx, {
           praticaId,
           statoDa: 'IN_DISTRIBUZIONE',
           statoA: 'IN_DISTRIBUZIONE',
           tipoEvento: STATO_EVENTO.ROUND_ADVANCE,
-          meta: { raggioM: res.raggioRaggiuntoM, ciclo: fresh.distribuzioneCiclo },
+          meta: { raggioM: res.raggioRaggiuntoM, round, ciclo: fresh.distribuzioneCiclo },
         });
         return {
-          result: { status: 'notified', assegnazioni: newIds.length, raggioM: res.raggioRaggiuntoM },
+          result: {
+            status: 'notified',
+            assegnazioni: newIds.length,
+            raggioM: res.raggioRaggiuntoM,
+            round,
+          },
           jobs: { newAssegnazioniIds: newIds, zonaNonCopertaPraticaId: null },
         };
       }
@@ -382,15 +380,19 @@ async function scriviZonaNonCoperta(
 }
 
 /**
- * Primo anello al submit (o al ricircolo dopo revoca): porta la pratica in
- * `IN_DISTRIBUZIONE`, `raggioCorrenteM = raggioStartM`, e contatta le sedi entro
- * il raggio iniziale. **Ignora l'orario lavorativo** (il primo anello parte a
- * qualsiasi ora). Se nessuna sede è in zona → nessuna notifica e
- * `ultimaEspansioneAt = null` (il primo tick in orario espanderà subito).
+ * Primo round al submit (o al ricircolo dopo revoca): porta la pratica in
+ * `IN_DISTRIBUZIONE` e contatta le sedi del primo anello NON VUOTO, partendo da
+ * `raggioStartM` ed espandendo a step fino a `raggioMaxM` — un raggio iniziale
+ * senza agenzie non fa aspettare il primo tick del cron. **Ignora l'orario
+ * lavorativo** (il primo round parte a qualsiasi ora).
  *
- * Come `tickPratica`: la query candidati (con chiamata di rete stradale) gira
- * FUORI dalla tx; la tx corta re-legge la pratica (esclusioni fresche + filtro)
- * e fa solo le scritture.
+ * Se nemmeno il raggio massimo contiene una sede, la pratica è dichiarata zona
+ * non coperta subito: il broker riceve la N52 al submit, non al primo tick
+ * utile. Stesso esito per una pratica senza coordinate (guardia difensiva: il
+ * submit le rende obbligatorie).
+ *
+ * Come `tickPratica`: la query candidati gira FUORI dalla tx; la tx corta
+ * re-legge la pratica (esclusioni fresche + filtro) e fa solo le scritture.
  *
  * Nome storicamente `avviaRound1ForPratica`: MANTENUTO perché il submit e la
  * revoca lo importano.
@@ -410,11 +412,12 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
   });
   if (!pratica) throw new Error('Pratica non trovata');
 
-  // ---- Step 2: candidati (query sede + rete) FUORI tx, solo se coord presenti ----
+  // ---- Step 2: candidati FUORI tx, fino al raggio MASSIMO (non più solo il
+  // raggio iniziale): serve a saltare in un colpo solo gli anelli vuoti. ----
   let candidati: SedeConDistanza[] = [];
   if (pratica.lat != null && pratica.lng != null) {
     const origine: LatLng = { lat: pratica.lat, lng: pratica.lng };
-    candidati = await candidatiEntro(prisma, pratica, origine, cfg.raggioStartM, now);
+    candidati = await candidatiEntro(prisma, pratica, origine, cfg.raggioMaxM, now);
   }
 
   // ---- Step 3: tx CORTA — re-read (esclusioni fresche + filtro), scritture ----
@@ -428,26 +431,64 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
 
     const escludere = new Set(sediDaEscludere(fresh));
     const candidatiFiltrati = candidati.filter((c) => !escludere.has(c.sedeId));
-    const newIds =
-      candidatiFiltrati.length > 0
-        ? await creaAssegnazioni(
-            tx,
-            praticaId,
-            fresh.distribuzioneCiclo,
-            cfg.raggioStartM,
-            candidatiFiltrati,
-            now,
-          )
-        : [];
+    const res = primoAnello(candidatiFiltrati, cfg);
+
+    if (res.tipo === 'zona-non-coperta') {
+      await tx.pratica.update({
+        where: { id: praticaId },
+        data: {
+          stato: 'IN_DISTRIBUZIONE',
+          raggioCorrenteM: cfg.raggioMaxM,
+          ultimaEspansioneAt: null,
+          zonaNonCopertaAt: now,
+          // Nessun batch notificato: il round resta a 0 per questo ciclo.
+          roundCorrente: 0,
+        },
+      });
+      await logCambioStato(tx, {
+        praticaId,
+        statoDa,
+        statoA: 'IN_DISTRIBUZIONE',
+        tipoEvento: STATO_EVENTO.SUBMIT,
+        // La chiave `motivo` va OMESSA quando non si applica, non messa a
+        // `undefined`: Prisma rifiuta `undefined` dentro un campo JSON.
+        meta: {
+          zonaNonCoperta: true,
+          raggioM: cfg.raggioMaxM,
+          ciclo: fresh.distribuzioneCiclo,
+          assegnazioni: 0,
+          ...(pratica.lat == null || pratica.lng == null
+            ? { motivo: 'coordinate-mancanti' }
+            : {}),
+        },
+      });
+      return {
+        result: { assegnazioni: 0, stato: 'IN_DISTRIBUZIONE', newAssegnazioniIds: [] },
+        jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId },
+      };
+    }
+
+    // Primo batch del ciclo: il round riparte sempre da 1, anche dopo un
+    // ricircolo (`distribuzioneCiclo` incrementato dalla revoca admin).
+    const round = 1;
+    const newIds = await creaAssegnazioni(
+      tx,
+      praticaId,
+      fresh.distribuzioneCiclo,
+      round,
+      res.raggioRaggiuntoM,
+      res.sedi,
+      now,
+    );
 
     await tx.pratica.update({
       where: { id: praticaId },
       data: {
         stato: 'IN_DISTRIBUZIONE',
-        raggioCorrenteM: cfg.raggioStartM,
-        // Solo se abbiamo davvero notificato: altrimenti null → il primo tick espande.
-        ultimaEspansioneAt: newIds.length > 0 ? now : null,
+        raggioCorrenteM: res.raggioRaggiuntoM,
+        ultimaEspansioneAt: now,
         zonaNonCopertaAt: null,
+        roundCorrente: round,
       },
     });
 
@@ -456,7 +497,12 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
       statoDa,
       statoA: 'IN_DISTRIBUZIONE',
       tipoEvento: STATO_EVENTO.SUBMIT,
-      meta: { raggioM: cfg.raggioStartM, ciclo: fresh.distribuzioneCiclo, assegnazioni: newIds.length },
+      meta: {
+        raggioM: res.raggioRaggiuntoM,
+        round,
+        ciclo: fresh.distribuzioneCiclo,
+        assegnazioni: newIds.length,
+      },
     });
 
     return {
@@ -579,7 +625,6 @@ async function emitN6ForAssegnazioni(assegnazioneIds: string[]): Promise<void> {
             comune: a.pratica.comune,
             provincia: a.pratica.provincia,
             feeCent: a.pratica.feeAgenziaCent,
-            round: a.round,
             altreAgenzie: Math.max(0, batchTotal - 1),
             countdownFineAt: a.countdownFineAt,
             nomeAgenzia: a.agenzia.ragioneSociale,

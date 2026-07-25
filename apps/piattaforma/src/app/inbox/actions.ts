@@ -111,6 +111,11 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
           agenziaAssegnataId: assegnazione.agenziaId,
           agenziaSedeId: assegnazione.sedeId,
           accettataAt: now,
+          // Round in cui la pratica è stata presa: dato admin-only, alimenta la
+          // media "entro quanto vengono accettate" (/admin/distribuzione).
+          // Scritto qui, sotto il row lock, così non esiste un istante in cui
+          // la pratica è ACCETTATA senza il round che l'ha portata lì.
+          roundAccettazione: assegnazione.round,
           // Chi accetta è chi seguirà la pratica: le email successive (promemoria
           // firma, segnalazione confermata) devono arrivare a lui, non alla madre.
           accettataDaUserId: session.user.id,
@@ -123,7 +128,7 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
         statoA: 'ACCETTATA',
         tipoEvento: STATO_EVENTO.ACCEPT,
         attoreUserId: session.user.id,
-        meta: { sedeId: assegnazione.sedeId },
+        meta: { sedeId: assegnazione.sedeId, round: assegnazione.round },
       });
     });
   } catch (err) {

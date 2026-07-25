@@ -14,7 +14,7 @@ const FLAG_LABELS: Record<CollusionFlag, string> = {
   SAME_IBAN: 'Stesso IBAN',
   SAME_IP_SIGNUP: 'Stesso IP di signup',
   SAME_EMAIL_DOMAIN: 'Stesso dominio email aziendale',
-  SAME_ADMIN: 'Stesso utente admin condiviso',
+  SAME_ADMIN: 'Stesso amministratore (codice fiscale) tra le due aziende',
 };
 
 /** Etichetta umana per ogni flag (UI admin). */

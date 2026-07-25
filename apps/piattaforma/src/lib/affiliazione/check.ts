@@ -123,31 +123,37 @@ export async function detectCollusion(
     flags.push('SAME_EMAIL_DOMAIN');
   }
 
-  // SAME_ADMIN: stesso utente admin tra le due company (multi-tenancy
-  // dovrebbe escluderlo, ma controllo difensivo).
-  const sharedAdmin = await tx.user.findFirst({
-    where: {
-      role: 'ADMIN_AZIENDA',
-      deletedAt: null,
-      companyId: { in: [referenteCompanyId, referralCompanyId] },
-    },
-    select: { email: true, companyId: true },
-  });
-  if (sharedAdmin) {
-    // Cerca un admin la cui email è anche admin dell'altra company
-    const otherAdmin = await tx.user.findFirst({
-      where: {
-        role: 'ADMIN_AZIENDA',
-        deletedAt: null,
-        email: sharedAdmin.email,
-        companyId: {
-          in: [referenteCompanyId, referralCompanyId],
-          not: sharedAdmin.companyId,
-        },
-      },
-      select: { id: true },
-    });
-    if (otherAdmin) flags.push('SAME_ADMIN');
+  // SAME_ADMIN: stessa persona fisica admin di entrambe le company. Prima
+  // dell'unicità globale dell'email (2026-07-25) il match si faceva
+  // sull'email dell'ADMIN_AZIENDA; da quella migration un'email identifica un
+  // solo account su tutta la piattaforma, quindi la stessa persona non può
+  // più comparire due volte con la stessa email e quel confronto non
+  // scattava mai più. Il match va fatto sul codice fiscale, che identifica la
+  // persona fisica indipendentemente dall'account con cui si è registrata.
+  const [refAdmins, reflAdmins] = await Promise.all([
+    tx.user.findMany({
+      where: { role: 'ADMIN_AZIENDA', deletedAt: null, companyId: referenteCompanyId },
+      select: { codiceFiscale: true },
+    }),
+    tx.user.findMany({
+      where: { role: 'ADMIN_AZIENDA', deletedAt: null, companyId: referralCompanyId },
+      select: { codiceFiscale: true },
+    }),
+  ]);
+  // codiceFiscale è nullable: due admin entrambi senza CF non sono un match
+  // (null == null non è un'identità condivisa), quindi i null vanno esclusi
+  // PRIMA del confronto, non trattati come un valore qualunque.
+  const cfSet = (admins: { codiceFiscale: string | null }[]): Set<string> =>
+    new Set(
+      admins
+        .map((a) => a.codiceFiscale)
+        .filter((cf): cf is string => !!cf)
+        .map((cf) => cf.toUpperCase()),
+    );
+  const refCf = cfSet(refAdmins);
+  const reflCf = cfSet(reflAdmins);
+  if ([...refCf].some((cf) => reflCf.has(cf))) {
+    flags.push('SAME_ADMIN');
   }
 
   return flags;

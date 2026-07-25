@@ -53,7 +53,7 @@ const {
     prismaMock: {
       company: { findUnique: vi.fn(), update: vi.fn() },
       wallet: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
-      payout: { findMany: vi.fn(), update: vi.fn(), findUnique: vi.fn() },
+      payout: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
       user: { updateMany: vi.fn() },
       $transaction: vi.fn((arg: unknown) => {
         if (typeof arg === 'function') {
@@ -85,7 +85,7 @@ vi.mock('@/lib/providers/payment', () => ({ getPayment: getPaymentMock }));
 import { deleteCompanyAction } from './suspension-actions';
 
 /** Stato della riga residua 'payout-R', l'unica cosa che questo test traccia. */
-let statoR: 'RICHIESTO' | 'IN_LAVORAZIONE' | 'ESEGUITO' = 'RICHIESTO';
+let statoR: 'RICHIESTO' | 'IN_LAVORAZIONE' | 'ESEGUITO' | 'FALLITO' = 'RICHIESTO';
 
 function mockCompanyFindUnique() {
   prismaMock.company.findUnique.mockImplementation(
@@ -114,13 +114,31 @@ beforeEach(() => {
   prismaMock.payout.findMany.mockResolvedValue([{ id: RESIDUO_ID, walletId: WALLET_ID }]);
   prismaMock.wallet.findMany.mockResolvedValue([{ id: WALLET_ID }]);
 
-  // Transizione a IN_LAVORAZIONE della riga residua (nuovo codice, top-level
-  // prisma.payout.update — DIVERSO da tx.payout.update usato dentro
-  // settlePayout per marcare ESEGUITO).
-  prismaMock.payout.update.mockImplementation(({ where, data }: { where: { id: string }; data: { stato: string } }) => {
-    if (where.id === RESIDUO_ID && data.stato === 'IN_LAVORAZIONE') statoR = 'IN_LAVORAZIONE';
-    return Promise.resolve({});
-  });
+  // Transizione a IN_LAVORAZIONE della riga residua (nuovo codice: compare-
+  // and-set con prisma.payout.updateMany, condizionato a stato RICHIESTO —
+  // DIVERSO da tx.payout.update usato dentro settlePayout per marcare
+  // ESEGUITO, e da prisma.payout.update sotto, usato da settlePayout per
+  // marcare FALLITO).
+  prismaMock.payout.updateMany.mockImplementation(
+    ({ where, data }: { where: { id: string; stato?: string }; data: { stato: string } }) => {
+      if (where.id === RESIDUO_ID && data.stato === 'IN_LAVORAZIONE' && statoR === 'RICHIESTO') {
+        statoR = 'IN_LAVORAZIONE';
+        return Promise.resolve({ count: 1 });
+      }
+      return Promise.resolve({ count: 0 });
+    },
+  );
+
+  // settlePayout (top-level, fuori transazione) marca FALLITO sia per IBAN
+  // mancante sia per esito negativo del provider, tramite prisma.payout.update
+  // (non tx): tracciamo anche questa transizione, perché è lo stato REALE che
+  // il write path produce dopo un fallimento — non IN_LAVORAZIONE.
+  prismaMock.payout.update.mockImplementation(
+    ({ where, data }: { where: { id: string }; data: { stato: string } }) => {
+      if (where.id === RESIDUO_ID && data.stato === 'FALLITO') statoR = 'FALLITO';
+      return Promise.resolve({});
+    },
+  );
 
   // settlePayout (top-level, fuori transazione): risolve payout+wallet+IBAN
   // per id — sia per la riga residua sia per il payout "del resto" creato
@@ -213,21 +231,20 @@ describe('deleteCompanyAction — integrazione reale con payout-exec (nessun moc
     consoleErrorSpy.mockRestore();
   });
 
-  it('senza il nuovo codice (simulato saltando il saldo della riga residua) il lock anti-doppione rifiuterebbe "Payout già in corso" — verifica del test stesso', async () => {
-    // Non tautologico: dimostra che l'inflight check del mock reagisce
-    // davvero allo stato di 'payout-R'. Se la riga residua NON viene mai
-    // saldata (qui simulato azzerando il risultato della query residua),
-    // l'inflight check dentro eseguiPayoutImmediato la trova ancora
-    // RICHIESTO/IN_LAVORAZIONE... ma qui non esiste nemmeno la riga nel DB
-    // mockato: usiamo invece lo scenario equivalente in cui la riga residua
-    // esiste ma non viene MAI transizionata (settlePayout fallisce sempre),
-    // per provare che in quel caso il log "Payout già in corso" appare.
+  it('IBAN mancante sulla riga residua: settlePayout la marca FALLITO (mai IN_LAVORAZIONE) — il lock anti-doppione NON scatta e il resto del wallet viene comunque liquidato, ma il fallimento resta loggato', async () => {
+    // Riscritto in review: la versione precedente di questo test asseriva
+    // `statoR === 'IN_LAVORAZIONE'` dopo il fallimento, uno stato che il
+    // write path reale non produce mai qui — settlePayout (payout-exec.ts)
+    // marca esplicitamente FALLITO sia per IBAN mancante sia per un provider
+    // che rigetta, MAI IN_LAVORAZIONE. E FALLITO non è fra gli stati inflight
+    // (`RICHIESTO`/`IN_LAVORAZIONE`, payout-exec.ts:269-273): quindi il lock
+    // anti-doppione della reserve per "il resto" del wallet NON la trova più,
+    // e la liquidazione del resto procede — "Payout già in corso" NON
+    // comparirebbe mai in questo scenario nel sistema reale. Questo test ora
+    // verifica esattamente quel comportamento, non il suo opposto.
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     prismaMock.payout.findUnique.mockImplementation(({ where }: { where: { id: string } }) => {
       if (where.id === RESIDUO_ID) {
-        // IBAN mancante → settlePayout marca FALLITO, MAI ESEGUITO: la riga
-        // resta bloccata (stato locale non avanza a ESEGUITO), esattamente
-        // come se il fix non ci fosse per questa riga.
         return Promise.resolve({
           id: RESIDUO_ID,
           walletId: WALLET_ID,
@@ -248,15 +265,24 @@ describe('deleteCompanyAction — integrazione reale con payout-exec (nessun moc
     const res = await deleteCompanyAction(COMPANY_ID, RAGIONE_SOCIALE);
 
     expect(res).toEqual({ ok: true });
-    // statoR resta IN_LAVORAZIONE (settlePayout ha fallito su IBAN mancante,
-    // non l'ha mai marcata ESEGUITO): l'inflight check la trova ancora e il
-    // resto del wallet viene rifiutato con "Payout già in corso".
-    expect(statoR).toBe('IN_LAVORAZIONE');
+    // Stato reale del write path: FALLITO, non IN_LAVORAZIONE.
+    expect(statoR).toBe('FALLITO');
     const logged = consoleErrorSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-    expect(logged).toMatch(/già in corso/i);
-    // E il fallimento è comunque diagnosticabile (punto B del fix): non è
-    // sparito in silenzio.
-    expect(logged).toMatch(new RegExp(WALLET_ID));
+    // "Payout già in corso" NON compare: l'inflight check non trova più la
+    // riga (FALLITO non è uno stato inflight), quindi il resto del wallet
+    // non viene rifiutato.
+    expect(logged).not.toMatch(/già in corso/i);
+    // Il fallimento della riga residua resta comunque diagnosticabile
+    // (difetto 2 del fix): l'id della riga e il motivo compaiono nel log.
+    expect(logged).toMatch(new RegExp(RESIDUO_ID));
+    expect(logged).toMatch(/IBAN mancante/);
+    // Prova positiva: il resto del wallet (payout-resto, IBAN valido) viene
+    // comunque liquidato — un'unica chiamata al provider, quella del resto,
+    // non quella della riga residua (che si ferma prima, per IBAN mancante).
+    expect(executePayoutMock).toHaveBeenCalledTimes(1);
+    expect(executePayoutMock).toHaveBeenCalledWith(
+      expect.objectContaining({ payoutId: 'payout-resto', importoCent: 18_000, iban: IBAN }),
+    );
 
     consoleErrorSpy.mockRestore();
   });

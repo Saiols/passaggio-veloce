@@ -363,17 +363,28 @@ export async function deleteCompanyAction(
       // Riusiamo `settlePayout` — lo stesso motore di settlement usato da
       // `processPayouts` per queste identiche righe (nessuna
       // reimplementazione: IBAN, provider, transazione di saldo, documento
-      // broker restano un unico posto) — con la stessa transizione a
-      // IN_LAVORAZIONE prima di saldare (stesso "lock" morbido del job).
-      // Dopo, il ciclo esistente sotto liquida il RESTO del saldo: il
-      // settlement ha già decrementato il wallet dell'importo della riga
-      // saldata, quindi ciò che rimane è il residuo vero.
+      // broker restano un unico posto). Dopo, il ciclo esistente sotto
+      // liquida il RESTO del saldo: il settlement ha già decrementato il
+      // wallet dell'importo della riga saldata, quindi ciò che rimane è il
+      // residuo vero.
       //
       // MAI le righe IN_LAVORAZIONE: significano un settlement DAVVERO in
       // corso (stesso motore, non un processo fantasma) — risaldarle
-      // rischierebbe di pagare due volte. Il filtro sotto (`stato:
-      // 'RICHIESTO'`) le esclude a priori: non vengono nemmeno lette, non
-      // vengono toccate.
+      // rischierebbe di pagare due volte. Il filtro della `findMany` sotto
+      // (`stato: 'RICHIESTO'`) le esclude a priori dalla lettura, ma la sola
+      // lettura non basta: `deleteCompanyAction` NON è l'unico attore che può
+      // saldare una riga RICHIESTO. `processPayouts` (lib/jobs/process-payouts.ts)
+      // legge il suo batch di 20 righe e le lavora in sequenza, una chiamata
+      // al provider per riga: l'ultima del batch può essere stata letta
+      // minuti prima di essere aggiornata, e in quella finestra questa
+      // azione può leggere la STESSA riga ancora RICHIESTO. La stessa corsa
+      // si ottiene fra due invocazioni concorrenti di `deleteCompanyAction`.
+      // Per questo la transizione a IN_LAVORAZIONE qui sotto è un
+      // compare-and-set (`updateMany` con `where: { stato: 'RICHIESTO' }`),
+      // non una `update` cieca: se `count === 0` un altro attore ha già
+      // preso la riga fra la `findMany` sopra e questo momento (o l'ha
+      // portata a IN_LAVORAZIONE nel frattempo) — in quel caso NON chiamiamo
+      // `settlePayout`, per non saldarla due volte.
       const richiesteResidue = await prisma.payout.findMany({
         where: {
           stato: 'RICHIESTO',
@@ -383,10 +394,21 @@ export async function deleteCompanyAction(
       });
       for (const p of richiesteResidue) {
         try {
-          await prisma.payout.update({
-            where: { id: p.id },
+          const preso = await prisma.payout.updateMany({
+            where: { id: p.id, stato: 'RICHIESTO' },
             data: { stato: 'IN_LAVORAZIONE' },
           });
+          if (preso.count === 0) {
+            // Persa la corsa: un altro attore (processPayouts, o un'altra
+            // invocazione di questa stessa azione) ha già preso in carico la
+            // riga. Non è un errore applicativo, ma va comunque loggato:
+            // è esattamente la corsa che questo compare-and-set esiste per
+            // vincere in modo sicuro, e sapere che è scattata è diagnostico.
+            console.error(
+              `[deleteCompanyAction] saldo riga RICHIESTO residua: presa da un altro attore, salto (payoutId=${p.id}, walletId=${p.walletId}, company=${companyId})`,
+            );
+            continue;
+          }
           const esito = await settlePayout(p.id);
           if (!esito.ok) {
             console.error(
@@ -411,17 +433,22 @@ export async function deleteCompanyAction(
       for (const w of wallets) {
         // Best-effort per design (non deve bloccare la cancellazione), ma il
         // fallimento non può più sparire in silenzio: sia un'eccezione sia un
-        // esito `{ ok: false }` (es. proprio "Payout già in corso" se il
-        // saldo delle righe residue sopra fosse fallito) vengono loggati con
-        // wallet ed errore, così restano diagnosticabili.
+        // esito `{ ok: false }` vengono loggati con wallet ed errore, così
+        // restano diagnosticabili. Se il saldo delle righe residue sopra
+        // fosse fallito, gli esiti possibili qui sono due, non uno solo: se
+        // `settlePayout` LANCIA dopo aver portato la riga a IN_LAVORAZIONE
+        // (es. eccezione a metà), la riga resta IN_LAVORAZIONE e l'inflight
+        // check di `eseguiPayoutImmediato` la trova ancora, rifiutando con
+        // "Payout già in corso, attendi". Se invece `settlePayout` RITORNA
+        // `{ ok: false }` (es. IBAN mancante), la riga viene marcata FALLITO
+        // da `settlePayout` stesso — FALLITO non è fra gli stati inflight
+        // (`RICHIESTO`/`IN_LAVORAZIONE`), quindi qui sotto non scatta alcun
+        // blocco: il resto del wallet viene liquidato normalmente.
         const esito = await eseguiPayoutImmediato(w.id, { ignoraSoglia: true }).catch(
-          (err): EseguiPayoutResult => {
-            console.error(
-              `[deleteCompanyAction] liquidazione cessazione: eccezione su wallet ${w.id} (company ${companyId}):`,
-              err,
-            );
-            return { ok: false, error: err instanceof Error ? err.message : String(err) };
-          },
+          (err): EseguiPayoutResult => ({
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          }),
         );
         if (!esito.ok) {
           console.error(
@@ -430,8 +457,16 @@ export async function deleteCompanyAction(
         }
       }
     }
-  } catch {
-    // best-effort
+  } catch (err) {
+    // Il blocco sopra è cresciuto (righe RICHIESTO residue + liquidazione):
+    // un'eccezione qui — es. un mock/dipendenza mancante che fa esplodere una
+    // query prima ancora del ciclo di liquidazione — deve restare
+    // diagnosticabile, non sparire in silenzio (best-effort per design, ma
+    // MAI muto).
+    console.error(
+      `[deleteCompanyAction] liquidazione cessazione: eccezione nel blocco di liquidazione (company ${companyId}):`,
+      err,
+    );
   }
 
   const now = new Date();

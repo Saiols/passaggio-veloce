@@ -49,7 +49,7 @@ const { authMock, prismaMock, redirectMock, eseguiPayoutImmediatoMock, settlePay
     prismaMock: {
       company: { findUnique: vi.fn(), update: vi.fn() },
       wallet: { findMany: vi.fn(), findFirst: vi.fn() },
-      payout: { findMany: vi.fn(), update: vi.fn() },
+      payout: { findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
       user: { updateMany: vi.fn() },
       $transaction: vi.fn((ops: unknown[]) => Promise.all(ops)),
     },
@@ -92,6 +92,7 @@ beforeEach(() => {
   prismaMock.wallet.findMany.mockResolvedValue([]);
   prismaMock.payout.findMany.mockResolvedValue([]);
   prismaMock.payout.update.mockResolvedValue({});
+  prismaMock.payout.updateMany.mockResolvedValue({ count: 1 }); // claim riuscito di default
   prismaMock.company.update.mockResolvedValue({});
   prismaMock.user.updateMany.mockResolvedValue({ count: 0 });
   eseguiPayoutImmediatoMock.mockResolvedValue({ ok: true, payoutId: 'p-resto', importoCent: 1 });
@@ -115,10 +116,12 @@ describe('deleteCompanyAction — righe RICHIESTO residue prima della liquidazio
       },
       select: { id: true, walletId: true },
     });
-    // Stesso "lock" morbido di processPayouts: transizione a IN_LAVORAZIONE
-    // prima di chiamare settlePayout.
-    expect(prismaMock.payout.update).toHaveBeenCalledWith({
-      where: { id: 'payout-richiesto' },
+    // Compare-and-set (NON una update cieca): la transizione a IN_LAVORAZIONE
+    // è condizionata a `stato: 'RICHIESTO'`, così un altro attore che avesse
+    // già preso la riga fa fallire il claim (count: 0) invece di essere
+    // sovrascritto.
+    expect(prismaMock.payout.updateMany).toHaveBeenCalledWith({
+      where: { id: 'payout-richiesto', stato: 'RICHIESTO' },
       data: { stato: 'IN_LAVORAZIONE' },
     });
     expect(settlePayoutMock).toHaveBeenCalledWith('payout-richiesto');
@@ -228,5 +231,67 @@ describe('deleteCompanyAction — righe RICHIESTO residue prima della liquidazio
     expect(logged).toMatch(/wallet-1/);
     expect(logged).toMatch(/Payout già in corso/);
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('deleteCompanyAction — compare-and-set sulla riga RICHIESTO residua (review: update cieca → race con processPayouts o con un\'altra invocazione concorrente)', () => {
+  it('riga già presa da un altro attore (updateMany → count: 0): settlePayout NON viene chiamata su quella riga, e il ciclo prosegue con le altre', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Due righe residue sullo stesso giro: 'payout-preso' viene rubata da un
+    // altro attore (es. processPayouts) fra la findMany e la updateMany di
+    // questa azione; 'payout-libero' no.
+    prismaMock.payout.findMany.mockResolvedValue([
+      { id: 'payout-preso', walletId: 'wallet-1' },
+      { id: 'payout-libero', walletId: 'wallet-2' },
+    ]);
+    prismaMock.payout.updateMany.mockImplementation(({ where }: { where: { id: string } }) => {
+      if (where.id === 'payout-preso') return Promise.resolve({ count: 0 });
+      return Promise.resolve({ count: 1 });
+    });
+    prismaMock.wallet.findMany.mockResolvedValue([{ id: 'wallet-1' }, { id: 'wallet-2' }]);
+
+    const res = await deleteCompanyAction(COMPANY_ID, RAGIONE_SOCIALE);
+
+    expect(res).toEqual({ ok: true });
+    // Il claim è stato tentato per ENTRAMBE le righe...
+    expect(prismaMock.payout.updateMany).toHaveBeenCalledWith({
+      where: { id: 'payout-preso', stato: 'RICHIESTO' },
+      data: { stato: 'IN_LAVORAZIONE' },
+    });
+    expect(prismaMock.payout.updateMany).toHaveBeenCalledWith({
+      where: { id: 'payout-libero', stato: 'RICHIESTO' },
+      data: { stato: 'IN_LAVORAZIONE' },
+    });
+    // ...ma settlePayout va SOLO sulla riga il cui claim è riuscito: la riga
+    // persa non deve MAI essere saldata da questa azione (altrimenti sarebbe
+    // saldata due volte, una da chi l'ha presa davvero e una da qui).
+    expect(settlePayoutMock).not.toHaveBeenCalledWith('payout-preso');
+    expect(settlePayoutMock).toHaveBeenCalledWith('payout-libero');
+    expect(settlePayoutMock).toHaveBeenCalledTimes(1);
+    // Il ciclo prosegue: la liquidazione del resto del saldo viene comunque
+    // tentata per entrambi i wallet, non abortita dalla riga persa.
+    expect(eseguiPayoutImmediatoMock).toHaveBeenCalledWith('wallet-1', { ignoraSoglia: true });
+    expect(eseguiPayoutImmediatoMock).toHaveBeenCalledWith('wallet-2', { ignoraSoglia: true });
+    // La corsa persa resta diagnosticabile (difetto 2: niente di silenzioso).
+    const logged = consoleErrorSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(logged).toMatch(/payout-preso/);
+    expect(logged).toMatch(/altro attore/);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('controprova: caso normale, claim riuscito (updateMany → count: 1), la riga viene saldata', async () => {
+    prismaMock.payout.findMany.mockResolvedValue([{ id: 'payout-libero', walletId: 'wallet-2' }]);
+    prismaMock.payout.updateMany.mockResolvedValue({ count: 1 });
+    prismaMock.wallet.findMany.mockResolvedValue([{ id: 'wallet-2' }]);
+
+    const res = await deleteCompanyAction(COMPANY_ID, RAGIONE_SOCIALE);
+
+    expect(res).toEqual({ ok: true });
+    expect(prismaMock.payout.updateMany).toHaveBeenCalledWith({
+      where: { id: 'payout-libero', stato: 'RICHIESTO' },
+      data: { stato: 'IN_LAVORAZIONE' },
+    });
+    expect(settlePayoutMock).toHaveBeenCalledWith('payout-libero');
+    expect(settlePayoutMock).toHaveBeenCalledTimes(1);
   });
 });

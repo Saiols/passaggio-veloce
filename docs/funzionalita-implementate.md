@@ -70,7 +70,7 @@ chatbot_visibility: internal
 - **[CLIENTI] Documenti registrazione**: CI fronte, CI retro, Codice Fiscale, **Visura camerale (≤6 mesi)**. Upload su Vercel Blob.
 - **[CLIENTI] Gate KYC anticipato** (`(auth)/actions.ts` `verifyRegistrationDocumentsAction` + `lib/kyc/verify.ts`): allo step 3 fa OCR e valida **prima** di proseguire. Regole di blocco: `VISURA_SCADUTA` (>5-6 mesi), `ATECO_NON_IDONEO` (ATECO non in allowlist per tipo azienda), `AZIENDA_MISMATCH`, `CI_MISMATCH`, `CF_MISMATCH`, `ILLEGGIBILE`. Emette `kycToken` per evitare ri-OCR al submit. 🚩 Regole dettagliate non nei docs.
 - **[CLIENTI] Verifica email**: link valido 24h → account `ACTIVE`. (In `DEMO_MODE` auto-attivo.)
-- **Login multi-tenant** (`auth.ts`): **stessa email su N aziende** (`@@unique([companyId,email])`); prova password su tutti. Admin platform (`companyId=null`) unici globali.
+- **Login, email univoca globale** (`auth.ts`, **dal 2026-07-25**, vedi `superpowers/specs/2026-07-25-email-univoca-design.md`): `email` è `@unique` su tutta la piattaforma (indice `users_email_key` + `CHECK (email = lower(email))`) — un solo account per email, aziende diverse comprese. Il login fa un solo `bcrypt.compare` (non più un loop su più candidati); nessuna eccezione per gli admin di piattaforma. Fonte unica della regola: `lib/auth/email-univoca.ts`.
 - **[CLIENTI] 2FA** (`lib/auth/totp.ts`): TOTP (Google Authenticator/Authy/1Password) + **10 backup code** (mostrati una sola volta). Setup/disable in `/profilo/sicurezza`.
 - **Rate limit login**: 5 tentativi falliti per (IP anonimizzato+email) → blocco 15 min.
 - **[CLIENTI] Team**: ADMIN_AZIENDA invita UTENTE_AZIENDA (`/invito/{token}`, scadenza 7gg) o crea utente diretto (subito ACTIVE). Reset password genera password leggibile.

@@ -19,9 +19,22 @@ export const MAPPA_SOSPENSIONE: Record<string, Record<string, 'BLOCCA' | 'CONSEN
     segnaTrasmessoSdiAction: 'CONSENTI', // gated ADMIN_PIATTAFORMA: staff, fuori scope
   },
   'src/app/blocco-pagamento/actions.ts': {
-    // Rimedi: permettono di rientrare in regola e presentarsi al riesame.
+    // Le due sorelle sono classificate DIVERSAMENTE, e la differenza non è il
+    // rimedio (lo sono entrambe) ma cosa scrivono.
+    //
+    // `ritentaAddebitoAction` non tocca né IBAN né importi: rilancia un
+    // addebito già dovuto col mandato esistente. È il rimedio al caso più
+    // frequente (banca sistemata, IBAN invariato) e resta aperta, così la
+    // sospensione non impedisce di rientrare in regola e presentarsi al riesame.
     ritentaAddebitoAction: 'CONSENTI',
-    aggiornaIbanERitentaAction: 'CONSENTI',
+    // `aggiornaIbanERitentaAction` riscrive `Company.iban`, cioè il conto su
+    // cui `settlePayout` eroga i payout, ed è l'ULTIMA via aperta a quel campo
+    // (le altre tre sono chiuse: updateCompanyProfileAction qui sotto,
+    // updateSedeAction gated `sede.edit`). Combinata con l'esenzione
+    // `ignoraSoglia` della liquidazione di cessazione — che per progetto ignora
+    // la sospensione, clausola 12.4 — permetteva a un sospeso di dirottare il
+    // residuo su un conto scritto DOPO la misura.
+    aggiornaIbanERitentaAction: 'BLOCCA',
   },
   'src/app/visura/actions.ts': {
     verificaVisuraAction: 'CONSENTI', // rimedio

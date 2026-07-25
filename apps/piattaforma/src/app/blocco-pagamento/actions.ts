@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { prisma } from '@pv/db';
 import { auth } from '@/auth';
 import { isOwner as isOwnerRole } from '@/lib/auth/permissions';
+import { requireOperativita } from '@/lib/auth/sospensione-guard';
 import { ritentaAddebitiAgenzia } from '@/lib/fee/retry';
 import { applySepaMandateToAgency } from '@/lib/providers/payment/stripe-mandate';
 
@@ -62,6 +63,17 @@ const ibanSchema = z.object({
  * Riservata al titolare dell'account (ADMIN_AZIENDA): riscrive l'IBAN
  * dell'azienda madre — quello su cui arrivano i payout — e riappoggia il
  * mandato SEPA sul nuovo conto. Un ADMIN_SEDE o un operatore non ci arriva.
+ *
+ * BLOCCATA sotto sospensione, a differenza della sorella `ritentaAddebitoAction`:
+ * questa è l'unica via rimasta per riscrivere `Company.iban`, cioè il conto che
+ * `resolveIban()` legge in `settlePayout` (lib/wallet/payout-exec.ts). Le altre
+ * tre sono già chiuse (`updateCompanyProfileAction` → guard qui sotto,
+ * `updateSedeAction` → gated `sede.edit`, chiave di scrittura). Lasciandola
+ * aperta, un sospeso riscriveva l'IBAN e il residuo della liquidazione di
+ * cessazione — che passa da `eseguiPayoutImmediato(..., { ignoraSoglia: true })`
+ * e per progetto ignora la sospensione, clausola 12.4 — finiva su un conto
+ * scritto DOPO la misura. Il rimedio non muore: `ritentaAddebitoAction` resta
+ * consentita e copre il caso comune (banca sistemata, IBAN invariato).
  */
 export async function aggiornaIbanERitentaAction(formData: FormData): Promise<RimedioResult> {
   const ctx = await getAgenziaContext();
@@ -69,6 +81,8 @@ export async function aggiornaIbanERitentaAction(formData: FormData): Promise<Ri
   if (!ctx.isOwner) {
     return { ok: false, error: "Solo il titolare dell'account può aggiornare l'IBAN" };
   }
+  const op = await requireOperativita();
+  if (!op.ok) return { ok: false, error: op.error };
   const agenziaId = ctx.agenziaId;
 
   const parsed = ibanSchema.safeParse({ iban: formData.get('iban') });

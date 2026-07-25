@@ -19,6 +19,12 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/headers', () => ({
   headers: () => Promise.resolve(new Headers()),
 }));
+// Non è oggetto di questo file: il rifiuto per sospensione di
+// `aggiornaIbanERitentaAction` è coperto da lib/auth/sospensione-blocca.test.ts.
+// Qui si assume sempre operativo, così i casi restano sull'autorizzazione.
+vi.mock('@/lib/auth/sospensione-guard', () => ({
+  requireOperativita: vi.fn(() => Promise.resolve({ ok: true })),
+}));
 
 import { aggiornaIbanERitentaAction, ritentaAddebitoAction } from './actions';
 

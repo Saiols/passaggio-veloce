@@ -142,7 +142,7 @@ export default async function FatturazionePage({
   return (
     <AppShell session={session} activePath="/fatturazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6">
+        <div className="mb-6 empty:hidden">
           <SuspensionBanner />
         </div>
         <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

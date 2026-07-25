@@ -8,6 +8,7 @@ import { canEditPaymentSettings } from '@/lib/sedi/scope';
 import { statoSospensione } from '@/lib/auth/sospensione-guard';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
+import { SuspensionBanner } from '@/components/suspension-banner';
 import { SedeEdit } from '../sedi/[id]/sede-edit';
 
 export default async function ImpostazioniSedePage() {
@@ -43,6 +44,9 @@ export default async function ImpostazioniSedePage() {
   return (
     <AppShell session={session} activePath="/impostazioni-sede">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
+        <div className="mb-6 empty:hidden">
+          <SuspensionBanner />
+        </div>
         <header className="mb-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">Sede</p>
           <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">

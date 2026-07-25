@@ -243,7 +243,7 @@ export default async function AffiliazionePage() {
   return (
     <AppShell session={session} activePath="/affiliazione">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6">
+        <div className="mb-6 empty:hidden">
           <SuspensionBanner />
         </div>
         <header className="mb-7">

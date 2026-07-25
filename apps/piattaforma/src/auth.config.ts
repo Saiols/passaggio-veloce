@@ -12,6 +12,30 @@ export const authConfig = {
   },
   session: {
     strategy: 'jwt',
+    /**
+     * Otto ore di INATTIVITÀ, non otto ore di sessione. Prima era il default di
+     * Auth.js, 30 giorni.
+     *
+     * COSA QUESTO NON FA — misurato il 2026-07-25, non dedotto. Il callback
+     * `jwt` gira ~5 volte per pagina autenticata (`trigger=undefined`,
+     * `user=assente`) e la riemissione del token porta `exp` a
+     * `adesso + maxAge`: osservato un `exp` riscritto 2h18m dopo il login,
+     * mentre `updateAge` era al suo default di 24 ore — quindi il rinnovo NON è
+     * governato da `updateAge` e avviene su normale lettura della sessione.
+     *
+     * Conseguenza: la scadenza SCORRE in avanti finché l'utente usa l'app.
+     * Questo valore limita le sessioni abbandonate, NON è una revoca. Un utente
+     * sospeso che continua a cliccare conserva il token a tempo indefinito.
+     * Per gli utenti azienda non è un problema: la sospensione è applicata per
+     * richiesta contro il DB in `getSessionContext`. Per lo STAFF di piattaforma
+     * (companyId null) lo è, ed è una falla ancora aperta — vedi i follow-up in
+     * docs/superpowers/specs/2026-07-25-sospensione-sola-lettura-design.md
+     *
+     * `updateAge` è deliberatamente NON impostato: la misura sopra mostra che non
+     * governa la riemissione, quindi fissarlo scriverebbe in configurazione una
+     * semantica non verificata.
+     */
+    maxAge: 8 * 60 * 60,
   },
   callbacks: {
     authorized({ auth, request }) {

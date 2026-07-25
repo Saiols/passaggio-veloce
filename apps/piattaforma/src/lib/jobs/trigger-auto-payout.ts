@@ -27,7 +27,11 @@ export type TriggerAutoPayoutResult = { created: number };
  * chiuso in `eseguiPayoutImmediato`. Il guard sospensione è arrivato per ultimo
  * proprio così: nato nel solo motore, non bloccava il payout automatico, lo
  * rimandava di una notte (il trigger in tempo reale rifiutava, il saldo restava
- * sopra soglia, questo cron pagava).
+ * sopra soglia, questo cron pagava). Chiudere QUI non basta comunque: una riga
+ * `RICHIESTO` che questo job ha già creato prima che l'azienda venisse sospesa
+ * arriva a `processPayouts` (lib/jobs/process-payouts.ts) comunque sospesa —
+ * terzo punto del guard (⚠️ GUARD DI TRIO, vedi lib/wallet/sospensione-payout.ts),
+ * quello sul SALDO anziché sulla creazione.
  *
  * Non c'è eccezione `ignoraSoglia` qui: questo path serve solo l'auto-payout
  * ordinario, mai la liquidazione di cessazione (quella passa da
@@ -61,10 +65,13 @@ export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
     const companyId = w.companyId ?? w.sede?.companyId ?? null;
 
     // Sospensione dell'azienda proprietaria del wallet: stesso guard di
-    // `eseguiPayoutImmediato` (lib/wallet/payout-exec.ts), predicato condiviso
-    // in lib/wallet/sospensione-payout.ts — la coppia va tenuta allineata. Qui
-    // non esiste `ignoraSoglia` (vedi docstring), quindi nessuna esenzione.
-    // Primo dei tre guard perché è l'unico a costo zero: non interroga il DB.
+    // `eseguiPayoutImmediato` (lib/wallet/payout-exec.ts, ⚠️ GUARD DI TRIO) e
+    // di `processPayouts` (lib/jobs/process-payouts.ts, terzo punto — quello
+    // sul SALDO, per le righe già `RICHIESTO` prima della sospensione),
+    // predicato condiviso in lib/wallet/sospensione-payout.ts — il trio va
+    // tenuto allineato. Qui non esiste `ignoraSoglia` (vedi docstring), quindi
+    // nessuna esenzione. Primo dei tre guard di QUESTA funzione perché è
+    // l'unico a costo zero: non interroga il DB.
     if (payoutBloccatoPerSospensione(w)) continue;
 
     if (companyId && (await hasNegativeCompanyWallet(prisma, companyId))) continue;

@@ -190,13 +190,15 @@ export async function eseguiPayoutImmediato(
     // legittimati. L'utente sospeso singolarmente non può comunque arrivare
     // qui dall'action, perché `wallet.payout` è una chiave di scrittura.
     //
-    // ⚠️ GUARD DI COPPIA: questa funzione NON è l'unico percorso che crea un
-    // payout. `lib/jobs/trigger-auto-payout.ts` (cron notturno) crea il Payout
-    // `RICHIESTO` da sé e `processPayouts` lo salda via `settlePayout`, che non
-    // ha guard di dominio: un blocco solo qui non ferma il payout automatico,
-    // lo rimanda di una notte. Il predicato è condiviso
-    // (./sospensione-payout.ts) proprio per tenere visibile la coppia — se
-    // aggiungi o cambi una condizione qui, guarda anche là.
+    // ⚠️ GUARD DI TRIO: questa funzione NON è l'unico percorso che crea o salda
+    // un payout. `lib/jobs/trigger-auto-payout.ts` (cron notturno) crea il
+    // Payout `RICHIESTO` da sé; `lib/jobs/process-payouts.ts` lo salda via
+    // `settlePayout`, che di suo non ha guard di dominio: un blocco solo qui
+    // non ferma né il payout automatico (lo rimanda di una notte) né una riga
+    // `RICHIESTO` già creata prima della sospensione (quella la paga
+    // comunque). Il predicato è condiviso (./sospensione-payout.ts) proprio
+    // per tenere visibile il trio — se aggiungi o cambi una condizione qui,
+    // guarda anche là.
     //
     // Come il guard visura sotto, è escluso da `ignoraSoglia`: la liquidazione
     // di cessazione (clausola 12.4) deve restare possibile, e `deleteCompanyAction`

@@ -4,11 +4,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * Il guard sta nel motore, non nell'action: il payout manuale e l'auto-payout a
  * soglia in tempo reale passano da qui (vedi lib/wallet/auto-payout.ts:45).
  *
- * ⚠️ NON tutti i percorsi: il cron notturno
- * (`lib/jobs/trigger-auto-payout.ts`) crea il Payout `RICHIESTO` da sé e lo fa
- * saldare da `processPayouts` → `settlePayout`, che non ha guard di dominio. Il
- * suo guard è replicato là e testato in `lib/jobs/trigger-auto-payout.test.ts`:
- * questo file NON lo copre, e per un po' la spec sosteneva il contrario.
+ * ⚠️ NON tutti i percorsi (⚠️ GUARD DI TRIO, vedi ./sospensione-payout.ts):
+ *  - il cron notturno (`lib/jobs/trigger-auto-payout.ts`) crea il Payout
+ *    `RICHIESTO` da sé — guard replicato là, testato in
+ *    `lib/jobs/trigger-auto-payout.test.ts`;
+ *  - `processPayouts` (`lib/jobs/process-payouts.ts`) salda le righe
+ *    `RICHIESTO` esistenti (comprese quelle create prima di una sospensione)
+ *    via `settlePayout`, che di suo non ha guard di dominio — guard
+ *    replicato là, testato in `lib/jobs/process-payouts.test.ts`.
+ * Questo file NON copre nessuno dei due, e per un po' la spec sosteneva il
+ * contrario.
  */
 
 const WALLET_ID = 'wallet-1';

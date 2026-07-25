@@ -29,7 +29,7 @@ export const MAPPA_SOSPENSIONE: Record<string, Record<string, 'BLOCCA' | 'CONSEN
     ritentaAddebitoAction: 'CONSENTI',
     // `aggiornaIbanERitentaAction` riscrive `Company.iban`, cioè il conto su
     // cui `settlePayout` eroga i payout, ed è l'ULTIMA via aperta a quel campo
-    // (le altre tre sono chiuse: updateCompanyProfileAction qui sotto,
+    // (le altre due sono chiuse: updateCompanyProfileAction qui sotto,
     // updateSedeAction gated `sede.edit`). Combinata con l'esenzione
     // `ignoraSoglia` della liquidazione di cessazione — che per progetto ignora
     // la sospensione, clausola 12.4 — permetteva a un sospeso di dirottare il

@@ -36,6 +36,7 @@ const {
   emailSendMock,
   storagePutMock,
   pdfMock,
+  verifyPasswordMock,
 } = vi.hoisted(() => ({
   authMock: vi.fn(),
   requireOperativitaMock: vi.fn(),
@@ -44,6 +45,7 @@ const {
   emailSendMock: vi.fn(),
   storagePutMock: vi.fn(),
   pdfMock: vi.fn(),
+  verifyPasswordMock: vi.fn(),
   prismaMock: {
     company: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     sede: {
@@ -89,6 +91,14 @@ vi.mock('@/lib/providers/payment/stripe-mandate', () => ({
 vi.mock('@/lib/providers/email', () => ({ getEmail: () => ({ send: emailSendMock }) }));
 vi.mock('@/lib/providers/storage', () => ({ getStorage: () => ({ put: storagePutMock }) }));
 vi.mock('@/lib/contratti/mandato-pdf', () => ({ buildMandatoFatturazionePdf: pdfMock }));
+// `verifyPassword` mockato a sempre-valido: serve a far arrivare
+// `firmaMandatoAction` fino alle mutazioni quando (b) va verificato davvero
+// (vedi sotto, `prismaMock.user.findUnique`). `hashPassword` non serve oltre
+// il guard in nessuno dei casi qui sotto: passthrough innocuo.
+vi.mock('@/lib/auth/password', () => ({
+  hashPassword: vi.fn().mockResolvedValue('hash-otp-mock'),
+  verifyPassword: verifyPasswordMock,
+}));
 
 import { inviaOtpMandatoAction, firmaMandatoAction } from '@/app/wallet/mandato-actions';
 import {
@@ -196,6 +206,26 @@ beforeEach(() => {
   prismaMock.sede.findUnique.mockResolvedValue({ companyId: 'c1', suspensionOrigin: null });
   prismaMock.mandatoFatturazione.findUnique.mockResolvedValue(null);
   mandateMock.mockResolvedValue('ACTIVE');
+  // `firmaMandatoAction` (src/app/wallet/mandato-actions.ts): senza questo
+  // stub `prisma.user.findUnique` risolve `undefined` e l'action esce da sé a
+  // "Codice scaduto: richiedine uno nuovo" (mandato-actions.ts:81-83) PRIMA
+  // di raggiungere il guard — un OTP plausibile e non scaduto è ciò che
+  // costringe l'uscita a passare dal guard vero, non da un dato mancante.
+  prismaMock.user.findUnique.mockResolvedValue({
+    nome: 'Mario',
+    cognome: 'Rossi',
+    mandatoOtpHash: 'hash-otp-valido',
+    mandatoOtpExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
+  });
+  verifyPasswordMock.mockResolvedValue(true);
+  emailSendMock.mockResolvedValue({});
+  pdfMock.mockResolvedValue(new Uint8Array([1, 2, 3]));
+  storagePutMock.mockResolvedValue({
+    storageKey: 'mock-key',
+    storageProvider: 'mock',
+    mimeType: 'application/pdf',
+    sizeBytes: 3,
+  });
 });
 
 /** Le sette action BLOCCA, ognuna invocata come la invoca la UI. */

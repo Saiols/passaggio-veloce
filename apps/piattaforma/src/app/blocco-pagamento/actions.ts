@@ -67,7 +67,7 @@ const ibanSchema = z.object({
  * BLOCCATA sotto sospensione, a differenza della sorella `ritentaAddebitoAction`:
  * questa è l'unica via rimasta per riscrivere `Company.iban`, cioè il conto che
  * `resolveIban()` legge in `settlePayout` (lib/wallet/payout-exec.ts). Le altre
- * tre sono già chiuse (`updateCompanyProfileAction` → guard qui sotto,
+ * due sono già chiuse (`updateCompanyProfileAction` → guard qui sotto,
  * `updateSedeAction` → gated `sede.edit`, chiave di scrittura). Lasciandola
  * aperta, un sospeso riscriveva l'IBAN e il residuo della liquidazione di
  * cessazione — che passa da `eseguiPayoutImmediato(..., { ignoraSoglia: true })`

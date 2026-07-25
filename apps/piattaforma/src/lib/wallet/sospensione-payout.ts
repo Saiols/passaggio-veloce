@@ -1,22 +1,32 @@
 /**
- * Guard di sospensione condiviso dai DUE percorsi che creano un payout:
+ * Guard di sospensione condiviso dai TRE punti che creano o saldano un payout
+ * (⚠️ GUARD DI TRIO — se cambi una condizione qui, aggiorna tutti e tre):
  *
  *  - `lib/wallet/payout-exec.ts` (`eseguiPayoutImmediato`): payout manuale e
- *    auto-payout a soglia in tempo reale;
+ *    auto-payout a soglia in tempo reale — crea E salda nello stesso giro;
  *  - `lib/jobs/trigger-auto-payout.ts` (`triggerAutoPayout`): rete di sicurezza
  *    notturna, che NON passa da `eseguiPayoutImmediato` — crea il Payout
- *    `RICHIESTO` e lo fa saldare da `processPayouts` → `settlePayout`.
+ *    `RICHIESTO` e lo lascia saldare da `processPayouts` → `settlePayout`;
+ *  - `lib/jobs/process-payouts.ts` (`processPayouts`): salda le righe
+ *    `RICHIESTO` esistenti, comprese quelle create PRIMA di una sospensione
+ *    (finestra fra i due cron, residuo di batch, run fallito). Nessuno dei due
+ *    guard sopra la vede: controllano solo al momento della CREAZIONE, non al
+ *    momento del SALDO — e `settlePayout` di suo non ha alcun guard di dominio.
  *
- * Il secondo percorso è la ragione per cui questo modulo esiste: con il guard
+ * Il secondo punto è la ragione per cui questo modulo esiste: con il guard
  * nel solo motore, una sospensione non bloccava il payout automatico, lo
  * rimandava di una notte (il trigger in tempo reale rifiutava, il saldo restava
- * sopra soglia, il cron notturno pagava).
+ * sopra soglia, il cron notturno pagava). Il terzo è arrivato dopo: la
+ * re-review ha trovato che il buco era chiuso sulla CREAZIONE ma non sul
+ * SALDO — una riga `RICHIESTO` già esistente al momento della sospensione
+ * veniva pagata comunque.
  *
- * Modulo PURO, nessuna query: entrambi i chiamanti risolvono già la company
+ * Modulo PURO, nessuna query: tutti e tre i chiamanti risolvono già la company
  * proprietaria del wallet nel proprio `select`, e una lettura per `companyId`
- * qui dentro diventerebbe una query per wallet nel ciclo del cron.
+ * qui dentro diventerebbe una query per wallet (o per payout) nel ciclo del
+ * cron.
  *
- * La forma del parametro è ciò che tiene insieme la coppia: se un domani il
+ * La forma del parametro è ciò che tiene insieme il trio: se un domani il
  * blocco dovrà guardare un altro campo, aggiungerlo a
  * `ProprietarioWalletPayout` fa fallire la compilazione di TUTTI i chiamanti
  * finché non lo aggiungono al proprio `select`.

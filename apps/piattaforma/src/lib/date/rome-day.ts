@@ -43,8 +43,14 @@ function romeOffsetMs(instant: number): number {
   return asUtc - instant;
 }
 
-/** Istante UTC corrispondente all'ora di parete indicata nel fuso di Roma. */
-function romeWallClockToUtc(
+/**
+ * Istante UTC corrispondente all'ora di parete indicata nel fuso di Roma.
+ *
+ * Pubblica: la usa anche `lib/distribuzione/orario-piattaforma.ts` per
+ * costruire gli estremi di una fascia oraria. Una seconda implementazione del
+ * fuso finirebbe per divergere su DST — questa è la sola.
+ */
+export function romeWallClockToUtc(
   y: number,
   mo: number,
   d: number,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseYmd, romeStartOfDay, romeEndOfDay, resolveDayRange, romeYmd } from './rome-day';
+import { parseYmd, romeStartOfDay, romeEndOfDay, resolveDayRange, romeYmd, romeWallClockToUtc } from './rome-day';
 
 describe('parseYmd', () => {
   it('accetta una data di calendario valida', () => {
@@ -73,5 +73,31 @@ describe('resolveDayRange', () => {
     expect(r.da).toBe('');
     expect(r.a).toBe('');
     expect(r.active).toBe(false);
+  });
+});
+
+describe('romeWallClockToUtc', () => {
+  // Offset verificati con Intl.DateTimeFormat({timeZone:'Europe/Rome'}):
+  // 2026-03-28 (sab) = CET +1h; 2026-03-30 (lun) = CEST +2h — il cambio è
+  // domenica 2026-03-29. 2026-10-24 (sab) = CEST +2h; 2026-10-26 (lun) = CET +1h.
+  it('ora solare (CET, +1): 09:00 a Roma = 08:00 UTC', () => {
+    expect(romeWallClockToUtc(2026, 3, 28, 9, 0, 0, 0).toISOString()).toBe(
+      '2026-03-28T08:00:00.000Z',
+    );
+  });
+
+  it('ora legale (CEST, +2): 09:00 a Roma = 07:00 UTC', () => {
+    expect(romeWallClockToUtc(2026, 3, 30, 9, 0, 0, 0).toISOString()).toBe(
+      '2026-03-30T07:00:00.000Z',
+    );
+  });
+
+  it('ritorno all ora solare in ottobre', () => {
+    expect(romeWallClockToUtc(2026, 10, 24, 19, 0, 0, 0).toISOString()).toBe(
+      '2026-10-24T17:00:00.000Z',
+    );
+    expect(romeWallClockToUtc(2026, 10, 26, 19, 0, 0, 0).toISOString()).toBe(
+      '2026-10-26T18:00:00.000Z',
+    );
   });
 });

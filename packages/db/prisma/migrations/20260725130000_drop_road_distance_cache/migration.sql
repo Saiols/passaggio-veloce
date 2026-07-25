@@ -1,0 +1,12 @@
+-- Distanza stradale rimossa: il raggio è in linea d'aria (Haversine), non c'è
+-- più un provider i cui risultati valga la pena cachare.
+--
+-- ⚠️ DA APPLICARE **DOPO** IL DEPLOY DEL CODICE, non prima.
+-- Questa è una migration SOTTRATTIVA: il codice della release precedente legge
+-- `road_distance_cache` in `roadDistancesM` senza try/catch sulla findMany,
+-- quindi finché quella versione è in produzione droppare la tabella romperebbe
+-- la creazione pratica (`avviaRound1ForPratica` lancia, il submit non cattura)
+-- e bloccherebbe in silenzio il cron di distribuzione.
+--
+-- Sequenza corretta: 20260725120000 (additiva) → push/deploy → questa.
+DROP TABLE IF EXISTS "road_distance_cache";

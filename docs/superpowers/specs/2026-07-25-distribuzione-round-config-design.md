@@ -175,27 +175,32 @@ Filtro: `stato ∈ {ACCETTATA, FIRMATA}` — una pratica accettata e poi firmata
 resta nel campione — `roundAccettazione != null`, `roundAccettazione < 99`,
 `deletedAt: null`. Nessun filtro temporale: il campione è piccolo e serve tutto.
 
-## Migration
+## Migration — due finestre, non una
 
-SQL a mano + `db:deploy` (mai `db:migrate`, che propone `DROP SEQUENCE`), da
-eseguire su Neon **prima** del push del codice.
+SQL a mano + `db:deploy` (mai `db:migrate`, che propone `DROP SEQUENCE`). La
+migration è **spezzata in due** perché contiene sia parti additive sia un DROP,
+e i due tipi vanno in direzioni opposte rispetto al deploy:
 
-```sql
-ALTER TABLE "pratiche" ADD COLUMN "roundCorrente" INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE "pratiche" ADD COLUMN "roundAccettazione" INTEGER;
+| Quando | Migration | Contenuto |
+|---|---|---|
+| **Prima** del push | `20260725120000_distribuzione_round_config` | `ADD COLUMN` ×2, `SET DEFAULT` ×3, `UPDATE` del singleton |
+| **Dopo** il deploy | `20260725130000_drop_road_distance_cache` | `DROP TABLE road_distance_cache` |
 
-ALTER TABLE "distribuzione_config" ALTER COLUMN "raggioStartM"  SET DEFAULT 1000;
-ALTER TABLE "distribuzione_config" ALTER COLUMN "stepM"         SET DEFAULT 1000;
-ALTER TABLE "distribuzione_config" ALTER COLUMN "intervalloMin" SET DEFAULT 60;
+La parte additiva deve precedere il codice: il nuovo codice legge
+`roundCorrente`/`roundAccettazione` dal primo request.
 
--- I @default non toccano una riga già esistente: il singleton in prod ha
--- ancora 500/200/10 e va aggiornato esplicitamente.
-UPDATE "distribuzione_config"
-   SET "raggioStartM" = 1000, "stepM" = 1000, "intervalloMin" = 60
- WHERE id = 'singleton';
+Il DROP deve **seguirlo**: il codice della release precedente legge
+`road_distance_cache` in `roadDistancesM` con una `findMany` **non protetta da
+try/catch**. Finché quella versione è viva, droppare la tabella farebbe lanciare
+`avviaRound1ForPratica` — che al submit (`pratiche/nuova/actions.ts`) non è
+catturato, quindi **la creazione pratica crasherebbe** — e farebbe accumulare
+errori silenziosi nel cron (`tickAllPraticheInDistribuzione` cattura per-pratica
+e conta, senza espandere nulla).
 
-DROP TABLE IF EXISTS "road_distance_cache";
-```
+Il `SET DEFAULT` non tocca la riga già esistente: il singleton creato da
+`20260721120000_distribuzione_v2` ha ancora 500/200/10, da cui l'`UPDATE`
+esplicito. `raggioMaxM` è volutamente escluso: se l'admin l'ha già cambiato
+dalla UI, il suo valore resta.
 
 **Nessun backfill.** Il DB di prod è usa-e-getta: le pratiche già accettate
 restano con `roundAccettazione = null`, mostrano "—" e sono fuori dal campione

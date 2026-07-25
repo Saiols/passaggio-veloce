@@ -352,9 +352,14 @@ Consapevoli e non corretti. In ordine di gravità.
    «+ Aggiungi utente»): asimmetria di presentazione con `/sedi`, che dopo questo
    lavoro le nasconde. L'enforcement è corretto — tutti e sei i gate rispondono
    `ERRORE_SOSPENSIONE`.
-5. **`ERR_TOO_MANY_REDIRECTS` su `/login`** osservato con un cookie di sessione
-   preesistente nel profilo browser, non riproducibile in contesto isolato. Non
-   chiarito: potrebbe essere un cookie stantio o una forma di loop reale.
+5. ~~`ERR_TOO_MANY_REDIRECTS` con un cookie di sessione preesistente.~~
+   **CHIUSO, non era un difetto dell'applicazione.** Il loop si osserva solo nel
+   profilo browser condiviso della macchina di sviluppo, mai in un contesto
+   isolato. La prova: quando scatta, il log del dev server registra **zero
+   richieste** — la navigazione non raggiunge nemmeno il server, quindi nessun
+   nostro redirect può esserne la causa. Artefatto locale del profilo
+   (plausibilmente HSTS su `localhost` o un service worker di un altro progetto
+   sulla stessa macchina). Non serve alcun intervento.
 6. **`reactivateCompanyAction` riattiva tutti gli utenti `SUSPENDED`**, revocando
    in silenzio anche una sospensione individuale motivata. Preesistente,
    documentato in `suspension-actions.ts`, richiede `User.suspensionSource` e una

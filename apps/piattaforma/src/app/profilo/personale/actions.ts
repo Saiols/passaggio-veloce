@@ -98,10 +98,13 @@ export async function changeOwnPasswordAction(
 
   const passwordHash = await hashPassword(newPassword);
 
-  // Email univoca: un solo account per email, quindi una sola riga colpita.
-  // Resta updateMany perche' la where non e' sulla chiave primaria.
-  await prisma.user.updateMany({
-    where: { email: me.email, deletedAt: null },
+  // session.user.id e' gia' l'id primario di questo utente (verificato sopra
+  // con findUnique): update by id, non updateMany. Se l'utente e' stato
+  // soft-deleted fra la sessione e questa azione, l'update fallisce
+  // rumorosamente invece di colpire zero righe e rispondere { ok: true } a
+  // un'operazione che non ha fatto nulla.
+  await prisma.user.update({
+    where: { id: session.user.id },
     data: { passwordHash },
   });
 

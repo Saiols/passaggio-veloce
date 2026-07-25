@@ -46,7 +46,7 @@ describe('changeOwnPasswordAction', () => {
     const res = await changeOwnPasswordAction('Sbagliata123', 'Nuova1234');
 
     expect(res).toEqual({ ok: false, error: 'La password attuale non è corretta' });
-    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 
   it('nuova password fuori policy → rifiuta e non scrive', async () => {
@@ -57,7 +57,7 @@ describe('changeOwnPasswordAction', () => {
 
     expect(corta.ok).toBe(false);
     expect(senzaNumeri.ok).toBe(false);
-    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 
   it('nuova password uguale alla attuale → rifiuta e non scrive', async () => {
@@ -69,17 +69,17 @@ describe('changeOwnPasswordAction', () => {
       ok: false,
       error: 'La nuova password deve essere diversa da quella attuale',
     });
-    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 
-  it('happy path → nuovo hash su TUTTI gli account attivi con quella email', async () => {
+  it('happy path → nuovo hash sull\'account della sessione (update by id, email univoca)', async () => {
     passwordInDb('Vecchia123');
 
     const res = await changeOwnPasswordAction('Vecchia123', 'Nuova1234');
 
     expect(res).toEqual({ ok: true });
-    expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
-      where: { email: 'mario@example.com', deletedAt: null },
+    expect(prismaMock.user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
       data: { passwordHash: 'NUOVO_HASH' },
     });
   });
@@ -88,6 +88,6 @@ describe('changeOwnPasswordAction', () => {
     authMock.mockResolvedValue(null);
 
     await expect(changeOwnPasswordAction('x', 'Nuova1234')).rejects.toThrow('NEXT_REDIRECT');
-    expect(prismaMock.user.updateMany).not.toHaveBeenCalled();
+    expect(prismaMock.user.update).not.toHaveBeenCalled();
   });
 });

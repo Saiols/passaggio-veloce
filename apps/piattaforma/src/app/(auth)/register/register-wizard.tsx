@@ -91,6 +91,22 @@ const STEPS = [
   { id: 5, label: 'Sedi', title: 'Le tue sedi', hint: 'Definisci le sedi operative (agenzie/punti). Se ne hai una sola, è già pronta dai dati azienda: clicca Completa.' },
 ] as const;
 
+/**
+ * Instrada l'errore di un campo server-side — rilevato SOLO al submit finale
+ * (step Sedi), sia dal check applicativo sia dal catch P2002 della race
+ * TOCTOU — verso lo step che possiede quel campo, così l'utente lo vede lì
+ * invece che come banner generico sullo step Sedi. Chiave = `field`
+ * restituito da `registerAction` (vedi RegisterActionResult in ../actions).
+ *
+ * Aggiungere un nuovo campo instradabile = una entry qui + il relativo prop
+ * `xxxError`/`useEffect(setError(...))` nello step che lo possiede (stesso
+ * pattern di `emailError` in AccountStep e `partitaIvaError` in CompanyStep).
+ */
+const ROUTABLE_FIELD_STEP: Record<string, number> = {
+  'account.email': 1,
+  'company.partitaIva': 2,
+};
+
 export function RegisterWizard({
   forcedCompanyType,
 }: {
@@ -111,10 +127,11 @@ export function RegisterWizard({
       : {},
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // Errore server-side sul campo email dello step Account (es. email già in
-  // uso): il submit finale avviene allo step Sedi, ma l'utente deve vederlo
-  // sul campo email di Step 1, non come banner generico in fondo alla pagina.
-  const [accountEmailError, setAccountEmailError] = useState<string | null>(null);
+  // Errore di un campo server-side (es. email o P.IVA già in uso): il submit
+  // finale avviene allo step Sedi, ma l'utente deve vederlo sullo step e sul
+  // campo che lo possiede, non come banner generico in fondo alla pagina.
+  // Instradato via ROUTABLE_FIELD_STEP, vedi lì.
+  const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null);
   const [kycErrors, setKycErrors] = useState<KycFailureUi[]>([]);
   // Cache verifica documenti: evita di ri-chiamare l'OCR su Back→Avanti senza
   // modifiche. `kycToken` viene passato al submit per non ri-fare l'OCR lì.
@@ -200,12 +217,13 @@ export function RegisterWizard({
 
   const handleAccount = (values: AccountData) => {
     setData((d) => ({ ...d, account: values }));
-    setAccountEmailError(null);
+    setFieldError(null);
     setStep(2);
   };
 
   const handleCompany = (values: CompanyData) => {
     setData((d) => ({ ...d, company: values }));
+    setFieldError(null);
     // I dati azienda incidono sul cross-check visura: invalida la verifica.
     setDocsVerified(false);
     setKycToken(null);
@@ -332,13 +350,15 @@ export function RegisterWizard({
         // di blocco per documento, così l'utente sa esattamente cosa correggere.
         setKycErrors(result.kycFailures);
         setStep(3);
-      } else if (result.field === 'account.email') {
-        // Email già in uso (check applicativo o race TOCTOU intercettata come
-        // P2002): torna allo step Account e mostra l'errore sul campo email,
-        // non come banner generico in fondo alla pagina Sedi.
-        setAccountEmailError(result.error);
-        setStep(1);
+      } else if (result.field && result.field in ROUTABLE_FIELD_STEP) {
+        // Campo già occupato (email o P.IVA — check applicativo o race TOCTOU
+        // intercettata come P2002): torna allo step che possiede il campo e
+        // mostra l'errore lì, non come banner generico sullo step Sedi.
+        setFieldError({ field: result.field, message: result.error });
+        setStep(ROUTABLE_FIELD_STEP[result.field]);
       } else {
+        // Nessun campo instradabile (o assente): banner generico, mai
+        // inghiottito in silenzio.
         setSubmitError(result.error);
       }
     });
@@ -453,7 +473,7 @@ export function RegisterWizard({
             <AccountStep
               defaultValues={data.account}
               onNext={handleAccount}
-              emailError={accountEmailError}
+              emailError={fieldError?.field === 'account.email' ? fieldError.message : null}
             />
           )}
           {step === 2 && (
@@ -462,6 +482,9 @@ export function RegisterWizard({
               forcedCompanyType={forcedCompanyType}
               onBack={() => setStep(1)}
               onNext={handleCompany}
+              partitaIvaError={
+                fieldError?.field === 'company.partitaIva' ? fieldError.message : null
+              }
             />
           )}
           {step === 3 && (
@@ -615,17 +638,21 @@ function CompanyStep({
   forcedCompanyType,
   onBack,
   onNext,
+  partitaIvaError,
 }: {
   defaultValues?: CompanyData;
   forcedCompanyType?: 'DEALER' | 'AGENZIA';
   onBack: () => void;
   onNext: (data: CompanyData) => void;
+  /** Errore server-side (es. P.IVA già registrata) da mostrare sul campo P.IVA. */
+  partitaIvaError?: string | null;
 }) {
   const {
     register,
     handleSubmit,
     setValue,
     watch,
+    setError,
     formState: { errors },
   } = useForm<CompanyData>({
     resolver: zodResolver(registerStep2CompanySchema),
@@ -638,6 +665,15 @@ function CompanyStep({
   // Il regime fiscale si chiede solo ai DEALER (i "broker" che maturano compensi):
   // determina il tipo di documento emesso per loro conto (TD01/TD06).
   const isDealer = (forcedCompanyType ?? watch('type')) === 'DEALER';
+
+  // Arrivo da un submit finale (step Sedi) fallito per P.IVA già registrata:
+  // porta l'errore sul campo, così l'utente lo vede dove deve correggerlo
+  // (stesso meccanismo di `emailError` in AccountStep).
+  useEffect(() => {
+    if (partitaIvaError) {
+      setError('partitaIva', { type: 'server', message: partitaIvaError });
+    }
+  }, [partitaIvaError, setError]);
 
   const applyAddress = (p: AddressParts) => {
     const opts = { shouldValidate: true, shouldDirty: true } as const;

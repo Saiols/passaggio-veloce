@@ -467,16 +467,28 @@ describe('tickPratica: espansione a raggio incrementale', () => {
   // sottrazione di calendario: `ultimaEspansioneAt` resta come documentazione
   // dello scenario, ma è `minutiLavorativiMock` a decidere l'esito.
   it('in orario ma ultima espansione 3 min lavorativi fa → noop, durata round non trascorsa', async () => {
+    // Istante riconoscibile: se `da`/`a` venissero scambiati nella chiamata a
+    // tickPratica, l'asserzione sugli argomenti sotto fallirebbe davvero.
+    const ultimaEspansioneAt = new Date(NOW.getTime() - 3 * 60_000);
     minutiLavorativiMock.mockReturnValue(3);
-    tx.pratica.findUnique.mockResolvedValue(
-      praticaTick({ ultimaEspansioneAt: new Date(NOW.getTime() - 3 * 60_000) }),
-    );
+    tx.pratica.findUnique.mockResolvedValue(praticaTick({ ultimaEspansioneAt }));
 
     const res = await tickPratica('p1');
 
     expect(res).toEqual({ status: 'noop', reason: 'durata round non trascorsa' });
     expect(tx.sede.findMany).not.toHaveBeenCalled();
     expect(tx.pratica.update).not.toHaveBeenCalled();
+
+    // Il mock ignora gli argomenti e restituisce solo il valore configurato:
+    // senza questo controllo, `da`/`a` scambiati (entrambi `Date`, TypeScript
+    // non se ne accorgerebbe) o un `cap` sbagliato lascerebbero la suite verde
+    // mentre ogni round di ogni pratica anticipa o ritarda in silenzio.
+    expect(minutiLavorativiMock).toHaveBeenCalledTimes(1);
+    const [da, a, , cap] = minutiLavorativiMock.mock.calls[0]!;
+    expect(da).toEqual(ultimaEspansioneAt); // 1° arg: l'istante DA cui si conta, non `now`
+    expect(a).toBeInstanceOf(Date);
+    expect((a as Date).getTime()).toBeGreaterThan((da as Date).getTime()); // `now` è successivo
+    expect(cap).toBe(CFG.intervalloMin); // 4° arg: il cap che abilita l'early-exit
   });
 
   // Gate 10 min con grazia (intervalloMin=10, ESPANSIONE_GRACE_MIN=0.2 → soglia 9,8 min).

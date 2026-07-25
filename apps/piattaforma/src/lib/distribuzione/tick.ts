@@ -34,8 +34,9 @@ const STATI_TERMINALI = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as cons
  * intero. 0,2 min = 12 secondi assorbono il jitter senza accorciare in modo
  * percepibile un round.
  *
- * ⚠️ Deve restare MOLTO minore della durata minima configurabile (1 minuto):
- * il valore precedente, 1 minuto, avrebbe dimezzato ogni round da 2 minuti.
+ * ⚠️ Deve restare MOLTO minore della più breve durata di round configurabile
+ * (il minimo vive in `validate.ts`, non qui, e non va duplicato): una grazia
+ * comparabile alla durata di un round corto lo dimezzerebbe di fatto.
  */
 const ESPANSIONE_GRACE_MIN = 0.2;
 

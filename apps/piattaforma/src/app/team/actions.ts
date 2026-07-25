@@ -20,6 +20,7 @@ import { isLettura } from '@/lib/auth/permessi/sola-lettura';
 import { ERRORE_SOSPENSIONE } from '@/lib/auth/sospensione';
 import type { CompanyTypeP, Permesso } from '@/lib/auth/permessi/catalogo';
 import type { Role } from '@/lib/auth/permissions';
+import { normalizzaEmail, emailGiaInUso, EMAIL_GIA_IN_USO, scriviUtente } from '@/lib/auth/email-univoca';
 
 export type InviteResult =
   | { ok: true; demoLink?: string }
@@ -202,21 +203,15 @@ export async function createInvitationAction(
   const companyId = authz.companyId;
   const invitedById = authz.userId;
 
-  const emailLower = email.toLowerCase().trim();
+  const emailLower = normalizzaEmail(email);
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
     return { ok: false, error: 'Email non valida' };
   }
 
-  // Multi-tenancy: il blocco vale solo se l'email e' gia' usata IN QUESTA azienda
-  // (item 07 release 2026-05). La stessa email puo' esistere in altre aziende.
-  const existingUser = await prisma.user.findFirst({
-    where: { email: emailLower, companyId },
-  });
-  if (existingUser) {
-    return {
-      ok: false,
-      error: 'Esiste già un utente con questa email nella tua azienda',
-    };
+  // Email univoca su tutta la piattaforma (spec 2026-07-25): non si invita
+  // qualcuno che ha gia' un account, nemmeno in un'altra azienda.
+  if (await emailGiaInUso(emailLower)) {
+    return { ok: false, error: EMAIL_GIA_IN_USO };
   }
 
   const existingPending = await prisma.invitation.findFirst({
@@ -299,12 +294,11 @@ export async function acceptInvitationAction(
     return { ok: false, error: 'Invito scaduto' };
   }
 
-  // Scope-company: l'invito e' stato emesso per l'azienda invitation.companyId,
-  // quindi l'email puo' duplicare altrove ma non in quella stessa azienda.
-  const exists = await prisma.user.findFirst({
-    where: { email: invitation.email, companyId: invitation.companyId },
-  });
-  if (exists) return { ok: false, error: 'Email già registrata in questa azienda' };
+  // Ri-verifica al momento dell'accettazione: fra l'invio dell'invito e ora
+  // l'email puo' essere stata presa da un'altra registrazione.
+  if (await emailGiaInUso(invitation.email)) {
+    return { ok: false, error: EMAIL_GIA_IN_USO };
+  }
 
   const passwordHash = await hashPassword(password);
 
@@ -315,30 +309,33 @@ export async function acceptInvitationAction(
     if (t.ok) sedeId = t.sedeId;
   }
 
-  await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: invitation.email,
-        passwordHash,
-        nome: nome.trim(),
-        cognome: cognome.trim(),
-        role: invitation.role,
-        status: 'ACTIVE',
-        emailVerifiedAt: new Date(),
-        companyId: invitation.companyId,
-        permessi: invitation.permessi,
-      },
-    });
-    if (sedeId) {
-      await tx.userSede.create({
-        data: { userId: user.id, sedeId, ruolo: invitation.ruoloSede },
+  const scritto = await scriviUtente(() =>
+    prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: invitation.email,
+          passwordHash,
+          nome: nome.trim(),
+          cognome: cognome.trim(),
+          role: invitation.role,
+          status: 'ACTIVE',
+          emailVerifiedAt: new Date(),
+          companyId: invitation.companyId,
+          permessi: invitation.permessi,
+        },
       });
-    }
-    await tx.invitation.update({
-      where: { id: invitation.id },
-      data: { status: 'ACCEPTED', acceptedAt: new Date() },
-    });
-  });
+      if (sedeId) {
+        await tx.userSede.create({
+          data: { userId: user.id, sedeId, ruolo: invitation.ruoloSede },
+        });
+      }
+      await tx.invitation.update({
+        where: { id: invitation.id },
+        data: { status: 'ACCEPTED', acceptedAt: new Date() },
+      });
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   return { ok: true };
 }
@@ -368,7 +365,7 @@ export async function createUserDirectAction(
   if (!perm.ok) return { ok: false, error: perm.error };
   const { companyId } = authz;
 
-  const emailLower = email.toLowerCase().trim();
+  const emailLower = normalizzaEmail(email);
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
     return { ok: false, error: 'Email non valida' };
   }
@@ -382,35 +379,32 @@ export async function createUserDirectAction(
     return { ok: false, error: 'Password deve contenere maiuscola, minuscola e numero' };
   }
 
-  const existing = await prisma.user.findFirst({
-    where: { email: emailLower, companyId },
-  });
-  if (existing) {
-    return {
-      ok: false,
-      error: 'Esiste già un utente con questa email nella tua azienda',
-    };
+  if (await emailGiaInUso(emailLower)) {
+    return { ok: false, error: EMAIL_GIA_IN_USO };
   }
 
   const passwordHash = await hashPassword(password);
-  await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        email: emailLower,
-        passwordHash,
-        nome: nome.trim(),
-        cognome: cognome.trim(),
-        role: 'UTENTE_AZIENDA',
-        status: 'ACTIVE',
-        emailVerifiedAt: new Date(),
-        companyId,
-        permessi: perm.permessi,
-      },
-    });
-    await tx.userSede.create({
-      data: { userId: user.id, sedeId: authz.sedeId, ruolo: authz.ruolo },
-    });
-  });
+  const scritto = await scriviUtente(() =>
+    prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: emailLower,
+          passwordHash,
+          nome: nome.trim(),
+          cognome: cognome.trim(),
+          role: 'UTENTE_AZIENDA',
+          status: 'ACTIVE',
+          emailVerifiedAt: new Date(),
+          companyId,
+          permessi: perm.permessi,
+        },
+      });
+      await tx.userSede.create({
+        data: { userId: user.id, sedeId: authz.sedeId, ruolo: authz.ruolo },
+      });
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   revalidatePath('/team');
   return { ok: true };
@@ -466,7 +460,7 @@ export async function updateTeamUserAction(
     return { ok: false, error: 'Utente non trovato nella tua azienda' };
   }
 
-  const emailLower = email.toLowerCase().trim();
+  const emailLower = normalizzaEmail(email);
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
     return { ok: false, error: 'Email non valida' };
   }
@@ -489,14 +483,8 @@ export async function updateTeamUserAction(
   }
 
   if (emailLower !== target.email) {
-    const conflict = await prisma.user.findFirst({
-      where: { email: emailLower, companyId, NOT: { id: userId } },
-    });
-    if (conflict) {
-      return {
-        ok: false,
-        error: 'Esiste già un altro utente con questa email nella tua azienda',
-      };
+    if (await emailGiaInUso(emailLower, { escludiUserId: userId })) {
+      return { ok: false, error: EMAIL_GIA_IN_USO };
     }
   }
 
@@ -525,24 +513,27 @@ export async function updateTeamUserAction(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.user.update({
-      where: { id: userId },
-      data: { email: emailLower, nome: nome.trim(), cognome: cognome.trim(), ...permessiData },
-    });
-    if (aggiornaMembership) {
-      // Modello "una sede per utente": l'utente appartiene a una sola sede. Per
-      // evitare conflitti con @@unique([userId, sedeId]) quando si sposta sede,
-      // collassiamo a un'unica membership con la sede/ruolo scelti.
-      const existing = await tx.userSede.findFirst({ where: { userId } });
-      if (existing && existing.sedeId === sedeId) {
-        await tx.userSede.update({ where: { id: existing.id }, data: { ruolo } });
-      } else {
-        await tx.userSede.deleteMany({ where: { userId } });
-        await tx.userSede.create({ data: { userId, sedeId: sedeId!, ruolo } });
+  const scritto = await scriviUtente(() =>
+    prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { email: emailLower, nome: nome.trim(), cognome: cognome.trim(), ...permessiData },
+      });
+      if (aggiornaMembership) {
+        // Modello "una sede per utente": l'utente appartiene a una sola sede. Per
+        // evitare conflitti con @@unique([userId, sedeId]) quando si sposta sede,
+        // collassiamo a un'unica membership con la sede/ruolo scelti.
+        const existing = await tx.userSede.findFirst({ where: { userId } });
+        if (existing && existing.sedeId === sedeId) {
+          await tx.userSede.update({ where: { id: existing.id }, data: { ruolo } });
+        } else {
+          await tx.userSede.deleteMany({ where: { userId } });
+          await tx.userSede.create({ data: { userId, sedeId: sedeId!, ruolo } });
+        }
       }
-    }
-  });
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   revalidatePath('/team');
   revalidatePath(`/team/${userId}/edit`);

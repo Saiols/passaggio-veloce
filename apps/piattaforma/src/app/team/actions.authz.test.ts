@@ -169,3 +169,34 @@ describe('revokeInvitationAction — autorizzazione sede-aware (invito)', () => 
     expect(prismaMock.invitation.update).not.toHaveBeenCalled();
   });
 });
+
+describe('unicita email globale (spec 2026-07-25)', () => {
+  it('createUserDirectAction rifiuta un email presa in un ALTRA azienda', async () => {
+    getSessionContextMock.mockResolvedValue(
+      ctxSede({
+        accessibleSedi: [sede('s1')],
+        membershipRuoli: { s1: 'ADMIN_SEDE' },
+        permessi: PERMESSI_TEAM_COMPLETI,
+      }),
+    );
+    // Il mock discrimina sulla where: col codice vecchio la query porta
+    // companyId: 'c1' e non deve trovare nulla, altrimenti il test sarebbe
+    // verde anche senza il fix.
+    prismaMock.user.findFirst.mockImplementation(async (args: {
+      where?: { email?: string; companyId?: string };
+    }) => {
+      const where = args?.where ?? {};
+      if (where.email !== 'x@y.it') return null;
+      if (where.companyId !== undefined) return null;
+      return { id: 'u-altrove' };
+    });
+
+    const res = await createUserDirectAction('x@y.it', 'Ann', 'Bee', 'Password1', 's1', 'OPERATORE');
+
+    expect(res).toEqual({
+      ok: false,
+      error: 'Questa email è già associata a un account Passaggio Veloce',
+    });
+    expect(prismaMock.user.create).not.toHaveBeenCalled();
+  });
+});

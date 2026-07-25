@@ -17,6 +17,11 @@ vi.mock('@/auth', () => ({ auth: authMock }));
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/geo/geocode', () => ({ geocodeAddress: geocodeMock }));
+// Non è oggetto di questo file: la sospensione ha la propria copertura in
+// mappa-enforcement.test.ts. Qui si assume sempre operativo.
+vi.mock('@/lib/auth/sospensione-guard', () => ({
+  requireOperativita: vi.fn(() => Promise.resolve({ ok: true })),
+}));
 
 import { createSedeAction } from './actions';
 

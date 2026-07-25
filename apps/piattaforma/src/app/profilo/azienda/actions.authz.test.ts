@@ -13,6 +13,11 @@ vi.mock('next/navigation', () => ({
     throw new Error('NEXT_REDIRECT');
   }),
 }));
+// Non è oggetto di questo file: la sospensione ha la propria copertura in
+// mappa-enforcement.test.ts. Qui si assume sempre operativo.
+vi.mock('@/lib/auth/sospensione-guard', () => ({
+  requireOperativita: vi.fn(() => Promise.resolve({ ok: true })),
+}));
 
 import { updateCompanyProfileAction } from './actions';
 

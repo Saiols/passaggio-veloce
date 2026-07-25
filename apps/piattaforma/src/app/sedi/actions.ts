@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { requirePermesso } from '@/lib/auth/permessi/guard';
+import { requireOperativita } from '@/lib/auth/sospensione-guard';
 import { prisma } from '@pv/db';
 import { parseSedeFields } from '@/lib/sedi/form';
 import { geocodeAddress } from '@/lib/geo/geocode';
@@ -38,6 +39,8 @@ export async function createSedeAction(formData: FormData): Promise<SedeActionRe
   if (session.user.role !== 'ADMIN_AZIENDA') {
     return { ok: false, error: 'Solo il proprietario può aggiungere sedi' };
   }
+  const op = await requireOperativita();
+  if (!op.ok) return { ok: false, error: op.error };
   const companyId = session.user.companyId!;
 
   const company = await prisma.company.findUnique({
@@ -224,6 +227,10 @@ async function setSedeSuspended(sedeId: string, suspended: boolean): Promise<Sed
   if (session.user.role !== 'ADMIN_AZIENDA') {
     return { ok: false, error: 'Solo il proprietario può gestire le sedi' };
   }
+  // Copre sia suspendSedeAction sia reactivateSedeAction, che sono wrapper di
+  // una riga su questa funzione.
+  const op = await requireOperativita();
+  if (!op.ok) return { ok: false, error: op.error };
   const companyId = session.user.companyId!;
 
   const sede = await prisma.sede.findUnique({

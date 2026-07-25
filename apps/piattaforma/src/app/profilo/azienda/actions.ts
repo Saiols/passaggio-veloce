@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
+import { requireOperativita } from '@/lib/auth/sospensione-guard';
 
 export type UpdateCompanyResult = { ok: true } | { ok: false; error: string };
 
@@ -37,6 +38,8 @@ export async function updateCompanyProfileAction(
   if (session.user.role !== 'ADMIN_AZIENDA') {
     return { ok: false, error: "Solo l'admin azienda può modificare il profilo" };
   }
+  const op = await requireOperativita();
+  if (!op.ok) return { ok: false, error: op.error };
   const companyId = session.user.companyId;
   if (!companyId) return { ok: false, error: 'Account non associato a un\'azienda' };
 

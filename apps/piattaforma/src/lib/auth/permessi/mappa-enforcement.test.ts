@@ -3,6 +3,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, resolve, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MAPPA_ENFORCEMENT } from './mappa-enforcement';
+import { MAPPA_SOSPENSIONE } from './mappa-sospensione';
 
 // `__dirname` non esiste sotto vitest (ESM). Stesso pattern di
 // src/lib/notifiche/pratica-schema.test.ts e degli altri test che leggono file.
@@ -215,7 +216,7 @@ describe('mappa-enforcement', () => {
         `rosso — questo è il buco che il test chiude. Aggiungi il file a MAPPA_ENFORCEMENT con le sue server action ` +
         `classificate (permesso o null con la ragione):\n  ${nonMappati.join('\n  ')}`,
     ).toEqual([]);
-  });
+  }, 20_000);
 
   it('ogni server action esportata è classificata nella mappa', () => {
     const mancanti: string[] = [];
@@ -261,4 +262,59 @@ describe('mappa-enforcement', () => {
         `funzione giusta, oppure in un helper dichiarato nello stesso file e chiamato direttamente da essa:\n  ${senzaGate.join('\n  ')}`,
     ).toEqual([]);
   });
+});
+
+/** Il corpo dell'action, o di un helper diretto, cita `requireOperativita`. */
+function citaGuardOperativita(src: string, corpo: string, nomeAction: string): boolean {
+  if (corpo.includes('requireOperativita')) return true;
+  const chiamate = [...corpo.matchAll(/\b([A-Za-z_]\w*)\s*\(/g)].map((m) => m[1]);
+  return [...new Set(chiamate)]
+    .filter((h) => h !== nomeAction)
+    .some((h) => {
+      const corpoHelper = corpoFunzione(src, h);
+      return corpoHelper !== null && corpoHelper.includes('requireOperativita');
+    });
+}
+
+describe('mappa-sospensione', () => {
+  it('classifica esattamente le action senza permesso delegabile', () => {
+    const attese: string[] = [];
+    for (const [rel, actions] of Object.entries(MAPPA_ENFORCEMENT)) {
+      for (const [nome, permesso] of Object.entries(actions)) {
+        if (permesso === null) attese.push(`${rel}:${nome}`);
+      }
+    }
+    const dichiarate: string[] = [];
+    for (const [rel, actions] of Object.entries(MAPPA_SOSPENSIONE)) {
+      for (const nome of Object.keys(actions)) dichiarate.push(`${rel}:${nome}`);
+    }
+    expect(
+      dichiarate.sort(),
+      'MAPPA_SOSPENSIONE deve coprire ESATTAMENTE le action a permesso null di ' +
+        'MAPPA_ENFORCEMENT: quelle gated da un permesso hanno il comportamento già ' +
+        'derivato dalla partizione lettura/scrittura e non vanno ripetute qui.',
+    ).toEqual(attese.sort());
+  });
+
+  it("ogni action marcata BLOCCA chiama davvero requireOperativita", () => {
+    const senzaGuard: string[] = [];
+    for (const [rel, actions] of Object.entries(MAPPA_SOSPENSIONE)) {
+      const src = readFileSync(resolve(ROOT, rel), 'utf8');
+      for (const [nome, esito] of Object.entries(actions)) {
+        if (esito !== 'BLOCCA') continue;
+        const corpo = corpoFunzione(src, nome);
+        if (corpo === null) {
+          senzaGuard.push(`${rel}:${nome} (funzione non trovata nel sorgente)`);
+          continue;
+        }
+        if (!citaGuardOperativita(src, corpo, nome)) senzaGuard.push(`${rel}:${nome}`);
+      }
+    }
+    expect(
+      senzaGuard,
+      'Action marcata BLOCCA in mappa-sospensione.ts ma che non chiama ' +
+        'requireOperativita() né direttamente né in un helper dichiarato nello stesso ' +
+        'file:\n  ' + senzaGuard.join('\n  '),
+    ).toEqual([]);
+  }, 20_000);
 });

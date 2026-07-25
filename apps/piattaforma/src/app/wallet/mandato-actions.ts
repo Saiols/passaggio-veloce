@@ -7,6 +7,7 @@ import { prisma } from '@pv/db';
 import { auth } from '@/auth';
 import { env } from '@/env';
 import { isOwner } from '@/lib/auth/permissions';
+import { requireOperativita } from '@/lib/auth/sospensione-guard';
 import { hashPassword, verifyPassword } from '@/lib/auth/password';
 import { getEmail } from '@/lib/providers/email';
 import { getStorage } from '@/lib/providers/storage';
@@ -29,6 +30,8 @@ async function utenteTitolare() {
 export async function inviaOtpMandatoAction(): Promise<Esito> {
   const u = await utenteTitolare();
   if (!u) return { ok: false, error: 'Solo il titolare può firmare il mandato' };
+  const op = await requireOperativita();
+  if (!op.ok) return { ok: false, error: op.error };
 
   const codice = generaCodiceOtp();
   const hash = await hashPassword(codice);
@@ -53,6 +56,8 @@ export async function inviaOtpMandatoAction(): Promise<Esito> {
 export async function firmaMandatoAction(codice: string): Promise<Esito> {
   const u = await utenteTitolare();
   if (!u) return { ok: false, error: 'Solo il titolare può firmare il mandato' };
+  const op = await requireOperativita();
+  if (!op.ok) return { ok: false, error: op.error };
 
   // Idempotente: se già firmato, ok.
   const esistente = await prisma.mandatoFatturazione.findUnique({

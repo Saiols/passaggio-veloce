@@ -9,26 +9,20 @@ const DEV_PASSWORD = 'DevPass123!';
 /**
  * Upsert idempotente di uno User per email.
  *
- * Lo schema usa `@@unique([companyId, email])` (più un partial index per gli
- * admin platform con companyId NULL), quindi `prisma.user.upsert({ where: { email } })`
- * non è valido: `email` da sola non è una chiave unica per Prisma. Questo helper
- * replica la semantica originale (find-by-email → update | create) restando
- * compatibile con la chiave composta.
+ * Dal 2026-07-25 `email` è `@unique` sullo schema, quindi `where: { email }`
+ * è una where valida su una chiave unica: un vero `prisma.user.upsert`.
  */
 async function upsertUserByEmail<
   C extends Record<string, unknown>,
   U extends Record<string, unknown>,
 >(email: string, data: { create: C; update: U }) {
-  const existing = await prisma.user.findFirst({ where: { email } });
-  if (existing) {
-    return prisma.user.update({
-      where: { id: existing.id },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: data.update as any,
-    });
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return prisma.user.create({ data: data.create as any });
+  return prisma.user.upsert({
+    where: { email },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    create: data.create as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    update: data.update as any,
+  });
 }
 
 async function main() {

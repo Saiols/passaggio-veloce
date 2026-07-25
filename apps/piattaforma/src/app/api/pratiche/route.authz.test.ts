@@ -53,6 +53,7 @@ function ctx(opts: { permessi?: string[] }) {
     scopeIds: ['s1'],
     membershipRuoli: {},
     permessi: new Set(opts.permessi ?? []),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   };
 }
 

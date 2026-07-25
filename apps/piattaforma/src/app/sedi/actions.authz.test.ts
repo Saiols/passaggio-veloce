@@ -28,6 +28,7 @@ const ctxConPermessi = (permessi: string[], overrides: Record<string, unknown> =
   scopeIds: ['s1'],
   membershipRuoli: { s1: 'ADMIN_SEDE' as const },
   permessi: new Set(permessi),
+  sospensione: { sospeso: false, motivo: null, origine: null },
   ...overrides,
 });
 

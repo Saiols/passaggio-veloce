@@ -36,6 +36,7 @@ beforeEach(() => {
     user: { id: 'u1' },
     isOwner: false,
     permessi: new Set(['wallet.view', 'wallet.payout', 'wallet.soglia']),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   });
   // Wallet di sede eleggibile; nessun wallet madre (broker senza affiliazione).
   prismaMock.wallet.findUnique.mockImplementation(({ where }: { where: { sedeId?: string; companyId?: string } }) =>

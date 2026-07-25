@@ -141,6 +141,7 @@ function sessione(): void {
     scopeIds: [SEDE_MIA],
     membershipRuoli: {},
     permessi: new Set(['pratiche.view', 'pratiche.firma']),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   });
 }
 

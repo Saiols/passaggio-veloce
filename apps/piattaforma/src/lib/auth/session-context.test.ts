@@ -88,12 +88,13 @@ describe('getSessionContext', () => {
     expect([...ctx!.permessi].sort()).toEqual(['pratiche.view']);
   });
 
-  it('owner (ADMIN_AZIENDA): non legge permessi dal DB', async () => {
+  it('owner (ADMIN_AZIENDA): legge comunque lo status (serve alla sospensione), ma il set permessi resta vuoto', async () => {
     authMock.mockResolvedValue({ user: { id: 'u1', role: 'ADMIN_AZIENDA', companyId: 'c1' } });
     const ctx = await getSessionContext();
-    // L'owner non deve leggere il campo permessi dal DB.
-    expect(userFindUnique).not.toHaveBeenCalled();
-    // Il set deve essere vuoto (l'owner ha poteri impliciti, gestiti altrove).
+    // La lettura ora serve anche per `status`/`suspensionLastNote`, che riguardano
+    // pure il titolare: non è più saltata.
+    expect(userFindUnique).toHaveBeenCalled();
+    // Il set permessi deve restare vuoto: l'owner ha poteri impliciti (isOwner in can()).
     expect([...ctx!.permessi].sort()).toEqual([]);
   });
 });

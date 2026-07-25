@@ -42,6 +42,7 @@ function brokerSession(): void {
     currentSede: { kind: 'ONE', sede: { id: SEDE, nome: 'Mia', type: 'DEALER' } },
     scopeIds: [SEDE], membershipRuoli: {},
     permessi: new Set(['pratiche.view', 'pratiche.create']),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   });
 }
 
@@ -108,6 +109,7 @@ describe('inviaSegnalazioneCreazioneAction', () => {
       // pratiche.create è un permesso DEALER-only: un'agenzia non lo ha comunque,
       // ma qui verifichiamo che il rifiuto avvenga per companyType, non a caso.
       permessi: new Set(['pratiche.view', 'pratiche.create']),
+      sospensione: { sospeso: false, motivo: null, origine: null },
     });
     const res = await inviaSegnalazioneCreazioneAction({ ...base, descrizione: 'x'.repeat(25) });
     expect(res).toEqual({ ok: false, error: 'Solo i broker possono inviare segnalazioni' });
@@ -127,6 +129,7 @@ describe('inviaSegnalazioneCreazioneAction — capability', () => {
       currentSede: { kind: 'ONE', sede: { id: SEDE, nome: 'Mia', type: 'DEALER' } },
       scopeIds: [SEDE], membershipRuoli: {},
       permessi: new Set(['pratiche.view']),
+      sospensione: { sospeso: false, motivo: null, origine: null },
     });
 
     const res = await inviaSegnalazioneCreazioneAction({

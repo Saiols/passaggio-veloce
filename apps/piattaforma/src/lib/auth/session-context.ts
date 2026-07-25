@@ -17,6 +17,8 @@ import {
   type SedeRole,
   type SedeRuolo,
 } from '@/lib/sedi/scope';
+import { calcolaSospensione, NON_SOSPESO, type StatoSospensione } from '@/lib/auth/sospensione';
+import { filtraSoloLettura } from '@/lib/auth/permessi/sola-lettura';
 
 /** Cookie che porta la sede operativa corrente (id sede oppure 'ALL' per il proprietario). */
 export const SEDE_COOKIE = 'pv_sede';
@@ -43,6 +45,8 @@ export type SessionContext = {
   companyType: CompanyTypeP | undefined;
   /** Capability granulari. Vuoto per l'owner: `can()` gli dà tutto comunque. */
   permessi: Set<Permesso>;
+  /** Sospensione in corso: `can()` nega ogni chiave di scrittura. */
+  sospensione: StatoSospensione;
 };
 
 /**
@@ -69,6 +73,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
       membershipRuoli: {},
       companyType: undefined,
       permessi: new Set<Permesso>(),
+      sospensione: NON_SOSPESO,
     };
   }
 
@@ -82,11 +87,19 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
       where: { userId: user.id, sede: { companyId, deletedAt: null } },
       select: { sedeId: true, ruolo: true },
     }),
-    // L'owner ha pieni poteri impliciti: non serve leggere il campo.
-    isOwner
-      ? Promise.resolve(null)
-      : prisma.user.findUnique({ where: { id: user.id }, select: { permessi: true } }),
-    prisma.company.findUnique({ where: { id: companyId }, select: { type: true } }),
+    // Non più saltata per l'owner: `status` e `suspensionLastNote` servono anche
+    // al titolare, che senza questa lettura resterebbe pienamente operativo
+    // malgrado la sospensione (ed è l'unica utenza nella maggior parte delle
+    // aziende clienti). `permessi` per l'owner resta ignorato: `can()` gli dà
+    // tutto comunque tramite lo short-circuit su isOwner.
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { permessi: true, status: true, suspensionLastNote: true },
+    }),
+    prisma.company.findUnique({
+      where: { id: companyId },
+      select: { type: true, suspendedAt: true, suspensionLastNote: true },
+    }),
   ]);
 
   const accessibleSedi = resolveAccessibleSedi({
@@ -102,6 +115,19 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
   const membershipRuoli: Record<string, SedeRuolo> = {};
   for (const m of memberships) membershipRuoli[m.sedeId] = m.ruolo as SedeRuolo;
 
+  const sospensione = calcolaSospensione({
+    userStatus: dbUser?.status,
+    userNote: dbUser?.suspensionLastNote,
+    companySuspendedAt: company?.suspendedAt,
+    companyNote: company?.suspensionLastNote,
+  });
+
+  // Il confine col DB: una chiave rimossa dal catalogo non entra nel set.
+  // Per l'owner il set resta vuoto — `can()` gli dà tutto tramite isOwner.
+  const permessiBase = isOwner
+    ? new Set<Permesso>()
+    : new Set((dbUser?.permessi ?? []).filter(isPermesso));
+
   return {
     user,
     companyId,
@@ -111,8 +137,8 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
     scopeIds,
     membershipRuoli,
     companyType: (company?.type ?? undefined) as CompanyTypeP | undefined,
-    // Il confine col DB: una chiave rimossa dal catalogo non entra nel set.
-    permessi: new Set((dbUser?.permessi ?? []).filter(isPermesso)),
+    permessi: sospensione.sospeso ? filtraSoloLettura(permessiBase) : permessiBase,
+    sospensione,
   };
 });
 

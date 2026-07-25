@@ -183,6 +183,7 @@ function sessionCtx() {
     scopeIds: [SEDE.id],
     membershipRuoli: {},
     permessi: new Set(['pratiche.create']),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   };
 }
 

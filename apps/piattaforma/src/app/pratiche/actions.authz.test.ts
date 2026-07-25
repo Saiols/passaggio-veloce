@@ -119,6 +119,7 @@ function sessione(companyType: 'AGENZIA' | 'DEALER', companyId: string): void {
     scopeIds: [SEDE_MIA],
     membershipRuoli: {},
     permessi: new Set(companyType === 'AGENZIA' ? PERMESSI_AGENZIA : PERMESSI_DEALER),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   });
 }
 
@@ -139,6 +140,7 @@ function ctxConPermessi(
     scopeIds: [SEDE_MIA],
     membershipRuoli: { [SEDE_MIA]: 'OPERATORE' },
     permessi: new Set(permessi),
+    sospensione: { sospeso: false, motivo: null, origine: null },
     ...overrides,
   };
 }

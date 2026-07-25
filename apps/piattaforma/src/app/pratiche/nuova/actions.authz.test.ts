@@ -132,6 +132,7 @@ function ctxBase(permessi: string[]) {
     scopeIds: [],
     membershipRuoli: {},
     permessi: new Set(permessi),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   };
 }
 

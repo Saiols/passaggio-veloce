@@ -20,6 +20,7 @@ const ctx = (over: Record<string, unknown> = {}) => ({
   companyType: 'AGENZIA',
   isOwner: false,
   permessi: new Set(['wallet.view']),
+  sospensione: { sospeso: false, motivo: null, origine: null },
   ...over,
 });
 

@@ -67,6 +67,7 @@ function ctxConPermessi(permessi: string[], overrides: Record<string, unknown> =
     scopeIds: [SEDE_MIA],
     membershipRuoli: { [SEDE_MIA]: 'OPERATORE' },
     permessi: new Set(permessi),
+    sospensione: { sospeso: false, motivo: null, origine: null },
     ...overrides,
   };
 }

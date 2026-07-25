@@ -73,6 +73,7 @@ function sessione(): void {
     scopeIds: [SEDE_MIA],
     membershipRuoli: {},
     permessi: new Set(PERMESSI_DEALER),
+    sospensione: { sospeso: false, motivo: null, origine: null },
   });
 }
 

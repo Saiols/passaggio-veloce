@@ -57,9 +57,18 @@ non preleva.
 ### Sola lettura come intersezione dei permessi, non come guard sparsi
 
 `lib/auth/permessi/catalogo.ts` definisce 31 chiavi già separabili in lettura e
-scrittura, e **ogni CTA di scrittura nella UI è già derivata da
+scrittura, e **la maggior parte delle CTA di scrittura nella UI è già derivata da
 `hasPermesso(...)`** — `pratiche/page.tsx:69-72`, `inbox/page.tsx:35`,
 `wallet/page.tsx:405-406`, `orari/page.tsx:75`, e così via.
+
+> **CORREZIONE (review whole-branch, 2026-07-25).** La prima stesura diceva
+> «**ogni** CTA», ed era imprecisa: è vero per `/pratiche/[id]` (5 chiavi),
+> `/inbox/[id]`, `/orari`, `/wallet`, `/fatturazione` e le due dashboard, ma
+> **falso per `/team` e `/sedi`**, dove «Modifica», `DisableTeamUserButton`,
+> `RevokeButton`, «+ Aggiungi utente» e «+ Aggiungi sede» si renderizzano senza
+> condizione. L'esito resta accettabile — ogni percorso finisce o in un errore
+> corretto o in un redirect — ma quella parola portava l'intero argomento
+> «~40 pagine senza toccarne nessuna», e va detta con le sue eccezioni.
 
 Quindi: se la sospensione **interseca** il set dei permessi effettivi con una
 whitelist di sole chiavi di lettura, l'enforcement e la UI si risolvono nello
@@ -174,12 +183,31 @@ e il test impedisce di aggiungerle per errore.
 
 ### B. Motore payout
 
-Tutti i percorsi di payout — action manuale, auto-payout a soglia in tempo reale,
-cron di sicurezza — passano da `eseguiPayoutImmediato`
-(`lib/wallet/auto-payout.ts:45`). Un blocco solo sull'action sarebbe **cosmetico**:
-l'auto-payout partirebbe comunque, senza che il sospeso tocchi nulla. Il caso è
-concreto, perché le pratiche già inviate da un broker sospeso continuano a essere
-firmate dalle agenzie e ad accreditargli il wallet.
+> **CORREZIONE (review whole-branch, 2026-07-25).** Questa sezione conteneva una
+> premessa falsa, asserita con sicurezza e non verificata: «tutti i percorsi di
+> payout passano da `eseguiPayoutImmediato`». **Non è vero.**
+> `lib/jobs/trigger-auto-payout.ts` crea le righe `Payout` **direttamente** con
+> `payout.create`, e `processPayouts` le salda via `settlePayout`, che non ha
+> alcun guard. Il docstring di quel file lo dichiara esplicitamente e per questo
+> motivo **due guard erano già stati replicati lì** (saldo negativo aziendale e
+> visura camerale). Il terzo — quello di questa spec — non lo era.
+>
+> Conseguenza, prima del fix: `vercel.json` schedula il trigger a `0 1 * * *` e il
+> settlement a `30 1 * * *`, quindi la sospensione **rimandava** il payout
+> automatico di una notte invece di bloccarlo. La sezione qui sotto descrive il
+> guard in `eseguiPayoutImmediato`, che resta necessario ma **non è sufficiente**:
+> serve il guard gemello in `trigger-auto-payout.ts`, senza esenzione
+> `ignoraSoglia` perché quel percorso non ne ha una.
+>
+> Nessuna review per-task poteva trovarlo: sta in un file che nessun task ha
+> toccato. Un `grep -rn "payout.create"` di dieci secondi l'avrebbe impedito.
+
+I percorsi che convergono su `eseguiPayoutImmediato` sono l'action manuale e
+l'auto-payout a soglia in tempo reale (`lib/wallet/auto-payout.ts:45`). Un blocco
+solo sull'action sarebbe **cosmetico**: l'auto-payout partirebbe comunque, senza
+che il sospeso tocchi nulla. Il caso è concreto, perché le pratiche già inviate da
+un broker sospeso continuano a essere firmate dalle agenzie e ad accreditargli il
+wallet.
 
 Guard in `eseguiPayoutImmediato`, accanto a quello della visura
 (`payout-exec.ts:176-189`) e con la stessa struttura, **esente sotto
@@ -198,9 +226,28 @@ variant="error"`, dice qual è la misura (utente o azienda), riporta il motivo,
 elenca cosa resta possibile e indica come chiedere il riesame (clausola 12.3-bis
 dei Termini: la misura è comunicata col motivo, e il riesame è un diritto).
 
-Montato **per-pagina** come già fa `VisuraBanner` — dashboard, pratiche, inbox,
-wallet, più fatture e affiliazione. È la convenzione del progetto: la shell è
-per-pagina, non c'è un layout dove montarlo una volta sola.
+> **CORREZIONE (review whole-branch, 2026-07-25).** Questa sezione prescriveva il
+> montaggio **per-pagina** «perché la shell è per-pagina e non c'è un layout dove
+> montarlo una volta sola». Falso in effetti: `components/app-shell.tsx:100`
+> esporta `AppShell`, un Server Component usato da **57 pagine**, che già rende
+> `<DemoBanner />` esattamente in questo ruolo, in quattro slot.
+>
+> Il costo della scelta sbagliata era concreto e nessuna review per-task poteva
+> vederlo: `redirectSeAgenziaBloccata()` manda a `/blocco-pagamento` da
+> `/dashboard`, `/pratiche` e `/inbox`, e quella pagina non aveva il banner —
+> quindi per un'agenzia **sospesa e bloccata-pagamento** i tre ancoraggi
+> principali erano irraggiungibili e nulla sullo schermo menzionava la
+> sospensione. Restavano inoltre senza spiegazione `/pratiche/[id]` e
+> `/inbox/[id]`, cioè i posti dove un'agenzia lavora davvero.
+>
+> Decisione del committente: il banner è montato **una volta sola in `AppShell`**,
+> accanto a `DemoBanner`, e i nove montaggi per-pagina sono stati cancellati. La
+> copertura diventa derivata invece che ricordata — lo stesso argomento con cui
+> questa spec giustifica l'intersezione dei permessi, che qui non avevo applicato
+> alla presentazione.
+
+`VisuraBanner` resta montato per-pagina: è preesistente e fuori dallo scopo di
+questo lavoro.
 
 Due accortezze che vengono da errori già commessi in questo repo:
 
@@ -279,6 +326,24 @@ i test mockano Prisma.
   semplicemente non ne crea di nuove.
 - **Migration**: nessuna. Tutti i campi usati (`User.status`,
   `Company.suspendedAt`, `suspensionLastNote`) esistono già.
+
+## Lezione: la prosa portante di una spec non è verificata da nulla
+
+Tre dei difetti trovati dalla review whole-branch sono difetti **di questa spec**,
+non dell'implementazione, e hanno tutti la stessa forma: una premessa di fatto,
+affermata con sicurezza, che nessun revisore per-task aveva un diff in cui
+controllare.
+
+| Premessa scritta qui | Smentita da |
+|---|---|
+| «tutti i percorsi di payout passano da `eseguiPayoutImmediato`» | il docstring di `lib/jobs/trigger-auto-payout.ts`, che avverte il contrario |
+| «non c'è un layout dove montare il banner una volta sola» | `components/app-shell.tsx`, che ospita già `DemoBanner` |
+| «ogni CTA di scrittura è derivata da `hasPermesso`» | `/team` e `/sedi` |
+
+Il codice è stato revisionato sei volte; queste tre frasi zero. Contromisura per
+le prossime spec: **per ogni affermazione della forma «tutti gli X passano da Y»,
+incollare nella spec il comando che la stabilisce.** Per la prima riga della
+tabella bastava `grep -rn "payout.create"`.
 
 ## Correzione collaterale
 

@@ -327,6 +327,39 @@ i test mockano Prisma.
 - **Migration**: nessuna. Tutti i campi usati (`User.status`,
   `Company.suspendedAt`, `suspensionLastNote`) esistono già.
 
+## Follow-up aperti al momento del merge (2026-07-25)
+
+Consapevoli e non corretti. In ordine di gravità.
+
+1. **Staff di piattaforma non coperto.** `ADMIN_PIATTAFORMA`, `ASSISTENTE` e i
+   ruoli CRM sospesi mantengono i loro poteri: le autorizzazioni passano da
+   funzioni pure sul ruolo in `permissions.ts` (165 punti di chiamata in 62 file)
+   e non esiste un layout admin condiviso. È il caso peggiore, perché sono gli
+   account più privilegiati. **Serve una spec separata.**
+2. **Riga `Payout` `IN_LAVORAZIONE` fantasma.** Lasciata da un settlement mai
+   completato, blocca la liquidazione del resto di quel wallet alla cessazione.
+   Non è risolvibile automaticamente — distinguere un settlement vivo da uno
+   morto non è possibile con i dati attuali, e sbagliare significa pagare due
+   volte — quindi resta un intervento admin. Oggi il segnale è un
+   `console.error` in log effimeri, su un'azione che nessuno rilegge, mentre la
+   company viene comunque soft-deleted. **Serve un segnale persistente**
+   (notifica admin o flag su `Company`).
+3. **`importoCent` di una riga residua superiore al saldo attuale** (penale
+   addebitata dopo la creazione della riga) porta il wallet in negativo.
+   Esposizione identica in `processPayouts`, quindi preesistente, ma sul percorso
+   di cessazione è irrecuperabile.
+4. **CTA di `/team` non condizionate** («Modifica», disabilita, revoca,
+   «+ Aggiungi utente»): asimmetria di presentazione con `/sedi`, che dopo questo
+   lavoro le nasconde. L'enforcement è corretto — tutti e sei i gate rispondono
+   `ERRORE_SOSPENSIONE`.
+5. **`ERR_TOO_MANY_REDIRECTS` su `/login`** osservato con un cookie di sessione
+   preesistente nel profilo browser, non riproducibile in contesto isolato. Non
+   chiarito: potrebbe essere un cookie stantio o una forma di loop reale.
+6. **`reactivateCompanyAction` riattiva tutti gli utenti `SUSPENDED`**, revocando
+   in silenzio anche una sospensione individuale motivata. Preesistente,
+   documentato in `suspension-actions.ts`, richiede `User.suspensionSource` e una
+   migration.
+
 ## Lezione: la prosa portante di una spec non è verificata da nulla
 
 Tre dei difetti trovati dalla review whole-branch sono difetti **di questa spec**,

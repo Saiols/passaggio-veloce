@@ -228,6 +228,18 @@ function parseBlobRefs(
   return { ok: true, docs };
 }
 
+/**
+ * I due soli campi che il wizard di registrazione sa instradare verso lo step
+ * che li possiede (vedi `ROUTABLE_FIELD_STEP` in `register/register-wizard.tsx`).
+ * `RegisterActionResult.field` resta un `string` generico perché copre anche
+ * i path Zod (qualunque `issue.path`, non instradabile), ma i 4 return che
+ * segnalano una collisione applicativa o P2002 su email/P.IVA sono annotati
+ * `satisfies RoutableRegisterField` qui sotto: un refuso o un rename in uno
+ * dei due lati (qui o nella mappa del wizard) fallisce il typecheck invece di
+ * silenziarsi in un banner generico mai instradato.
+ */
+export type RoutableRegisterField = 'account.email' | 'company.partitaIva';
+
 export type RegisterActionResult =
   | {
       ok: true;
@@ -445,7 +457,11 @@ export async function registerAction(
   // per azienda o ruolo. Check best-effort — la garanzia e' il vincolo unique
   // sul DB, intercettato come P2002 nel catch in fondo alla funzione.
   if (await emailGiaInUso(emailLower)) {
-    return { ok: false, error: EMAIL_GIA_REGISTRATA, field: 'account.email' };
+    return {
+      ok: false,
+      error: EMAIL_GIA_REGISTRATA,
+      field: 'account.email' satisfies RoutableRegisterField,
+    };
   }
 
   const existingCompany = await prisma.company.findUnique({
@@ -454,8 +470,8 @@ export async function registerAction(
   if (existingCompany) {
     return {
       ok: false,
-      error: 'P.IVA gia registrata',
-      field: 'company.partitaIva',
+      error: 'P.IVA già registrata',
+      field: 'company.partitaIva' satisfies RoutableRegisterField,
     };
   }
 
@@ -757,15 +773,23 @@ export async function registerAction(
     // l'email (o la P.IVA). L'utente non deve distinguere questo caso dal
     // normale, quindi stesso messaggio e stesso campo evidenziato.
     if (isViolazioneEmailUnica(error)) {
-      return { ok: false, error: EMAIL_GIA_REGISTRATA, field: 'account.email' };
+      return {
+        ok: false,
+        error: EMAIL_GIA_REGISTRATA,
+        field: 'account.email' satisfies RoutableRegisterField,
+      };
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       const target = error.meta?.target;
       const parts = Array.isArray(target) ? target.map(String) : [String(target ?? '')];
       if (parts.some((p) => p === 'partitaIva' || p === 'companies_partitaIva_key')) {
-        return { ok: false, error: 'P.IVA gia registrata', field: 'company.partitaIva' };
+        return {
+          ok: false,
+          error: 'P.IVA già registrata',
+          field: 'company.partitaIva' satisfies RoutableRegisterField,
+        };
       }
-      return { ok: false, error: 'Dato gia esistente' };
+      return { ok: false, error: 'Dato già esistente' };
     }
     throw error;
   }
@@ -959,7 +983,6 @@ export async function resendVerificationAction(
       deletedAt: null,
       status: 'PENDING_EMAIL_VERIFICATION',
     },
-    orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
     select: {
       nome: true,
       company: { select: { ragioneSociale: true, type: true } },
@@ -1105,8 +1128,11 @@ export async function confirmPasswordResetAction(
       where: { id: record.id },
       data: { usedAt: new Date() },
     });
-    // Email univoca: un solo account per email, quindi una sola riga colpita.
-    // Resta updateMany perche' la where non e' sulla chiave primaria.
+    // Qui non c'e' un id a disposizione (si arriva da un token legato
+    // all'email, non da una sessione): resta updateMany, ma non per la forma
+    // della where — la vera ragione e' che updateMany non lancia se colpisce
+    // zero righe (es. l'utente e' stato soft-deleted dopo aver richiesto il
+    // reset): l'operazione resta silenziosamente innocua invece di un 500.
     await tx.user.updateMany({
       where: { email: record.email, deletedAt: null },
       data: { passwordHash },

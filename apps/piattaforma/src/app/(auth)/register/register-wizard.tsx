@@ -18,7 +18,12 @@ import { AddressAutocomplete, type AddressParts } from '@/components/address-aut
 import { WizardProgress } from '@/components/wizard-progress';
 import { DocCard } from '@/components/doc-card';
 import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
-import { registerAction, checkPromoCodeAction, verifyRegistrationDocumentsAction } from '../actions';
+import {
+  registerAction,
+  checkPromoCodeAction,
+  verifyRegistrationDocumentsAction,
+  type RoutableRegisterField,
+} from '../actions';
 import type { PromoCheckResult } from '@/lib/promo/evaluate';
 import { formatCurrencyCent } from '@/lib/format';
 import { uploadToBlob, type BlobRef } from '@/lib/blob/upload-client';
@@ -101,11 +106,22 @@ const STEPS = [
  * Aggiungere un nuovo campo instradabile = una entry qui + il relativo prop
  * `xxxError`/`useEffect(setError(...))` nello step che lo possiede (stesso
  * pattern di `emailError` in AccountStep e `partitaIvaError` in CompanyStep).
+ *
+ * Tipizzata su `RoutableRegisterField` (importato da `../actions`): le chiavi
+ * qui e i `field` letterali che il server restituisce si controllano a
+ * vicenda col typecheck, non solo via questo commento.
  */
-const ROUTABLE_FIELD_STEP: Record<string, number> = {
+const ROUTABLE_FIELD_STEP: Record<RoutableRegisterField, number> = {
   'account.email': 1,
   'company.partitaIva': 2,
 };
+
+/** Type guard su `ROUTABLE_FIELD_STEP`: usa `Object.hasOwn` (non `in`, che
+ * cammina anche sulla catena dei prototipi) per restringere il `field`
+ * generico del server a `RoutableRegisterField` prima di indicizzare la mappa. */
+function isRoutableField(field: string): field is RoutableRegisterField {
+  return Object.hasOwn(ROUTABLE_FIELD_STEP, field);
+}
 
 export function RegisterWizard({
   forcedCompanyType,
@@ -350,7 +366,7 @@ export function RegisterWizard({
         // di blocco per documento, così l'utente sa esattamente cosa correggere.
         setKycErrors(result.kycFailures);
         setStep(3);
-      } else if (result.field && result.field in ROUTABLE_FIELD_STEP) {
+      } else if (result.field && isRoutableField(result.field)) {
         // Campo già occupato (email o P.IVA — check applicativo o race TOCTOU
         // intercettata come P2002): torna allo step che possiede il campo e
         // mostra l'errore lì, non come banner generico sullo step Sedi.

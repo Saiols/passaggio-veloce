@@ -11,6 +11,7 @@ import {
   canManageCrmTeamUser,
   creatableCrmRoles,
 } from '@/lib/auth/permissions';
+import { normalizzaEmail, emailGiaInUso, EMAIL_GIA_IN_USO, scriviUtente } from '@/lib/auth/email-univoca';
 
 export type CrmUserResult =
   | { ok: true; id: string }
@@ -83,32 +84,30 @@ export async function createCrmTeamUserAction(
     };
   }
 
-  // Email univoca tra utenti team interno (companyId NULL)
-  const emailLower = d.email.toLowerCase();
-  const existing = await prisma.user.findFirst({
-    where: { email: emailLower, companyId: null },
-  });
-  if (existing) {
-    return {
-      ok: false,
-      error: 'Esiste già un utente team con questa email',
-    };
+  // Email univoca su tutta la piattaforma (spec 2026-07-25).
+  const emailLower = normalizzaEmail(d.email);
+  if (await emailGiaInUso(emailLower)) {
+    return { ok: false, error: EMAIL_GIA_IN_USO };
   }
 
   const passwordHash = await hashPassword(d.password);
-  const created = await prisma.user.create({
-    data: {
-      email: emailLower,
-      passwordHash,
-      nome: d.nome,
-      cognome: d.cognome,
-      role: d.role,
-      status: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-      companyId: null,
-    },
-    select: { id: true },
-  });
+  const scritto = await scriviUtente(() =>
+    prisma.user.create({
+      data: {
+        email: emailLower,
+        passwordHash,
+        nome: d.nome,
+        cognome: d.cognome,
+        role: d.role,
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        companyId: null,
+      },
+      select: { id: true },
+    }),
+  );
+  if (!scritto.ok) return scritto;
+  const created = scritto.value;
 
   revalidatePath('/admin/crm/utenti');
   return { ok: true, id: created.id };
@@ -158,30 +157,23 @@ export async function updateCrmTeamUserAction(
     }
   }
 
-  const emailLower = d.email.toLowerCase();
-  const conflict = await prisma.user.findFirst({
-    where: {
-      email: emailLower,
-      companyId: null,
-      NOT: { id },
-    },
-  });
-  if (conflict) {
-    return {
-      ok: false,
-      error: 'Esiste già un altro utente team con questa email',
-    };
+  const emailLower = normalizzaEmail(d.email);
+  if (await emailGiaInUso(emailLower, { escludiUserId: id })) {
+    return { ok: false, error: EMAIL_GIA_IN_USO };
   }
 
-  await prisma.user.update({
-    where: { id },
-    data: {
-      nome: d.nome,
-      cognome: d.cognome,
-      email: emailLower,
-      role: d.role,
-    },
-  });
+  const scritto = await scriviUtente(() =>
+    prisma.user.update({
+      where: { id },
+      data: {
+        nome: d.nome,
+        cognome: d.cognome,
+        email: emailLower,
+        role: d.role,
+      },
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   revalidatePath('/admin/crm/utenti');
   return { ok: true, id };

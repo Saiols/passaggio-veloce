@@ -6,6 +6,7 @@ import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { hashPassword } from '@/lib/auth/password';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { normalizzaEmail, emailGiaInUso, EMAIL_GIA_IN_USO, scriviUtente } from '@/lib/auth/email-univoca';
 
 export type CreateAssistenteResult = { ok: true } | { ok: false; error: string };
 
@@ -30,7 +31,7 @@ export async function createAssistenteAction(
     };
   }
 
-  const emailLower = email.toLowerCase().trim();
+  const emailLower = normalizzaEmail(email);
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
     return { ok: false, error: 'Email non valida' };
   }
@@ -44,32 +45,28 @@ export async function createAssistenteAction(
     return { ok: false, error: 'Password deve contenere maiuscola, minuscola e numero' };
   }
 
-  // Scope-platform: blocchiamo solo conflitti con altri admin platform o
-  // assistenti (companyId=null). La stessa email puo' esistere come admin
-  // di azienda dealer/agenzia senza conflitti (item 14 release 2026-05).
-  const existing = await prisma.user.findFirst({
-    where: { email: emailLower, companyId: null },
-  });
-  if (existing) {
-    return {
-      ok: false,
-      error: 'Esiste già un assistente o admin con questa email',
-    };
+  // Email univoca su tutta la piattaforma (spec 2026-07-25): staff e aziende
+  // condividono lo spazio dei nomi, niente eccezione per companyId=null.
+  if (await emailGiaInUso(emailLower)) {
+    return { ok: false, error: EMAIL_GIA_IN_USO };
   }
 
   const passwordHash = await hashPassword(password);
-  await prisma.user.create({
-    data: {
-      email: emailLower,
-      passwordHash,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-      role: 'ASSISTENTE',
-      status: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-      companyId: null,
-    },
-  });
+  const scritto = await scriviUtente(() =>
+    prisma.user.create({
+      data: {
+        email: emailLower,
+        passwordHash,
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+        role: 'ASSISTENTE',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        companyId: null,
+      },
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   revalidatePath('/admin/assistenti');
   return { ok: true };
@@ -121,7 +118,7 @@ export async function updateAssistenteAction(
     return { ok: false, error: 'Assistente non trovato' };
   }
 
-  const emailLower = email.toLowerCase().trim();
+  const emailLower = normalizzaEmail(email);
   if (!emailLower || !/^[^@]+@[^@]+\.[^@]+$/.test(emailLower)) {
     return { ok: false, error: 'Email non valida' };
   }
@@ -130,25 +127,22 @@ export async function updateAssistenteAction(
   }
 
   if (emailLower !== target.email) {
-    const conflict = await prisma.user.findFirst({
-      where: { email: emailLower, companyId: null, NOT: { id: userId } },
-    });
-    if (conflict) {
-      return {
-        ok: false,
-        error: 'Esiste già un altro assistente o admin con questa email',
-      };
+    if (await emailGiaInUso(emailLower, { escludiUserId: userId })) {
+      return { ok: false, error: EMAIL_GIA_IN_USO };
     }
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      email: emailLower,
-      nome: nome.trim(),
-      cognome: cognome.trim(),
-    },
-  });
+  const scritto = await scriviUtente(() =>
+    prisma.user.update({
+      where: { id: userId },
+      data: {
+        email: emailLower,
+        nome: nome.trim(),
+        cognome: cognome.trim(),
+      },
+    }),
+  );
+  if (!scritto.ok) return scritto;
 
   revalidatePath('/admin/assistenti');
   revalidatePath(`/admin/assistenti/${userId}/edit`);

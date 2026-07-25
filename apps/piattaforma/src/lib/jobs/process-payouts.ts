@@ -9,6 +9,14 @@ export type ProcessPayoutsResult = {
   processed: number;
   succeeded: number;
   failed: number;
+  // Righe RICHIESTO lette dal batch ma MAI passate a `settlePayout` perché il
+  // guard sospensione (sotto) le ha saltate: prima di questo contatore
+  // `processed` (= `payouts.length`, il numero di righe lette) le includeva
+  // silenziosamente insieme a `succeeded`/`failed`, facendo sembrare
+  // "tentate" righe che il job non ha nemmeno provato a saldare — fuorviante
+  // proprio quando il guard scatta spesso (azienda sospesa a lungo). Invariante:
+  // `processed === succeeded + failed + skipped`.
+  skipped: number;
 };
 
 /**
@@ -59,9 +67,13 @@ export async function processPayouts(): Promise<ProcessPayoutsResult> {
 
   let succeeded = 0;
   let failed = 0;
+  let skipped = 0;
 
   for (const payout of payouts) {
-    if (payoutBloccatoPerSospensione(payout.wallet)) continue;
+    if (payoutBloccatoPerSospensione(payout.wallet)) {
+      skipped++;
+      continue;
+    }
 
     await prisma.payout.update({
       where: { id: payout.id },
@@ -72,5 +84,5 @@ export async function processPayouts(): Promise<ProcessPayoutsResult> {
     else failed++;
   }
 
-  return { processed: payouts.length, succeeded, failed };
+  return { processed: payouts.length, succeeded, failed, skipped };
 }

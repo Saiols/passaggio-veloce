@@ -79,7 +79,11 @@ describe('processPayouts — guard sospensione aziendale sul saldo', () => {
 
     expect(settlePayoutMock).not.toHaveBeenCalled();
     expect(prismaMock.payout.update).not.toHaveBeenCalled();
-    expect(res).toEqual({ processed: 1, succeeded: 0, failed: 0 });
+    // La riga saltata NON è mai stata tentata: deve finire in `skipped`, non
+    // in `succeeded`/`failed` (che restano 0), ma `processed` la conta lo
+    // stesso perché è stata letta dal batch — vedi il commento sul tipo
+    // `ProcessPayoutsResult` per il perché della distinzione.
+    expect(res).toEqual({ processed: 1, succeeded: 0, failed: 0, skipped: 1 });
   });
 
   it('riga RICHIESTO della COMPANY MADRE sospesa (wallet affiliazione, sede nullo) → settlePayout NON chiamata, nessuna scrittura di stato', async () => {
@@ -89,7 +93,7 @@ describe('processPayouts — guard sospensione aziendale sul saldo', () => {
 
     expect(settlePayoutMock).not.toHaveBeenCalled();
     expect(prismaMock.payout.update).not.toHaveBeenCalled();
-    expect(res).toEqual({ processed: 1, succeeded: 0, failed: 0 });
+    expect(res).toEqual({ processed: 1, succeeded: 0, failed: 0, skipped: 1 });
   });
 
   it("riga RICHIESTO di azienda NON sospesa → settlePayout chiamata regolarmente (controprova: un guard che salta tutto non passerebbe questo caso)", async () => {
@@ -102,10 +106,10 @@ describe('processPayouts — guard sospensione aziendale sul saldo', () => {
       data: { stato: 'IN_LAVORAZIONE' },
     });
     expect(settlePayoutMock).toHaveBeenCalledWith('p1');
-    expect(res).toEqual({ processed: 1, succeeded: 1, failed: 0 });
+    expect(res).toEqual({ processed: 1, succeeded: 1, failed: 0, skipped: 0 });
   });
 
-  it('un lotto misto: la riga sospesa viene saltata, le altre due saldate normalmente', async () => {
+  it('un lotto misto: la riga sospesa viene saltata, le altre due saldate normalmente — i conteggi tornano (processed = succeeded + failed + skipped)', async () => {
     prismaMock.payout.findMany.mockResolvedValue([
       rigaDiAziendaNonSospesa('p1'),
       rigaDiSedeSospesa('p2'),
@@ -121,6 +125,7 @@ describe('processPayouts — guard sospensione aziendale sul saldo', () => {
     expect(settlePayoutMock).not.toHaveBeenCalledWith('p2');
     expect(settlePayoutMock).not.toHaveBeenCalledWith('p3');
     expect(prismaMock.payout.update).toHaveBeenCalledTimes(2);
-    expect(res).toEqual({ processed: 4, succeeded: 2, failed: 0 });
+    expect(res).toEqual({ processed: 4, succeeded: 2, failed: 0, skipped: 2 });
+    expect(res.processed).toBe(res.succeeded + res.failed + res.skipped);
   });
 });

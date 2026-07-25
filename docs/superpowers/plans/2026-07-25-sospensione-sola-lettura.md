@@ -757,9 +757,13 @@ describe('mappa-sospensione', () => {
         'requireOperativita() né direttamente né in un helper dichiarato nello stesso ' +
         'file:\n  ' + senzaGuard.join('\n  '),
     ).toEqual([]);
-  });
+  }, 20_000);
 });
 ```
+
+**Il timeout di 20s sul secondo test non è facoltativo.** Quel test legge da disco un file per ogni action mappata. Il default di vitest è 5s, e il test già esistente nello stesso file — che cammina l'intero albero di `src/app` e `src/lib` — sotto la suite completa a cache fredda **sfora e diventa rosso** (osservato: 1 fallimento su 2080 alla prima esecuzione dopo il checkout, verde alla seconda). Aggiungendo un secondo test I/O-bound nello stesso file l'esposizione cresce.
+
+Quindi, nello stesso commit, aggiungi `, 20_000` anche al test preesistente `nessun modulo di server action sfugge alla mappa (blindspot: file interamente nuovo)` (riga ~218, chiusura `});`). L'asserzione non cambia: cambia solo la pazienza. Un test che dipende dall'I/O del filesystem non deve avere il timeout pensato per un test in memoria.
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
@@ -977,6 +981,12 @@ import { eseguiPayoutImmediato } from './payout-exec';
 beforeEach(() => {
   vi.clearAllMocks();
   isVisuraScadutaMock.mockResolvedValue(false);
+  // La reserve fallisce per saldo non erogabile. `eseguiPayoutImmediato` fa
+  // `if (!reserve.ok) return reserve` (payout-exec.ts:258), quindi la funzione
+  // torna subito dopo i guard senza mai raggiungere il provider di pagamento.
+  // Senza questo mock `$transaction` risolverebbe `undefined` e il test che
+  // verifica l'esenzione `ignoraSoglia` lancerebbe invece di asserire.
+  prismaMock.$transaction.mockResolvedValue({ ok: false, error: 'Saldo non erogabile' });
 });
 
 /** Wallet di sede la cui company è sospesa. */
@@ -1014,11 +1024,13 @@ describe('eseguiPayoutImmediato — azienda sospesa', () => {
     // senza questa esenzione il denaro dovuto resterebbe intrappolato per sempre.
     walletDiCompanySospesa();
 
-    await eseguiPayoutImmediato(WALLET_ID, { ignoraSoglia: true });
+    const res = await eseguiPayoutImmediato(WALLET_ID, { ignoraSoglia: true });
 
-    // Non asserisce l'esito (dipende dal saldo, mockato altrove): asserisce che
-    // il guard NON ha corto-circuitato prima della reserve.
+    // Il guard NON ha corto-circuitato: si è arrivati alla reserve, e l'errore
+    // che torna è quello del saldo, non quello della sospensione.
     expect(prismaMock.$transaction).toHaveBeenCalled();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).not.toMatch(/sospes/i);
   });
 
   it('wallet di company madre non sospesa → prosegue verso il guard visura', async () => {

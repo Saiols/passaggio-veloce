@@ -92,17 +92,27 @@ const validPayload = {
   },
 };
 
-function makeFile(): File {
-  return new File([new Uint8Array(200 * 1024)], 'doc.pdf', { type: 'application/pdf' });
-}
-
+// registerAction legge i documenti da un campo FormData `blobRefs` (JSON di
+// {key,name,size,type}), non da File allegati alla Server Action — dal client
+// upload su Vercel Blob (limite 4,5 MB sul body serverless, vedi actions.ts
+// parseBlobRefs). Valori scelti per passare anche il classificatore
+// rule-based (PDF, 200 KB, nome innocuo): CI_FRONTE/CI_RETRO controllano
+// hint sul nome, VISURA_CAMERALE richiede PDF.
 function fdWith(payload: unknown, opts: { omit?: string } = {}): FormData {
   const fd = new FormData();
   fd.set('payload', JSON.stringify(payload));
-  for (const slot of ['CI_FRONTE', 'CI_RETRO', 'CODICE_FISCALE', 'VISURA_CAMERALE']) {
+  const blobRefs: Record<string, { key: string; name: string; size: number; type: string }> = {};
+  for (const slot of [
+    'CI_FRONTE',
+    'CI_RETRO',
+    'CODICE_FISCALE',
+    'CODICE_FISCALE_RETRO',
+    'VISURA_CAMERALE',
+  ]) {
     if (opts.omit === slot) continue;
-    fd.set(slot, makeFile());
+    blobRefs[slot] = { key: `test-blob-${slot}`, name: 'doc.pdf', size: 200 * 1024, type: 'application/pdf' };
   }
+  fd.set('blobRefs', JSON.stringify(blobRefs));
   return fd;
 }
 
@@ -115,7 +125,11 @@ beforeEach(() => {
 });
 
 describe('registerAction (early returns)', () => {
-  beforeEach(() => txMock.mockReset());
+  beforeEach(() => {
+    txMock.mockReset();
+    vi.mocked(prisma.user.findFirst).mockReset();
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+  });
 
   it('fallisce se manca il payload', async () => {
     const r = await registerAction(new FormData());
@@ -127,6 +141,32 @@ describe('registerAction (early returns)', () => {
     const r = await registerAction(fdWith(validPayload, { omit: 'CODICE_FISCALE' }));
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toContain('tutti i documenti');
+    expect(txMock).not.toHaveBeenCalled();
+  });
+
+  it('rifiuta un email gia usata da un utente di un ALTRA azienda', async () => {
+    // Il mock simula il DB: esiste un utente con questa email, in un'azienda
+    // qualunque. Discrimina sulla `where` — il codice vecchio cerca solo fra
+    // gli admin platform (companyId: null) e NON deve trovarlo, altrimenti il
+    // test passerebbe anche senza il fix e non proverebbe nulla.
+    vi.mocked(prisma.user.findFirst).mockImplementation((async (args: {
+      where?: { email?: string; companyId?: string | null };
+    }) => {
+      const where = args?.where ?? {};
+      if (where.email !== 'mario@example.com') return null;
+      if (where.companyId === null) return null; // nessun admin platform con quell'email
+      return { id: 'u-altra-azienda' };
+    }) as never);
+
+    const r = await registerAction(fdWith(validPayload));
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toBe(
+        "Questa email è già registrata. Accedi con l'account esistente o usa un'altra email.",
+      );
+      expect(r.field).toBe('account.email');
+    }
     expect(txMock).not.toHaveBeenCalled();
   });
 });

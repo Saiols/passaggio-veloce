@@ -19,6 +19,12 @@ import { anonymizeIp, clientIp } from '@/lib/net/ip';
 import { rateLimit, resetRateLimit } from '@/lib/rate-limit/durable';
 import { getClientIp } from '@/lib/rate-limit/client-ip';
 import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
+import {
+  normalizzaEmail,
+  emailGiaInUso,
+  EMAIL_GIA_REGISTRATA,
+  isViolazioneEmailUnica,
+} from '@/lib/auth/email-univoca';
 import { loginSchema, registerFullSchema } from '@/lib/auth/schemas';
 import { randomUUID } from 'node:crypto';
 import { getStorage, storageGetBuffer } from '@/lib/providers/storage';
@@ -440,18 +446,13 @@ export async function registerAction(
     }
   }
 
-  const emailLower = account.email.toLowerCase();
+  const emailLower = normalizzaEmail(account.email);
 
-  // Multi-tenancy email scope-company (item 07 release 2026-05): la stessa
-  // email puo' registrarsi in piu' aziende (stesso utente come dealer e come
-  // agenzia, o consulente esterno con piu' clienti). Qui blocchiamo solo se
-  // collide con un admin platform (companyId=null) per evitare ambiguita'
-  // di login con account amministrativi.
-  const existingAdmin = await prisma.user.findFirst({
-    where: { email: emailLower, companyId: null },
-  });
-  if (existingAdmin) {
-    return { ok: false, error: 'Email gia registrata', field: 'account.email' };
+  // Email univoca su tutta la piattaforma (spec 2026-07-25): nessuna eccezione
+  // per azienda o ruolo. Check best-effort — la garanzia e' il vincolo unique
+  // sul DB, intercettato come P2002 nel catch in fondo alla funzione.
+  if (await emailGiaInUso(emailLower)) {
+    return { ok: false, error: EMAIL_GIA_REGISTRATA, field: 'account.email' };
   }
 
   const existingCompany = await prisma.company.findUnique({
@@ -760,7 +761,18 @@ export async function registerAction(
       promo: promoCodeFromPayload ? promoResult : undefined,
     };
   } catch (error) {
+    // Race: fra il check sopra e la create un'altra registrazione ha preso
+    // l'email (o la P.IVA). L'utente non deve distinguere questo caso dal
+    // normale, quindi stesso messaggio e stesso campo evidenziato.
+    if (isViolazioneEmailUnica(error)) {
+      return { ok: false, error: EMAIL_GIA_REGISTRATA, field: 'account.email' };
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const target = error.meta?.target;
+      const parts = Array.isArray(target) ? target.map(String) : [String(target ?? '')];
+      if (parts.some((p) => p === 'partitaIva' || p === 'companies_partitaIva_key')) {
+        return { ok: false, error: 'P.IVA gia registrata', field: 'company.partitaIva' };
+      }
       return { ok: false, error: 'Dato gia esistente' };
     }
     throw error;

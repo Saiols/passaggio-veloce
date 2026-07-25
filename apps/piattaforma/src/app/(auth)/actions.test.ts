@@ -53,7 +53,7 @@ import {
   requestPasswordResetAction,
 } from './actions';
 
-const findManyMock = vi.mocked(prisma.user.findMany);
+const findFirstMock = vi.mocked(prisma.user.findFirst);
 const compareMock = vi.mocked(bcrypt.compare);
 const signInMock = vi.mocked(signIn);
 const rateLimitMock = vi.mocked(rateLimit);
@@ -186,13 +186,13 @@ describe('loginAction', () => {
   }
 
   beforeEach(() => {
-    findManyMock.mockReset();
+    findFirstMock.mockReset();
     compareMock.mockReset();
     signInMock.mockReset();
   });
 
   it('utente 2FA + password corretta senza totp → { needTotp: true }, niente signIn', async () => {
-    findManyMock.mockResolvedValue([candidate(true)] as never);
+    findFirstMock.mockResolvedValue(candidate(true) as never);
     compareMock.mockResolvedValue(true as never);
 
     const r = await loginAction({}, loginForm());
@@ -202,7 +202,7 @@ describe('loginAction', () => {
   });
 
   it('utente senza 2FA + password corretta → chiama signIn e ritorna {}', async () => {
-    findManyMock.mockResolvedValue([candidate(false)] as never);
+    findFirstMock.mockResolvedValue(candidate(false) as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockResolvedValue(undefined as never);
 
@@ -221,7 +221,7 @@ describe('loginAction', () => {
   });
 
   it('password errata (nessun candidate combacia) → { error: "Credenziali non valide" }, niente signIn', async () => {
-    findManyMock.mockResolvedValue([candidate(false)] as never);
+    findFirstMock.mockResolvedValue(candidate(false) as never);
     compareMock.mockResolvedValue(false as never);
 
     const r = await loginAction({}, loginForm({ password: 'Sbagliata9' }));
@@ -233,9 +233,9 @@ describe('loginAction', () => {
   it('account PENDING (email non verificata) + password corretta → { needsEmailVerification, email }, niente signIn', async () => {
     // 1ª query = utenti ATTIVI (vuota: l'account non è ancora ACTIVE).
     // 2ª query = utenti PENDING_EMAIL_VERIFICATION (match sull'email+password).
-    findManyMock
-      .mockResolvedValueOnce([] as never)
-      .mockResolvedValueOnce([{ passwordHash: 'hash' }] as never);
+    findFirstMock
+      .mockResolvedValueOnce(null as never)                      // nessun ATTIVO
+      .mockResolvedValueOnce({ passwordHash: 'hash' } as never); // uno PENDING
     compareMock.mockResolvedValue(true as never);
 
     const r = await loginAction({}, loginForm());
@@ -246,7 +246,7 @@ describe('loginAction', () => {
 
   it('email sconosciuta (nessun utente attivo né pending) → { error: "Credenziali non valide" }', async () => {
     // Entrambe le query vuote: non si rivela nulla, messaggio generico.
-    findManyMock.mockResolvedValue([] as never);
+    findFirstMock.mockResolvedValue(null as never);
 
     const r = await loginAction({}, loginForm());
 
@@ -255,7 +255,7 @@ describe('loginAction', () => {
   });
 
   it('utente 2FA + password corretta + totp errato → signIn lancia AuthError → { error: "Codice 2FA non valido", needTotp: true }', async () => {
-    findManyMock.mockResolvedValue([candidate(true)] as never);
+    findFirstMock.mockResolvedValue(candidate(true) as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockRejectedValueOnce(new AuthError());
 
@@ -265,7 +265,7 @@ describe('loginAction', () => {
   });
 
   it('utente senza 2FA + signIn lancia AuthError → { error: "Credenziali non valide" } e needTotp undefined', async () => {
-    findManyMock.mockResolvedValue([candidate(false)] as never);
+    findFirstMock.mockResolvedValue(candidate(false) as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockRejectedValueOnce(new AuthError());
 
@@ -305,10 +305,9 @@ describe('checkPromoCodeAction', () => {
 describe('rate limit durevole sulle server action pubbliche', () => {
   beforeEach(() => {
     signInMock.mockReset();
-    findManyMock.mockReset();
+    findFirstMock.mockReset();
     compareMock.mockReset();
     txMock.mockReset();
-    vi.mocked(prisma.user.findFirst).mockReset();
   });
 
   function loginForm(): FormData {
@@ -325,11 +324,11 @@ describe('rate limit durevole sulle server action pubbliche', () => {
 
     expect(r.error).toMatch(/Troppi tentativi/);
     expect(signInMock).not.toHaveBeenCalled();
-    expect(findManyMock).not.toHaveBeenCalled();
+    expect(findFirstMock).not.toHaveBeenCalled();
   });
 
   it('loginAction: se rateLimit consente, procede normalmente (comportamento invariato)', async () => {
-    findManyMock.mockResolvedValue([{ passwordHash: 'hash', twoFactorEnabled: false }] as never);
+    findFirstMock.mockResolvedValue({ passwordHash: 'hash', twoFactorEnabled: false } as never);
     compareMock.mockResolvedValue(true as never);
     signInMock.mockResolvedValue(undefined as never);
 

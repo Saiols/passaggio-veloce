@@ -98,10 +98,8 @@ export async function changeOwnPasswordAction(
 
   const passwordHash = await hashPassword(newPassword);
 
-  // Stessa semantica del reset via email (confirmPasswordResetAction): la
-  // stessa persona può avere più User con la stessa email (uno per azienda).
-  // La password li segue tutti, altrimenti la vecchia resterebbe valida per
-  // entrare — cambiarla su un solo record darebbe una falsa sicurezza.
+  // Email univoca: un solo account per email, quindi una sola riga colpita.
+  // Resta updateMany perche' la where non e' sulla chiave primaria.
   await prisma.user.updateMany({
     where: { email: me.email, deletedAt: null },
     data: { passwordHash },

@@ -29,27 +29,15 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
         const { email, password } = parsed.data;
 
-        // Multi-tenancy email scope-company (item 07 release 2026-05): la
-        // stessa email puo' esistere su piu' User (uno per company). Cerchiamo
-        // tutti i match attivi e verifichiamo la password contro ognuno.
-        // L'admin platform (companyId=null) prevale per disambiguare in caso
-        // di hash uguali, poi viene il primo per createdAt.
-        const candidates = await prisma.user.findMany({
+        // Email univoca su tutta la piattaforma (spec 2026-07-25): al piu' un
+        // account per email, quindi un solo lookup e un solo bcrypt.compare.
+        const matched = await prisma.user.findFirst({
           ...activeUserCredentialsQuery(email.toLowerCase()),
           include: { company: true },
         });
 
-        if (candidates.length === 0) return null;
-
-        let matched: (typeof candidates)[number] | null = null;
-        for (const c of candidates) {
-          const ok = await bcrypt.compare(password, c.passwordHash);
-          if (ok) {
-            matched = c;
-            break;
-          }
-        }
         if (!matched) return null;
+        if (!(await bcrypt.compare(password, matched.passwordHash))) return null;
 
         // P4: se il 2FA è attivo, il codice TOTP (o un backup code) è obbligatorio.
         // authorize è la fonte autoritativa: consuma il backup code se usato.

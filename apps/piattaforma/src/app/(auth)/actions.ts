@@ -95,17 +95,12 @@ export async function loginAction(
   // Pre-check: individua l'utente la cui password combacia (mirror di authorize)
   // per capire se il 2FA è richiesto. Non logga: serve solo a decidere se
   // mostrare il campo codice. La password NON viene mai ritornata al client.
-  const candidates = await prisma.user.findMany({
+  const found = await prisma.user.findFirst({
     ...activeUserCredentialsQuery(emailLower),
     select: { passwordHash: true, twoFactorEnabled: true },
   });
-  let matched: (typeof candidates)[number] | null = null;
-  for (const c of candidates) {
-    if (await bcrypt.compare(parsed.data.password, c.passwordHash)) {
-      matched = c;
-      break;
-    }
-  }
+  const matched =
+    found && (await bcrypt.compare(parsed.data.password, found.passwordHash)) ? found : null;
   if (!matched) {
     // Nessun utente ATTIVO combacia. Prima di rispondere "credenziali non
     // valide", verifica se esiste un account con la stessa email+password ma
@@ -113,7 +108,7 @@ export async function loginAction(
     // verifica, non le credenziali, e va comunicato in modo esplicito (con il
     // reinvio del link). Il controllo richiede la password corretta, quindi non
     // rivela nulla a chi non possiede l'account.
-    const pendingCandidates = await prisma.user.findMany({
+    const pending = await prisma.user.findFirst({
       where: {
         email: emailLower,
         deletedAt: null,
@@ -121,10 +116,8 @@ export async function loginAction(
       },
       select: { passwordHash: true },
     });
-    for (const c of pendingCandidates) {
-      if (await bcrypt.compare(parsed.data.password, c.passwordHash)) {
-        return { needsEmailVerification: true, email: emailLower };
-      }
+    if (pending && (await bcrypt.compare(parsed.data.password, pending.passwordHash))) {
+      return { needsEmailVerification: true, email: emailLower };
     }
     return { error: 'Credenziali non valide' };
   }
@@ -716,9 +709,8 @@ export async function registerAction(
           where: { token: verificationToken },
           data: { usedAt: new Date() },
         });
-        // Multi-tenancy: colpisce solo il record con stato PENDING (quello
-        // appena creato in questo flusso). Gli altri eventuali account con la
-        // stessa email sono gia' ACTIVE.
+        // Email univoca: c'e' un solo account con questa email, ed e' quello
+        // appena creato in questo flusso.
         await tx.user.updateMany({
           where: { email: emailLower, status: 'PENDING_EMAIL_VERIFICATION' },
           data: {
@@ -1045,14 +1037,9 @@ export async function requestPasswordResetAction(
   }
 
   const emailLower = email.toLowerCase().trim();
-  // Multi-tenancy: con stessa email su piu' User, mandiamo email reset agli
-  // admin platform per primi (priorita' di sicurezza), altrimenti al primo
-  // utente in ordine createdAt. Il token si lega a email e tutti gli account
-  // con quell'email potranno essere ripristinati condividendo la nuova
-  // password (caso raro multi-account: l'utente sceglie poi quale loggare).
+  // Email univoca: al piu' un account per email, quindi un solo lookup.
   const user = await prisma.user.findFirst({
     where: { email: emailLower, deletedAt: null },
-    orderBy: [{ companyId: 'asc' }, { createdAt: 'asc' }],
   });
 
   // Per privacy, ritorniamo ok anche se l'utente non esiste (no enumeration)
@@ -1118,10 +1105,8 @@ export async function confirmPasswordResetAction(
       where: { id: record.id },
       data: { usedAt: new Date() },
     });
-    // Multi-tenancy: la stessa email puo' avere piu' User record. Quando
-    // l'utente reimposta la password, la propaghiamo a tutti i suoi account
-    // (l'identita' fisica e' la stessa, e' come un "single sign-on" dal punto
-    // di vista del recupero credenziali).
+    // Email univoca: un solo account per email, quindi una sola riga colpita.
+    // Resta updateMany perche' la where non e' sulla chiave primaria.
     await tx.user.updateMany({
       where: { email: record.email, deletedAt: null },
       data: { passwordHash },

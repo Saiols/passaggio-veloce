@@ -413,7 +413,7 @@ Solo DB e schema. Il codice non legge ancora le colonne nuove, quindi tutto rest
 
 - [ ] **Step 1: Aggiorna lo schema Prisma**
 
-In `packages/db/prisma/schema.prisma`, nel modello `DistribuzioneConfig`, aggiungi le due colonne **senza rimuovere** le tre vecchie (verranno droppate nel Task 11, dopo il deploy):
+In `packages/db/prisma/schema.prisma`, nel modello `DistribuzioneConfig`, aggiungi le due colonne **senza rimuovere** le tre vecchie (verranno droppate nel Task 12, dopo il deploy):
 
 ```prisma
 model DistribuzioneConfig {
@@ -2452,7 +2452,295 @@ git commit -m "feat(pratiche): card Copertura admin con i motivi di mancato cont
 
 ---
 
-### Task 11: Migration di drop e messa in produzione
+### Task 11: Ripresa delle pratiche in zona non coperta
+
+Oggi `zonaNonCopertaAt` è **definitivo**: `tickAllPraticheInDistribuzione` filtra via quelle pratiche (`zonaNonCopertaAt: null`) e `tickPratica` esce subito con `noop('zona non coperta')`. Non esiste alcun percorso di ritorno, nemmeno quando un'agenzia idonea si registra in zona un minuto dopo.
+
+Non è teoria: in produzione la pratica `PV-2026-00002` è stata creata il 23/07 alle 17:09, venti minuti prima che l'unica agenzia della sua zona (Assago) si registrasse alle 17:29. È stata dichiarata zona non coperta il giorno dopo alle 09:30 e da lì è rimasta congelata, mentre quell'agenzia era a 4,3 km, geocodata, con visura valida e senza sospensioni.
+
+**Files:**
+- Modify: `apps/piattaforma/src/lib/distribuzione/tick.ts` (guardia `zonaNonCopertaAt` in `tickPratica`, `where` di `tickAllPraticheInDistribuzione`)
+- Modify: `apps/piattaforma/src/lib/distribuzione/tick.test.ts`
+
+**Interfaces:**
+- Consumes: `primoAnello` da `./anelli` (già importato in `tick.ts`), `minutiLavorativiTra` dal Task 5.
+- Produces: nessuna nuova firma pubblica. `TickResult` guadagna il caso `{ status: 'ripresa'; assegnazioni: number; raggioM: number; round: number }`.
+
+**Decisioni di design, già prese:**
+
+1. **La ripresa riparte dal raggio iniziale**, non da `raggioCorrenteM`. Quest'ultimo è fermo a `raggioMaxM`, e `prossimoAnello` partendo da lì non entrerebbe mai nel `while`. Si riusa `primoAnello`, che parte da `cfg.raggioStartM` e salta gli anelli vuoti: fra le agenzie nuove viene contattata prima la più vicina, che è la stessa regola di sempre.
+2. **`roundCorrente` continua a incrementare**, non riparte da 1: è lo stesso ciclo di distribuzione, non un ricircolo (quello è la revoca admin, che incrementa `distribuzioneCiclo`).
+3. **Nessuna nuova email.** Le agenzie ricevono la N6 come in qualsiasi round. Il broker aveva ricevuto la N52 "zona non coperta": non gli si manda una smentita, ma la ripresa lascia un `PraticaStatoLog` con `meta.ripresa = true`, che è ciò che serve a ricostruire la storia dal monitoraggio admin.
+4. **Le esclusioni restano valide:** le sedi già contattate in questo ciclo e quelle revocate dall'admin non tornano candidabili. È esattamente ciò che `sediDaEscludere` già calcola.
+5. **Il gate orario e il gate durata round valgono anche per la ripresa**, che li attraversa prima di arrivare qui: una pratica non riparte di domenica notte.
+
+**Nota sul costo:** il cron ora esamina anche le pratiche ferme, a ogni tick (ogni minuto). Il gate durata round non le trattiene, perché la loro `ultimaEspansioneAt` è vecchia, quindi ognuna costa una `findMany` su `sedi` per tick. Con l'ordine di grandezza attuale (poche centinaia di sedi, poche pratiche ferme) è trascurabile. Se un giorno le pratiche ferme diventassero centinaia, il posto giusto per intervenire è la `where` del cron, non questa logica.
+
+- [ ] **Step 1: Scrivi i test che falliscono**
+
+Aggiungi in `apps/piattaforma/src/lib/distribuzione/tick.test.ts`, dentro il `describe('tickPratica')`:
+
+```ts
+it('pratica in zona non coperta: riprende se compare una sede idonea', async () => {
+  cfgMock.mockResolvedValue(CFG);
+  orarioMock.mockReturnValue(true);
+  minutiLavorativiMock.mockReturnValue(10_000);
+  const ferma = praticaTick({
+    zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
+    raggioCorrenteM: CFG.raggioMaxM,
+    roundCorrente: 3,
+    ultimaEspansioneAt: new Date('2026-07-24T07:20:00Z'),
+  });
+  prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+  tx.pratica.findUnique.mockResolvedValue(ferma);
+  // Agenzia registrata dopo: 0,4 km, dentro il raggio iniziale (500 m).
+  prismaMock.sede.findMany.mockResolvedValue([
+    { id: 'nuova', lat: kmLat(0.4), lng: LNG0, companyId: 'cN' },
+  ]);
+  tx.praticaAssegnazione.create.mockResolvedValue({ id: 'aN' });
+  tx.pratica.update.mockResolvedValue({});
+  tx.praticaStatoLog.create.mockResolvedValue({});
+
+  const res = await tickPratica('p1');
+
+  expect(res.status).toBe('ripresa');
+  // zonaNonCopertaAt azzerato e round incrementato dal valore precedente.
+  expect(tx.pratica.update).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ zonaNonCopertaAt: null, roundCorrente: 4 }),
+    }),
+  );
+  // La ripresa riparte dal raggio INIZIALE, non dal massimo.
+  expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ sedeId: 'nuova', raggioMetri: CFG.raggioStartM }),
+    }),
+  );
+});
+
+it('pratica in zona non coperta: nessuna sede nuova → noop senza scritture', async () => {
+  cfgMock.mockResolvedValue(CFG);
+  orarioMock.mockReturnValue(true);
+  minutiLavorativiMock.mockReturnValue(10_000);
+  const ferma = praticaTick({
+    zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
+    raggioCorrenteM: CFG.raggioMaxM,
+  });
+  prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+  tx.pratica.findUnique.mockResolvedValue(ferma);
+  prismaMock.sede.findMany.mockResolvedValue([]);
+
+  const res = await tickPratica('p1');
+
+  expect(res).toEqual({ status: 'noop', reason: 'zona non coperta: nessuna sede nuova' });
+  expect(tx.pratica.update).not.toHaveBeenCalled();
+  expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+});
+
+it('pratica in zona non coperta: una sede già contattata nel ciclo non la fa ripartire', async () => {
+  cfgMock.mockResolvedValue(CFG);
+  orarioMock.mockReturnValue(true);
+  minutiLavorativiMock.mockReturnValue(10_000);
+  const ferma = praticaTick({
+    zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
+    raggioCorrenteM: CFG.raggioMaxM,
+    assegnazioni: [{ sedeId: 'vecchia', ciclo: 1, esito: 'RIFIUTATA' }],
+  });
+  prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+  tx.pratica.findUnique.mockResolvedValue(ferma);
+  prismaMock.sede.findMany.mockResolvedValue([]);
+
+  const res = await tickPratica('p1');
+
+  expect(res.status).toBe('noop');
+  expect(tx.pratica.update).not.toHaveBeenCalled();
+});
+
+it('pratica in zona non coperta: fuori orario non riprende', async () => {
+  cfgMock.mockResolvedValue(CFG);
+  orarioMock.mockReturnValue(false);
+  prismaMock.pratica.findUnique.mockResolvedValue(
+    praticaTick({ zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z') }),
+  );
+
+  const res = await tickPratica('p1');
+
+  expect(res).toEqual({ status: 'noop', reason: 'fuori orario' });
+  expect(prismaMock.sede.findMany).not.toHaveBeenCalled();
+});
+```
+
+E, nel `describe('tickAllPraticheInDistribuzione')`:
+
+```ts
+it('il cron considera anche le pratiche ferme in zona non coperta', async () => {
+  prismaMock.pratica.findMany.mockResolvedValue([]);
+
+  await tickAllPraticheInDistribuzione();
+
+  // La where NON deve più filtrare su zonaNonCopertaAt: quelle pratiche sono
+  // proprio quelle che possono ripartire quando entra una nuova agenzia.
+  const where = prismaMock.pratica.findMany.mock.calls[0][0].where;
+  expect(where).not.toHaveProperty('zonaNonCopertaAt');
+  expect(where.stato).toBe('IN_DISTRIBUZIONE');
+  expect(where.deletedAt).toBeNull();
+});
+```
+
+- [ ] **Step 2: Esegui i test e verifica che falliscano**
+
+Run: `pnpm --filter piattaforma test src/lib/distribuzione/tick.test.ts`
+Expected: FAIL — `tickPratica` esce con `noop('zona non coperta')` e la `where` del cron contiene ancora `zonaNonCopertaAt: null`.
+
+- [ ] **Step 3: Estendi il tipo di risultato**
+
+In `apps/piattaforma/src/lib/distribuzione/tick.ts`, aggiungi il caso a `TickResult`:
+
+```ts
+export type TickResult =
+  | { status: 'noop'; reason: string }
+  | { status: 'notified'; assegnazioni: number; raggioM: number; round: number }
+  | { status: 'ripresa'; assegnazioni: number; raggioM: number; round: number }
+  | { status: 'zona-non-coperta' }
+  | { status: 'closed'; finalStato: 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
+```
+
+- [ ] **Step 4: Sostituisci la guardia con la ripresa**
+
+Sempre in `tick.ts`, la guardia attuale
+
+```ts
+  // Già dichiarata zona non coperta → espansione ferma.
+  if (pratica.zonaNonCopertaAt) {
+    return noop('zona non coperta');
+  }
+```
+
+va **rimossa**, e la pratica prosegue nel flusso normale. Dentro la transazione, dove oggi si sceglie fra `prossimoAnello` e "zona non coperta", il ramo diventa:
+
+```ts
+      // Una pratica ferma in zona non coperta riparte dal raggio INIZIALE: il
+      // suo `raggioCorrenteM` è al massimo, e `prossimoAnello` partendo da lì
+      // non entrerebbe mai nel ciclo. Le agenzie registrate dopo la dichiarazione
+      // possono essere ovunque entro il raggio massimo, quindi si riapre il
+      // ventaglio dalla più vicina, come al primo giro.
+      const inRipresa = fresh.zonaNonCopertaAt !== null;
+      const res = inRipresa
+        ? primoAnello(candidatiFiltrati, cfg)
+        : prossimoAnello(candidatiFiltrati, fresh.raggioCorrenteM ?? cfg.raggioStartM, cfg);
+
+      if (res.tipo === 'notifica') {
+        const round = fresh.roundCorrente + 1;
+        const newIds = await creaAssegnazioni(
+          tx,
+          praticaId,
+          fresh.distribuzioneCiclo,
+          round,
+          res.raggioRaggiuntoM,
+          res.sedi,
+          now,
+        );
+        await tx.pratica.update({
+          where: { id: praticaId },
+          data: {
+            raggioCorrenteM: res.raggioRaggiuntoM,
+            ultimaEspansioneAt: now,
+            roundCorrente: round,
+            // La ripresa toglie il marchio: la pratica è di nuovo in gara.
+            ...(inRipresa ? { zonaNonCopertaAt: null } : {}),
+          },
+        });
+        await logCambioStato(tx, {
+          praticaId,
+          statoDa: 'IN_DISTRIBUZIONE',
+          statoA: 'IN_DISTRIBUZIONE',
+          tipoEvento: STATO_EVENTO.ROUND_ADVANCE,
+          meta: {
+            raggioM: res.raggioRaggiuntoM,
+            round,
+            ciclo: fresh.distribuzioneCiclo,
+            // Distingue nel monitoraggio un round normale da una ripresa.
+            ...(inRipresa ? { ripresa: true } : {}),
+          },
+        });
+        return {
+          result: {
+            status: inRipresa ? ('ripresa' as const) : ('notified' as const),
+            assegnazioni: newIds.length,
+            raggioM: res.raggioRaggiuntoM,
+            round,
+          },
+          jobs: { newAssegnazioniIds: newIds, zonaNonCopertaPraticaId: null },
+        };
+      }
+
+      // Nessuna sede disponibile. Se la pratica era GIÀ in zona non coperta non
+      // si riscrive nulla: lo stato è invariato e una seconda N52 al broker
+      // sarebbe rumore a ogni tick.
+      if (inRipresa) {
+        return {
+          result: noop('zona non coperta: nessuna sede nuova'),
+          jobs: emptyJobs(),
+        };
+      }
+
+      await markZonaNonCoperta(tx, praticaId, cfg, now, {
+        zonaNonCoperta: true,
+        raggioM: cfg.raggioMaxM,
+        ciclo: fresh.distribuzioneCiclo,
+      });
+      return {
+        result: { status: 'zona-non-coperta' },
+        jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId },
+      };
+```
+
+⚠️ Il compare-and-set in-tx confronta anche `(fresh.raggioCorrenteM ?? null) !== snapRaggio`: **non toccarlo**. Protegge dalle accettazioni in race e continua a valere identico nella ripresa.
+
+⚠️ La guardia sul re-check dentro la transazione contiene `fresh.zonaNonCopertaAt` fra le condizioni di abort: va **rimossa da lì**, altrimenti ogni ripresa aborta come se fosse una race.
+
+- [ ] **Step 5: Apri la `where` del cron**
+
+```ts
+  const pratiche = await prisma.pratica.findMany({
+    // `zonaNonCopertaAt` NON è più un filtro: una pratica dichiarata scoperta
+    // deve poter ripartire quando un'agenzia idonea si registra nella sua zona.
+    where: { stato: 'IN_DISTRIBUZIONE', deletedAt: null },
+    select: { id: true },
+    take: 500,
+  });
+```
+
+Aggiungi il contatore delle riprese al risultato:
+
+```ts
+  const counters = { scanned: 0, expanded: 0, riprese: 0, zonaNonCoperta: 0, errors: 0 };
+  ...
+      if (r.status === 'notified') counters.expanded += 1;
+      if (r.status === 'ripresa') counters.riprese += 1;
+```
+
+aggiornando il tipo di ritorno della funzione con `riprese: number`.
+
+- [ ] **Step 6: Esegui i test**
+
+Run: `pnpm --filter piattaforma test src/lib/distribuzione/tick.test.ts`
+Expected: PASS. Poi l'intera suite: `pnpm --filter piattaforma test`.
+
+- [ ] **Step 7: Verifica la regressione più importante**
+
+Il rischio di questo task è che una pratica scoperta produca una N52 a ogni tick. Cerca nel test file il caso "zona non coperta" originale e verifica che `sendNotification` sia chiamata **una sola volta**, alla prima dichiarazione, e mai nel ramo di ripresa fallita.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/piattaforma/src/lib/distribuzione/tick.ts apps/piattaforma/src/lib/distribuzione/tick.test.ts
+git commit -m "fix(distribuzione): le pratiche in zona non coperta ripartono se entra un'agenzia in zona"
+```
+
+---
+
+### Task 12: Migration di drop e messa in produzione
 
 Questo task si esegue **a cavallo del deploy**, in tre momenti distinti. Non anticipare il drop: la versione di codice precedente legge ancora le tre colonne.
 

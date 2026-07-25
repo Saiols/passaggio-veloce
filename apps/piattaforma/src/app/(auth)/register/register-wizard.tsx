@@ -111,6 +111,10 @@ export function RegisterWizard({
       : {},
   );
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Errore server-side sul campo email dello step Account (es. email già in
+  // uso): il submit finale avviene allo step Sedi, ma l'utente deve vederlo
+  // sul campo email di Step 1, non come banner generico in fondo alla pagina.
+  const [accountEmailError, setAccountEmailError] = useState<string | null>(null);
   const [kycErrors, setKycErrors] = useState<KycFailureUi[]>([]);
   // Cache verifica documenti: evita di ri-chiamare l'OCR su Back→Avanti senza
   // modifiche. `kycToken` viene passato al submit per non ri-fare l'OCR lì.
@@ -196,6 +200,7 @@ export function RegisterWizard({
 
   const handleAccount = (values: AccountData) => {
     setData((d) => ({ ...d, account: values }));
+    setAccountEmailError(null);
     setStep(2);
   };
 
@@ -327,6 +332,12 @@ export function RegisterWizard({
         // di blocco per documento, così l'utente sa esattamente cosa correggere.
         setKycErrors(result.kycFailures);
         setStep(3);
+      } else if (result.field === 'account.email') {
+        // Email già in uso (check applicativo o race TOCTOU intercettata come
+        // P2002): torna allo step Account e mostra l'errore sul campo email,
+        // non come banner generico in fondo alla pagina Sedi.
+        setAccountEmailError(result.error);
+        setStep(1);
       } else {
         setSubmitError(result.error);
       }
@@ -438,7 +449,13 @@ export function RegisterWizard({
             </div>
           </Modal>
 
-          {step === 1 && <AccountStep defaultValues={data.account} onNext={handleAccount} />}
+          {step === 1 && (
+            <AccountStep
+              defaultValues={data.account}
+              onNext={handleAccount}
+              emailError={accountEmailError}
+            />
+          )}
           {step === 2 && (
             <CompanyStep
               defaultValues={data.company}
@@ -499,9 +516,12 @@ function toDateInputValue(value: unknown): string {
 function AccountStep({
   defaultValues,
   onNext,
+  emailError,
 }: {
   defaultValues?: AccountData;
   onNext: (data: AccountData) => void;
+  /** Errore server-side (es. email già registrata) da mostrare sul campo email. */
+  emailError?: string | null;
 }) {
   // `dataNascita` è coerced a Date dallo schema; l'input type="date" vuole una
   // stringa yyyy-mm-dd, altrimenti al "Indietro" il campo resta vuoto.
@@ -512,12 +532,21 @@ function AccountStep({
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<AccountData>({
     resolver: zodResolver(registerStep1AccountSchema),
     defaultValues: formDefaults,
     mode: 'onChange',
   });
+
+  // Arrivo da un submit finale (step Sedi) fallito per email già in uso:
+  // porta l'errore sul campo, così l'utente lo vede dove deve correggerlo.
+  useEffect(() => {
+    if (emailError) {
+      setError('email', { type: 'server', message: emailError });
+    }
+  }, [emailError, setError]);
 
   return (
     <form onSubmit={handleSubmit(onNext)} noValidate className="space-y-4">

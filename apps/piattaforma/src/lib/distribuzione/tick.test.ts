@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { tx, prismaMock, cfgMock, orarioMock } = vi.hoisted(() => {
+const { tx, prismaMock, cfgMock, orarioMock, minutiLavorativiMock } = vi.hoisted(() => {
   const tx = {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     sede: { findMany: vi.fn() },
@@ -22,12 +22,16 @@ const { tx, prismaMock, cfgMock, orarioMock } = vi.hoisted(() => {
     prismaMock,
     cfgMock: vi.fn(),
     orarioMock: vi.fn(),
+    minutiLavorativiMock: vi.fn(),
   };
 });
 
 vi.mock('@pv/db', () => ({ prisma: prismaMock, Prisma: {} }));
 vi.mock('./config', () => ({ getDistribuzioneConfig: cfgMock }));
-vi.mock('./orario-piattaforma', () => ({ isOrarioLavorativo: orarioMock }));
+vi.mock('./orario-piattaforma', () => ({
+  isOrarioLavorativo: orarioMock,
+  minutiLavorativiTra: minutiLavorativiMock,
+}));
 vi.mock('@/lib/notifiche', () => ({
   sendNotification: vi.fn(() => Promise.resolve()),
   sendNotifications: vi.fn(() => Promise.resolve()),
@@ -108,6 +112,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   cfgMock.mockResolvedValue(CFG);
   orarioMock.mockReturnValue(true);
+  // Default alto: i test che non sono specificamente sul gate "durata round"
+  // devono attraversarlo senza pensarci. I test del gate sovrascrivono questo
+  // valore esplicitamente.
+  minutiLavorativiMock.mockReturnValue(10_000);
   tx.sede.findMany.mockResolvedValue([]);
   tx.praticaAssegnazione.findMany.mockResolvedValue([]);
   tx.praticaAssegnazione.updateMany.mockResolvedValue({ count: 0 });
@@ -455,7 +463,11 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
   });
 
-  it('in orario ma ultima espansione 3 min fa → noop, durata round non trascorsa', async () => {
+  // Il gate ora conta i minuti LAVORATIVI (funzione mockata), non più la
+  // sottrazione di calendario: `ultimaEspansioneAt` resta come documentazione
+  // dello scenario, ma è `minutiLavorativiMock` a decidere l'esito.
+  it('in orario ma ultima espansione 3 min lavorativi fa → noop, durata round non trascorsa', async () => {
+    minutiLavorativiMock.mockReturnValue(3);
     tx.pratica.findUnique.mockResolvedValue(
       praticaTick({ ultimaEspansioneAt: new Date(NOW.getTime() - 3 * 60_000) }),
     );
@@ -467,8 +479,9 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.pratica.update).not.toHaveBeenCalled();
   });
 
-  // Gate 10 min con grazia (intervalloMin=10, ESPANSIONE_GRACE_MIN=1 → soglia 9 min).
-  it('ultima espansione 8 min fa → ancora noop (sotto 10-grace)', async () => {
+  // Gate 10 min con grazia (intervalloMin=10, ESPANSIONE_GRACE_MIN=0.2 → soglia 9,8 min).
+  it('8 min lavorativi trascorsi → ancora noop (sotto 10-grace)', async () => {
+    minutiLavorativiMock.mockReturnValue(8);
     tx.pratica.findUnique.mockResolvedValue(
       praticaTick({ raggioCorrenteM: 500, ultimaEspansioneAt: new Date(NOW.getTime() - 8 * 60_000) }),
     );
@@ -479,9 +492,10 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.sede.findMany).not.toHaveBeenCalled();
   });
 
-  it('ultima espansione 9,2 min fa → espande (la grazia assorbe il jitter del cron)', async () => {
+  it('9,8 min lavorativi trascorsi → espande (la grazia di 12s assorbe il jitter del cron)', async () => {
+    minutiLavorativiMock.mockReturnValue(9.8);
     tx.pratica.findUnique.mockResolvedValue(
-      praticaTick({ raggioCorrenteM: 500, ultimaEspansioneAt: new Date(NOW.getTime() - 9.2 * 60_000) }),
+      praticaTick({ raggioCorrenteM: 500, ultimaEspansioneAt: new Date(NOW.getTime() - 9.8 * 60_000) }),
     );
     tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
 
@@ -493,6 +507,58 @@ describe('tickPratica: espansione a raggio incrementale', () => {
         data: expect.objectContaining({ raggioCorrenteM: 700, ultimaEspansioneAt: NOW }),
       }),
     );
+  });
+
+  it('attende se i minuti LAVORATIVI trascorsi sono sotto la durata del round', async () => {
+    cfgMock.mockResolvedValue({ ...CFG, intervalloMin: 60 });
+    orarioMock.mockReturnValue(true);
+    // Otto ore di calendario, ma solo 5 minuti dentro la finestra: si attende.
+    minutiLavorativiMock.mockReturnValue(5);
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaTick({ ultimaEspansioneAt: new Date('2026-07-22T00:20:00Z') }),
+    );
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'durata round non trascorsa' });
+    expect(prismaMock.sede.findMany).not.toHaveBeenCalled();
+  });
+
+  it('espande quando i minuti lavorativi raggiungono la durata del round', async () => {
+    cfgMock.mockResolvedValue({ ...CFG, intervalloMin: 60 });
+    orarioMock.mockReturnValue(true);
+    minutiLavorativiMock.mockReturnValue(60);
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaTick({ ultimaEspansioneAt: new Date('2026-07-22T07:00:00Z') }),
+    );
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({ ultimaEspansioneAt: new Date('2026-07-22T07:00:00Z') }),
+    );
+    prismaMock.sede.findMany.mockResolvedValue([
+      { id: 's1', lat: kmLat(0.6), lng: LNG0, companyId: 'c1' },
+    ]);
+    tx.praticaAssegnazione.create.mockResolvedValue({ id: 'a1' });
+    tx.pratica.update.mockResolvedValue({});
+    tx.praticaStatoLog.create.mockResolvedValue({});
+
+    const res = await tickPratica('p1');
+
+    expect(res.status).toBe('notified');
+  });
+
+  it('la grazia è di secondi, non di un minuto intero', async () => {
+    // Con durata 2 min, a 1 minuto e mezzo di lavoro NON si deve espandere:
+    // la vecchia grazia da 1 minuto lo avrebbe fatto passare.
+    cfgMock.mockResolvedValue({ ...CFG, intervalloMin: 2 });
+    orarioMock.mockReturnValue(true);
+    minutiLavorativiMock.mockReturnValue(1.5);
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaTick({ ultimaEspansioneAt: new Date('2026-07-22T07:00:00Z') }),
+    );
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'durata round non trascorsa' });
   });
 
   it('anello successivo con sedi → assegnazioni (raggioMetri = raggio raggiunto, PENDING), avanza raggio + round + ultimaEspansioneAt, coda N6', async () => {

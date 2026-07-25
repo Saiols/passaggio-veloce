@@ -1,7 +1,7 @@
 import 'server-only';
 import { prisma, type Prisma, type PrismaClient } from '@pv/db';
 import { getDistribuzioneConfig, type DistribuzioneConfigDTO } from './config';
-import { isOrarioLavorativo } from './orario-piattaforma';
+import { isOrarioLavorativo, minutiLavorativiTra } from './orario-piattaforma';
 import { primoAnello, prossimoAnello, type SedeConDistanza } from './anelli';
 import { sediDaEscludere } from './esclusioni';
 import { limiteVisuraUtc } from '@/lib/visura/validita';
@@ -28,14 +28,16 @@ export type TickResult =
 const STATI_TERMINALI = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as const;
 
 /**
- * Grazia (min) sul gate della durata round. Il cron gira ogni 10 minuti, ma con
- * jitter dello scheduler un tick può arrivare appena prima della scadenza:
- * senza grazia il gate `minutesSince < intervalloMin` lo respingerebbe e il
- * round slitterebbe di un intero giro di cron. La grazia assorbe il jitter
- * (gate su `< intervalloMin - GRACE`) senza mai anticipare in modo sensibile
- * la cadenza reale.
+ * Grazia (min) sul gate della durata round. Il cron gira ogni 10 minuti
+ * (vercel.json) e Vercel non garantisce il trigger al secondo: senza grazia
+ * un tick che arriva un istante prima della scadenza slitterebbe di un giro
+ * intero. 0,2 min = 12 secondi assorbono il jitter senza accorciare in modo
+ * percepibile un round.
+ *
+ * ⚠️ Deve restare MOLTO minore della durata minima configurabile (1 minuto):
+ * il valore precedente, 1 minuto, avrebbe dimezzato ogni round da 2 minuti.
  */
-const ESPANSIONE_GRACE_MIN = 1;
+const ESPANSIONE_GRACE_MIN = 0.2;
 
 /** Client Prisma base o transazione: le letture/candidati girano FUORI dalla tx. */
 type DistribClient = PrismaClient | Prisma.TransactionClient;
@@ -52,11 +54,6 @@ function emptyJobs(): PostCommitJobs {
 
 function noop(reason: string): TickResult {
   return { status: 'noop', reason };
-}
-
-/** Minuti trascorsi da `t` a `now` (frazionari). */
-function minutesSince(now: Date, t: Date): number {
-  return (now.getTime() - t.getTime()) / 60000;
 }
 
 /** Forma minima della pratica necessaria a costruire i candidati. */
@@ -248,12 +245,15 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
     return noop('fuori orario');
   }
 
-  // Gate durata round (con grazia): se l'ultima notifica è troppo recente,
-  // attendi. Solo le notifiche reali muovono `ultimaEspansioneAt`, quindi un
-  // round vuoto non consuma tempo.
+  // Gate durata round, misurata in minuti LAVORATIVI: i minuti fuori finestra,
+  // nei giorni spenti e nei festivi non contano. Così ogni cerchio ha la sua
+  // finestra piena per rispondere anche quando la pratica è arrivata di notte.
+  // Solo le notifiche reali muovono `ultimaEspansioneAt`: un round vuoto non
+  // consuma tempo.
   if (
     pratica.ultimaEspansioneAt &&
-    minutesSince(now, pratica.ultimaEspansioneAt) < cfg.intervalloMin - ESPANSIONE_GRACE_MIN
+    minutiLavorativiTra(pratica.ultimaEspansioneAt, now, cfg, cfg.intervalloMin) <
+      cfg.intervalloMin - ESPANSIONE_GRACE_MIN
   ) {
     return noop('durata round non trascorsa');
   }

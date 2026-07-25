@@ -8,6 +8,7 @@ import { AgenziaDashboard } from './agenzia-dashboard';
 import { AdminDashboard } from './admin-dashboard';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 import { VisuraBanner } from '@/components/visura-banner';
+import { SuspensionBanner } from '@/components/suspension-banner';
 
 export default async function DashboardPage({
   searchParams,
@@ -35,7 +36,8 @@ export default async function DashboardPage({
   return (
     <AppShell session={session} activePath="/dashboard">
       {companyId && (
-        <div className="mx-auto w-full max-w-6xl px-5 pt-6 sm:px-6">
+        <div className="mx-auto w-full max-w-6xl space-y-3 px-5 pt-6 sm:px-6">
+          <SuspensionBanner />
           <VisuraBanner
             companyId={companyId}
             companyType={companyType === 'AGENZIA' ? 'AGENZIA' : 'DEALER'}

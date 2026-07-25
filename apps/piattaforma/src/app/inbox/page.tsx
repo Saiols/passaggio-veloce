@@ -11,6 +11,7 @@ import { acceptAndRedirect, rejectAndRedirect } from './actions';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
 import { STORICO_ESITI, storicoCutoff, labelEsito } from './storico';
 import { VisuraBanner } from '@/components/visura-banner';
+import { SuspensionBanner } from '@/components/suspension-banner';
 
 export default async function InboxPage() {
   const session = await auth();
@@ -75,7 +76,8 @@ export default async function InboxPage() {
     <AppShell session={session} activePath="/inbox">
       <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-6 sm:py-10">
         {session.user.companyId && (
-          <div className="mb-6">
+          <div className="mb-6 space-y-3">
+            <SuspensionBanner />
             <VisuraBanner companyId={session.user.companyId} companyType="AGENZIA" />
           </div>
         )}

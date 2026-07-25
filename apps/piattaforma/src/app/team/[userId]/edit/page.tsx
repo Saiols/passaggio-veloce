@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { getSessionContext, getManageableSedi } from '@/lib/auth/session-context';
 import { can, assignablePermessi } from '@/lib/auth/permessi/check';
 import { assertPermesso, toPermessiCtx } from '@/lib/auth/permessi/guard';
+import { assertOperativita } from '@/lib/auth/sospensione-guard';
 import { isPermesso } from '@/lib/auth/permessi/catalogo';
 import { etichettaRuolo } from '@/lib/auth/permessi/ruoli';
 import { etichetteSediUniche } from '@/lib/sedi/etichetta-sede';
@@ -28,6 +29,9 @@ export default async function TeamUserEditPage({
   if (!ctx.companyType) redirect('/dashboard'); // azienda senza tipo: il catalogo non si applica
   // Autenticazione → permesso → scope, come in /team.
   await assertPermesso('team.view');
+  // Pagina di sola modifica: sotto sospensione non c'è nulla da leggere qui, e
+  // il form rifiuterebbe al submit. Rimanda alla dashboard, dove il banner spiega.
+  await assertOperativita();
   const manageable = await getManageableSedi();
   if (manageable.length === 0) redirect('/dashboard');
   const companyId = ctx.companyId;

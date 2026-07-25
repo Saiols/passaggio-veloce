@@ -35,10 +35,13 @@ export function SedeEdit({
   sedeId,
   data,
   canEditPagamenti,
+  soloLettura = false,
 }: {
   sedeId: string;
   data: SedeEditData;
   canEditPagamenti: boolean;
+  /** Account sospeso: la vista resta leggibile, il tasto "Modifica" non compare. */
+  soloLettura?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -128,13 +131,15 @@ export function SedeEdit({
         <Card className="mb-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-[15px] font-bold text-pv-navy-800">Anagrafica</h2>
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
-            >
-              Modifica
-            </button>
+            {!soloLettura && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="rounded-lg border border-pv-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+              >
+                Modifica
+              </button>
+            )}
           </div>
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
             <Row label="Nome sede" value={data.nome} />

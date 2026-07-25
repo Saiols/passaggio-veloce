@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Card } from '@/components/ui';
 import { formatDate } from '@/lib/format';
+import { statoSospensione } from '@/lib/auth/sospensione-guard';
 import { SedeEdit } from './sede-edit';
 import { SuspendToggle } from './suspend-toggle';
 
@@ -26,6 +27,7 @@ export default async function SedeDetailPage({
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const link = sede.referralCode ? `${appUrl}/r/${sede.referralCode}` : null;
+  const sospensione = await statoSospensione();
 
   return (
     <AppShell session={session} activePath="/sedi">
@@ -62,6 +64,7 @@ export default async function SedeDetailPage({
           sedeId={sede.id}
           // La pagina è già ADMIN_AZIENDA-only (redirect sopra): chi arriva qui è il proprietario.
           canEditPagamenti
+          soloLettura={sospensione.sospeso}
           data={{
             nome: sede.nome,
             indirizzo: sede.indirizzo,

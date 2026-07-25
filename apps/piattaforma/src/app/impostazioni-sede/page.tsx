@@ -5,6 +5,7 @@ import { prisma } from '@pv/db';
 import { getOperatingSede, getSedeRole } from '@/lib/auth/session-context';
 import { assertPermesso } from '@/lib/auth/permessi/guard';
 import { canEditPaymentSettings } from '@/lib/sedi/scope';
+import { statoSospensione } from '@/lib/auth/sospensione-guard';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card } from '@/components/ui';
 import { SedeEdit } from '../sedi/[id]/sede-edit';
@@ -37,6 +38,7 @@ export default async function ImpostazioniSedePage() {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const link = row.referralCode ? `${appUrl}/r/${row.referralCode}` : null;
+  const sospensione = await statoSospensione();
 
   return (
     <AppShell session={session} activePath="/impostazioni-sede">
@@ -56,6 +58,7 @@ export default async function ImpostazioniSedePage() {
         <SedeEdit
           sedeId={row.id}
           canEditPagamenti={canEditPagamenti}
+          soloLettura={sospensione.sospeso}
           data={{
             nome: row.nome,
             indirizzo: row.indirizzo,

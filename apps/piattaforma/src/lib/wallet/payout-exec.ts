@@ -6,6 +6,7 @@ import { getPayment } from '@/lib/providers/payment';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { WALLET } from './config';
 import { hasNegativeCompanyWallet } from './negative-wallet-guard';
+import { ERRORE_PAYOUT_SOSPESO, payoutBloccatoPerSospensione } from './sospensione-payout';
 
 export type EseguiPayoutResult =
   | { ok: true; payoutId: string; importoCent: number }
@@ -189,18 +190,20 @@ export async function eseguiPayoutImmediato(
     // legittimati. L'utente sospeso singolarmente non può comunque arrivare
     // qui dall'action, perché `wallet.payout` è una chiave di scrittura.
     //
+    // ⚠️ GUARD DI COPPIA: questa funzione NON è l'unico percorso che crea un
+    // payout. `lib/jobs/trigger-auto-payout.ts` (cron notturno) crea il Payout
+    // `RICHIESTO` da sé e `processPayouts` lo salda via `settlePayout`, che non
+    // ha guard di dominio: un blocco solo qui non ferma il payout automatico,
+    // lo rimanda di una notte. Il predicato è condiviso
+    // (./sospensione-payout.ts) proprio per tenere visibile la coppia — se
+    // aggiungi o cambi una condizione qui, guarda anche là.
+    //
     // Come il guard visura sotto, è escluso da `ignoraSoglia`: la liquidazione
     // di cessazione (clausola 12.4) deve restare possibile, e `deleteCompanyAction`
     // marca `suspendedAt` insieme a `deletedAt` — bloccare qui intrappolerebbe
     // per sempre il denaro dovuto.
-    const suspendedAt =
-      walletOwner?.company?.suspendedAt ?? walletOwner?.sede?.company?.suspendedAt ?? null;
-    if (suspendedAt) {
-      return {
-        ok: false,
-        error:
-          'Il tuo account è sospeso: i prelievi dal wallet sono bloccati finché la sospensione non viene revocata. Il saldo resta a tuo credito.',
-      };
+    if (payoutBloccatoPerSospensione(walletOwner)) {
+      return { ok: false, error: ERRORE_PAYOUT_SOSPESO };
     }
 
     if (ownerCompanyId && (await isVisuraScadutaCompany(ownerCompanyId))) {

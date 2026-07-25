@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Il guard sta nel motore, non nell'action: manuale, auto-payout a soglia e
- * cron passano tutti da qui. Vedi lib/wallet/auto-payout.ts:45.
+ * Il guard sta nel motore, non nell'action: il payout manuale e l'auto-payout a
+ * soglia in tempo reale passano da qui (vedi lib/wallet/auto-payout.ts:45).
+ *
+ * ⚠️ NON tutti i percorsi: il cron notturno
+ * (`lib/jobs/trigger-auto-payout.ts`) crea il Payout `RICHIESTO` da sé e lo fa
+ * saldare da `processPayouts` → `settlePayout`, che non ha guard di dominio. Il
+ * suo guard è replicato là e testato in `lib/jobs/trigger-auto-payout.test.ts`:
+ * questo file NON lo copre, e per un po' la spec sosteneva il contrario.
  */
 
 const WALLET_ID = 'wallet-1';
@@ -43,6 +49,20 @@ function walletDiCompanySospesa() {
   });
 }
 
+/**
+ * Wallet della company MADRE (affiliazione) sospesa: `company.suspendedAt`
+ * diretto, `sede: null`. È la seconda forma di proprietà del wallet, altrettanto
+ * producibile dal write path — il caso positivo qui sopra passa solo per la
+ * relazione sede, quindi da solo non inchioda niente su questa.
+ */
+function walletDiMadreSospesa() {
+  prismaMock.wallet.findUnique.mockResolvedValue({
+    companyId: 'c1',
+    company: { suspendedAt: new Date('2026-07-25T10:00:00Z') },
+    sede: null,
+  });
+}
+
 describe('eseguiPayoutImmediato — azienda sospesa', () => {
   it('rifiuta senza aprire la transazione di reserve', async () => {
     walletDiCompanySospesa();
@@ -54,7 +74,17 @@ describe('eseguiPayoutImmediato — azienda sospesa', () => {
     expect(prismaMock.$transaction).not.toHaveBeenCalled();
   });
 
-  it('rifiuta anche il payout automatico (soglia e cron passano da qui)', async () => {
+  it('rifiuta anche il wallet della company madre sospesa (wallet affiliazione)', async () => {
+    walletDiMadreSospesa();
+
+    const res = await eseguiPayoutImmediato(WALLET_ID);
+
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/sospes/i);
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rifiuta anche il payout automatico (soglia in tempo reale passa da qui)', async () => {
     walletDiCompanySospesa();
 
     const res = await eseguiPayoutImmediato(WALLET_ID, { automatico: true });

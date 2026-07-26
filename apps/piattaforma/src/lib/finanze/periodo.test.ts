@@ -1,15 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
   parsePeriodo,
+  parseTipo,
   periodoLabel,
   resolvePeriodo,
   defaultCustomRange,
   periodoDateFilter,
+  filtriPratiche,
 } from './periodo';
 
-// Metà luglio: Roma e UTC sono entrambi in CEST, così le asserzioni sulle
-// finestre mobili (che usano i setter locali, come il codice originale)
-// valgono sia con runner in UTC sia con runner in Europe/Rome.
+// Metà luglio: in questa finestra non c'è nessuna transizione DST (né a
+// Roma né altrove), quindi le asserzioni sulle finestre mobili (che usano i
+// setter locali, come il codice originale) danno lo stesso risultato
+// qualunque sia il fuso del runner — verificato anche lanciando la suite con
+// TZ=UTC. UTC stesso non è mai "in CEST": la proprietà che conta è l'assenza
+// di transizione, non una coincidenza di fuso.
 const NOW = new Date('2026-07-27T10:00:00.000Z');
 
 describe('parsePeriodo', () => {
@@ -124,5 +129,69 @@ describe('periodoLabel', () => {
     expect(periodoLabel('giorno')).toBe('Ultime 24h');
     expect(periodoLabel('anno')).toBe('Ultimo anno');
     expect(periodoLabel('custom')).toBe('Personalizzato');
+  });
+});
+
+describe('parseTipo', () => {
+  it('accetta i due valori noti', () => {
+    expect(parseTipo('SEMPLICE')).toBe('SEMPLICE');
+    expect(parseTipo('MINIVOLTURA')).toBe('MINIVOLTURA');
+  });
+  it('assente o sconosciuto torna stringa vuota, mai un valore che Prisma rifiuta', () => {
+    expect(parseTipo(undefined)).toBe('');
+    expect(parseTipo(null)).toBe('');
+    expect(parseTipo('')).toBe('');
+    expect(parseTipo('pippo')).toBe('');
+  });
+});
+
+describe('filtriPratiche', () => {
+  it('periodo mobile + tipo valido: where ha createdAt.gte e tipo, nessun lte', () => {
+    const f = filtriPratiche({ periodo: 'mese', tipo: 'SEMPLICE', now: NOW });
+    expect(f.periodo).toBe('mese');
+    expect(f.tipo).toBe('SEMPLICE');
+    expect(f.where).toEqual({
+      deletedAt: null,
+      createdAt: { gte: new Date('2026-06-27T10:00:00.000Z') },
+      tipo: 'SEMPLICE',
+    });
+  });
+
+  it('custom con due estremi: where ha createdAt.gte e .lte', () => {
+    const f = filtriPratiche({ periodo: 'custom', da: '2026-06-01', a: '2026-06-30', now: NOW });
+    expect(f.periodo).toBe('custom');
+    expect(f.range.label).toBe('Dal 01/06/2026 al 30/06/2026');
+    expect(f.where).toEqual({
+      deletedAt: null,
+      createdAt: {
+        gte: new Date('2026-05-31T22:00:00.000Z'),
+        lte: new Date('2026-06-30T21:59:59.999Z'),
+      },
+    });
+  });
+
+  it('custom senza estremi: nessun createdAt nel where', () => {
+    const f = filtriPratiche({ periodo: 'custom', now: NOW });
+    expect(f.where).toEqual({ deletedAt: null });
+    expect('createdAt' in f.where).toBe(false);
+  });
+
+  it('tipo sconosciuto: nessun tipo nel where (e non finisce nel filename di chi chiama)', () => {
+    const f = filtriPratiche({ periodo: 'mese', tipo: 'pippo', now: NOW });
+    expect(f.tipo).toBe('');
+    expect(f.where).toEqual({
+      deletedAt: null,
+      createdAt: { gte: new Date('2026-06-27T10:00:00.000Z') },
+    });
+    expect('tipo' in f.where).toBe(false);
+  });
+
+  it('periodo sconosciuto: ricade su mese', () => {
+    const f = filtriPratiche({ periodo: 'pippo', now: NOW });
+    expect(f.periodo).toBe('mese');
+    expect(f.where).toEqual({
+      deletedAt: null,
+      createdAt: { gte: new Date('2026-06-27T10:00:00.000Z') },
+    });
   });
 });

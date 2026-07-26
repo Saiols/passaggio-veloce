@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
-import { prisma, Prisma } from '@pv/db';
+import { prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert, Card, StatCard } from '@/components/ui';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
@@ -8,17 +8,18 @@ import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { STATI_IN_DISTRIBUZIONE } from '@/lib/pratiche/stati';
 import {
   defaultCustomRange,
-  parsePeriodo,
+  filtriPratiche,
   periodoDateFilter,
   periodoLabel,
-  resolvePeriodo,
   type Periodo,
+  type TipoFiltro,
 } from '@/lib/finanze/periodo';
 import { FiltriPeriodoCustom } from './filtri-periodo';
 
-type TipoFiltro = '' | 'SEMPLICE' | 'MINIVOLTURA';
-
-type SearchParams = { periodo?: string; tipo?: TipoFiltro; da?: string; a?: string };
+// `tipo` viaggia grezzo dalla query string come gli altri campi: la sua
+// forma valida (TipoFiltro) esce solo da filtriPratiche/parseTipo, mai da
+// una dichiarazione locale che Next.js non fa rispettare a runtime.
+type SearchParams = { periodo?: string; tipo?: string; da?: string; a?: string };
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -42,14 +43,13 @@ export default async function AdminDashboardPage({
   }
 
   const sp = await searchParams;
-  const periodo = parsePeriodo(sp.periodo);
-  const tipo: TipoFiltro = sp.tipo ?? '';
-  const range = resolvePeriodo({ periodo, da: sp.da, a: sp.a });
+  const { periodo, tipo, range, where } = filtriPratiche({
+    periodo: sp.periodo,
+    tipo: sp.tipo,
+    da: sp.da,
+    a: sp.a,
+  });
   const dateFilter = periodoDateFilter(range);
-
-  const where: Prisma.PraticaWhereInput = { deletedAt: null };
-  if (dateFilter) where.createdAt = dateFilter;
-  if (tipo) where.tipo = tipo;
 
   const [
     totale,

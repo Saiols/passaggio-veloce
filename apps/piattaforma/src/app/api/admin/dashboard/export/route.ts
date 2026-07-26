@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { prisma, Prisma } from '@pv/db';
+import { prisma } from '@pv/db';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
-import { parsePeriodo, resolvePeriodo, periodoDateFilter } from '@/lib/finanze/periodo';
+import { filtriPratiche } from '@/lib/finanze/periodo';
 import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
@@ -27,20 +27,12 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const periodo = parsePeriodo(url.searchParams.get('periodo'));
-  const range = resolvePeriodo({
-    periodo,
-    da: url.searchParams.get('da') ?? undefined,
-    a: url.searchParams.get('a') ?? undefined,
+  const { periodo, tipo, range, where } = filtriPratiche({
+    periodo: url.searchParams.get('periodo'),
+    tipo: url.searchParams.get('tipo'),
+    da: url.searchParams.get('da'),
+    a: url.searchParams.get('a'),
   });
-  const tipo = url.searchParams.get('tipo') ?? '';
-
-  const where: Prisma.PraticaWhereInput = { deletedAt: null };
-  const dateFilter = periodoDateFilter(range);
-  if (dateFilter) where.createdAt = dateFilter;
-  if (tipo === 'SEMPLICE' || tipo === 'MINIVOLTURA') {
-    where.tipo = tipo;
-  }
 
   const pratiche = await prisma.pratica.findMany({
     where,

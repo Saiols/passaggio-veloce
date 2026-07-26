@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import type { TipoFiltro } from '@/lib/finanze/periodo';
 
 const CONTROL =
   'rounded-[10px] border-[1.5px] border-transparent bg-pv-navy-100 px-3 py-2.5 text-sm font-medium text-pv-slate-900 focus:border-pv-navy-600 focus:bg-white focus:outline-none focus:shadow-[var(--pv-ring-focus)]';
@@ -11,7 +12,15 @@ const LABEL = 'flex flex-col gap-1 text-[12px] font-semibold text-pv-slate-500';
  * hidden: senza di loro il submit del form perderebbe il tab attivo e il
  * filtro tipo pratica, riportando la pagina al default.
  */
-export function FiltriPeriodoCustom({ da, a, tipo }: { da: string; a: string; tipo: string }) {
+export function FiltriPeriodoCustom({
+  da,
+  a,
+  tipo,
+}: {
+  da: string;
+  a: string;
+  tipo: TipoFiltro;
+}) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const submit = () => formRef.current?.requestSubmit();
 

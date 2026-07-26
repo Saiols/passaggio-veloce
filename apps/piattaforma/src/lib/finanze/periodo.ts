@@ -9,10 +9,15 @@
  *
  * Puro, niente IO: `now` è iniettabile per i test.
  */
+import type { Prisma } from '@pv/db';
 import { resolveDayRange, romeYmd } from '@/lib/date/rome-day';
 
 export const PERIODI = ['giorno', 'settimana', 'mese', 'anno', 'custom'] as const;
 export type Periodo = (typeof PERIODI)[number];
+
+export const TIPI_FILTRO = ['SEMPLICE', 'MINIVOLTURA'] as const;
+/** `''` = nessun filtro tipo. È il valore di default, non un caso limite. */
+export type TipoFiltro = '' | (typeof TIPI_FILTRO)[number];
 
 export type PeriodoRisolto = {
   /** Estremo inferiore; assente = aperto a sinistra (solo su `custom`). */
@@ -36,6 +41,16 @@ const LABEL_MOBILE = {
 /** Valore assente o sconosciuto → `mese`, il default storico della pagina. */
 export function parsePeriodo(value: string | undefined | null): Periodo {
   return (PERIODI as readonly string[]).includes(value ?? '') ? (value as Periodo) : 'mese';
+}
+
+/**
+ * Valore assente o sconosciuto → `''` (nessun filtro tipo), mai un valore che
+ * Prisma rifiuta. Letto grezzo dalla query string sia dalla pagina sia
+ * dall'export: entrambi lo passano da qui prima di usarlo, che sia per il
+ * `where` o per il nome del file scaricato.
+ */
+export function parseTipo(value: string | undefined | null): TipoFiltro {
+  return (TIPI_FILTRO as readonly string[]).includes(value ?? '') ? (value as TipoFiltro) : '';
 }
 
 export function periodoLabel(p: Periodo): string {
@@ -122,4 +137,41 @@ export function defaultCustomRange(now: Date): { da: string; a: string } {
 export function periodoDateFilter(r: PeriodoRisolto): { gte?: Date; lte?: Date } | undefined {
   if (!r.gte && !r.lte) return undefined;
   return { ...(r.gte ? { gte: r.gte } : {}), ...(r.lte ? { lte: r.lte } : {}) };
+}
+
+/**
+ * Da query string ai filtri delle metriche Finanze: un solo punto in cui la
+ * pagina e l'export possono divergere, ed è questo. Prima di questa funzione
+ * i due consumer ricostruivano `where` a mano — `tipo` incluso, validato per
+ * il filtro ma non per il nome del file scaricato nell'export: da lì un
+ * `tipo` qualsiasi finiva nel filename e nell'header
+ * `Content-Disposition`. Chi chiama `filtriPratiche` non vede mai un `tipo`
+ * diverso da `''`, `'SEMPLICE'` o `'MINIVOLTURA'`, in nessun campo del
+ * risultato.
+ */
+export function filtriPratiche(params: {
+  periodo?: string | null;
+  tipo?: string | null;
+  da?: string | null;
+  a?: string | null;
+  now?: Date;
+}): {
+  periodo: Periodo;
+  tipo: TipoFiltro;
+  range: PeriodoRisolto;
+  where: Prisma.PraticaWhereInput;
+} {
+  const periodo = parsePeriodo(params.periodo);
+  const tipo = parseTipo(params.tipo);
+  const range = resolvePeriodo({
+    periodo,
+    da: params.da ?? undefined,
+    a: params.a ?? undefined,
+    now: params.now,
+  });
+  const dateFilter = periodoDateFilter(range);
+  const where: Prisma.PraticaWhereInput = { deletedAt: null };
+  if (dateFilter) where.createdAt = dateFilter;
+  if (tipo) where.tipo = tipo;
+  return { periodo, tipo, range, where };
 }

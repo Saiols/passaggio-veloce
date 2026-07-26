@@ -11,6 +11,10 @@ import { sendNotification, notifyClientiAvanzamento } from '@/lib/notifiche';
 import { destinatariBroker } from '@/lib/notifiche/pratica';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
+import {
+  ERRORE_RIACCETTAZIONE_PENDENTE,
+  getRiaccettazionePendente,
+} from '@/lib/tariffe/riaccettazione';
 import { emitEventoPratica, dismissNuovaPraticaEventi } from '@/lib/eventi/emit';
 import { eventoPraticaAccettata } from '@/lib/eventi/pratica-eventi';
 import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
@@ -42,6 +46,15 @@ export async function acceptPratica(praticaId: string): Promise<ActionResult> {
       error:
         "Operatività sospesa per addebito non riuscito: regolarizza il pagamento in /blocco-pagamento per tornare a lavorare le pratiche.",
     };
+  }
+
+  if (await getRiaccettazionePendente(agenziaId)) {
+    // Clausola 3, fascia (b): una variazione oltre il 20% non è opponibile a
+    // chi non l'ha riaccettata. Accettare una pratica adesso significherebbe
+    // applicarle una fee che questa agenzia non ha mai accettato. Come i due
+    // check sopra è una limitazione OPERATIVA e temporanea, non una
+    // sospensione: si risolve con una conferma.
+    return { ok: false, error: ERRORE_RIACCETTAZIONE_PENDENTE };
   }
 
   if (await isVisuraScadutaCompany(agenziaId)) {

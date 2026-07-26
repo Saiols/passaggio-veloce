@@ -43,6 +43,10 @@ import { extractCf } from '@/lib/kyc/extract-cf';
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { computeFees } from '@/lib/pricing';
 import { getTariffarioCorrente } from '@/lib/tariffario';
+import {
+  ERRORE_RIACCETTAZIONE_PENDENTE,
+  getRiaccettazionePendente,
+} from '@/lib/tariffe/riaccettazione';
 import { calcolaDocumentiRichiesti } from '@/lib/documenti/engine';
 import {
   requiredUploadDocs,
@@ -1261,11 +1265,26 @@ export async function submitNuovaPraticaAction(
     );
   }
 
+  // Clausola 3, fascia (b): se è in vigore una variazione oltre il 20% che
+  // questo broker non ha riaccettato, la pratica non può partire — verrebbe
+  // prezzata con condizioni che non ha mai accettato. Il gate sta QUI, subito
+  // prima del pricing, e non più in alto: tutto il lavoro di validazione dei
+  // documenti è già stato fatto e l'utente riceve l'errore che davvero lo
+  // blocca, non uno generico.
+  if (await getRiaccettazionePendente(brokerId)) {
+    redirect(`/pratiche/nuova?error=${encodeURIComponent(ERRORE_RIACCETTAZIONE_PENDENTE)}`);
+  }
+
   // Pricing derivato dal tipo + numero veicoli (engine in lib/pricing.ts).
   const tariffario = await getTariffarioCorrente();
   const fees = computeFees({ tipo: d.tipo, numeroVeicoli: d.numeroVeicoli }, tariffario);
   const feeAgenziaCent = fees.feeAgenziaCent;
   const creditoBrokerCent = fees.creditoBrokerCent;
+  // Clausola 3: la pratica congela QUI tutti e tre gli importi, invio
+  // compreso l'affiliazione. Prima quest'ultima veniva riletta viva alla
+  // firma, così una variazione tariffaria nel mezzo cambiava la commissione
+  // di una pratica già partita.
+  const affiliazioneCent = fees.costoAffiliazioneTotaleCent;
 
   const codicePratica = await nextCodicePratica();
   const now = new Date();
@@ -1373,6 +1392,7 @@ export async function submitNuovaPraticaAction(
       brokerSedeId,
       feeAgenziaCent,
       creditoBrokerCent,
+      affiliazioneCent,
 
       submittedAt: now,
     },

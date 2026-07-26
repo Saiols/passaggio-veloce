@@ -62,6 +62,12 @@ export const MAPPA_ENFORCEMENT: Record<string, Record<string, Permesso | null>> 
     verificaVisuraAction: null, // passo 1: OCR + controlli, non scrive nulla
     aggiornaVisuraAction: null, // passo 2: scrive data/ragione sociale/sede legale
   },
+  'src/app/tariffe-aggiornate/actions.ts': {
+    // Owner-only via `isOwner`, come l'IBAN e la visura: accettare nuove
+    // condizioni economiche impegna l'azienda su un prezzo, non è una
+    // capability che il titolare possa delegare a un collaboratore.
+    riaccettaTariffaAction: null,
+  },
   'src/app/orari/actions.ts': {
     updateOrariAction: 'orari.edit',
   },

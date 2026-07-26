@@ -44,6 +44,12 @@ export const MAPPA_PAGINE: Record<string, Permesso | null> = {
   // visura è owner-only (`isOwner`, come l'IBAN) ed è gatato dentro la pagina e
   // ri-verificato nella server action — non è una capability delegabile.
   'src/app/visura/page.tsx': null,
+  // Terza gemella di blocco-pagamento e visura: chi trova l'invio o
+  // l'accettazione bloccati dalla clausola 3 (variazione tariffaria oltre il
+  // 20% non ancora riaccettata) deve poter vedere il perché, chiunque sia. La
+  // riaccettazione vera e propria è owner-only — vincola l'azienda a un prezzo
+  // — ed è gatata dentro la pagina e ri-verificata nella server action.
+  'src/app/tariffe-aggiornate/page.tsx': null,
   'src/app/sedi/page.tsx': null, // owner-only: redirect a /dashboard se role !== 'ADMIN_AZIENDA', non un permesso del catalogo
   'src/app/sedi/[id]/page.tsx': null, // owner-only, stesso motivo di src/app/sedi/page.tsx
   // Doppio gate: `team.view` (capability) e `getManageableSedi()` (scope, owner o ADMIN_SEDE).

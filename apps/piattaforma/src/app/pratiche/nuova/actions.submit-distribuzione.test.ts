@@ -166,6 +166,11 @@ vi.mock('@/lib/documenti/engine', async (orig) => {
   return { ...actual, calcolaDocumentiRichiesti: calcolaDocumentiRichiestiMock };
 });
 vi.mock('@/lib/tariffario', () => ({ getTariffarioCorrente: getTariffarioCorrenteMock }));
+// Clausola 3: gate della riaccettazione tariffaria, nessuna pendente di default.
+vi.mock('@/lib/tariffe/riaccettazione', () => ({
+  getRiaccettazionePendente: vi.fn(() => Promise.resolve(null)),
+  ERRORE_RIACCETTAZIONE_PENDENTE: 'riaccettazione pendente',
+}));
 
 import { submitNuovaPraticaAction } from './actions';
 

@@ -43,6 +43,12 @@ vi.mock('@/lib/notifiche', () => ({
 vi.mock('@/lib/notifiche/pratica', () => ({ destinatariBroker: vi.fn(() => Promise.resolve([])) }));
 vi.mock('@/lib/fee/blocco', () => ({ isAgenziaBloccata: vi.fn(() => Promise.resolve(false)) }));
 vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
+// Clausola 3: gate della riaccettazione tariffaria. Di default nessuna
+// pendente — i test di questo file esercitano gli altri gate.
+vi.mock('@/lib/tariffe/riaccettazione', () => ({
+  getRiaccettazionePendente: vi.fn(() => Promise.resolve(null)),
+  ERRORE_RIACCETTAZIONE_PENDENTE: 'riaccettazione pendente',
+}));
 vi.mock('@/lib/eventi/emit', () => ({
   emitEventoPratica: vi.fn(() => Promise.resolve()),
   dismissNuovaPraticaEventi: vi.fn(() => Promise.resolve()),

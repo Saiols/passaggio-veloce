@@ -353,6 +353,11 @@ export async function firmaPraticaCore(
         // Multi-sede: sede della madre referente che ha affiliato (attribuzione).
         brokerReferenteSedeId: pratica.broker.referenteSedeId,
         agenziaReferenteSedeId: pratica.agenziaAssegnata?.referenteSedeId ?? null,
+        // Clausola 3: la commissione è quella congelata all'INVIO, non quella
+        // in vigore oggi. Fra invio e firma può essersi insediata una
+        // variazione tariffaria, che per contratto vale solo per le pratiche
+        // inviate dopo la sua efficacia.
+        affiliazioneTotaleCent: pratica.affiliazioneCent,
       });
       accreditiResult = accreditOut.accrediti;
     });

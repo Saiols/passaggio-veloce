@@ -1769,6 +1769,91 @@ export function tplN51BrokerRimessaInCircolo(p: N51BrokerRimessaInCircoloPayload
  * La fattura esiste solo ora perché l'addebito è stato incassato ora: fino al
  * settlement SEPA non c'era nulla da fatturare (v. lib/fee/incasso.ts).
  */
+export type N54VariazioneTariffePayload = {
+  nomeDestinatario: string;
+  /** Voci variate, già formattate: etichetta, prima, dopo, variazione. */
+  voci: { etichetta: string; daEuro: string; aEuro: string; variazione: string }[];
+  /** Data di entrata in vigore, già formattata in italiano. */
+  inVigoreDal: string;
+  giorniPreavviso: number;
+  richiedeRiaccettazione: boolean;
+  terminiUrl: string;
+};
+
+/**
+ * Clausola 3 — preavviso di variazione delle tariffe.
+ *
+ * È la comunicazione da cui DECORRE il preavviso contrattuale, quindi dice tre
+ * cose che non possono mancare: cosa cambia, da quando, e che fino a quel
+ * giorno si può recedere senza penali. Per la fascia oltre il 20% aggiunge la
+ * richiesta di riaccettazione esplicita, senza la quale la variazione non è
+ * opponibile a chi non l'ha accettata.
+ */
+export function tplN54VariazioneTariffe(p: N54VariazioneTariffePayload): NotificaContent {
+  const subject = `Variazione delle tariffe dal ${p.inVigoreDal}`;
+  const righeText = p.voci
+    .map((v) => `  · ${v.etichetta}: da ${v.daEuro} a ${v.aEuro} (${v.variazione})`)
+    .join('\n');
+  const riaccettazioneText = p.richiedeRiaccettazione
+    ? `\nTrattandosi di una variazione superiore al 20%, prima dell'entrata in vigore ti sarà chiesta una riaccettazione esplicita delle condizioni economiche.\n`
+    : '';
+  const text =
+    `Ciao ${p.nomeDestinatario},\n` +
+    `ti comunichiamo con ${p.giorniPreavviso} giorni di preavviso, ai sensi della clausola 3 dei Termini e Condizioni, ` +
+    `una variazione delle tariffe di Passaggio Veloce.\n\n` +
+    `${righeText}\n\n` +
+    `Le nuove condizioni si applicano dal ${p.inVigoreDal} e valgono per le pratiche inviate o accettate da quella data: ` +
+    `le pratiche già in corso restano alle condizioni precedenti.\n` +
+    riaccettazioneText +
+    `\nSe non intendi accettare la variazione puoi recedere senza penali, con effetto dalla data di entrata in vigore, ` +
+    `scrivendo ad assistenza@passaggioveloce.it.\n` +
+    `Termini e Condizioni: ${p.terminiUrl}`;
+  const righeHtml = p.voci
+    .map(
+      (v) => `
+      <tr>
+        <td style="padding:6px 0;color:#334155;font-size:13px">${escapeHtml(v.etichetta)}</td>
+        <td style="padding:6px 0;color:#64748b;font-size:13px;text-align:right">${escapeHtml(v.daEuro)}</td>
+        <td style="padding:6px 8px;color:#64748b;font-size:13px;text-align:center">&rarr;</td>
+        <td style="padding:6px 0;color:#0a2540;font-size:13px;font-weight:700;text-align:right">${escapeHtml(v.aEuro)}</td>
+        <td style="padding:6px 0 6px 12px;color:#64748b;font-size:12px;text-align:right">${escapeHtml(v.variazione)}</td>
+      </tr>`,
+    )
+    .join('');
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Variazione delle tariffe</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeDestinatario)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      ti comunichiamo con <strong>${p.giorniPreavviso} giorni di preavviso</strong>, ai sensi della
+      <strong>clausola 3</strong> dei Termini e Condizioni, una variazione delle tariffe di Passaggio Veloce.
+    </p>
+    <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:10px;padding:8px">
+      ${righeHtml}
+    </table>
+    <p style="margin:16px 0 0;color:#334155;font-size:14px">
+      Le nuove condizioni si applicano <strong>dal ${escapeHtml(p.inVigoreDal)}</strong> e valgono per le pratiche
+      inviate o accettate da quella data: <strong>le pratiche già in corso restano alle condizioni precedenti</strong>.
+    </p>
+    ${
+      p.richiedeRiaccettazione
+        ? `<div style="margin:16px 0 0;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;font-size:13px;color:#7c2d12">
+             Trattandosi di una variazione <strong>superiore al 20%</strong>, prima dell&apos;entrata in vigore ti sarà
+             chiesta una <strong>riaccettazione esplicita</strong> delle condizioni economiche.
+           </div>`
+        : ''
+    }
+    <p style="margin:16px 0 0;color:#334155;font-size:13px">
+      Se non intendi accettare la variazione puoi <strong>recedere senza penali</strong>, con effetto dalla data di
+      entrata in vigore, scrivendo ad
+      <a href="mailto:assistenza@passaggioveloce.it" style="color:#0054a6">assistenza@passaggioveloce.it</a>.
+    </p>
+    <p style="margin:12px 0 0;font-size:12px;color:#64748b">
+      <a href="${p.terminiUrl}" style="color:#0054a6">Termini e Condizioni</a>
+    </p>
+  `);
+  return { subject, html, text };
+}
+
 export function tplN53AgenziaFatturaDisponibile(
   p: N53AgenziaFatturaDisponibilePayload,
 ): NotificaContent {

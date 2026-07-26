@@ -332,6 +332,10 @@ enum NotificaTipo {
   N51_BROKER_PRATICA_RIMESSA_IN_CIRCOLO
   N52_BROKER_ZONA_NON_COPERTA
   N53_AGENZIA_FATTURA_DISPONIBILE
+  /// Clausola 3: preavviso di variazione delle tariffe. Va a TUTTI gli Utenti
+  /// (broker e agenzie) e non e' mai opzionale: e' la comunicazione da cui
+  /// decorre il preavviso contrattuale.
+  N54_VARIAZIONE_TARIFFE
 }
 
 enum NotificaCanale {
@@ -506,6 +510,9 @@ model Company {
   documentiEmessi   DocumentoFiscale[] @relation("DocumentiEmessi")
   documentiRicevuti DocumentoFiscale[] @relation("DocumentiRicevuti")
 
+  // Clausola 3: variazioni tariffarie rilevanti riaccettate da questa azienda.
+  riaccettazioniTariffa RiaccettazioneTariffa[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -588,7 +595,12 @@ model User {
   commissioniReviewed CommissioneAffiliazione[] @relation("CommissioneAffiliazioneReviewer")
 
   // Tariffario piattaforma: righe create da questo utente (admin)
-  tariffeCreate TariffaPiattaforma[] @relation("TariffaCreatedBy")
+  tariffeCreate    TariffaPiattaforma[] @relation("TariffaCreatedBy")
+  tariffeAnnullate TariffaPiattaforma[] @relation("TariffaAnnullataDa")
+
+  // Clausola 3: riaccettazioni di variazioni tariffarie rilevanti prestate
+  // da questa persona per conto della propria azienda.
+  riaccettazioniTariffa RiaccettazioneTariffa[] @relation("RiaccettazioneTariffaUser")
 
   // Multi-sede: sedi su cui questo utente può operare (login multi-sede).
   sediMembership UserSede[]
@@ -872,9 +884,19 @@ model Pratica {
   codiceAgenziaInterno String?
   notaInternaAgenzia   String?
 
-  // Economics (in centesimi)
+  // Economics (in centesimi) — SNAPSHOT della tariffa al momento dell'INVIO
+  // della pratica, non del suo esito. Clausola 3: «la variazione entra in
+  // vigore dalla prima pratica inviata o accettata successivamente alla data
+  // di efficacia», quindi una pratica inviata prima di un aumento resta al
+  // vecchio prezzo anche se viene firmata dopo.
   feeAgenziaCent    Int @default(0)
   creditoBrokerCent Int @default(0)
+  /// Costo TOTALE dell'affiliazione per questa pratica (già moltiplicato per
+  /// il numero di veicoli), congelato all'invio come gli altri due. Prima non
+  /// esisteva e `lib/affiliazione/accredit.ts` rileggeva la tariffa VIVA al
+  /// momento della firma: una variazione nel mezzo pagava al referente una
+  /// commissione diversa da quella pubblicata quando la pratica è partita.
+  affiliazioneCent  Int @default(0)
 
   // Timeline
   submittedAt     DateTime?
@@ -1808,9 +1830,16 @@ model Listino {
 }
 
 /// Listino fee di piattaforma (costo agenzia + commissione broker + costo
-/// affiliazione, per tipo). Append-only versionato: esattamente una riga
-/// `attivo=true` è il listino corrente. Il ricavo lordo PV è derivato
-/// (fee − commissione), NON persistito.
+/// affiliazione, per tipo). Append-only versionato. Il ricavo lordo PV è
+/// derivato (fee − commissione), NON persistito.
+///
+/// La riga corrente NON è più marcata da un booleano: è quella con
+/// `efficaceDal` più recente fra quelle già efficaci e non annullate
+/// (`lib/tariffario.ts`). Il flag `attivo` è stato rimosso perché con le
+/// variazioni programmate della clausola 3 avrebbe avuto due significati in
+/// conflitto — "pubblicata" e "in vigore" — e sarebbe bastato che i due
+/// divergessero per far pagare a un'agenzia un prezzo che nessuno le aveva
+/// comunicato.
 model TariffaPiattaforma {
   id String @id @default(uuid()) @db.Uuid
 
@@ -1824,16 +1853,74 @@ model TariffaPiattaforma {
   minivolturaCreditoBrokerCent Int
   minivolturaAffiliazioneCent  Int
 
-  attivo Boolean @default(false) // invariante applicativo: esattamente una riga true
-  note   String?
+  /// Momento da cui la tariffa si applica (clausola 3: mai prima del preavviso
+  /// di 7 o 30 giorni dalla comunicazione). Una riga con `efficaceDal` futuro
+  /// è una variazione PROGRAMMATA: visibile in admin e comunicata via email,
+  /// ma non ancora applicata ad alcuna pratica.
+  efficaceDal DateTime
+
+  /// Fascia (b) della clausola 3: variazione oltre il 20% o strutturale. Con
+  /// true, prima dell'entrata in vigore serve la riaccettazione esplicita di
+  /// ciascun Utente (`RiaccettazioneTariffa`).
+  richiedeRiaccettazione Boolean @default(false)
+
+  /// Scostamento massimo in punti base rispetto alla tariffa precedente (2000
+  /// = 20%). NULL quando non è calcolabile perché una voce partiva da zero.
+  /// Puramente informativo: serve a spiegare a posteriori PERCHÉ una
+  /// variazione ha avuto 7 o 30 giorni di preavviso.
+  scostamentoMassimoBp Int?
+
+  /// L'admin ha dichiarato la modifica «strutturale» ai sensi della clausola 3,
+  /// forzando il preavviso lungo a prescindere dalla percentuale.
+  strutturale Boolean @default(false)
+
+  /// Variazione programmata poi annullata prima dell'entrata in vigore. Riga
+  /// conservata (non cancellata) perché la comunicazione agli Utenti è già
+  /// partita e l'annullamento va tracciato.
+  annullataAt   DateTime?
+  annullataDaId String?   @db.Uuid
+  annullataDa   User?     @relation("TariffaAnnullataDa", fields: [annullataDaId], references: [id])
+
+  note String?
 
   createdAt   DateTime @default(now())
   createdById String?  @db.Uuid
   createdBy   User?    @relation("TariffaCreatedBy", fields: [createdById], references: [id])
 
-  @@index([attivo])
+  riaccettazioni RiaccettazioneTariffa[]
+
+  @@index([efficaceDal])
   @@index([createdAt])
   @@map("tariffe_piattaforma")
+}
+
+/// Riaccettazione esplicita di una variazione tariffaria rilevante (clausola 3,
+/// fascia b: oltre il 20% o strutturale).
+///
+/// Il consenso è dell'AZIENDA ma lo presta una persona: registriamo entrambi,
+/// più IP e user-agent, perché è esattamente il tipo di accettazione che in
+/// contenzioso va dimostrata. Una riga per (azienda, tariffa): riaccettare due
+/// volte la stessa variazione non ha senso e lo unique lo impedisce.
+model RiaccettazioneTariffa {
+  id String @id @default(uuid()) @db.Uuid
+
+  companyId String  @db.Uuid
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  tariffaId String             @db.Uuid
+  tariffa   TariffaPiattaforma @relation(fields: [tariffaId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation("RiaccettazioneTariffaUser", fields: [userId], references: [id])
+
+  ip        String? // GDPR: IPv4 = primi 3 ottetti; IPv6 = primi 4 hextet
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, tariffaId])
+  @@index([tariffaId])
+  @@map("riaccettazioni_tariffa")
 }
 
 // ============================================================

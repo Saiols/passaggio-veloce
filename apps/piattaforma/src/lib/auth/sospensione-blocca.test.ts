@@ -108,6 +108,7 @@ import {
 } from '@/app/sedi/actions';
 import { updateCompanyProfileAction } from '@/app/profilo/azienda/actions';
 import { aggiornaIbanERitentaAction } from '@/app/blocco-pagamento/actions';
+import { riaccettaTariffaAction } from '@/app/tariffe-aggiornate/actions';
 
 /** IBAN con checksum MOD97 corretto: il rifiuto non deve venire dalla validazione. */
 const IBAN_VALIDO = 'IT60X0542811101000000123456';
@@ -257,6 +258,14 @@ const CASI: { chiave: string; esegui: () => Promise<{ ok: boolean; error?: strin
   {
     chiave: 'src/app/blocco-pagamento/actions.ts:aggiornaIbanERitentaAction',
     esegui: () => aggiornaIbanERitentaAction(formIban()),
+  },
+  {
+    // Clausola 3: accettare nuove condizioni economiche è un impegno
+    // contrattuale, e un account sospeso è in sola lettura. Il guard sta prima
+    // della `upsert` su RiaccettazioneTariffa — se ci finisse dopo, l'azienda
+    // risulterebbe vincolata a un prezzo mentre era sospesa.
+    chiave: 'src/app/tariffe-aggiornate/actions.ts:riaccettaTariffaAction',
+    esegui: () => riaccettaTariffaAction(),
   },
 ];
 

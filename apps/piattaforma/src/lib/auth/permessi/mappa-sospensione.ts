@@ -46,6 +46,14 @@ export const MAPPA_SOSPENSIONE: Record<string, Record<string, 'BLOCCA' | 'CONSEN
     // ri-estratto lato server dal camerale caricato — e l'IBAN non è toccato.
     aggiornaVisuraAction: 'CONSENTI',
   },
+  'src/app/tariffe-aggiornate/actions.ts': {
+    // Accettare nuove condizioni economiche è un atto contrattuale che
+    // vincola l'azienda, non un rimedio a una sospensione: un account sospeso
+    // è in sola lettura e non firma niente. Non è nemmeno un vicolo cieco —
+    // la sospensione si risolve col riesame della clausola 12.3, e solo dopo
+    // ha senso riprendere a lavorare pratiche.
+    riaccettaTariffaAction: 'BLOCCA',
+  },
   'src/app/sedi/actions.ts': {
     // Creare o riorganizzare sedi da sospesi è espansione, cioè operatività.
     createSedeAction: 'BLOCCA',

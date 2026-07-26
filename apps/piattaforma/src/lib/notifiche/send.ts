@@ -37,6 +37,7 @@ import {
   tplN51BrokerRimessaInCircolo,
   tplN52BrokerZonaNonCoperta,
   tplN53AgenziaFatturaDisponibile,
+  tplN54VariazioneTariffe,
   tplN1BrokerInvio,
   tplN2BrokerAccettata,
   tplN3BrokerSollecito,
@@ -77,6 +78,7 @@ import {
   type N51BrokerRimessaInCircoloPayload,
   type N52BrokerZonaNonCopertaPayload,
   type N53AgenziaFatturaDisponibilePayload,
+  type N54VariazioneTariffePayload,
   type N1BrokerInvioPayload,
   type N2BrokerAccettataPayload,
   type N3BrokerSollecitoPayload,
@@ -238,7 +240,8 @@ type SendInput =
   | { tipo: 'N50_AGENZIA_PRATICA_REVOCATA'; target: Target; payload: N50AgenziaRevocataPayload }
   | { tipo: 'N51_BROKER_PRATICA_RIMESSA_IN_CIRCOLO'; target: Target; payload: N51BrokerRimessaInCircoloPayload }
   | { tipo: 'N52_BROKER_ZONA_NON_COPERTA'; target: Target; payload: N52BrokerZonaNonCopertaPayload }
-  | { tipo: 'N53_AGENZIA_FATTURA_DISPONIBILE'; target: Target; payload: N53AgenziaFatturaDisponibilePayload };
+  | { tipo: 'N53_AGENZIA_FATTURA_DISPONIBILE'; target: Target; payload: N53AgenziaFatturaDisponibilePayload }
+  | { tipo: 'N54_VARIAZIONE_TARIFFE'; target: Target; payload: N54VariazioneTariffePayload };
 
 function render(input: SendInput): NotificaContent {
   switch (input.tipo) {
@@ -322,6 +325,8 @@ function render(input: SendInput): NotificaContent {
       return tplN52BrokerZonaNonCoperta(input.payload);
     case 'N53_AGENZIA_FATTURA_DISPONIBILE':
       return tplN53AgenziaFatturaDisponibile(input.payload);
+    case 'N54_VARIAZIONE_TARIFFE':
+      return tplN54VariazioneTariffe(input.payload);
   }
 }
 

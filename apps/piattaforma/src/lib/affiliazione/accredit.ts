@@ -26,6 +26,22 @@ export type AccreditCommissioniInput = {
   /** Multi-sede: sede della madre referente che ha affiliato (attribuzione/classifica). */
   brokerReferenteSedeId?: string | null;
   agenziaReferenteSedeId?: string | null;
+  /**
+   * Costo TOTALE dell'affiliazione congelato sulla pratica al momento
+   * dell'INVIO (`Pratica.affiliazioneCent`), già moltiplicato per i veicoli.
+   *
+   * Clausola 3: una variazione tariffaria vale «dalla prima pratica inviata o
+   * accettata successivamente» alla sua efficacia — quindi la commissione è
+   * quella pubblicata quando la pratica è partita, non quella in vigore il
+   * giorno della firma, che può cadere settimane dopo.
+   *
+   * 0 significa "nessuno snapshot": sono le pratiche inviate prima della
+   * migration `20260726200000_tariffa_efficacia_differita`, per le quali si
+   * ricade sulla tariffa corrente (era il comportamento di prima). Non è
+   * ambiguo con un'affiliazione legittimamente pari a zero: in quel caso
+   * `computeFees` restituirebbe comunque 0 e non si accredita nulla.
+   */
+  affiliazioneTotaleCent?: number;
 };
 
 /**
@@ -72,14 +88,21 @@ export async function accreditCommissioniAffiliazione(
     return { commissioniCreate: 0, importoTotaleCent: 0, accrediti: [] };
   }
 
-  const tariffario = rowToTariffario(
-    await tx.tariffaPiattaforma.findFirst({
-      where: { attivo: true },
-      orderBy: { createdAt: 'desc' },
-    }),
-  );
-  const fees = computeFees({ tipo: input.tipo, numeroVeicoli: input.numeroVeicoli }, tariffario);
-  const totale = fees.costoAffiliazioneTotaleCent;
+  // Prima si guarda lo snapshot congelato all'invio; solo se manca (pratiche
+  // anteriori alla migration) si rilegge la tariffa in vigore ADESSO —
+  // quella con `efficaceDal` più recente fra le già efficaci, non un flag.
+  const totale =
+    input.affiliazioneTotaleCent && input.affiliazioneTotaleCent > 0
+      ? input.affiliazioneTotaleCent
+      : computeFees(
+          { tipo: input.tipo, numeroVeicoli: input.numeroVeicoli },
+          rowToTariffario(
+            await tx.tariffaPiattaforma.findFirst({
+              where: { efficaceDal: { lte: new Date() }, annullataAt: null },
+              orderBy: [{ efficaceDal: 'desc' }, { createdAt: 'desc' }],
+            }),
+          ),
+        ).costoAffiliazioneTotaleCent;
   const quota = quotaPerReferente(totale, numReferenti as 1 | 2);
 
   let createdCount = 0;

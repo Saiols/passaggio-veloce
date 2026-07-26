@@ -197,15 +197,21 @@ function isUniqueViolation(e: unknown): boolean {
  * Tick di espansione per UNA pratica in distribuzione.
  *
  * Struttura in tre fasi (la tx resta corta e senza I/O):
- *  1. FUORI tx: config + lettura pratica + guardie (terminale/stato/zona non
- *     coperta/coord-null) + gate orario + gate durata round → noop early.
+ *  1. FUORI tx: config + lettura pratica + guardie (terminale/stato/coord-null
+ *     — quest'ultima SOLO se già zona non coperta, perché lì non c'è ripresa
+ *     possibile) + gate orario + gate durata round → noop early. Una pratica
+ *     GIÀ in zona non coperta (coordinate presenti) NON esce qui: prosegue,
+ *     perché potrebbe riprendere (vedi fase 3).
  *  2. FUORI tx: `candidatiEntro` (query sede + distanza in linea d'aria).
- *  3. Tx CORTA: re-legge la pratica fresca, ri-verifica le guardie e che
- *     `raggioCorrenteM`/`distribuzioneCiclo` non siano cambiati (accept/tick/
- *     revoca in race → noop, nessuna scrittura), ricalcola le esclusioni sulle
- *     assegnazioni fresche filtrando i candidati pre-calcolati, poi
- *     `prossimoAnello` e le scritture.
- *  4. Post-commit: N6 (notifica) / N52 (zona non coperta).
+ *  3. Tx CORTA: re-legge la pratica fresca, ri-verifica che `raggioCorrenteM`/
+ *     `distribuzioneCiclo` non siano cambiati (accept/tick/revoca in race →
+ *     noop, nessuna scrittura), ricalcola le esclusioni sulle assegnazioni
+ *     fresche filtrando i candidati pre-calcolati, poi sceglie l'anello:
+ *     `primoAnello` (dal raggio iniziale) se la pratica è in ripresa da zona
+ *     non coperta, altrimenti `prossimoAnello` (da `raggioCorrenteM`) — e fa
+ *     le scritture.
+ *  4. Post-commit: N6 (notifica, anche in ripresa) / N52 (solo alla PRIMA
+ *     dichiarazione di zona non coperta, mai alla ripresa fallita).
  */
 export async function tickPratica(praticaId: string): Promise<TickResult> {
   const cfg = await getDistribuzioneConfig();
@@ -575,6 +581,15 @@ export async function tickAllPraticheInDistribuzione(): Promise<{
     // `zonaNonCopertaAt` NON è più un filtro: una pratica dichiarata scoperta
     // deve poter ripartire quando un'agenzia idonea si registra nella sua zona.
     where: { stato: 'IN_DISTRIBUZIONE', deletedAt: null },
+    // Una pratica ferma non esce mai da sola da IN_DISTRIBUZIONE (nessuno può
+    // accettarla, nessun percorso la marca SCADUTA): si accumula in modo
+    // monotono nel set scansionato. Senza un ordine esplicito il `take: 500`
+    // rischierebbe di affamare in silenzio le pratiche ATTIVE (superate le
+    // 500, l'ordine fisico è tipicamente per data di creazione, quindi le più
+    // vecchie — spesso proprio le ferme — per prime). L'ordinamento mette
+    // sempre le attive (`zonaNonCopertaAt` null) davanti: sono le ferme, mai
+    // le attive, a restare fuori dal batch quando i 500 non bastano.
+    orderBy: [{ zonaNonCopertaAt: { sort: 'asc', nulls: 'first' } }],
     select: { id: true },
     take: 500,
   });

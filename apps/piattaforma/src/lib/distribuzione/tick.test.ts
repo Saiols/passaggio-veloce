@@ -656,6 +656,40 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     );
   });
 
+  // Compare-and-set in-tx: protegge da un'accettazione/tick/revoca concorrente
+  // fra la lettura Step 1 (fuori tx) e il re-check dentro la tx. `tx.pratica.
+  // findUnique` è la STESSA funzione usata sia dalla delega di Step 1 sia dal
+  // re-check: due `mockResolvedValueOnce` in sequenza simulano la divergenza.
+  it('race: il raggio cambia fra la lettura fuori tx e il re-check in tx → noop, nessuna scrittura', async () => {
+    const primaLettura = praticaTick({ raggioCorrenteM: 500 });
+    // Un altro tick (o un'accettazione) ha già fatto avanzare il raggio nel
+    // frattempo: stesso ciclo, raggio diverso da quello letto allo Step 1.
+    const dopoLettura = praticaTick({ raggioCorrenteM: 700 });
+    tx.pratica.findUnique.mockResolvedValueOnce(primaLettura).mockResolvedValueOnce(dopoLettura);
+    tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'race: stato cambiato durante il tick' });
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+  });
+
+  it('race: il ciclo di distribuzione cambia (revoca admin) fra le due letture → noop, nessuna scrittura', async () => {
+    const primaLettura = praticaTick({ distribuzioneCiclo: 1 });
+    // Una revoca admin ha incrementato distribuzioneCiclo (ricircolo) nel
+    // frattempo: stesso raggio, ciclo diverso da quello letto allo Step 1.
+    const dopoLettura = praticaTick({ distribuzioneCiclo: 2 });
+    tx.pratica.findUnique.mockResolvedValueOnce(primaLettura).mockResolvedValueOnce(dopoLettura);
+    tx.sede.findMany.mockResolvedValue([{ id: 's1', lat: kmLat(0.65), lng: LNG0, companyId: 'm1' }]);
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'race: stato cambiato durante il tick' });
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+  });
+
   it('pratica ACCETTATA (terminale) → closed, nessuna espansione', async () => {
     tx.pratica.findUnique.mockResolvedValue(praticaTick({ stato: 'ACCETTATA' }));
 
@@ -696,7 +730,10 @@ describe('tickPratica: espansione a raggio incrementale', () => {
       roundCorrente: 3,
       ultimaEspansioneAt: new Date('2026-07-24T07:20:00Z'),
     });
-    prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+    // Solo tx.pratica.findUnique: prismaMock.pratica.findUnique resta la
+    // mockImplementation del beforeEach, che discrimina su `select` e delega
+    // qui per lo Step 1 (`include`) — sovrascriverla romperebbe il ramo
+    // `select` usato dalla N52 post-commit (broker payload).
     tx.pratica.findUnique.mockResolvedValue(ferma);
     // Agenzia registrata dopo: 0,4 km, dentro il raggio iniziale (500 m).
     prismaMock.sede.findMany.mockResolvedValue([
@@ -733,7 +770,7 @@ describe('tickPratica: espansione a raggio incrementale', () => {
       zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
       raggioCorrenteM: CFG.raggioMaxM,
     });
-    prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+    // Solo tx.pratica.findUnique (vedi commento nel test precedente).
     tx.pratica.findUnique.mockResolvedValue(ferma);
     prismaMock.sede.findMany.mockResolvedValue([]);
 
@@ -755,7 +792,7 @@ describe('tickPratica: espansione a raggio incrementale', () => {
       raggioCorrenteM: CFG.raggioMaxM,
       assegnazioni: [{ sedeId: 'vecchia', ciclo: 1, esito: 'RIFIUTATA' }],
     });
-    prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+    // Solo tx.pratica.findUnique (vedi commento nel primo test di questo blocco).
     tx.pratica.findUnique.mockResolvedValue(ferma);
     prismaMock.sede.findMany.mockResolvedValue([]);
 
@@ -770,7 +807,8 @@ describe('tickPratica: espansione a raggio incrementale', () => {
   it('pratica in zona non coperta: fuori orario non riprende', async () => {
     cfgMock.mockResolvedValue(CFG);
     orarioMock.mockReturnValue(false);
-    prismaMock.pratica.findUnique.mockResolvedValue(
+    // Solo tx.pratica.findUnique (vedi commento nel primo test di questo blocco).
+    tx.pratica.findUnique.mockResolvedValue(
       praticaTick({ zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z') }),
     );
 
@@ -859,5 +897,18 @@ describe('tickAllPraticheInDistribuzione: isolamento errori per-pratica', () => 
     expect(where).not.toHaveProperty('zonaNonCopertaAt');
     expect(where.stato).toBe('IN_DISTRIBUZIONE');
     expect(where.deletedAt).toBeNull();
+  });
+
+  // Una pratica ferma non esce mai da sola da IN_DISTRIBUZIONE: si accumula
+  // in modo monotono. Senza un ordine esplicito, superate le 500 del `take`
+  // le pratiche ferme affamerebbero in silenzio quelle attive. L'ordinamento
+  // deve mettere le attive (zonaNonCopertaAt null) sempre prima.
+  it('la query ordina le pratiche ATTIVE prima di quelle ferme, cosi\' il cap di 500 non affama le attive', async () => {
+    prismaMock.pratica.findMany.mockResolvedValue([]);
+
+    await tickAllPraticheInDistribuzione();
+
+    const call = prismaMock.pratica.findMany.mock.calls[0][0];
+    expect(call.orderBy).toEqual([{ zonaNonCopertaAt: { sort: 'asc', nulls: 'first' } }]);
   });
 });

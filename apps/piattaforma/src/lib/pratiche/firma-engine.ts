@@ -181,7 +181,9 @@ export async function firmaPraticaCore(
   }
 
   let accreditiResult: AccreditoEseguito[] = [];
-  let feeAgenziaCentFattura = 0;
+  // Id del FeeAddebito creato nella transazione di firma: è l'ingresso sia
+  // della fattura sia dell'addebito.
+  let feeAddebitoIdCreato: string | null = null;
   // L'agenzia da addebitare/fatturare: sempre quella ASSEGNATA alla pratica,
   // non quella in sessione (l'admin non ne ha una).
   let agenziaIdEffettivo = '';
@@ -236,7 +238,6 @@ export async function firmaPraticaCore(
       const now = new Date();
       // Addebito istantaneo: dovuto subito (niente programmazione nel futuro).
       const autoAddebitoAt = now;
-      feeAgenziaCentFattura = pratica.feeAgenziaCent;
 
       // Compare-and-set, non leggi-poi-scrivi: a READ COMMITTED (default
       // Postgres/Prisma) due transazioni concorrenti possono leggere entrambe
@@ -316,7 +317,7 @@ export async function firmaPraticaCore(
       // Fee addebito istantaneo (Stripe reale in Fase 5): scheduledAt = now, così
       // il job process-fee-scheduled lo prende al primo giro, senza attese.
       if (pratica.feeAgenziaCent > 0) {
-        await tx.feeAddebito.create({
+        const feeCreato = await tx.feeAddebito.create({
           data: {
             praticaId: pratica.id,
             agenziaId: agenziaIdEffettivo,
@@ -328,7 +329,9 @@ export async function firmaPraticaCore(
             stato: 'SCHEDULED',
             scheduledAt: autoAddebitoAt,
           },
+          select: { id: true },
         });
+        feeAddebitoIdCreato = feeCreato.id;
       }
 
       // FASE 13: commissioni affiliazione ai referenti di broker e/o agenzia
@@ -364,11 +367,12 @@ export async function firmaPraticaCore(
   // costruire l'allegato. Resta best-effort — la firma è già committata, un
   // errore qui non blocca nulla e la N8 partirà comunque (eventualmente senza
   // allegato).
-  await createFatturaPv({
-    praticaId,
-    agenziaId: agenziaIdEffettivo,
-    feeAgenziaCent: feeAgenziaCentFattura,
-  }).catch(() => undefined);
+  if (feeAddebitoIdCreato) {
+    await createFatturaPv({
+      feeAddebitoId: feeAddebitoIdCreato,
+      statoPagamento: 'IN_ATTESA',
+    }).catch(() => null);
+  }
 
   // AF-N: notifiche affiliazione post-firma (N23 prima pratica del referral,
   // N24 soglia payout attraversata). Best-effort, non blocca il flusso.

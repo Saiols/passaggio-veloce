@@ -101,6 +101,9 @@ beforeEach(() => {
   // Default: la transizione di stato (compare-and-set) trova le precondizioni
   // vere e scrive 1 riga. I test della race la sovrascrivono a { count: 0 }.
   prismaMock.pratica.updateMany.mockResolvedValue({ count: 1 });
+  // Id fittizio: serve solo se il ramo feeAgenziaCent > 0 viene esercitato
+  // (il motore ora si tiene l'id per passarlo a createFatturaPv).
+  prismaMock.feeAddebito.create.mockResolvedValue({ id: 'fee-1' });
   // Default: visura non scaduta, mai bloccata.
   visuraScadutaMock.mockResolvedValue(false);
 });

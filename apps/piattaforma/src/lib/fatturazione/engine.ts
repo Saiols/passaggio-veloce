@@ -8,34 +8,53 @@ import { pvEmittente, snapshotCompany, type DatiFiscali } from './pv-emittente';
 const ID_SOGGETTO_PV = 'PV';
 
 /**
- * FATTURA_PV verso l'agenzia, generata alla firma. Importo = feeAgenziaCent
- * (PV regime ordinario → IVA 22% scorporata). Idempotente per pratica.
+ * FATTURA_PV verso l'agenzia. Importo = `FeeAddebito.importoCent`, cioè quello
+ * davvero addebitato: se l'addebito è stato modificato dopo la firma, la
+ * fattura segue lui e non il preventivo scritto sulla pratica.
+ *
+ * `statoPagamento` è a carico del chiamante e non è un dettaglio: `PAGATA` sul
+ * percorso d'incasso (i soldi ci sono), `IN_ATTESA` sulla valvola che emette
+ * alla firma quando il provider di pagamento non è live.
+ *
+ * Ritorna il documento creato, oppure `null` se non c'era niente da creare —
+ * fee assente, importo non positivo, agenzia assente, o fattura già esistente
+ * per quella pratica. Il `null` è il segnale che fa partire la N53 una volta
+ * sola da chiamanti che non si conoscono (percorso d'incasso e riconciliazione).
+ *
+ * Idempotente per pratica: è la seconda rete sotto il compare-and-set di
+ * `segnaFeeIncassato`.
  */
 export async function createFatturaPv(input: {
-  praticaId: string;
-  agenziaId: string;
-  feeAgenziaCent: number;
-}): Promise<void> {
-  if (input.feeAgenziaCent <= 0) return;
+  feeAddebitoId: string;
+  statoPagamento: 'IN_ATTESA' | 'PAGATA';
+}): Promise<{ id: string } | null> {
   const anno = new Date().getFullYear();
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    const fee = await tx.feeAddebito.findUnique({ where: { id: input.feeAddebitoId } });
+    if (!fee || fee.importoCent <= 0) return null;
+
     const esiste = await tx.documentoFiscale.findFirst({
-      where: { praticaId: input.praticaId, tipo: 'FATTURA_PV' },
+      where: { praticaId: fee.praticaId, tipo: 'FATTURA_PV' },
       select: { id: true },
     });
-    if (esiste) return;
-    const agenzia = await tx.company.findUnique({ where: { id: input.agenziaId } });
-    if (!agenzia) return;
+    if (esiste) return null;
 
-    const split = splitImporto(input.feeAgenziaCent, 'ORDINARIO');
+    const agenzia = await tx.company.findUnique({ where: { id: fee.agenziaId } });
+    if (!agenzia) return null;
+
+    const split = splitImporto(fee.importoCent, 'ORDINARIO');
     const num = await prossimoContatore(tx, ID_SOGGETTO_PV, 'FATTURA_PV', anno);
     const numeroStr = numeroDocumento({ tipo: 'FATTURA_PV', numeroProgressivo: num, anno });
 
-    await tx.documentoFiscale.create({
+    return tx.documentoFiscale.create({
       data: {
         tipo: 'FATTURA_PV',
         fatturaPaTipo: 'TD01',
-        praticaId: input.praticaId,
+        praticaId: fee.praticaId,
+        // Legame documento ↔ incasso: il campo esisteva in schema ma non veniva
+        // mai scritto. Serve alla lettura admin, non alla riconciliazione (che
+        // interroga per praticaId, l'unico dei due che ha un indice).
+        feeAddebitoId: fee.id,
         emittenteCompanyId: null,
         destinatarioCompanyId: agenzia.id,
         datiEmittente: pvEmittente() as unknown as Prisma.InputJsonValue,
@@ -43,12 +62,13 @@ export async function createFatturaPv(input: {
         numeroProgressivo: num,
         anno,
         numeroDocumentoStr: numeroStr,
-        importoLordoCent: input.feeAgenziaCent,
+        importoLordoCent: fee.importoCent,
         imponibileCent: split.imponibileCent,
         ivaCent: split.ivaCent,
         aliquotaIvaPct: split.aliquotaIvaPct,
-        statoPagamento: 'IN_ATTESA',
+        statoPagamento: input.statoPagamento,
       },
+      select: { id: true },
     });
   });
 }

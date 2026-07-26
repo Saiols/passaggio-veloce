@@ -2,7 +2,21 @@
 -- salva, ma da una DATA DI EFFICACIA futura, dopo il preavviso via email
 -- (7 giorni fino al 20%, 30 giorni + riaccettazione oltre).
 --
--- 1) `efficaceDal` sostituisce `attivo`.
+-- ⚠️ MIGRATION DI SOLA ESPANSIONE: aggiunge, non toglie. Va lanciata PRIMA del
+-- deploy del codice nuovo ed e' compatibile con quello vecchio, che continua a
+-- leggere `attivo` finche' non viene sostituito. La rimozione di `attivo` vive
+-- nella migration gemella `20260726202000_drop_tariffa_attivo`, da lanciare
+-- DOPO il deploy.
+--
+-- Perche' separarle: droppare `attivo` mentre in produzione gira ancora il
+-- codice che lo legge non da' un errore visibile — `getTariffarioCorrente` ha
+-- un catch che ricade su DEFAULT_TARIFFARIO, quindi le pratiche verrebbero
+-- prezzate coi valori di default (minivoltura 15 EUR invece di 50) senza che
+-- nessuno se ne accorga. `accredit.ts` invece non ha catch: la transazione di
+-- firma esploderebbe. Nessuno dei due e' accettabile per la manciata di minuti
+-- di un deploy.
+--
+-- 1) `efficaceDal`, che sostituira' `attivo`.
 --
 -- Il booleano aveva un solo significato possibile ("questa e' la riga buona") e
 -- con le variazioni programmate ne servivano due, "pubblicata" e "in vigore".
@@ -21,9 +35,6 @@ ALTER TABLE "tariffe_piattaforma" ADD COLUMN "scostamentoMassimoBp" INTEGER;
 ALTER TABLE "tariffe_piattaforma" ADD COLUMN "strutturale" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "tariffe_piattaforma" ADD COLUMN "annullataAt" TIMESTAMP(3);
 ALTER TABLE "tariffe_piattaforma" ADD COLUMN "annullataDaId" UUID;
-
-DROP INDEX IF EXISTS "tariffe_piattaforma_attivo_idx";
-ALTER TABLE "tariffe_piattaforma" DROP COLUMN "attivo";
 
 CREATE INDEX "tariffe_piattaforma_efficaceDal_idx" ON "tariffe_piattaforma"("efficaceDal");
 

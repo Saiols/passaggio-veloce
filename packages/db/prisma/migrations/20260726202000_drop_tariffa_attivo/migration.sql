@@ -1,0 +1,25 @@
+-- ⚠️ CONTRAZIONE: lanciare SOLO DOPO che il codice nuovo e' in produzione.
+--
+-- Gemella di `20260726200000_tariffa_efficacia_differita`, che aggiunge
+-- `efficaceDal` lasciando `attivo` al suo posto. Da quel momento vecchio e
+-- nuovo codice convivono: il vecchio legge `attivo`, il nuovo `efficaceDal`, e
+-- la riga corrente e' la stessa per entrambi (il backfill le allinea).
+--
+-- Questa migration chiude la finestra. Se venisse lanciata prima del deploy, il
+-- codice ancora in prod cadrebbe nel catch di `getTariffarioCorrente` e
+-- prezzerebbe le pratiche con DEFAULT_TARIFFARIO — minivoltura 15 EUR invece di
+-- 50 — senza alcun errore visibile, mentre `accredit.ts` farebbe fallire la
+-- firma. Dopo il deploy nessuno legge piu' `attivo` e toglierlo e' inerte.
+--
+-- ORDINE CORRETTO:
+--   1. migrate deploy (si ferma qui se questa e' l'unica pendente e il deploy
+--      non e' ancora andato: e' voluto, va lanciata a mano dopo)
+--   2. push su main -> deploy Vercel
+--   3. questa migration
+--
+-- `IF EXISTS` su entrambe le istruzioni: rende la migration idempotente e
+-- applicabile anche a un database dove la colonna e' gia' stata rimossa (e' il
+-- caso dell'ambiente di sviluppo su cui la versione precedente, non ancora
+-- splittata, era gia' passata).
+DROP INDEX IF EXISTS "tariffe_piattaforma_attivo_idx";
+ALTER TABLE "tariffe_piattaforma" DROP COLUMN IF EXISTS "attivo";

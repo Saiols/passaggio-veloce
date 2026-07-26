@@ -162,7 +162,7 @@ export function DistribuzioneConfigClient({
             label="Durata round (minuti)"
             required
             error={fDurata.error}
-            hint={`Attesa di orario lavorativo prima di allargare il raggio. Tra ${DURATA_ROUND_MIN_MIN} e ${DURATA_ROUND_MIN_MAX} minuti. Il cron gira ogni minuto: sotto i 2 minuti la cadenza reale può variare di un minuto.`}
+            hint={`Attesa di orario lavorativo prima di allargare il raggio. Tra ${DURATA_ROUND_MIN_MIN} e ${DURATA_ROUND_MIN_MAX} minuti. Il cron gira ogni minuto e non è puntuale al secondo: la cadenza reale può variare di un minuto, qualunque sia la durata impostata (su un round da 1 minuto è il 100%, su uno da 60 quasi nulla).`}
           >
             <NumberInput
               value={durataRoundMin}
@@ -178,9 +178,10 @@ export function DistribuzioneConfigClient({
 
         {roundMax !== null && (
           <p className="mt-4 text-[13px] text-pv-slate-500">
+            {/* «round» è invariabile in italiano: nessun plurale da scegliere,
+                quindi nessun ternario (ne esisteva uno con i due rami identici). */}
             Con questi valori la distribuzione arriva al raggio massimo in al più{' '}
-            <strong className="text-pv-navy-800">{roundMax}</strong>{' '}
-            {roundMax === 1 ? 'round' : 'round'}
+            <strong className="text-pv-navy-800">{roundMax}</strong> round
             {durataRoundMin != null && durataRoundMin > 0 && (
               <>
                 , cioè circa{' '}

@@ -7,8 +7,10 @@
  * l'ora cade nella fascia di quel giorno? Basta un no per fermare l'espansione.
  *
  * Fuso: le fasce sono ore di parete italiane, ma su Vercel il processo gira in
- * UTC. Giorno e minuti si calcolano quindi in `Europe/Rome` tramite
- * `lib/date/rome-day.ts`, mai con `now.getHours()/getDay()`.
+ * UTC, quindi nulla qui usa `now.getHours()/getDay()`. Da `lib/date/rome-day.ts`
+ * arrivano solo `romeYmd` (la data di calendario a Roma, da cui si ricavano
+ * giorno della settimana e chiave dei festivi) e `romeWallClockToUtc`; i minuti
+ * dalla mezzanotte li calcola `minutiDelGiornoRoma`, locale a questo file.
  */
 
 import { romeYmd, romeWallClockToUtc } from '@/lib/date/rome-day';

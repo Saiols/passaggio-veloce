@@ -6,8 +6,10 @@ import { ROUND_BUCKET_MAX, type StatisticheRound } from '@/lib/distribuzione/sta
  * per tararli.
  *
  * Con `intervalloMin` in config, `round N` corrisponde a circa
- * `(N-1) × durata round` di attesa: la stima in ore è mostrata sotto la media
- * per rendere leggibile il numero senza doverlo convertire a mente.
+ * `(N-1) × durata round` di attesa: la stima è mostrata sotto la media per
+ * rendere leggibile il numero senza doverlo convertire a mente. L'unità la
+ * sceglie `formatAttesa`: con round da 1-60 minuti l'esito è quasi sempre in
+ * minuti, e si passa a `h`/`h min` solo quando l'attesa supera l'ora.
  */
 export function RoundStats({
   stats,

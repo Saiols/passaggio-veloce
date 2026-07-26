@@ -6,6 +6,7 @@ import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import type { DistribuzioneConfigDTO } from '@/lib/distribuzione/config';
 import { OrariSettimanaEditor } from './orari-settimana';
+import { FestiviEditor } from './festivi';
 import { salvaConfigDistribuzione } from './actions';
 import {
   configDistribuzioneSchema,
@@ -31,12 +32,19 @@ function num(v: number): string {
   return v.toLocaleString('it-IT');
 }
 
-export function DistribuzioneConfigClient({ config }: { config: DistribuzioneConfigDTO }) {
+export function DistribuzioneConfigClient({
+  config,
+  oggiIso,
+}: {
+  config: DistribuzioneConfigDTO;
+  oggiIso: string;
+}) {
   const [raggioStartKm, setRaggioStartKm] = useState<number | null>(toKm(config.raggioStartM));
   const [stepKm, setStepKm] = useState<number | null>(toKm(config.stepM));
   const [raggioMaxKm, setRaggioMaxKm] = useState<number | null>(toKm(config.raggioMaxM));
   const [durataRoundMin, setDurataRoundMin] = useState<number | null>(config.intervalloMin);
   const [orariSettimana, setOrariSettimana] = useState(config.orariSettimana);
+  const [festivi, setFestivi] = useState(config.festivi);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -49,6 +57,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
     raggioMaxKm: raggioMaxKm ?? NaN,
     durataRoundMin: durataRoundMin ?? NaN,
     orariSettimana,
+    festivi,
   });
   const { field, gatedSubmit } = useFieldErrorsState(errors);
   const fStart = field('raggioStartKm');
@@ -78,6 +87,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
         raggioMaxKm: raggioMaxKm ?? NaN,
         durataRoundMin: durataRoundMin ?? NaN,
         orariSettimana,
+        festivi,
       });
       setMsg(
         res.ok
@@ -200,6 +210,8 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
         onChange={setOrariSettimana}
         errore={field('orariSettimana').error}
       />
+
+      <FestiviEditor value={festivi} onChange={setFestivi} oggiIso={oggiIso} />
 
       <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>

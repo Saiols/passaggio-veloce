@@ -28,6 +28,7 @@ const INPUT_OK: ConfigDistribuzioneInput = {
   raggioMaxKm: 10,
   durataRoundMin: 60,
   orariSettimana: ORARI_SETTIMANA_DEFAULT,
+  festivi: [],
 };
 
 const ADMIN = { user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } };
@@ -134,6 +135,7 @@ describe('salvaConfigDistribuzione', () => {
         raggioMaxM: 10000,
         intervalloMin: 60,
         orariSettimana: ORARI_SETTIMANA_DEFAULT,
+        festivi: [],
       },
       update: {
         raggioStartM: 1000,
@@ -141,6 +143,7 @@ describe('salvaConfigDistribuzione', () => {
         raggioMaxM: 10000,
         intervalloMin: 60,
         orariSettimana: ORARI_SETTIMANA_DEFAULT,
+        festivi: [],
       },
     });
     expect(revalidateMock).toHaveBeenCalledWith('/admin/distribuzione');
@@ -158,6 +161,7 @@ describe('salvaConfigDistribuzione', () => {
       raggioMaxKm: 7.5,
       durataRoundMin: 45,
       orariSettimana: ORARI_SETTIMANA_DEFAULT,
+      festivi: [{ data: '2026-12-25', nome: 'Natale' }],
     });
 
     expect(res.ok).toBe(true);
@@ -169,6 +173,7 @@ describe('salvaConfigDistribuzione', () => {
           raggioMaxM: 7500,
           intervalloMin: 45,
           orariSettimana: ORARI_SETTIMANA_DEFAULT,
+          festivi: [{ data: '2026-12-25', nome: 'Natale' }],
         },
       }),
     );

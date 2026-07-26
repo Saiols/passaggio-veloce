@@ -51,7 +51,14 @@ const ORARI_OK = {
 };
 
 describe('configDistribuzioneSchema', () => {
-  const OK = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundMin: 60, orariSettimana: ORARI_OK };
+  const OK = {
+    raggioStartKm: 1,
+    stepKm: 1,
+    raggioMaxKm: 10,
+    durataRoundMin: 60,
+    orariSettimana: ORARI_OK,
+    festivi: [],
+  };
 
   it('accetta i valori di default', () => {
     expect(configDistribuzioneSchema.safeParse(OK).success).toBe(true);
@@ -64,6 +71,7 @@ describe('configDistribuzioneSchema', () => {
       raggioMaxKm: RAGGIO_MAX_KM_MAX,
       durataRoundMin: DURATA_ROUND_MIN_MAX,
       orariSettimana: ORARI_OK,
+      festivi: [],
     };
     expect(configDistribuzioneSchema.safeParse(estremi).success).toBe(true);
   });
@@ -91,8 +99,16 @@ describe('toConfigPersistita', () => {
         raggioMaxKm: 12.4,
         durataRoundMin: 15,
         orariSettimana: ORARI_OK,
+        festivi: [],
       }),
-    ).toEqual({ raggioStartM: 300, stepM: 1500, raggioMaxM: 12400, intervalloMin: 15, orariSettimana: ORARI_OK });
+    ).toEqual({
+      raggioStartM: 300,
+      stepM: 1500,
+      raggioMaxM: 12400,
+      intervalloMin: 15,
+      orariSettimana: ORARI_OK,
+      festivi: [],
+    });
   });
 
   // 0,1 km in floating point è 100.00000000000001 m: senza arrotondamento
@@ -104,9 +120,10 @@ describe('toConfigPersistita', () => {
       raggioMaxKm: 2.9,
       durataRoundMin: 21,
       orariSettimana: ORARI_OK,
+      festivi: [],
     });
     for (const [k, v] of Object.entries(out)) {
-      if (k === 'orariSettimana') continue; // non è un numero: il calendario passa invariato
+      if (k === 'orariSettimana' || k === 'festivi') continue; // non sono numeri: passano invariati
       expect(Number.isInteger(v)).toBe(true);
     }
     expect(out).toEqual({
@@ -115,6 +132,7 @@ describe('toConfigPersistita', () => {
       raggioMaxM: 2900,
       intervalloMin: 21,
       orariSettimana: ORARI_OK,
+      festivi: [],
     });
   });
 });
@@ -125,6 +143,7 @@ const BASE = {
   raggioMaxKm: 10,
   durataRoundMin: 60,
   orariSettimana: ORARI_OK,
+  festivi: [],
 };
 
 describe('durata round in minuti', () => {
@@ -198,5 +217,35 @@ describe('orari settimana', () => {
 
   it('gli orari escono da toConfigPersistita così come sono entrati', () => {
     expect(toConfigPersistita(BASE_ORARI).orariSettimana).toEqual(ORARI_OK);
+  });
+});
+
+describe('festivi', () => {
+  it('accetta una lista valida', () => {
+    const out = configDistribuzioneSchema.safeParse({
+      ...BASE_ORARI,
+      festivi: [{ data: '2026-12-25', nome: 'Natale' }],
+    });
+    expect(out.success).toBe(true);
+  });
+
+  it('accetta la lista vuota', () => {
+    expect(configDistribuzioneSchema.safeParse({ ...BASE_ORARI, festivi: [] }).success).toBe(true);
+  });
+
+  it('rifiuta una data impossibile', () => {
+    const out = configDistribuzioneSchema.safeParse({
+      ...BASE_ORARI,
+      festivi: [{ data: '2026-02-30', nome: 'Mai' }],
+    });
+    expect(out.success).toBe(false);
+  });
+
+  it('rifiuta un nome vuoto', () => {
+    const out = configDistribuzioneSchema.safeParse({
+      ...BASE_ORARI,
+      festivi: [{ data: '2026-12-25', nome: '  ' }],
+    });
+    expect(out.success).toBe(false);
   });
 });

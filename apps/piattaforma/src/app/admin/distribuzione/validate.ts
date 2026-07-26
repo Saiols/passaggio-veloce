@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GIORNI_ORDINE, hhmmToMinuti, isHHMM } from '@/lib/distribuzione/calendario';
+import { parseYmd } from '@/lib/date/rome-day';
 
 /**
  * Limiti dei parametri di distribuzione, in unità umane (km e minuti): sono
@@ -90,6 +91,15 @@ const orariSettimanaSchema = z
   });
 
 /**
+ * Un festivo è una data piena (non una ricorrenza): `parseYmd` scarta già le
+ * date impossibili (es. 30 febbraio) facendo il round-trip su `Date`.
+ */
+const festivoSchema = z.object({
+  data: z.string().refine((v) => parseYmd(v) !== null, 'Data non valida (formato YYYY-MM-DD)'),
+  nome: z.string().trim().min(1, 'Dai un nome al festivo').max(60),
+});
+
+/**
  * Validazione di `salvaConfigDistribuzione`.
  *
  * Cross-field OBBLIGATORIA: il raggio massimo deve essere strettamente maggiore
@@ -117,6 +127,7 @@ export const configDistribuzioneSchema = z
       .min(DURATA_ROUND_MIN_MIN, `La durata minima di un round è ${DURATA_ROUND_MIN_MIN} min`)
       .max(DURATA_ROUND_MIN_MAX, `La durata di un round non può superare ${DURATA_ROUND_MIN_MAX} min`),
     orariSettimana: orariSettimanaSchema,
+    festivi: z.array(festivoSchema),
   })
   .refine((d) => d.raggioMaxKm > d.raggioStartKm, {
     message: 'Il raggio massimo deve essere maggiore del raggio iniziale',
@@ -135,6 +146,7 @@ export function toConfigPersistita(input: ConfigDistribuzioneInput): {
   raggioMaxM: number;
   intervalloMin: number;
   orariSettimana: ConfigDistribuzioneInput['orariSettimana'];
+  festivi: ConfigDistribuzioneInput['festivi'];
 } {
   return {
     raggioStartM: Math.round(input.raggioStartKm * 1000),
@@ -142,5 +154,6 @@ export function toConfigPersistita(input: ConfigDistribuzioneInput): {
     raggioMaxM: Math.round(input.raggioMaxKm * 1000),
     intervalloMin: input.durataRoundMin,
     orariSettimana: input.orariSettimana,
+    festivi: input.festivi,
   };
 }

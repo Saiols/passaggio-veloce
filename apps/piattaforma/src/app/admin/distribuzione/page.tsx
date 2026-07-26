@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { romeYmd } from '@/lib/date/rome-day';
 import { getDistribuzioneConfig } from '@/lib/distribuzione/config';
 import { getStatisticheRound } from '@/lib/distribuzione/statistiche';
 import { DistribuzioneConfigClient } from './client';
@@ -25,6 +26,12 @@ export default async function AdminDistribuzionePage() {
 
   const [config, stats] = await Promise.all([getDistribuzioneConfig(), getStatisticheRound()]);
 
+  // Il giorno di Roma, non quello del browser dell'admin: è lo stesso giorno
+  // che l'editor dei festivi usa per distinguere "passato" da "futuro" e per
+  // valutare l'avviso di calendario in scadenza.
+  const [y, m, d] = romeYmd(new Date());
+  const oggiIso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
   return (
     <AppShell session={session} activePath="/admin/distribuzione">
       <div className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
@@ -41,7 +48,7 @@ export default async function AdminDistribuzionePage() {
           <RoundStats stats={stats} intervalloMin={config.intervalloMin} />
         </div>
         <div className="mt-6">
-          <DistribuzioneConfigClient config={config} />
+          <DistribuzioneConfigClient config={config} oggiIso={oggiIso} />
         </div>
       </div>
     </AppShell>

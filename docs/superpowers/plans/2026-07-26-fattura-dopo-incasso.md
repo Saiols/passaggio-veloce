@@ -15,6 +15,7 @@
 - Comandi: `pnpm --filter piattaforma test <path>` per i test mirati, `pnpm typecheck` dalla root. Node ≥ 18 (`nvm use 22.15.0` se la shell è tornata a Node 16).
 - Ogni task termina con un commit. Si lavora direttamente su `main`.
 - Il codice e i commenti di questo repo sono in italiano: mantenere la lingua.
+- **Nessun `catch` muto.** I `.catch` best-effort di questo piano servono a non far fallire un'operazione già committata, non a nascondere il guasto: ognuno logga con `console.error`, includendo l'id dell'entità coinvolta, nello stile di `lib/fee/retry.ts:27-29`. Un'emissione fiscale che salta senza lasciare traccia non è recuperabile da nessuno.
 - Fuori scope in tutto il piano: dispute/rimborsi SEPA post-incasso, nota di credito automatica, pulsante admin di emissione manuale.
 
 ---
@@ -650,7 +651,13 @@ e sostituisci il blocco fattura scritto nel Task 1 con:
     await createFatturaPv({
       feeAddebitoId: feeAddebitoIdCreato,
       statoPagamento: 'IN_ATTESA',
-    }).catch(() => null);
+    }).catch((err) => {
+      console.error(
+        `[firmaPratica] createFatturaPv fallita per fee ${feeAddebitoIdCreato} (pratica ${praticaId}):`,
+        err,
+      );
+      return null;
+    });
   }
 ```
 
@@ -755,7 +762,13 @@ In `firma-engine.ts`, aggiungi l'import `import { processFeeAddebito } from '@/l
   // committata e se questa chiamata fallisce il fee resta SCHEDULED, che è
   // esattamente ciò che il cron orario raccoglie.
   if (feeAddebitoIdCreato) {
-    await processFeeAddebito(feeAddebitoIdCreato).catch(() => undefined);
+    await processFeeAddebito(feeAddebitoIdCreato).catch((err) => {
+      console.error(
+        `[firmaPratica] avvio addebito fallito per fee ${feeAddebitoIdCreato} (pratica ${praticaId}):`,
+        err,
+      );
+      return undefined;
+    });
   }
 ```
 
@@ -1058,12 +1071,17 @@ In `apps/piattaforma/src/lib/fee/incasso.ts`, sostituisci la riga della fattura 
   const documento = await createFatturaPv({
     feeAddebitoId: feeId,
     statoPagamento: 'PAGATA',
-  }).catch(() => null);
+  }).catch((err) => {
+    console.error(`[segnaFeeIncassato] createFatturaPv fallita per fee ${feeId}:`, err);
+    return null;
+  });
 
   // Solo chi ha davvero creato il documento notifica: `null` significa che
   // esisteva già, e la sua N53 è partita a suo tempo.
   if (documento) {
-    await notificaFatturaDisponibile(documento.id).catch(() => undefined);
+    await notificaFatturaDisponibile(documento.id).catch((err) => {
+      console.error(`[segnaFeeIncassato] N53 fallita per documento ${documento.id}:`, err);
+    });
   }
 ```
 
@@ -1165,7 +1183,10 @@ In `firma-engine.ts`, blocco N8 (righe 469-493), sostituisci con:
               where: { praticaId, tipo: 'FATTURA_PV', inviatoEmailAt: null },
               data: { inviatoEmailAt: new Date() },
             })
-            .catch(() => undefined);
+            .catch((err) => {
+              console.error(`[firmaPratica] inviatoEmailAt non scritto per pratica ${praticaId}:`, err);
+              return undefined;
+            });
         }
       }
 ```
@@ -1322,17 +1343,24 @@ export async function riconciliaFattureIncassate(): Promise<{
       const creato = await createFatturaPv({
         feeAddebitoId: fee.id,
         statoPagamento: 'PAGATA',
-      }).catch(() => null);
+      }).catch((err) => {
+        console.error(`[riconciliaFatture] emissione fallita per fee ${fee.id}:`, err);
+        return null;
+      });
       if (creato) {
         emesse++;
-        await notificaFatturaDisponibile(creato.id).catch(() => undefined);
+        await notificaFatturaDisponibile(creato.id).catch((err) => {
+          console.error(`[riconciliaFatture] N53 fallita per documento ${creato.id}:`, err);
+        });
         notificate++;
       }
       continue;
     }
 
     if (!doc.inviatoEmailAt) {
-      await notificaFatturaDisponibile(doc.id).catch(() => undefined);
+      await notificaFatturaDisponibile(doc.id).catch((err) => {
+        console.error(`[riconciliaFatture] N53 fallita per documento ${doc.id}:`, err);
+      });
       notificate++;
     }
   }

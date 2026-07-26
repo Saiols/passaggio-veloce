@@ -39,8 +39,19 @@ describe('passo dei campi numerici — ogni valore ammesso è raggiungibile', ()
   });
 });
 
+/** Settimana valida di riferimento: LUN-VEN attivi, weekend spento. */
+const ORARI_OK = {
+  LUN: { attivo: true, inizio: '09:00', fine: '19:00' },
+  MAR: { attivo: true, inizio: '09:00', fine: '19:00' },
+  MER: { attivo: true, inizio: '09:00', fine: '19:00' },
+  GIO: { attivo: true, inizio: '09:00', fine: '19:00' },
+  VEN: { attivo: true, inizio: '09:00', fine: '19:00' },
+  SAB: { attivo: false, inizio: '09:00', fine: '13:00' },
+  DOM: { attivo: false, inizio: '09:00', fine: '19:00' },
+};
+
 describe('configDistribuzioneSchema', () => {
-  const OK = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundMin: 60 };
+  const OK = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundMin: 60, orariSettimana: ORARI_OK };
 
   it('accetta i valori di default', () => {
     expect(configDistribuzioneSchema.safeParse(OK).success).toBe(true);
@@ -52,6 +63,7 @@ describe('configDistribuzioneSchema', () => {
       stepKm: STEP_KM_MAX,
       raggioMaxKm: RAGGIO_MAX_KM_MAX,
       durataRoundMin: DURATA_ROUND_MIN_MAX,
+      orariSettimana: ORARI_OK,
     };
     expect(configDistribuzioneSchema.safeParse(estremi).success).toBe(true);
   });
@@ -73,8 +85,14 @@ describe('configDistribuzioneSchema', () => {
 describe('toConfigPersistita', () => {
   it('converte km→metri arrotondando a interi; i minuti passano invariati', () => {
     expect(
-      toConfigPersistita({ raggioStartKm: 0.3, stepKm: 1.5, raggioMaxKm: 12.4, durataRoundMin: 15 }),
-    ).toEqual({ raggioStartM: 300, stepM: 1500, raggioMaxM: 12400, intervalloMin: 15 });
+      toConfigPersistita({
+        raggioStartKm: 0.3,
+        stepKm: 1.5,
+        raggioMaxKm: 12.4,
+        durataRoundMin: 15,
+        orariSettimana: ORARI_OK,
+      }),
+    ).toEqual({ raggioStartM: 300, stepM: 1500, raggioMaxM: 12400, intervalloMin: 15, orariSettimana: ORARI_OK });
   });
 
   // 0,1 km in floating point è 100.00000000000001 m: senza arrotondamento
@@ -85,15 +103,29 @@ describe('toConfigPersistita', () => {
       stepKm: 0.7,
       raggioMaxKm: 2.9,
       durataRoundMin: 21,
+      orariSettimana: ORARI_OK,
     });
-    for (const v of Object.values(out)) {
+    for (const [k, v] of Object.entries(out)) {
+      if (k === 'orariSettimana') continue; // non è un numero: il calendario passa invariato
       expect(Number.isInteger(v)).toBe(true);
     }
-    expect(out).toEqual({ raggioStartM: 100, stepM: 700, raggioMaxM: 2900, intervalloMin: 21 });
+    expect(out).toEqual({
+      raggioStartM: 100,
+      stepM: 700,
+      raggioMaxM: 2900,
+      intervalloMin: 21,
+      orariSettimana: ORARI_OK,
+    });
   });
 });
 
-const BASE = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundMin: 60 };
+const BASE = {
+  raggioStartKm: 1,
+  stepKm: 1,
+  raggioMaxKm: 10,
+  durataRoundMin: 60,
+  orariSettimana: ORARI_OK,
+};
 
 describe('durata round in minuti', () => {
   it('accetta il minimo e il massimo', () => {
@@ -119,5 +151,52 @@ describe('durata round in minuti', () => {
     // Il browser considera validi solo `min + n·step`: uno step che non divide
     // l'intervallo marcherebbe come invalidi dei valori legittimi.
     expect((DURATA_ROUND_MIN_MAX - DURATA_ROUND_MIN_MIN) % STEP_DURATA_MIN_INPUT).toBe(0);
+  });
+});
+
+const BASE_ORARI = { ...BASE, orariSettimana: ORARI_OK };
+
+describe('orari settimana', () => {
+  it('accetta una settimana valida', () => {
+    expect(configDistribuzioneSchema.safeParse(BASE_ORARI).success).toBe(true);
+  });
+
+  it('rifiuta fine <= inizio su un giorno ATTIVO', () => {
+    const out = configDistribuzioneSchema.safeParse({
+      ...BASE_ORARI,
+      orariSettimana: { ...ORARI_OK, LUN: { attivo: true, inizio: '19:00', fine: '09:00' } },
+    });
+    expect(out.success).toBe(false);
+  });
+
+  it('tollera fine <= inizio su un giorno SPENTO: quegli orari non hanno effetto', () => {
+    const out = configDistribuzioneSchema.safeParse({
+      ...BASE_ORARI,
+      orariSettimana: { ...ORARI_OK, DOM: { attivo: false, inizio: '19:00', fine: '09:00' } },
+    });
+    expect(out.success).toBe(true);
+  });
+
+  it('rifiuta zero giorni attivi: congelerebbe ogni pratica dopo il primo round', () => {
+    const spenti = Object.fromEntries(
+      Object.entries(ORARI_OK).map(([g, f]) => [g, { ...f, attivo: false }]),
+    );
+    const out = configDistribuzioneSchema.safeParse({ ...BASE_ORARI, orariSettimana: spenti });
+    expect(out.success).toBe(false);
+    if (!out.success) {
+      expect(out.error.issues.some((i) => i.message.includes('almeno un giorno'))).toBe(true);
+    }
+  });
+
+  it('rifiuta un orario malformato', () => {
+    const out = configDistribuzioneSchema.safeParse({
+      ...BASE_ORARI,
+      orariSettimana: { ...ORARI_OK, LUN: { attivo: true, inizio: '9:00', fine: '19:00' } },
+    });
+    expect(out.success).toBe(false);
+  });
+
+  it('gli orari escono da toConfigPersistita così come sono entrati', () => {
+    expect(toConfigPersistita(BASE_ORARI).orariSettimana).toEqual(ORARI_OK);
   });
 });

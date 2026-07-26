@@ -19,6 +19,7 @@ vi.mock('next/navigation', () => ({
 
 import { salvaConfigDistribuzione } from './actions';
 import type { ConfigDistribuzioneInput } from './validate';
+import { ORARI_SETTIMANA_DEFAULT } from '@/lib/distribuzione/calendario';
 
 /** Input valido di riferimento: 1 km iniziale, +1 km, max 10 km, 60 min per round. */
 const INPUT_OK: ConfigDistribuzioneInput = {
@@ -26,6 +27,7 @@ const INPUT_OK: ConfigDistribuzioneInput = {
   stepKm: 1,
   raggioMaxKm: 10,
   durataRoundMin: 60,
+  orariSettimana: ORARI_SETTIMANA_DEFAULT,
 };
 
 const ADMIN = { user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } };
@@ -131,12 +133,14 @@ describe('salvaConfigDistribuzione', () => {
         stepM: 1000,
         raggioMaxM: 10000,
         intervalloMin: 60,
+        orariSettimana: ORARI_SETTIMANA_DEFAULT,
       },
       update: {
         raggioStartM: 1000,
         stepM: 1000,
         raggioMaxM: 10000,
         intervalloMin: 60,
+        orariSettimana: ORARI_SETTIMANA_DEFAULT,
       },
     });
     expect(revalidateMock).toHaveBeenCalledWith('/admin/distribuzione');
@@ -153,6 +157,7 @@ describe('salvaConfigDistribuzione', () => {
       stepKm: 2.5,
       raggioMaxKm: 7.5,
       durataRoundMin: 45,
+      orariSettimana: ORARI_SETTIMANA_DEFAULT,
     });
 
     expect(res.ok).toBe(true);
@@ -163,6 +168,7 @@ describe('salvaConfigDistribuzione', () => {
           stepM: 2500,
           raggioMaxM: 7500,
           intervalloMin: 45,
+          orariSettimana: ORARI_SETTIMANA_DEFAULT,
         },
       }),
     );

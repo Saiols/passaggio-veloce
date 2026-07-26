@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GIORNI_ORDINE, hhmmToMinuti, isHHMM } from '@/lib/distribuzione/calendario';
 
 /**
  * Limiti dei parametri di distribuzione, in unità umane (km e minuti): sono
@@ -48,6 +49,46 @@ export const STEP_RAGGIO_MAX_KM_INPUT = 1;
 const numero = (campo: string) =>
   z.number({ invalid_type_error: `Inserisci un numero valido per ${campo}` });
 
+const orarioHHMM = z.string().refine(isHHMM, 'Usa il formato HH:MM (es. 09:00)');
+
+/**
+ * Un giorno spento non ha effetto sulla distribuzione: i suoi orari restano
+ * salvati come promemoria (riattivarlo non deve costringere a ridigitarli) e
+ * non vanno validati fra loro.
+ *
+ * `hhmmToMinuti` esplode su un orario non nel formato HH:MM: il `.refine()`
+ * qui gira ANCHE quando `inizio`/`fine` hanno già fallito `orarioHHMM` sopra
+ * (zod non salta gli effetti a valle di un campo invalido), quindi il
+ * confronto va ri-guardato con `isHHMM` prima di convertire in minuti — quel
+ * caso è già segnalato dal messaggio su `orarioHHMM`.
+ */
+const fasciaGiornoSchema = z
+  .object({ attivo: z.boolean(), inizio: orarioHHMM, fine: orarioHHMM })
+  .refine(
+    (f) =>
+      !f.attivo ||
+      !isHHMM(f.inizio) ||
+      !isHHMM(f.fine) ||
+      hhmmToMinuti(f.fine) > hhmmToMinuti(f.inizio),
+    {
+      message: "L'orario di fine deve essere successivo a quello di inizio",
+      path: ['fine'],
+    },
+  );
+
+/**
+ * Zero giorni attivi congelerebbe ogni pratica dopo il primo round: nessuna
+ * finestra di apertura significa che il motore non allarga mai il raggio.
+ */
+const orariSettimanaSchema = z
+  .object(Object.fromEntries(GIORNI_ORDINE.map((g) => [g, fasciaGiornoSchema])) as Record<
+    (typeof GIORNI_ORDINE)[number],
+    typeof fasciaGiornoSchema
+  >)
+  .refine((o) => Object.values(o).some((f) => f.attivo), {
+    message: 'Attiva almeno un giorno: senza, nessuna pratica avanzerebbe oltre il primo round',
+  });
+
 /**
  * Validazione di `salvaConfigDistribuzione`.
  *
@@ -75,6 +116,7 @@ export const configDistribuzioneSchema = z
       .int('La durata del round va indicata in minuti interi')
       .min(DURATA_ROUND_MIN_MIN, `La durata minima di un round è ${DURATA_ROUND_MIN_MIN} min`)
       .max(DURATA_ROUND_MIN_MAX, `La durata di un round non può superare ${DURATA_ROUND_MIN_MAX} min`),
+    orariSettimana: orariSettimanaSchema,
   })
   .refine((d) => d.raggioMaxKm > d.raggioStartKm, {
     message: 'Il raggio massimo deve essere maggiore del raggio iniziale',
@@ -92,11 +134,13 @@ export function toConfigPersistita(input: ConfigDistribuzioneInput): {
   stepM: number;
   raggioMaxM: number;
   intervalloMin: number;
+  orariSettimana: ConfigDistribuzioneInput['orariSettimana'];
 } {
   return {
     raggioStartM: Math.round(input.raggioStartKm * 1000),
     stepM: Math.round(input.stepKm * 1000),
     raggioMaxM: Math.round(input.raggioMaxKm * 1000),
     intervalloMin: input.durataRoundMin,
+    orariSettimana: input.orariSettimana,
   };
 }

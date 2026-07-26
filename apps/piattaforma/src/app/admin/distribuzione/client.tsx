@@ -5,7 +5,7 @@ import { Alert, Button, Field, NumberInput } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
 import { useFieldErrorsState, zodFieldErrors } from '@/components/forms';
 import type { DistribuzioneConfigDTO } from '@/lib/distribuzione/config';
-import { GIORNI_ORDINE } from '@/lib/distribuzione/calendario';
+import { OrariSettimanaEditor } from './orari-settimana';
 import { salvaConfigDistribuzione } from './actions';
 import {
   configDistribuzioneSchema,
@@ -20,16 +20,6 @@ import {
   STEP_KM_MIN,
   STEP_RAGGIO_MAX_KM_INPUT,
 } from './validate';
-
-const GIORNI_LABEL: Record<string, string> = {
-  LUN: 'Lun',
-  MAR: 'Mar',
-  MER: 'Mer',
-  GIO: 'Gio',
-  VEN: 'Ven',
-  SAB: 'Sab',
-  DOM: 'Dom',
-};
 
 /** Metri → km per il form: la persistenza resta in metri. */
 function toKm(metri: number): number {
@@ -46,6 +36,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
   const [stepKm, setStepKm] = useState<number | null>(toKm(config.stepM));
   const [raggioMaxKm, setRaggioMaxKm] = useState<number | null>(toKm(config.raggioMaxM));
   const [durataRoundMin, setDurataRoundMin] = useState<number | null>(config.intervalloMin);
+  const [orariSettimana, setOrariSettimana] = useState(config.orariSettimana);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -57,6 +48,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
     stepKm: stepKm ?? NaN,
     raggioMaxKm: raggioMaxKm ?? NaN,
     durataRoundMin: durataRoundMin ?? NaN,
+    orariSettimana,
   });
   const { field, gatedSubmit } = useFieldErrorsState(errors);
   const fStart = field('raggioStartKm');
@@ -85,6 +77,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
         stepKm: stepKm ?? NaN,
         raggioMaxKm: raggioMaxKm ?? NaN,
         durataRoundMin: durataRoundMin ?? NaN,
+        orariSettimana,
       });
       setMsg(
         res.ok
@@ -191,6 +184,10 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
           </p>
         )}
 
+        <p className="mt-3 text-[12.5px] text-pv-slate-500">
+          Misura del raggio: linea d&apos;aria.
+        </p>
+
         <div className="mt-5 flex justify-end">
           <Button type="submit" loading={pending} loadingLabel="Salvataggio…">
             Salva
@@ -198,25 +195,11 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
         </div>
       </div>
 
-      <div className="rounded-[16px] border border-pv-slate-200 bg-pv-slate-50 p-5">
-        <h2 className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-          Altri parametri (fissi, sola lettura)
-        </h2>
-        <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-3">
-          <div className="col-span-2">
-            <dt className="text-pv-slate-500">Calendario</dt>
-            <dd className="font-semibold text-pv-navy-800">
-              {GIORNI_ORDINE.filter((g) => config.orariSettimana[g].attivo)
-                .map((g) => `${GIORNI_LABEL[g]} ${config.orariSettimana[g].inizio}–${config.orariSettimana[g].fine}`)
-                .join(' · ') || 'Nessun giorno attivo'}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-pv-slate-500">Misura del raggio</dt>
-            <dd className="font-semibold text-pv-navy-800">Linea d&apos;aria</dd>
-          </div>
-        </dl>
-      </div>
+      <OrariSettimanaEditor
+        value={orariSettimana}
+        onChange={setOrariSettimana}
+        errore={field('orariSettimana').error}
+      />
 
       <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>

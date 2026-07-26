@@ -10,7 +10,8 @@
 
 ## Global Constraints
 
-- **Nessuna migration Prisma.** `DocumentoFiscale.feeAddebitoId`, `statoPagamento: PAGATA` e `inviatoEmailAt` esistono già in `packages/db/prisma/schema.prisma`. Se un task sembra richiedere una migration, è il task a essere sbagliato.
+- **Una sola migration, e solo nel Task 5.** Sui dati non serve nulla: `DocumentoFiscale.feeAddebitoId`, `statoPagamento: PAGATA` e `inviatoEmailAt` esistono già in `packages/db/prisma/schema.prisma`. Ma `NotificaInviata.tipo` è un **enum Postgres** `NotificaTipo`, quindi la N53 richiede un `ALTER TYPE ... ADD VALUE`, come ogni notifica aggiunta prima di lei (N44, N45, N46-49, N52). In tutti gli altri task una migration è il segnale che il task è sbagliato.
+- **Le migration si scrivono a mano.** `pnpm db:migrate` in questo repo propone DROP di sequenze: si crea il file SQL a mano e si applica con `db:deploy`.
 - **Nessun backfill** dei documenti già emessi in produzione: quei dati sono usa-e-getta.
 - Comandi: `pnpm --filter piattaforma test <path>` per i test mirati, `pnpm typecheck` dalla root. Node ≥ 18 (`nvm use 22.15.0` se la shell è tornata a Node 16).
 - Ogni task termina con un commit. Si lavora direttamente su `main`.
@@ -1423,6 +1424,7 @@ git commit -m "feat(jobs): riconciliazione oraria delle fatture da incasso"
 
 Da fare separatamente, non sono task di implementazione:
 
-1. **Verificare `PAYMENT_PROVIDER` in produzione** su Vercel. Con la valvola il deploy è sicuro in entrambi i casi, ma determina se dopo il rilascio le fatture nascono alla firma o all'incasso.
-2. **Riallineare i Termini**: la clausola 11 elenca fra gli effetti dell'attestazione "addebito della fee ed emissione della relativa fattura", la clausola 9 rimanda alle "tempistiche indicate in Piattaforma". Restano vere ma la tempistica reale cambia — da rivedere con il legale. La KB del chatbot si riallinea da sola al prebuild una volta aggiornati i docs.
-3. **Aggiornare `docs/sistema-fatturazione.md` §1.2-1.3**, dove le tabelle mettono la generazione fattura (step 2) prima dell'addebito (step 4).
+1. **Applicare la migration su Neon PRIMA del deploy del codice**: `20260726150000_notifica_n53_fattura_disponibile` (`ALTER TYPE "NotificaTipo" ADD VALUE 'N53_AGENZIA_FATTURA_DISPONIBILE'`). Se il codice arriva per primo, il primo tentativo di scrivere una N53 fallisce con enum sconosciuto — e fallirebbe proprio nel momento in cui l'agenzia dovrebbe ricevere la fattura.
+2. **Verificare `PAYMENT_PROVIDER` in produzione** su Vercel. Con la valvola il deploy è sicuro in entrambi i casi, ma determina se dopo il rilascio le fatture nascono alla firma o all'incasso.
+3. **Riallineare i Termini**: la clausola 11 elenca fra gli effetti dell'attestazione "addebito della fee ed emissione della relativa fattura", la clausola 9 rimanda alle "tempistiche indicate in Piattaforma". Restano vere ma la tempistica reale cambia — da rivedere con il legale. La KB del chatbot si riallinea da sola al prebuild una volta aggiornati i docs.
+4. **Aggiornare `docs/sistema-fatturazione.md` §1.2-1.3**, dove le tabelle mettono la generazione fattura (step 2) prima dell'addebito (step 4).

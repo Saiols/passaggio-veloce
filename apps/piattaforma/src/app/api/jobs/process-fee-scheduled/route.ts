@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { processFeeScheduled } from '@/lib/jobs/process-fee-scheduled';
+import { riconciliaFattureIncassate } from '@/lib/jobs/riconcilia-fatture';
 import { requireAdminOrCron } from '@/lib/jobs/auth';
 
 export const maxDuration = 60;
@@ -13,7 +14,10 @@ async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);
   if (guard) return guard;
   const result = await processFeeScheduled();
-  return NextResponse.json({ ok: true, ...result });
+  // Stessa passata: gli incassi appena chiusi qui sopra sono già coperti dal
+  // percorso normale, questa raccoglie quelli rimasti indietro.
+  const riconciliazione = await riconciliaFattureIncassate();
+  return NextResponse.json({ ok: true, ...result, ...riconciliazione });
 }
 
 export const GET = run;

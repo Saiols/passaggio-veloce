@@ -26,8 +26,10 @@ export const metadata: Metadata = {
  * (6.1.f) + obbligo di legge (6.1.c) — mai il consenso, che sarebbe revocabile
  * a metà pratica.
  *
- * DRAFT: da sottoporre a revisione legale prima del go-live, insieme a
- * /termini (clausola 17) e /privacy.
+ * DRAFT: da sottoporre a revisione legale prima dell'entrata in vigore
+ * definitiva, insieme a /termini (la clausola sui dati dei Terzi —
+ * `ART_DATI_TERZI` in lib/legal/clausole-vessatorie.ts, oggi la 23 dopo la
+ * rinumerazione del 2026-07-26) e /privacy.
  * Spec: docs/superpowers/specs/2026-07-14-gdpr-dati-terzi-design.md
  */
 export default function PrivacyClientiPage() {

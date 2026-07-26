@@ -4,10 +4,12 @@ import { SiteHeader } from '@/components/site-header';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { webPageJsonLd } from '@/lib/seo/jsonLd';
 import { siteUrl } from '@/lib/seo/brand';
+import { ART_DATI_TERZI } from '@/lib/legal/clausole-vessatorie';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Informativa privacy di Passaggio Veloce: titolare, dati raccolti, finalità, base giuridica, conservazione, diritti dell\'interessato.',
+  description:
+    "Informativa privacy di Passaggio Veloce: titolare, dati raccolti, finalità, base giuridica, conservazione, fornitori terzi, cookie, DPO, diritti dell'interessato.",
   alternates: { canonical: '/privacy' },
   robots: { index: true, follow: true },
 };
@@ -17,9 +19,24 @@ export const metadata: Metadata = {
  * venditori e acquirenti — soggetti terzi che non hanno un rapporto con noi —
  * hanno un'informativa dedicata ex art. 14: `app/privacy/clienti/page.tsx`.
  *
- * Da rivedere con il legale prima del lancio in prod: aggiungere DPO e
- * ricorso al Garante per categoria.
+ * Da rivedere con il legale prima dell'entrata in vigore definitiva.
  * Spec: docs/superpowers/specs/2026-07-14-gdpr-dati-terzi-design.md
+ *
+ * Revisione 2026-07-26 — merge del documento «PassaggioVeloce Privacy COMPLETO
+ * FINALE» (v6). Sezioni nuove: sub-utenti e log di accesso (con relativa
+ * retention di 24 mesi), informativa specifica sui dati di venditori e
+ * acquirenti, Stripe fra i fornitori (doppio livello: responsabile per i
+ * pagamenti su nostro incarico, titolare autonomo per le proprie finalità),
+ * cessione d'azienda, cookie policy, DPO e istruzioni pratiche per il reclamo
+ * al Garante.
+ *
+ * NON è una riscrittura integrale: quanto già presente qui e assente dal
+ * documento è stato mantenuto — in particolare i «Dati finanziari» e la
+ * finalità commerciale sull'elenco dei contatti emersi dalle pratiche, che
+ * descrive un trattamento reale (CRM) e coincide con la clausola
+ * {ART_DATI_TERZI}.1 dei Termini. Il documento aggiunge accanto ad essa
+ * l'analisi su dati aggregati e anonimizzati: sono due trattamenti distinti,
+ * non due versioni dello stesso, e convivono.
  */
 export default function PrivacyPage() {
   return (
@@ -30,7 +47,7 @@ export default function PrivacyPage() {
           url: siteUrl('/privacy'),
           name: 'Privacy Policy',
           description: 'Informativa privacy di Passaggio Veloce.',
-          lastModified: '2026-07-14',
+          lastModified: '2026-07-26',
         })}
       />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
@@ -38,14 +55,13 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p className="mt-2 text-[12px] text-pv-slate-500">
-          Ultimo aggiornamento: 2026-07-14
+          Ultimo aggiornamento: 2026-07-26
         </p>
 
         <Section title="Titolare del trattamento">
           <p>
-            Passaggio Veloce S.r.l., con sede legale in Italia, è il titolare
-            del trattamento dei dati personali raccolti tramite la piattaforma
-            <code> passaggioveloce.it</code>{' '}e i sottodomini collegati.
+            Passaggio Veloce S.r.l., con sede legale in Italia, è il titolare del trattamento dei dati personali raccolti tramite la piattaforma{' '}
+            <code>passaggioveloce.it</code>{' '}e i sottodomini collegati.
           </p>
           <p>
             Per qualsiasi richiesta in materia di protezione dati:{' '}
@@ -59,97 +75,111 @@ export default function PrivacyPage() {
         </Section>
 
         <Section title="Tipologie di dati trattati">
+          <h3 className="mt-2 text-[15px] font-bold text-pv-navy-900">
+            Dati degli utenti registrati (broker, agenzie, admin e sub-utenti)
+          </h3>
           <ul className="list-disc pl-5">
             <li>
-              <strong>Dati di registrazione e profilo</strong>: nome, cognome,
-              codice fiscale, dati anagrafici dell&apos;amministratore di
-              azienda, ragione sociale, P.IVA, PEC, IBAN, codice SDI.
+              <strong>Dati di registrazione e profilo</strong>: nome, cognome, codice fiscale, dati anagrafici dell&apos;amministratore o del referente account, ragione sociale, P.IVA, PEC, IBAN, codice SDI, sede legale e sedi operative.
             </li>
             <li>
-              <strong>Dati operativi</strong>: documenti caricati per le
-              pratiche (libretto di circolazione, carta d&apos;identità,
-              patente, passaporto, codice fiscale, visure), dati estratti via
-              OCR, comunicazioni con le agenzie.
-            </li>
-            <li>
-              <strong>Dati di venditori e acquirenti</strong>{' '}
-              (soggetti terzi rispetto all&apos;utente registrato), conferiti
-              dall&apos;utente
-              per la lavorazione della pratica. Quando la pratica lo richiede
-              includono <strong>permesso di soggiorno</strong>,{' '}
-              <strong>certificato di morte</strong>{' '}e atti di successione,
-              procure e autorizzazioni del giudice tutelare. Rispetto a questi
-              dati Passaggio Veloce è titolare autonomo: v.{' '}
-              <Link
-                href="/privacy/clienti"
-                className="font-semibold text-pv-navy-700 hover:underline"
-              >
-                informativa per venditori e acquirenti
+              <strong>Dati degli utenti operativi e sub-utenti</strong>: per ciascun dipendente o collaboratore che accede alla Piattaforma su delega dell&apos;Utente titolare trattiamo nome, cognome, indirizzo email, credenziali di accesso (hash della password), ruolo e permessi assegnati. L&apos;Utente titolare è tenuto a informare preventivamente i sub-utenti del trattamento dei loro dati da parte di Passaggio Veloce, prima della creazione delle relative utenze, ai sensi della clausola 2 dei{' '}
+              <Link href="/termini" className="font-semibold text-pv-navy-700 hover:underline">
+                Termini e Condizioni
               </Link>
-              .
+              . Passaggio Veloce è manlevata da qualsiasi pretesa dei sub-utenti derivante dalla mancata informativa imputabile all&apos;Utente titolare.
             </li>
             <li>
-              <strong>Dati finanziari</strong>: addebiti, payout, transazioni
-              wallet (importi e timestamp; i dati di pagamento Stripe sono
-              trattati direttamente dal processor).
+              <strong>Log di accesso e attività</strong>: registriamo automaticamente gli accessi e le attività compiute sulla Piattaforma da ciascun utente (amministratore titolare, sub-utenti, admin interni di Passaggio Veloce). I log includono data e ora di accesso, indirizzo IP anonimizzato e azioni compiute (caricamento documenti, invio e accettazione pratiche, payout richiesti, modifiche ai dati del profilo, accesso alla dashboard). Sono trattati sulla base del nostro <strong>legittimo interesse</strong> per finalità di sicurezza della Piattaforma, prevenzione delle frodi, audit interno e risoluzione di eventuali controversie. Periodo di conservazione: <strong>24 mesi</strong>.
             </li>
             <li>
-              <strong>Dati tecnici</strong>: indirizzo IP (anonimizzato a 3
-              ottetti), user-agent, log di accesso. Nessun cookie di
-              tracciamento di terze parti attivo al momento.
+              <strong>Dati operativi</strong>: documenti caricati per le pratiche (libretto di circolazione, carta d&apos;identità, patente, passaporto, codice fiscale, visure), dati estratti via OCR, comunicazioni con le agenzie.
+            </li>
+            <li>
+              <strong>Dati finanziari</strong>: addebiti, payout, transazioni wallet (importi e timestamp; i dati di pagamento sono trattati direttamente dal processor).
+            </li>
+            <li>
+              <strong>Dati tecnici</strong>: indirizzo IP (anonimizzato a 3 ottetti), user-agent, log di accesso. Nessun cookie di tracciamento di terze parti attivo al momento.
             </li>
           </ul>
+
+          <h3 className="mt-4 text-[15px] font-bold text-pv-navy-900">
+            Dati di venditori e acquirenti (Terzi)
+          </h3>
+          <p>
+            I dati personali di venditori e acquirenti — soggetti terzi rispetto all&apos;utente registrato — sono conferiti dall&apos;utente per la lavorazione della pratica. Quando la pratica lo richiede includono <strong>permesso di soggiorno</strong>, <strong>certificato di morte</strong>{' '}e atti di successione, procure e autorizzazioni del giudice tutelare. Rispetto a questi dati Passaggio Veloce è <strong>titolare autonomo</strong>: v.{' '}
+            <Link
+              href="/privacy/clienti"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              informativa per venditori e acquirenti
+            </Link>
+            . La comunicazione di tali dati a Passaggio Veloce avviene sotto la <strong>responsabilità esclusiva</strong>{' '}dell&apos;utente broker o agenzia che li carica, il quale garantisce di avere titolo per farlo e di aver reso ai Terzi le informative dovute ai sensi dell&apos;art. 13 GDPR.
+          </p>
         </Section>
 
         <Section title="Finalità e basi giuridiche">
           <ul className="list-disc pl-5">
             <li>
-              Esecuzione del contratto e gestione delle pratiche di passaggio
-              di proprietà (art. 6.1.b GDPR).
+              Esecuzione del contratto e gestione delle pratiche di passaggio di proprietà (art. 6.1.b GDPR).
             </li>
             <li>
               Adempimenti fiscali e contabili (art. 6.1.c GDPR).
             </li>
             <li>
-              Sicurezza della piattaforma, anti-abuso e investigazione di
-              eventuali frodi (legittimo interesse, art. 6.1.f GDPR).
+              Sicurezza della piattaforma, anti-abuso e investigazione di eventuali frodi (legittimo interesse, art. 6.1.f GDPR).
             </li>
             <li>
-              Comunicazioni di servizio sul ciclo di vita della pratica
-              (esecuzione del contratto).
+              Gestione dei log di accesso e delle attività degli utenti per finalità di sicurezza, audit e risoluzione controversie (legittimo interesse, art. 6.1.f GDPR).
             </li>
             <li>
-              Sviluppo e miglioramento del servizio, e finalità commerciali, tramite un elenco
-              aggregato dei contatti (nome, contatti, identificativo fiscale, numero di
-              pratiche) emersi dalle pratiche gestite (legittimo interesse, art. 6.1.f GDPR).
+              Comunicazioni di servizio sul ciclo di vita della pratica (esecuzione del contratto).
+            </li>
+            <li>
+              Analisi e miglioramento del servizio tramite <strong>dati aggregati e anonimizzati</strong>{' '}— dati che non consentono l&apos;identificazione dei singoli utenti (legittimo interesse, art. 6.1.f GDPR).
+            </li>
+            <li>
+              Sviluppo e miglioramento del servizio, e finalità commerciali, tramite un elenco aggregato dei contatti (nome, contatti, identificativo fiscale, numero di pratiche) emersi dalle pratiche gestite (legittimo interesse, art. 6.1.f GDPR). Puoi opporti in ogni momento (art. 21 GDPR) scrivendo a{' '}
+              <a
+                href="mailto:privacy@passaggioveloce.it"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                privacy@passaggioveloce.it
+              </a>
+              .
             </li>
           </ul>
         </Section>
 
         <Section title="Conservazione">
-          <p>
-            I documenti rimossi vengono cancellati definitivamente (dal
-            database e dallo storage) <strong>90 giorni</strong>{' '}dopo la
-            rimozione. Le pratiche rimaste in <strong>bozza</strong>{' '}e mai
-            inviate, con i relativi documenti, vengono eliminate dopo{' '}
-            <strong>30 giorni</strong>.
-          </p>
-          <p>
-            I dati delle pratiche <strong>portate a termine</strong>{' '}e i dati
-            contabili e fiscali sono conservati per il periodo imposto dalla
-            normativa fiscale e dagli obblighi connessi agli adempimenti sul
-            veicolo. I dati di un account eliminato sono soft-deleted per{' '}
-            <strong>90 giorni</strong>{' '}e poi rimossi, fatti salvi gli obblighi
-            di conservazione di legge.
-          </p>
+          <ul className="list-disc pl-5">
+            <li>
+              <strong>Documenti rimossi</strong>: cancellati definitivamente (dal database e dallo storage) <strong>90 giorni</strong>{' '}dopo la rimozione.
+            </li>
+            <li>
+              <strong>Pratiche in bozza mai inviate</strong>, con i relativi documenti: eliminate dopo <strong>30 giorni</strong>.
+            </li>
+            <li>
+              <strong>Dati delle pratiche portate a termine e dati contabili e fiscali</strong>: conservati per il periodo imposto dalla normativa fiscale italiana (<strong>minimo 10 anni</strong>) e dagli obblighi connessi agli adempimenti sul veicolo.
+            </li>
+            <li>
+              <strong>Log di accesso e attività</strong>: conservati per <strong>24 mesi</strong>{' '}dalla data di registrazione del log.
+            </li>
+            <li>
+              <strong>Dati degli utenti operativi e sub-utenti</strong> (nome, cognome, email, ruolo): conservati per tutta la durata del rapporto contrattuale con l&apos;Utente titolare e per <strong>24 mesi</strong>{' '}dalla cessazione dell&apos;account o dalla revoca dell&apos;utenza, salvo obblighi di legge che richiedano una conservazione più lunga.
+            </li>
+            <li>
+              <strong>Dati di un account eliminato</strong>: soft-deleted per <strong>90 giorni</strong>{' '}e poi rimossi, fatti salvi gli obblighi di conservazione di legge.
+            </li>
+            <li>
+              <strong>Dati di venditori e acquirenti (Terzi)</strong>: conservati per la durata necessaria all&apos;erogazione del servizio e successivamente per il periodo imposto dalla normativa fiscale (<strong>minimo 10 anni</strong>). Decorso tale periodo, i dati sono cancellati salvo ulteriori obblighi di legge.
+            </li>
+          </ul>
         </Section>
 
         <Section title="Diritti dell'interessato">
           <p>
-            Hai diritto di chiedere accesso, rettifica, cancellazione,
-            limitazione, opposizione e portabilità dei tuoi dati personali.
-            Hai inoltre diritto di proporre reclamo al Garante per la
-            Protezione dei Dati Personali (
+            Hai diritto di chiedere accesso, rettifica, cancellazione, limitazione, opposizione e portabilità dei tuoi dati personali. Hai inoltre diritto di proporre reclamo al Garante per la Protezione dei Dati Personali (
             <a
               href="https://www.garanteprivacy.it"
               target="_blank"
@@ -158,56 +188,189 @@ export default function PrivacyPage() {
             >
               garanteprivacy.it
             </a>
-            ).
+            ) — v. la sezione &laquo;Reclamo al Garante&raquo; in fondo a questa pagina.
           </p>
+          <p>
+            Per esercitare i tuoi diritti scrivi a{' '}
+            <a
+              href="mailto:privacy@passaggioveloce.it"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              privacy@passaggioveloce.it
+            </a>
+            .
+          </p>
+        </Section>
+
+        <Section title="Dati di venditori e acquirenti — informativa specifica">
+          <p>
+            Passaggio Veloce riceve i dati personali di venditori e acquirenti (Terzi) direttamente dai broker e dalle agenzie che li caricano sulla Piattaforma nell&apos;ambito della gestione delle pratiche. Rispetto a tali dati, Passaggio Veloce è <strong>titolare autonomo del trattamento</strong>{' '}ai sensi dell&apos;art. 4 n. 7 GDPR.
+          </p>
+          <ul className="list-disc pl-5">
+            <li>
+              <strong>Finalità</strong>: (a) erogazione del servizio e gestione della pratica; (b) invio di comunicazioni email al venditore e/o all&apos;acquirente sull&apos;avanzamento della pratica; (c) adempimenti fiscali e contabili; (d) prevenzione delle frodi e sicurezza della Piattaforma; (e) adempimento di obblighi di legge.
+            </li>
+            <li>
+              <strong>Base giuridica</strong>: esecuzione di un compito nell&apos;interesse del Terzo (art. 6.1.b GDPR) e legittimo interesse di Passaggio Veloce (art. 6.1.f GDPR) per le finalità di cui ai punti (c), (d) ed (e); obbligo legale (art. 6.1.c GDPR) per gli adempimenti fiscali.
+            </li>
+            <li>
+              <strong>Conservazione</strong>: per il periodo necessario all&apos;erogazione del servizio e successivamente per il periodo imposto dalla normativa fiscale italiana (minimo 10 anni). Decorso tale periodo, i dati sono cancellati.
+            </li>
+            <li>
+              <strong>Diritti dei Terzi</strong>: venditori e acquirenti possono esercitare i propri diritti scrivendo a{' '}
+              <a
+                href="mailto:privacy@passaggioveloce.it"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                privacy@passaggioveloce.it
+              </a>
+              . L&apos;informativa completa è disponibile su{' '}
+              <Link
+                href="/privacy/clienti"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                passaggioveloce.it/privacy/clienti
+              </Link>
+              .
+            </li>
+            <li>
+              <strong>Responsabilità dell&apos;utente</strong>: la comunicazione dei dati dei Terzi a Passaggio Veloce avviene sotto la responsabilità esclusiva dell&apos;utente che li carica. Passaggio Veloce è manlevata da qualsiasi pretesa dei Terzi derivante da trattamento non autorizzato imputabile all&apos;utente, ai sensi della clausola {ART_DATI_TERZI}.5 dei{' '}
+              <Link href="/termini" className="font-semibold text-pv-navy-700 hover:underline">
+                Termini e Condizioni
+              </Link>
+              .
+            </li>
+          </ul>
         </Section>
 
         <Section title="Fornitori terzi e responsabili del trattamento">
           <p>
-            Per erogare il servizio ci avvaliamo di fornitori terzi che
-            trattano dati per nostro conto, con sede o trattamento
-            nell&apos;Unione Europea:
+            Per erogare il servizio ci avvaliamo dei seguenti fornitori terzi:
           </p>
           <ul className="list-disc pl-5">
             <li>
-              <strong>Google Cloud – Document AI</strong>: lettura automatica
-              (OCR) dei documenti caricati in fase di registrazione (carta
-              d&apos;identità, tessera sanitaria/codice fiscale, visura
-              camerale) per la verifica dell&apos;identità e dei requisiti
-              (KYC). Regione di trattamento: Unione Europea.
+              <strong>Google Cloud – Document AI</strong>: lettura automatica (OCR) dei documenti caricati per la verifica di identità e requisiti (KYC). Agisce come responsabile del trattamento per nostro conto. Regione di trattamento: Unione Europea.
             </li>
             <li>
-              <strong>Google Maps Platform</strong>: completamento e
-              validazione dell&apos;indirizzo aziendale in fase di
-              registrazione.
+              <strong>Google Maps Platform</strong>: completamento e validazione dell&apos;indirizzo aziendale e calcolo della distanza geografica per il matching delle agenzie. Agisce come responsabile del trattamento per nostro conto.
             </li>
             <li>
-              <strong>Resend</strong>: invio delle email transazionali
-              (conferme, notifiche, reset password). Trattamento
-              nell&apos;Unione Europea.
+              <strong>Resend</strong>: invio delle email transazionali (conferme, notifiche, reset password). Agisce come responsabile del trattamento per nostro conto. Trattamento nell&apos;Unione Europea.
             </li>
             <li>
-              <strong>Vercel</strong>: hosting e distribuzione
-              dell&apos;applicazione.
+              <strong>Vercel</strong>: hosting e distribuzione dell&apos;applicazione. Agisce come responsabile del trattamento per nostro conto.
             </li>
             <li>
-              <strong>Neon</strong>: database gestito (PostgreSQL), regione
-              Unione Europea.
+              <strong>Neon</strong>: database gestito (PostgreSQL). Agisce come responsabile del trattamento per nostro conto. Regione Unione Europea.
             </li>
             <li>
-              <strong>Vercel Blob</strong>: archiviazione dei documenti
-              caricati (libretti, documenti di identità, visure).
+              <strong>Vercel Blob</strong>: archiviazione dei documenti caricati (libretti, documenti di identità, visure). Agisce come responsabile del trattamento per nostro conto.
+            </li>
+            <li>
+              <strong>Stripe, Inc.</strong>: processor dei pagamenti per la gestione degli addebiti SEPA e dei payout. Il rapporto con Stripe si articola su <strong>due livelli distinti</strong>: (a) per le operazioni di pagamento eseguite su incarico di Passaggio Veloce (addebiti SEPA, payout verso i broker), Stripe agisce come <strong>responsabile del trattamento</strong> ai sensi dell&apos;art. 28 GDPR, in forza di un Data Processing Agreement stipulato con Passaggio Veloce; (b) per le proprie finalità autonome (prevenzione delle frodi, compliance finanziaria, miglioramento dei propri servizi), Stripe agisce come <strong>titolare autonomo</strong>, soggetto alla propria informativa privacy (
+              <a
+                href="https://stripe.com/it/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                stripe.com/it/privacy
+              </a>
+              ). Il trasferimento di dati verso Stripe può comportare trattamento extra-UE protetto da clausole contrattuali standard (SCC) ai sensi dell&apos;art. 46 GDPR.
             </li>
           </ul>
         </Section>
 
         <Section title="Trasferimenti internazionali">
           <p>
-            La maggior parte dei trattamenti avviene su server in UE (si
-            veda la sezione &ldquo;Fornitori terzi&rdquo; per i dettagli per
-            singolo fornitore). Alcuni servizi ausiliari (es. Sentry per
-            error monitoring) potrebbero comportare trasferimenti extra-UE
-            protetti da clausole contrattuali standard.
+            La maggior parte dei trattamenti avviene su server nell&apos;Unione Europea (si veda la sezione &laquo;Fornitori terzi&raquo; per i dettagli per singolo fornitore). Alcuni servizi — Sentry per l&apos;error monitoring, Stripe per i pagamenti — possono comportare trasferimenti extra-UE protetti da <strong>clausole contrattuali standard</strong>{' '}(SCC) ai sensi dell&apos;art. 46 GDPR.
+          </p>
+        </Section>
+
+        <Section title="Cessione d'azienda o acquisizione">
+          <p>
+            In caso di cessione, fusione, acquisizione o altra operazione straordinaria che coinvolga Passaggio Veloce S.r.l., i dati personali trattati dalla Piattaforma potranno essere trasferiti al soggetto subentrante quale parte degli asset aziendali ceduti. Tale trasferimento avviene sulla base del <strong>legittimo interesse</strong>{' '}di Passaggio Veloce (art. 6.1.f GDPR), in quanto necessario alla continuità del servizio e all&apos;adempimento delle obbligazioni contrattuali in corso.
+          </p>
+          <p>
+            Il soggetto subentrante sarà vincolato al rispetto della presente Informativa Privacy e della normativa applicabile in materia di protezione dei dati. In caso di operazione straordinaria, Passaggio Veloce comunicherà agli Utenti le eventuali modifiche al trattamento dei dati con preavviso adeguato e nel rispetto degli obblighi di legge, incluso il <strong>diritto degli interessati di opporsi</strong>{' '}al trattamento ai sensi dell&apos;art. 21 GDPR.
+          </p>
+        </Section>
+
+        <Section title="Cookie Policy">
+          <p>
+            La Piattaforma utilizza <strong>esclusivamente cookie tecnici</strong>{' '}necessari al funzionamento del servizio. Non sono utilizzati cookie di profilazione, cookie di tracciamento comportamentale o cookie di terze parti a scopo pubblicitario.
+          </p>
+          <p>
+            I cookie tecnici utilizzati includono: (a) <strong>cookie di sessione</strong> — necessari per mantenere la sessione dell&apos;Utente autenticato durante la navigazione, eliminati automaticamente alla chiusura del browser; (b) <strong>cookie di preferenze</strong> — necessari per ricordare le impostazioni dell&apos;Utente (lingua, preferenze di visualizzazione), con durata massima di 12 mesi; (c) <strong>cookie di sicurezza</strong> — necessari per prevenire attacchi CSRF (Cross-Site Request Forgery) e garantire la sicurezza delle sessioni, eliminati alla chiusura del browser; (d) <strong>cookie di attribuzione dell&apos;affiliazione</strong>{' '}— cookie di prima parte, di durata 30 giorni, che memorizza il solo identificativo del referente per attribuire le registrazioni effettuate dopo il clic su un link di invito.
+          </p>
+          <p>
+            I cookie tecnici non richiedono il consenso dell&apos;Utente ai sensi dell&apos;art. 122 del D.Lgs. 196/2003 (Codice Privacy) e del Provvedimento del Garante dell&apos;8 maggio 2014. L&apos;Utente può disabilitare i cookie dal proprio browser, ma ciò potrebbe compromettere il corretto funzionamento della Piattaforma.
+          </p>
+          <p>
+            Qualora in futuro venissero introdotti cookie non tecnici, la presente sezione sarà aggiornata e — ove richiesto dalla normativa — sarà richiesto il consenso esplicito dell&apos;Utente prima dell&apos;attivazione. Il dettaglio dei singoli cookie è nella{' '}
+            <Link href="/cookie" className="font-semibold text-pv-navy-700 hover:underline">
+              cookie policy
+            </Link>
+            .
+          </p>
+        </Section>
+
+        <Section title="Responsabile della Protezione dei Dati (DPO)">
+          <p>
+            Passaggio Veloce S.r.l. ha valutato l&apos;obbligo di nomina del Responsabile della Protezione dei Dati (DPO) ai sensi dell&apos;art. 37 GDPR. Allo stato attuale, in ragione delle dimensioni dell&apos;organizzazione e della tipologia di dati trattati, <strong>la nomina non è obbligatoria</strong>. Passaggio Veloce si riserva di procedere alla nomina qualora l&apos;evoluzione dell&apos;attività lo rendesse necessario o opportuno.
+          </p>
+          <p>
+            Per qualsiasi questione relativa alla protezione dei dati è possibile contattare il referente interno alla privacy:{' '}
+            <a
+              href="mailto:privacy@passaggioveloce.it"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              privacy@passaggioveloce.it
+            </a>
+            .
+          </p>
+        </Section>
+
+        <Section title="Reclamo al Garante — istruzioni pratiche">
+          <p>
+            L&apos;interessato ha il diritto di proporre reclamo all&apos;Autorità Garante per la Protezione dei Dati Personali qualora ritenga che il trattamento dei propri dati violi il GDPR o la normativa nazionale applicabile. Il reclamo può essere presentato:
+          </p>
+          <ul className="list-disc pl-5">
+            <li>
+              online, tramite il portale del Garante:{' '}
+              <a
+                href="https://www.garanteprivacy.it"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                garanteprivacy.it
+              </a>
+              ;
+            </li>
+            <li>
+              via email all&apos;indirizzo{' '}
+              <a
+                href="mailto:garante@gpdp.it"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                garante@gpdp.it
+              </a>
+              ;
+            </li>
+            <li>
+              via posta ordinaria o raccomandata all&apos;indirizzo: Garante per la Protezione dei Dati Personali, Piazza Venezia 11, 00187 Roma.
+            </li>
+          </ul>
+          <p>
+            Prima di presentare reclamo al Garante, ti invitiamo a contattarci all&apos;indirizzo{' '}
+            <a
+              href="mailto:privacy@passaggioveloce.it"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              privacy@passaggioveloce.it
+            </a>
+            {' '}per tentare una risoluzione diretta della questione.
           </p>
         </Section>
 

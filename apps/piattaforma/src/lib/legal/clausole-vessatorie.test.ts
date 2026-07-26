@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ART_APPROVAZIONE_SPECIFICA,
+  ART_DATI_TERZI,
   CLAUSOLE_VESSATORIE,
   DESCRIZIONI_VESSATORIE,
   TERMS_VERSION,
@@ -10,11 +11,11 @@ import {
 
 describe('clausole vessatorie', () => {
   it('elenca le clausole approvate specificamente ex 1341/1342', () => {
-    expect([...CLAUSOLE_VESSATORIE]).toEqual([3, 5, 7, 8, 10, 11, 12, 13, 17, 18]);
+    expect([...CLAUSOLE_VESSATORIE]).toEqual([3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 23, 24]);
   });
 
-  it("l'articolo di approvazione specifica è il 19", () => {
-    expect(ART_APPROVAZIONE_SPECIFICA).toBe(19);
+  it("l'articolo di approvazione specifica è il 25", () => {
+    expect(ART_APPROVAZIONE_SPECIFICA).toBe(25);
   });
 
   it("nessuna clausola vessatoria coincide o supera l'articolo di approvazione", () => {
@@ -32,7 +33,7 @@ describe('clausole vessatorie', () => {
   });
 
   it('rende l\'elenco come stringa leggibile per la checkbox', () => {
-    expect(elencoClausoleVessatorie()).toBe('3, 5, 7, 8, 10, 11, 12, 13, 17, 18');
+    expect(elencoClausoleVessatorie()).toBe('3, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 23, 24');
   });
 
   it('la versione dei Termini è una data ISO', () => {
@@ -52,13 +53,25 @@ describe('clausole vessatorie', () => {
     expect(chiaviDescrizioni).toEqual(chiaviAttese);
   });
 
-  it('la 17 è la garanzia/manleva sui dati dei terzi e la 18 è il foro (non invertite)', () => {
+  it('la 23 è la garanzia/manleva sui dati dei terzi e la 24 è il foro (non invertite)', () => {
     // Rinumerando, il rischio non è perdere una chiave — il test sopra lo
     // vedrebbe — ma lasciarla attaccata alla descrizione vecchia: l'elenco
-    // dell'approvazione specifica direbbe "Clausola 17 — foro competente"
-    // mentre la 17 dei Termini parla di dati personali di terzi.
-    expect(DESCRIZIONI_VESSATORIE[17]).toMatch(/dati di venditori e acquirenti/i);
-    expect(DESCRIZIONI_VESSATORIE[18]).toMatch(/foro/i);
+    // dell'approvazione specifica direbbe "Clausola 23 — foro competente"
+    // mentre la 23 dei Termini parla di dati personali di terzi.
+    expect(DESCRIZIONI_VESSATORIE[23]).toMatch(/dati di venditori e acquirenti/i);
+    expect(DESCRIZIONI_VESSATORIE[24]).toMatch(/foro/i);
+  });
+
+  it('ART_DATI_TERZI punta alla clausola descritta come dati di venditori e acquirenti', () => {
+    // `ART_DATI_TERZI` è il numero mostrato nella checkbox del popup broker e
+    // tracciato in `BrokerDichiarazione`. Alla rinumerazione del 2026-07-26
+    // (17→23) è bastato dimenticarlo per far dichiarare al broker di aver
+    // informato i clienti "ai sensi della clausola 17" — che nei Termini v8 è
+    // il divieto di cessione del contratto. Qui i due valori non possono più
+    // divergere.
+    expect(DESCRIZIONI_VESSATORIE[ART_DATI_TERZI as 23]).toMatch(
+      /dati di venditori e acquirenti/i,
+    );
   });
 
   it('la prosa descrittiva della checkbox copre TUTTE le clausole elencate', () => {

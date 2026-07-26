@@ -42,8 +42,14 @@ export const PENALI = {
    * Termini) — rende azionabile la manleva della 17.5 registrando la
    * garanzia ad ogni invio pratica, non solo una volta in registrazione.
    * Vedi docs/superpowers/plans/2026-07-14-gdpr-dati-terzi.md
+   *
+   * v3.1 (2026-07-26): stesso testo, ma il rimando alla clausola sui dati di
+   * venditori e acquirenti è passato da 17 a 23 con la rinumerazione dei
+   * Termini (merge del documento v8). Il record persiste solo questa versione,
+   * non il copy: senza il bump, due testi che citano clausole diverse
+   * finirebbero indistinguibili sotto "v3.0".
    */
-  POPUP_VERSION: 'v3.0',
+  POPUP_VERSION: 'v3.1',
 } as const;
 
 /**

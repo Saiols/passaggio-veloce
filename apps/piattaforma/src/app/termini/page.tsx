@@ -6,6 +6,7 @@ import { webPageJsonLd } from '@/lib/seo/jsonLd';
 import { siteUrl } from '@/lib/seo/brand';
 import {
   ART_APPROVAZIONE_SPECIFICA,
+  ART_DATI_TERZI,
   CLAUSOLE_VESSATORIE,
   DESCRIZIONI_VESSATORIE,
 } from '@/lib/legal/clausole-vessatorie';
@@ -13,17 +14,17 @@ import {
 export const metadata: Metadata = {
   title: 'Termini e Condizioni',
   description:
-    'Termini e Condizioni di utilizzo della piattaforma Passaggio Veloce: prezzo del servizio, affiliazione, wallet e payout, fatturazione conto terzi, regime fiscale, responsabilità, foro competente.',
+    'Termini e Condizioni di utilizzo della piattaforma Passaggio Veloce: prezzo del servizio, affiliazione, wallet e payout, fatturazione conto terzi, regime fiscale, responsabilità, proprietà intellettuale, riservatezza, foro competente.',
   alternates: { canonical: '/termini' },
   robots: { index: true, follow: true },
 };
 
 /**
  * Termini e Condizioni di utilizzo (contratto B2B). Draft tecnico completo:
- * DA SOTTOPORRE A REVISIONE LEGALE prima del go-live, in particolare la clausola 3
- * (variazione prezzo a discrezione), le manleve (8) e le limitazioni di
- * responsabilità (13). Le clausole vessatorie ex artt. 1341-1342 c.c. sono
- * elencate alla clausola 19 e richiedono la seconda accettazione specifica
+ * DA SOTTOPORRE A REVISIONE LEGALE prima dell'entrata in vigore definitiva, in
+ * particolare le manleve (8, 23) e le limitazioni di responsabilità (13). Le
+ * clausole vessatorie ex artt. 1341-1342 c.c. sono elencate alla clausola
+ * {ART_APPROVAZIONE_SPECIFICA} e richiedono la seconda accettazione specifica
  * raccolta in fase di registrazione.
  *
  * Revisione 2026-07-11: riscritte le clausole 5 (prelievo — un wallet per
@@ -34,20 +35,33 @@ export const metadata: Metadata = {
  * della singola utenza). Spec:
  * docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
  *
- * Revisione 2026-07-14: nuova clausola 17 (dati di venditori e acquirenti —
- * PV titolare autonomo, garanzia + manleva dell'Utente). Foro → 18,
- * approvazione specifica → 19. Spec:
+ * Revisione 2026-07-14: nuova clausola sui dati di venditori e acquirenti —
+ * PV titolare autonomo, garanzia + manleva dell'Utente. Spec:
  * docs/superpowers/specs/2026-07-14-gdpr-dati-terzi-design.md
  *
  * Revisione 2026-07-17: ciclo di vita della visura camerale nelle clausole
- * ESISTENTI, senza alcuna rinumerazione (i numeri sono citati dentro record
- * persistiti — v. lib/legal/clausole-vessatorie.ts). Clausola 8: validità
- * 180 giorni, obbligo di aggiornamento e preavviso email a 5 giorni.
- * Clausola 5: sospensione del prelievo (Broker e Agenzia) per visura non
- * aggiornata. Clausola 12: nuovo sotto-punto 12.1-bis, limitazione operativa
- * della sola Agenzia (parallelo della 12.1). Le tre erano già vessatorie con
- * doppia accettazione. DA SOTTOPORRE A REVISIONE LEGALE (sospendono un
- * servizio a pagamento). Spec: .superpowers/sdd/task-6.1-brief.md
+ * ESISTENTI. Clausola 8: validità 180 giorni, obbligo di aggiornamento e
+ * preavviso email a 5 giorni. Clausola 5: sospensione del prelievo (Broker e
+ * Agenzia) per visura non aggiornata. Clausola 12: nuovo sotto-punto 12.1-bis,
+ * limitazione operativa della sola Agenzia. Spec: .superpowers/sdd/task-6.1-brief.md
+ *
+ * Revisione 2026-07-26 — merge del documento «PassaggioVeloce Termini COMPLETO
+ * FINALE» (v8). Quattro clausole NUOVE inserite in mezzo al testo (14 forza
+ * maggiore, 15 proprietà intellettuale, 16 riservatezza + divieto di elusione,
+ * 17 divieto di cessione; poi 20 integrità del contratto e 21 comunicazioni
+ * ufficiali): il documento le colloca lì e questo ha comportato una
+ * RINUMERAZIONE (modifiche 14→18, recesso 15→19, privacy 16→22, dati terzi
+ * 17→23, foro 18→24, approvazione specifica 19→25). Per questo i numeri citati
+ * fuori da questa pagina si leggono SEMPRE da lib/legal/clausole-vessatorie.ts
+ * (`ART_DATI_TERZI`, `ART_APPROVAZIONE_SPECIFICA`) e mai a mano — v. il commento
+ * di quel file. Modifiche sostanziali di merito: clausola 3 (la variazione di
+ * prezzo non è più discrezionale, ma soggetta a preavviso 7/30 giorni con
+ * recesso senza penali), clausola 5 e 10.6 (il saldo negativo di un wallet NON
+ * blocca più gli altri wallet dell'Utente), clausola 4 (split 50/50 della
+ * commissione di affiliazione), clausola 6 (conferma OTP del mandato al primo
+ * payout, ora vessatoria), clausola 10.3 (esito della verifica entro 10 giorni
+ * lavorativi), clausola 13 (cap del danno differenziato per dolo/colpa grave +
+ * continuità del servizio as-is).
  */
 export default function TerminiPage() {
   return (
@@ -64,7 +78,7 @@ export default function TerminiPage() {
         <h1 className="text-[28px] font-extrabold tracking-tight text-pv-navy-900 sm:text-[32px]">
           Termini e Condizioni di Utilizzo
         </h1>
-        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-17</p>
+        <p className="mt-2 text-[12px] text-pv-slate-500">Ultimo aggiornamento: 2026-07-26</p>
 
         <p className="mt-4">
           I presenti Termini e Condizioni (i &laquo;<strong>Termini</strong>&raquo;) disciplinano
@@ -97,16 +111,19 @@ export default function TerminiPage() {
         <Section title="2. Registrazione, account e verifica (KYC)">
           <p>
             Per utilizzare la Piattaforma l&apos;Utente si registra fornendo dati aziendali
-            veritieri, completi e aggiornati (ragione sociale, partita IVA, sede, regime fiscale,
-            contatti, IBAN) e i documenti richiesti per la verifica antifrode e di identità (KYC),
-            tra cui documento d&apos;identità del legale rappresentante, codice fiscale e visura
-            camerale.
+            veritieri, completi e aggiornati (ragione sociale, partita IVA, sede legale e sedi
+            operative, regime fiscale, contatti, IBAN) e i documenti richiesti per la verifica
+            antifrode e di identità (KYC), tra cui documento d&apos;identità del legale
+            rappresentante, codice fiscale e visura camerale.
           </p>
           <p>
             La registrazione genera un unico account amministratore titolare, cui l&apos;Utente può
             associare ulteriori utenze e sedi operative. L&apos;Utente è responsabile della
             riservatezza delle credenziali, dell&apos;operato delle utenze da esso create e della
             veridicità di ogni dato e documento caricato, anche relativo alle pratiche.
+          </p>
+          <p>
+            L&apos;Utente che assegna l&apos;accesso alla Piattaforma a dipendenti, collaboratori o altri soggetti (<strong>sub-utenti</strong>) è tenuto a <strong>informarli preventivamente</strong>{' '}del trattamento dei loro dati personali da parte di Passaggio Veloce per le finalità indicate nell&apos;<Link href="/privacy" className="font-semibold text-pv-navy-700 hover:underline">Informativa Privacy</Link>, <strong>prima</strong>{' '}di procedere alla creazione delle relative utenze. L&apos;Utente è responsabile dell&apos;adempimento di tale obbligo informativo e manleva Passaggio Veloce da qualsiasi pretesa dei sub-utenti derivante dalla mancata informativa.
           </p>
         </Section>
 
@@ -116,16 +133,28 @@ export default function TerminiPage() {
             dall&apos;agenzia e ricevuta tramite la Piattaforma è dovuto a Passaggio Veloce un
             corrispettivo <strong>variabile compreso tra 1 € e 200 €</strong>{' '}per pratica. Il
             corrispettivo applicabile è indicato in Piattaforma al momento dell&apos;invio/accettazione
-            della pratica.
+            della pratica. Il valore di <strong>200 €</strong>{' '}costituisce il <strong>tetto massimo invalicabile</strong>{' '}del corrispettivo per singola pratica.
           </p>
           <p>
-            <strong>
-              Passaggio Veloce si riserva il diritto di variare il prezzo del servizio, entro il
-              predetto intervallo, a propria discrezione e senza alcuna limitazione
-            </strong>
-            , anche in relazione alla tipologia di pratica, alla zona e alle condizioni di mercato.
-            L&apos;agenzia accetta espressamente tale facoltà di variazione (clausola vessatoria: v.
-            clausola {ART_APPROVAZIONE_SPECIFICA}).
+            Passaggio Veloce si riserva il diritto di variare il prezzo del servizio, <strong>entro il predetto intervallo</strong>, in relazione alla tipologia di pratica, alla zona e alle condizioni di mercato, secondo le seguenti modalità:
+          </p>
+          <ol className="mt-2 list-[lower-alpha] space-y-1 pl-5">
+            <li>
+              <strong>Variazioni fino al 20% della tariffa corrente</strong>: comunicate con <strong>preavviso minimo di 7 (sette) giorni</strong>{' '}via email. La variazione entra in vigore dalla prima pratica inviata o accettata successivamente alla data di efficacia indicata nella comunicazione.
+            </li>
+            <li>
+              <strong>Variazioni superiori al 20% della tariffa corrente</strong>{' '}o modifiche strutturali alle tipologie di corrispettivo: comunicate con <strong>preavviso minimo di 30 (trenta) giorni</strong>{' '}via email, con <strong>riaccettazione esplicita</strong>{' '}da parte dell&apos;Utente prima dell&apos;entrata in vigore.
+            </li>
+          </ol>
+          <p>
+            In entrambi i casi, durante il periodo di preavviso l&apos;Utente che non intenda accettare la variazione può <strong>recedere dal contratto senza penali</strong>, con effetto dalla data di entrata in vigore della variazione stessa, comunicando il recesso via email ad{' '}
+            <a
+              href="mailto:assistenza@passaggioveloce.it"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              assistenza@passaggioveloce.it
+            </a>
+            . Le pratiche già in corso al momento del recesso sono gestite alle condizioni precedenti. L&apos;agenzia accetta espressamente tale facoltà di variazione (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -138,11 +167,7 @@ export default function TerminiPage() {
             accettazione o invio).
           </p>
           <p>
-            Qualora a una medesima pratica siano collegati <strong>due</strong>{' '}soggetti affiliati
-            &mdash; ossia sia il broker sia l&apos;agenzia risultino iscritti tramite referral
-            &mdash; la commissione di affiliazione è <strong>ripartita (splittata) tra i due
-            referenti</strong>, secondo i criteri indicati in Piattaforma. In presenza di un solo
-            referente, la commissione è a questi integralmente riconosciuta.
+            Qualora a una medesima pratica siano collegati <strong>due</strong>{' '}soggetti affiliati &mdash; ossia sia il broker sia l&apos;agenzia risultino iscritti tramite referral &mdash; la commissione di affiliazione è <strong>ripartita in parti uguali tra i due referenti (50% ciascuno)</strong>, salvo diversa indicazione pubblicata nella sezione Affiliazione della Piattaforma, che costituisce parte integrante dei presenti Termini. In presenza di un solo referente, la commissione è a questi integralmente riconosciuta.
           </p>
           <p>
             Le commissioni sono accreditate sul wallet del soggetto referente e sono soggette ai
@@ -156,16 +181,22 @@ export default function TerminiPage() {
             I compensi maturati dall&apos;Utente sono accreditati sul wallet <strong>alla firma</strong> della relativa pratica. <strong>Il saldo del wallet è in ogni momento e integralmente di spettanza dell&apos;Utente: non è soggetto a scadenza né a decadenza; le uniche variazioni in diminuzione, diverse dall&apos;erogazione dei payout, sono quelle previste dalle clausole 10.4 (penale), 10.5(b) (storno del compenso non maturato) e 10.8 (rettifiche contabili).</strong>
           </p>
           <p>
-            L&apos;Utente dispone di <strong>portafogli distinti</strong>: <strong>un wallet per ciascuna sede operativa</strong>, sul quale confluiscono i compensi delle pratiche lavorate da quella sede (ed eventuali bonus promozionali), e — ove applicabile — <strong>un unico wallet aziendale</strong> per le <strong>commissioni di affiliazione</strong> (clausola 4). Un Utente con più sedi dispone pertanto di più wallet di sede, <strong>ciascuno con contabilità separata</strong> quanto agli accrediti e alla soglia di accumulo per la richiesta di prelievo, <strong>fermo restando quanto previsto al quarto comma della presente clausola in caso di saldo negativo su uno qualsiasi dei wallet dell&apos;Utente</strong>. I compensi <strong>si accumulano liberamente</strong> su ciascun wallet. La <strong>richiesta di prelievo</strong> può essere presentata, <strong>per ciascun wallet separatamente</strong>, una volta raggiunto su di esso un saldo di <strong>500 €</strong>; al di sotto di tale importo i compensi <strong>restano accreditati e continuano ad accumularsi senza alcuna perdita</strong>. Al raggiungimento della soglia di payout automatico configurata dall&apos;Utente (di regola 1.000 €, impostabile tra 1.000 € e 5.000 €) l&apos;erogazione è avviata automaticamente, wallet per wallet. L&apos;erogazione avviene mediante bonifico sull&apos;IBAN indicato.
+            L&apos;Utente dispone di <strong>portafogli distinti</strong>: <strong>un wallet per ciascuna sede operativa</strong>, sul quale confluiscono i compensi delle pratiche lavorate da quella sede (ed eventuali bonus promozionali), e — ove applicabile — <strong>un unico wallet aziendale</strong> per le <strong>commissioni di affiliazione</strong> (clausola 4). Un Utente con più sedi dispone pertanto di più wallet di sede, <strong>ciascuno con contabilità separata</strong> quanto agli accrediti, alla soglia di accumulo per la richiesta di prelievo e agli effetti di un eventuale saldo negativo. I compensi <strong>si accumulano liberamente</strong> su ciascun wallet. La <strong>richiesta di prelievo</strong> può essere presentata, <strong>per ciascun wallet separatamente</strong>, una volta raggiunto su di esso un saldo di <strong>500 €</strong>; al di sotto di tale importo i compensi <strong>restano accreditati e continuano ad accumularsi senza alcuna perdita</strong>. Al raggiungimento della soglia di payout automatico configurata dall&apos;Utente (di regola 1.000 €, impostabile tra 1.000 € e 5.000 €) l&apos;erogazione è avviata automaticamente, wallet per wallet. L&apos;erogazione avviene mediante bonifico sull&apos;IBAN indicato.
           </p>
           <p>
-            <strong>In ogni caso di cessazione del rapporto</strong> (recesso di una delle parti, chiusura o cancellazione dell&apos;account) <strong>il saldo residuo è liquidato integralmente all&apos;Utente anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce. Qualora un wallet dell&apos;Utente presenti saldo negativo, <strong>la liquidazione è sospesa fino alla regolarizzazione del debito</strong>.
+            <strong>Bonus promozionali e crediti omaggio.</strong>{' '}Eventuali bonus promozionali di iscrizione o crediti omaggio accreditati da Passaggio Veloce sul wallet dell&apos;Utente <strong>non sono prelevabili autonomamente</strong> e <strong>non abbassano la soglia minima di payout</strong>. Il prelievo del saldo del wallet — inclusa la quota corrispondente al bonus — è possibile unicamente al raggiungimento della <strong>soglia minima di 500 € calcolata sul totale del wallet</strong>. Fino a tale soglia, il bonus resta accreditato e si cumula con i compensi maturati dalle pratiche.
           </p>
           <p>
-            In caso di penali (clausola 10) il saldo di un wallet può risultare negativo: in tale ipotesi <strong>i prelievi sono sospesi su tutti i wallet dell&apos;Utente</strong> (ogni sede e, ove presente, il wallet aziendale di affiliazione) <strong>e non soltanto su quello in negativo</strong>, fino al ripristino di un saldo non negativo su quest&apos;ultimo; nel frattempo i compensi successivi continuano ad accreditarsi liberamente su ciascun wallet, anche a compensazione del saldo negativo. <strong>L&apos;operatività dell&apos;Utente nella gestione delle pratiche resta invariata.</strong>{' '}L&apos;Utente accetta espressamente le presenti condizioni di prelievo, inclusa la soglia di richiesta del payout e la sospensione dei prelievi su tutti i wallet in caso di saldo negativo di uno solo di essi (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+            <strong>Addebito di penali e saldo del wallet.</strong>{' '}In caso di applicazione di una penale ai sensi della clausola 10.4, l&apos;importo è addebitato sul <strong>wallet della sede interessata</strong>. Qualora l&apos;addebito determini un <strong>saldo negativo</strong> su quel wallet, i compensi delle pratiche successive si accreditano naturalmente compensando il negativo fino al ripristino di un saldo positivo. Il prelievo <strong>dal wallet interessato</strong> è possibile solo al raggiungimento della soglia di 500 € con saldo positivo. <strong>Gli altri wallet dell&apos;Utente</strong> (altre sedi e wallet di affiliazione) <strong>non sono in alcun modo vincolati o bloccati</strong> per effetto del saldo negativo di un singolo wallet. <strong>L&apos;operatività dell&apos;Utente nella gestione delle pratiche resta invariata.</strong>
           </p>
           <p>
-            <strong>Sospensione del prelievo per visura camerale non aggiornata.</strong>{' '}Il prelievo del saldo dei wallet dell&apos;Utente &mdash; di ciascuna sede e, ove presente, del wallet aziendale di affiliazione &mdash; è <strong>altresì sospeso</strong> qualora la visura camerale dell&apos;Utente risulti <strong>emessa da oltre 180 giorni</strong> (clausola 8), e ciò fino al caricamento di una visura aggiornata nell&apos;apposita sezione della Piattaforma. La sospensione <strong>non incide sulla maturazione né sulla titolarità delle somme</strong>, che restano integralmente acquisite all&apos;Utente, ma ne differisce la sola erogazione: lo <strong>sblocco è automatico e immediato</strong> al momento dell&apos;accettazione del documento aggiornato, senza necessità di alcun intervento manuale. La misura si applica <strong>sia all&apos;Utente Broker sia all&apos;Utente Agenzia</strong>. L&apos;Utente accetta espressamente tale sospensione del prelievo per visura camerale non aggiornata (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+            <strong>In ogni caso di cessazione del rapporto</strong> (recesso di una delle parti, chiusura o cancellazione dell&apos;account) <strong>il saldo residuo positivo di ciascun wallet è liquidato integralmente all&apos;Utente anche se inferiore a 500 €</strong>, previa emissione dei documenti fiscali e regolarizzazione di quanto eventualmente dovuto a Passaggio Veloce. Qualora un wallet dell&apos;Utente presenti saldo negativo, <strong>la liquidazione è sospesa fino alla regolarizzazione del debito</strong>.
+          </p>
+          <p>
+            <strong>Sospensione del prelievo per visura camerale non aggiornata.</strong>{' '}Il prelievo del saldo dei wallet dell&apos;Utente &mdash; di ciascuna sede e, ove presente, del wallet aziendale di affiliazione &mdash; è <strong>altresì sospeso</strong> qualora la visura camerale dell&apos;Utente risulti <strong>emessa da oltre 180 giorni</strong> (clausola 8), e ciò fino al caricamento di una visura aggiornata nell&apos;apposita sezione della Piattaforma. La sospensione <strong>non incide sulla maturazione né sulla titolarità delle somme</strong>, che restano integralmente acquisite all&apos;Utente, ma ne differisce la sola erogazione: lo <strong>sblocco è automatico e immediato</strong> al momento dell&apos;accettazione del documento aggiornato, senza necessità di alcun intervento manuale. La misura si applica <strong>sia all&apos;Utente Broker sia all&apos;Utente Agenzia</strong>.
+          </p>
+          <p>
+            L&apos;Utente accetta espressamente le presenti condizioni di prelievo, inclusa la soglia di richiesta del payout, le condizioni sui bonus promozionali e la sospensione del prelievo per visura camerale non aggiornata (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -178,9 +209,13 @@ export default function TerminiPage() {
             normativa italiana sulla fatturazione elettronica B2B.
           </p>
           <p>
-            L&apos;Utente si obbliga a fornire e mantenere aggiornati tutti i dati necessari alla
-            corretta emissione dei documenti fiscali e riconosce come validamente emessi i documenti
-            generati da Passaggio Veloce nell&apos;esercizio di tale mandato.
+            Il mandato alla fatturazione delegata, accettato in fase di registrazione unitamente ai presenti Termini, è <strong>confermato con apposita procedura OTP</strong> (One Time Password) <strong>al momento del primo prelievo (payout)</strong> da parte dell&apos;Utente. Tale conferma — registrata con <strong>timestamp e indirizzo IP</strong>{' '}— costituisce accettazione espressa e tracciabile del mandato e delle relative condizioni.
+          </p>
+          <p>
+            Nell&apos;esercizio del mandato, Passaggio Veloce provvede all&apos;emissione dei documenti fiscali <strong>in nome e per conto dell&apos;Utente</strong>, riportando i dati fiscali dell&apos;Utente come <strong>soggetto cedente/prestatore</strong>, nel rispetto della normativa vigente in materia di fatturazione elettronica e delle modalità tecniche di trasmissione allo SDI di volta in volta adottate da Passaggio Veloce.
+          </p>
+          <p>
+            L&apos;Utente si obbliga a fornire e mantenere aggiornati tutti i dati necessari alla corretta emissione dei documenti fiscali e riconosce come validamente emessi i documenti generati da Passaggio Veloce nell&apos;esercizio di tale mandato. Passaggio Veloce <strong>non è responsabile</strong>{' '}di errori derivanti da dati fiscali errati o non aggiornati forniti dall&apos;Utente. L&apos;Utente accetta espressamente il presente mandato e la relativa conferma OTP (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -193,12 +228,7 @@ export default function TerminiPage() {
             comunicarne tempestivamente le variazioni.
           </p>
           <p>
-            In particolare, per gli Utenti in <strong>regime forfettario</strong>, non applicando
-            questi l&apos;IVA, Passaggio Veloce <strong>tratterrà la differenza corrispondente
-            all&apos;IVA</strong>{' '}e l&apos;importo erogato all&apos;Utente sarà conseguentemente{' '}
-            <strong>inferiore</strong>{' '}rispetto a quello riconosciuto ai soggetti che applicano
-            l&apos;IVA. L&apos;Utente accetta espressamente tale meccanismo di determinazione
-            differenziata del compenso (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+            In particolare, per gli Utenti in <strong>regime forfettario</strong>, non applicando questi l&apos;IVA, Passaggio Veloce <strong>tratterrà la differenza corrispondente all&apos;IVA</strong>{' '}e l&apos;importo erogato all&apos;Utente sarà conseguentemente <strong>inferiore</strong>{' '}rispetto a quello riconosciuto ai soggetti che applicano l&apos;IVA. Tale meccanismo è <strong>comunicato esplicitamente in fase di registrazione</strong>, prima dell&apos;accettazione dei presenti Termini. L&apos;Utente accetta espressamente tale meccanismo di determinazione differenziata del compenso (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
@@ -248,10 +278,10 @@ export default function TerminiPage() {
             <strong>10.2 &mdash; Segnalazione dell&apos;agenzia.</strong> La sola <strong>agenzia assegnataria</strong> può segnalare, <strong>esclusivamente prima della firma</strong> (pratica in stato &laquo;Accettata&raquo; o &laquo;Processata&raquo;): <strong>fermo amministrativo</strong>, <strong>ipoteca o vincolo PRA</strong>, <strong>documento non valido</strong>, <strong>altro</strong> (con nota). L&apos;agenzia <strong>indica i veicoli interessati</strong>. Dopo la firma la pratica è chiusa e non è più segnalabile.
           </p>
           <p>
-            <strong>10.3 &mdash; Verifica di Passaggio Veloce. Nessuna penale è mai applicata automaticamente.</strong> Ogni segnalazione è verificata da Passaggio Veloce, che può <strong>confermarla</strong> (pratica annullata, penale addebitata) o <strong>respingerla</strong>{' '}(pratica prosegue, nessun addebito). L&apos;esito è comunicato via email a entrambe le parti.
+            <strong>10.3 &mdash; Verifica di Passaggio Veloce e termini. Nessuna penale è mai applicata automaticamente.</strong> Ogni segnalazione è verificata da Passaggio Veloce, che può <strong>confermarla</strong> (pratica annullata, penale addebitata) o <strong>respingerla</strong>{' '}(pratica prosegue, nessun addebito). Passaggio Veloce comunica l&apos;esito <strong>entro 10 (dieci) giorni lavorativi</strong> dalla ricezione della segnalazione. Qualora la verifica richiedesse tempi più lunghi per motivi documentati, Passaggio Veloce ne dà comunicazione all&apos;Utente entro il medesimo termine, indicando la data prevista di conclusione. <strong>Il decorso del termine senza risposta non implica né accoglimento né rigetto automatico</strong>{' '}della segnalazione. L&apos;esito &mdash; conferma o rigetto &mdash; è comunicato via email a entrambe le parti.
           </p>
           <p>
-            <strong>10.4 &mdash; Penale: unica penale prevista.</strong> In caso di segnalazione <strong>confermata</strong> è addebitata al broker una penale di <strong>€ 25,00 per ciascun veicolo oggetto della segnalazione confermata</strong>. La penale: (a) è addebitata sul wallet del broker; (b) <strong>non è soggetta a IVA</strong>, costituendo somma dovuta a titolo di penalità, esclusa dalla base imponibile ai sensi dell&apos;<strong>art. 15, co. 1, n. 1, D.P.R. 633/1972</strong>; (c) <strong>non si applica ai veicoli non segnalati</strong>{' '}della medesima pratica.
+            <strong>10.4 &mdash; Penale: unica penale prevista.</strong> In caso di segnalazione <strong>confermata</strong> è addebitata al broker una penale di <strong>€ 25,00 per ciascun veicolo oggetto della segnalazione confermata</strong>. La penale: (a) è addebitata sul <strong>wallet della sede del broker interessata</strong>; (b) <strong>non è soggetta a IVA</strong>, costituendo somma dovuta a titolo di penalità, esclusa dalla base imponibile ai sensi dell&apos;<strong>art. 15, co. 1, n. 1, D.P.R. 633/1972</strong>; (c) <strong>non si applica ai veicoli non segnalati</strong>{' '}della medesima pratica.
           </p>
           <p className="italic">
             Esempio: pratica con 3 veicoli, di cui 1 con fermo confermato → penale € 25,00 (un solo veicolo), non € 75,00.
@@ -260,7 +290,8 @@ export default function TerminiPage() {
             <strong>10.5 &mdash; Effetti della conferma.</strong> (a) la pratica è <strong>annullata</strong>; (b) il compenso della pratica <strong>non è maturato</strong> dal broker, poiché matura solo alla firma (se già eccezionalmente accreditato, è stornato); (c) all&apos;agenzia segnalante <strong>non è addebitata alcuna fee</strong>.
           </p>
           <p>
-            <strong>10.6 &mdash; Saldo negativo.</strong> L&apos;addebito può portare il wallet della sede a saldo negativo. In tal caso, come previsto dalla clausola 5, <strong>i prelievi sono sospesi su tutti i wallet dell&apos;Utente</strong> (non solo su quello addebitato) fino al ripristino di un saldo non negativo su quest&apos;ultimo; i compensi successivi si accreditano liberamente a compensazione, e <strong>l&apos;operatività resta invariata</strong>: il broker può continuare a caricare e gestire pratiche.
+            <strong>10.6 &mdash; Saldo negativo del wallet.</strong> L&apos;addebito può portare il wallet della sede interessata a saldo negativo. In tal caso, come previsto dalla clausola 5, i compensi delle pratiche successive si accreditano naturalmente compensando il negativo fino al ripristino di un saldo positivo, e il prelievo <strong>da quel wallet</strong> resta possibile solo al raggiungimento della soglia di 500 € con saldo positivo. <strong>Gli altri wallet dell&apos;Utente non sono in alcun modo vincolati.</strong>{' '}
+            L&apos;<strong>operatività resta invariata</strong>: il broker può continuare a caricare e gestire pratiche.
           </p>
           <p>
             <strong>10.7 &mdash; Reiterazione.</strong> Al raggiungimento di <strong>2 penali confermate</strong>, la posizione del broker è sottoposta a valutazione ai fini della sospensione ai sensi della clausola 12.
@@ -363,7 +394,7 @@ export default function TerminiPage() {
             >
               assistenza@passaggioveloce.it
             </a>
-            ; Passaggio Veloce riscontra entro <strong>15 giorni</strong>. Venuto meno il motivo, l&apos;account è riattivato.
+            ; Passaggio Veloce riscontra entro <strong>15 giorni</strong>. <strong>Il decorso del termine senza risposta non implica accoglimento del riesame</strong>; Passaggio Veloce può prorogare motivatamente il termine, comunicando la proroga e la nuova data prevista di risposta <strong>entro il termine originario di 15 giorni</strong>. Venuto meno il motivo, l&apos;account è riattivato.
           </p>
           <p>
             <em>Effetti economici:</em> <strong>la sospensione non comporta in alcun caso la perdita dei compensi già maturati</strong>, che restano accreditati sul wallet e sono liquidati ai sensi della clausola 5.
@@ -386,22 +417,73 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="13. Limitazioni di responsabilità">
+        <Section title="13. Limitazioni di responsabilità e continuità del servizio">
           <p>
-            Passaggio Veloce risponde esclusivamente del corretto funzionamento tecnologico della
-            Piattaforma e della corretta esecuzione delle transazioni economiche tracciate. Nei
-            limiti consentiti dalla legge, Passaggio Veloce{' '}
-            <strong>non è responsabile</strong>{' '}di errori, omissioni o falsità nei dati e documenti
-            caricati dall&apos;Utente, dell&apos;operato e dei ritardi delle agenzie
-            nell&apos;esecuzione delle pratiche, né di danni indiretti o consequenziali. In ogni
-            caso, ove una responsabilità fosse accertata, essa è limitata all&apos;importo delle fee
-            corrisposte dall&apos;Utente a Passaggio Veloce nei dodici mesi precedenti l&apos;evento.
-            L&apos;Utente accetta espressamente la presente limitazione (clausola vessatoria: v.
-            clausola {ART_APPROVAZIONE_SPECIFICA}).
+            Passaggio Veloce risponde esclusivamente del corretto funzionamento tecnologico della Piattaforma e della corretta esecuzione delle transazioni economiche tracciate. Nei limiti consentiti dalla legge, Passaggio Veloce <strong>non è responsabile</strong>{' '}di: (a) errori, omissioni o falsità nei dati e documenti caricati dall&apos;Utente; (b) operato, ritardi o inadempimenti delle agenzie o dei broker nell&apos;esecuzione delle pratiche; (c) danni indiretti, consequenziali, perdita di profitto, perdita di opportunità commerciali o danni reputazionali di qualsiasi natura.
+          </p>
+          <p>
+            <strong>Limitazione del danno risarcibile.</strong>{' '}Ove una responsabilità di Passaggio Veloce fosse accertata in via definitiva, il danno risarcibile è limitato come segue: (a) per danni derivanti da <strong>negligenza ordinaria</strong> o da disservizi tecnici non imputabili a dolo o colpa grave, il risarcimento <strong>non può eccedere l&apos;importo delle fee corrisposte</strong> dall&apos;Utente a Passaggio Veloce nei <strong>dodici mesi</strong> precedenti l&apos;evento dannoso; (b) per danni derivanti da <strong>dolo o colpa grave</strong> di Passaggio Veloce, il cap di cui al punto (a) <strong>non si applica</strong>{' '}e la responsabilità è determinata secondo le norme ordinarie, fermo restando che Passaggio Veloce non risponde in nessun caso di danni indiretti, consequenziali o perdita di profitto anche in caso di dolo o colpa grave.
+          </p>
+          <p>
+            <strong>Continuità del servizio.</strong>{' '}La Piattaforma è fornita <strong>nello stato in cui si trova</strong> (as-is). Passaggio Veloce non garantisce la disponibilità continua e ininterrotta del servizio e non è responsabile di interruzioni, rallentamenti o malfunzionamenti tecnici non imputabili a dolo o colpa grave, ivi inclusi i <em>down</em> dei sistemi di terzi (provider cloud, banche, Agenzia delle Entrate, SDI). In caso di interruzione prolungata del servizio causata da Passaggio Veloce, l&apos;unico rimedio dell&apos;Utente è il <strong>recesso senza penali</strong>{' '}ai sensi della clausola 19.
+          </p>
+          <p>
+            L&apos;Utente accetta espressamente le presenti limitazioni di responsabilità (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
         </Section>
 
-        <Section title="14. Modifiche ai Termini">
+        <Section title="14. Forza maggiore">
+          <p>
+            Passaggio Veloce non è responsabile di ritardi, interruzioni o inadempimenti derivanti da <strong>cause di forza maggiore</strong>, intendendosi per tali eventi imprevedibili e non controllabili da Passaggio Veloce, inclusi a titolo esemplificativo: calamità naturali, eventi atmosferici eccezionali, epidemie, atti di guerra o terrorismo, provvedimenti dell&apos;Autorità, scioperi generali, interruzioni delle reti di telecomunicazione o di energia elettrica, attacchi informatici su larga scala, malfunzionamenti dei sistemi di terzi indipendenti da Passaggio Veloce (provider cloud, istituti bancari, Agenzia delle Entrate, SDI).
+          </p>
+          <p>
+            In caso di evento di forza maggiore, Passaggio Veloce ne dà comunicazione all&apos;Utente nel più breve tempo possibile e si adopera per ripristinare il servizio con la massima diligenza. Se l&apos;evento si protrae per più di <strong>30 (trenta) giorni consecutivi</strong>, ciascuna parte ha diritto di <strong>recedere senza penali</strong>, con effetto immediato dalla comunicazione del recesso.
+          </p>
+        </Section>
+
+        <Section title="15. Proprietà intellettuale">
+          <p>
+            La Piattaforma, il codice sorgente, il brand, il logo, i marchi, i brevetti, gli algoritmi, i sistemi di matching, i modelli di intelligenza artificiale, i dati aggregati e le statistiche generate dall&apos;attività sulla Piattaforma, la documentazione tecnica e ogni altro elemento della Piattaforma sono di <strong>esclusiva proprietà di Passaggio Veloce S.r.l.</strong>{' '}e sono protetti dalla normativa applicabile in materia di proprietà intellettuale e industriale.
+          </p>
+          <p>
+            L&apos;Utente <strong>non acquisisce alcun diritto di proprietà intellettuale</strong>{' '}sulla Piattaforma per effetto della registrazione o dell&apos;utilizzo del servizio. È espressamente vietato: (a) copiare, riprodurre, modificare o distribuire la Piattaforma o suoi componenti; (b) decompilare o tentare di estrarre il codice sorgente, salvo nei limiti consentiti dalla Direttiva UE 2009/24/CE; (c) utilizzare il brand o il logo di Passaggio Veloce senza previa autorizzazione scritta; (d) estrarre o riutilizzare i dati aggregati della Piattaforma per finalità proprie o di terzi; (e) replicare, anche parzialmente, il modello di business, gli algoritmi o i sistemi della Piattaforma.
+          </p>
+          <p>
+            Passaggio Veloce si riserva il diritto di agire legalmente nei confronti di qualsiasi Utente che violi le presenti disposizioni, richiedendo il risarcimento del danno patrimoniale e non patrimoniale subito. L&apos;Utente accetta espressamente i presenti divieti, incluso il divieto di reverse engineering (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+          </p>
+        </Section>
+
+        <Section title="16. Riservatezza dei dati commerciali e divieto di elusione della Piattaforma">
+          <p>
+            <strong>16.1 &mdash; Obbligo di riservatezza.</strong>{' '}Le informazioni commerciali acquisite dall&apos;Utente attraverso l&apos;utilizzo della Piattaforma &mdash; incluse le relazioni commerciali tra broker e agenzie instaurate tramite la Piattaforma, i volumi di pratiche, le tariffe, le condizioni commerciali, i dati di contatto degli operatori conosciuti tramite la Piattaforma e qualsiasi altra informazione riservata &mdash; sono da considerarsi <strong>informazioni riservate</strong>{' '}e di proprietà di Passaggio Veloce.
+          </p>
+          <p>
+            L&apos;Utente si impegna a non divulgare tali informazioni a terzi non autorizzati e a non utilizzarle per finalità estranee all&apos;utilizzo del servizio. L&apos;obbligo di riservatezza si applica durante tutta la durata del rapporto contrattuale e permane fino a quando le informazioni restano riservate o comunque non siano divenute di pubblico dominio per cause non imputabili all&apos;Utente.
+          </p>
+          <p>
+            <strong>16.2 &mdash; Divieto di elusione della Piattaforma.</strong>{' '}L&apos;Utente si impegna a <strong>non contattare direttamente</strong> broker o agenzie conosciuti tramite la Piattaforma &mdash; ovvero con i quali è entrato in contatto esclusivamente grazie all&apos;utilizzo del servizio &mdash; al fine di gestire pratiche di passaggio di proprietà <strong>al di fuori della Piattaforma</strong>, eludendo in tal modo il pagamento delle fee dovute a Passaggio Veloce ai sensi della clausola 3.
+          </p>
+          <p>
+            Il presente divieto si applica durante tutta la durata del rapporto contrattuale e per i <strong>12 (dodici) mesi successivi</strong> alla cessazione dello stesso, limitatamente agli operatori conosciuti <strong>esclusivamente</strong>{' '}tramite la Piattaforma e alle pratiche del medesimo tipo intermediato da Passaggio Veloce.
+          </p>
+          <p>
+            La violazione del divieto di elusione costituisce <strong>inadempimento grave</strong>{' '}che legittima Passaggio Veloce alla risoluzione immediata del contratto, alla sospensione dell&apos;account e al risarcimento del danno, incluso il lucro cessante corrispondente alle fee che sarebbero state dovute sulle pratiche gestite in elusione. L&apos;Utente accetta espressamente l&apos;obbligo di riservatezza e il divieto di elusione (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+          </p>
+        </Section>
+
+        <Section title="17. Divieto di cessione del contratto">
+          <p>
+            L&apos;Utente <strong>non può cedere, trasferire o sublicenziare</strong>{' '}i diritti e gli obblighi derivanti dal presente contratto a terzi, senza il preventivo consenso scritto di Passaggio Veloce. Qualsiasi cessione effettuata in violazione è nulla e priva di effetti nei confronti di Passaggio Veloce.
+          </p>
+          <p>
+            In caso di cessione o trasferimento dell&apos;attività imprenditoriale dell&apos;Utente (fusione, acquisizione, cessione di ramo d&apos;azienda), l&apos;Utente è tenuto a informare tempestivamente Passaggio Veloce, che si riserva il diritto di richiedere la <strong>verifica KYC del soggetto subentrante</strong>{' '}e, in caso di esito negativo, di risolvere il contratto con preavviso di 30 giorni. I compensi maturati fino alla risoluzione sono liquidati all&apos;avente diritto.
+          </p>
+          <p>
+            Passaggio Veloce si riserva il diritto di cedere il presente contratto a società controllate, controllanti o collegate, nonché in caso di operazioni straordinarie, previa comunicazione all&apos;Utente con preavviso di 30 giorni.
+          </p>
+        </Section>
+
+        <Section title="18. Modifiche ai Termini">
           <p>
             Passaggio Veloce può modificare i presenti Termini con <strong>preavviso di 30
             giorni</strong>{' '}notificato via email. Per le modifiche sostanziali (in particolare
@@ -412,7 +494,7 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="15. Durata e recesso">
+        <Section title="19. Durata e recesso">
           <p>
             Il rapporto è a <strong>tempo indeterminato</strong>. Ciascuna parte può recedere
             liberamente in qualsiasi momento con <strong>preavviso di 30 giorni</strong>{' '}comunicato
@@ -421,14 +503,35 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="16. Trattamento dei dati personali">
+        <Section title="20. Integrità del contratto e nullità parziale">
+          <p>
+            I presenti Termini, unitamente all&apos;<Link href="/privacy" className="font-semibold text-pv-navy-700 hover:underline">Informativa Privacy</Link>{' '}e a qualsiasi altra policy pubblicata su passaggioveloce.it, costituiscono l&apos;<strong>intero accordo</strong>{' '}tra le parti in relazione all&apos;utilizzo della Piattaforma e sostituiscono integralmente qualsiasi comunicazione, trattativa, proposta o accordo precedente, sia scritto che verbale, avente il medesimo oggetto.
+          </p>
+          <p>
+            Qualora una o più clausole dei presenti Termini siano dichiarate nulle, annullabili o inapplicabili da un&apos;autorità competente, le <strong>restanti clausole mantengono piena validità ed efficacia</strong>. La clausola nulla sarà sostituita, ove possibile, da una clausola valida che si avvicini il più possibile all&apos;intenzione economica e giuridica delle parti.
+          </p>
+        </Section>
+
+        <Section title="21. Comunicazioni ufficiali">
+          <p>
+            Tutte le comunicazioni ufficiali tra Passaggio Veloce e l&apos;Utente avvengono <strong>via email</strong> agli indirizzi indicati in fase di registrazione o successivamente aggiornati dall&apos;Utente nel proprio profilo. Le comunicazioni via email si considerano <strong>ricevute entro 24 (ventiquattro) ore dall&apos;invio</strong>, indipendentemente dall&apos;effettiva lettura, a condizione che non sia pervenuta al mittente una notifica di mancato recapito entro tale termine.
+          </p>
+          <p>
+            L&apos;Utente è responsabile del mantenimento aggiornato del proprio indirizzo email. Passaggio Veloce non è responsabile di comunicazioni non ricevute per effetto di un indirizzo non aggiornato, di filtri antispam o di malfunzionamenti del servizio email dell&apos;Utente.
+          </p>
+          <p>
+            Per comunicazioni urgenti (sospensione account, penali confermate, interruzioni del servizio) Passaggio Veloce potrà avvalersi anche di <strong>notifiche in Piattaforma</strong> e/o <strong>SMS</strong>{' '}al numero di telefono indicato in registrazione, in aggiunta alla comunicazione via email.
+          </p>
+        </Section>
+
+        <Section title="22. Trattamento dei dati personali">
           <p>
             Il trattamento dei dati personali è disciplinato dall&apos;
             <Link href="/privacy" className="font-semibold text-pv-navy-700 hover:underline">
               Informativa Privacy
             </Link>
             , conforme al Regolamento (UE) 2016/679 (GDPR), che l&apos;Utente dichiara di aver preso
-            visione. I dati di venditori e acquirenti sono disciplinati dalla clausola 17 e
+            visione. I dati di venditori e acquirenti sono disciplinati dalla clausola {ART_DATI_TERZI} e
             dall&apos;
             <Link
               href="/privacy/clienti"
@@ -440,26 +543,22 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="17. Dati di venditori, acquirenti e altri terzi">
+        <Section title="23. Dati di venditori, acquirenti e altri terzi">
           <p>
-            <strong>17.1 &mdash; Ruoli.</strong>{' '}Nel caricare sulla Piattaforma i dati personali di
+            <strong>23.1 &mdash; Ruoli.</strong>{' '}Nel caricare sulla Piattaforma i dati personali di
             venditori, acquirenti e altri soggetti terzi (i &laquo;<strong>Terzi</strong>&raquo;),
             l&apos;Utente agisce quale <strong>titolare del trattamento</strong>{' '}nei confronti dei
             propri clienti. Passaggio Veloce tratta i dati dei Terzi quale{' '}
             <strong>titolare autonomo</strong>, per le proprie finalità (erogazione del servizio,
-            prevenzione delle frodi, adempimenti fiscali e di legge, sviluppo e finalità
-            commerciali proprie), e{' '}
+            adempimenti fiscali, prevenzione delle frodi e finalità commerciali proprie), e{' '}
             <strong>non</strong>{' '}in qualità di responsabile del trattamento ai sensi
             dell&apos;art. 28 GDPR.
           </p>
           <p>
-            <strong>17.2 &mdash; Garanzia dell&apos;Utente.</strong>{' '}L&apos;Utente garantisce di
-            aver reso ai Terzi l&apos;informativa prevista dall&apos;art. 13 GDPR e di averli
-            informati che i loro dati sono comunicati a Passaggio Veloce per la gestione della
-            pratica, e di avere titolo per conferirli.
+            <strong>23.2 &mdash; Garanzia e responsabilità dell&apos;Utente.</strong>{' '}L&apos;Utente garantisce di aver reso ai Terzi l&apos;informativa prevista dall&apos;art. 13 GDPR e di averli informati che i loro dati personali e i loro documenti sono comunicati a Passaggio Veloce per la gestione della pratica. L&apos;Utente garantisce di avere titolo per conferire tali dati. La responsabilità dell&apos;ottenimento della <strong>base giuridica</strong> per il trattamento dei dati dei Terzi nei confronti di Passaggio Veloce è <strong>integralmente e in via esclusiva dell&apos;Utente</strong>.
           </p>
           <p>
-            <strong>17.3 &mdash; Informativa di Passaggio Veloce.</strong>{' '}Passaggio Veloce rende
+            <strong>23.3 &mdash; Informativa di Passaggio Veloce ai Terzi.</strong>{' '}Passaggio Veloce rende
             ai Terzi la propria informativa ai sensi dell&apos;art. 14 GDPR (
             <Link
               href="/privacy/clienti"
@@ -467,28 +566,25 @@ export default function TerminiPage() {
             >
               Informativa per venditori e acquirenti
             </Link>
-            ), anche tramite le comunicazioni email sull&apos;avanzamento della pratica.
+            ), anche tramite le comunicazioni email sull&apos;avanzamento della pratica. Passaggio Veloce conserva i dati dei Terzi per il periodo imposto dalla normativa applicabile, in particolare per gli obblighi fiscali e contabili.
           </p>
           <p>
-            <strong>17.4 &mdash; Minimizzazione.</strong>{' '}L&apos;Utente carica esclusivamente i
+            <strong>23.4 &mdash; Minimizzazione.</strong>{' '}L&apos;Utente carica esclusivamente i
             dati e i documenti necessari alla lavorazione della pratica e si astiene dal conferire
             dati ulteriori.
           </p>
           <p>
-            <strong>17.5 &mdash; Manleva.</strong>{' '}L&apos;Utente tiene indenne Passaggio Veloce da
-            ogni pretesa, reclamo, contestazione o sanzione, anche dell&apos;Autorità Garante, che
-            derivi dalla violazione delle garanzie di cui alle clausole 17.2 e 17.4 (clausola
-            vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
+            <strong>23.5 &mdash; Manleva.</strong>{' '}L&apos;Utente tiene indenne Passaggio Veloce da ogni pretesa, reclamo, contestazione, danno o sanzione &mdash; anche dell&apos;Autorità Garante &mdash; che derivi dalla violazione delle garanzie di cui alle clausole 23.2 e 23.4, ivi incluse le pretese avanzate <strong>direttamente dai Terzi</strong> nei confronti di Passaggio Veloce per trattamento di dati non autorizzato o privo di base giuridica imputabile all&apos;Utente. La presente manleva si estende alle <strong>spese legali ragionevolmente sostenute</strong>{' '}da Passaggio Veloce (clausola vessatoria: v. clausola {ART_APPROVAZIONE_SPECIFICA}).
           </p>
           <p>
-            <strong>17.6 &mdash; Violazioni dei dati personali.</strong>{' '}Ciascuna parte informa
+            <strong>23.6 &mdash; Violazioni dei dati personali.</strong>{' '}Ciascuna parte informa
             l&apos;altra <strong>senza ingiustificato ritardo</strong>{' '}di ogni violazione di dati
             personali (art. 4 n. 12 GDPR) che riguardi i dati dei Terzi trattati tramite la
             Piattaforma, e coopera per gli adempimenti di cui agli artt. 33 e 34 GDPR.
           </p>
         </Section>
 
-        <Section title="18. Legge applicabile e foro competente">
+        <Section title="24. Legge applicabile e foro competente">
           <p>
             I presenti Termini sono regolati dalla <strong>legge italiana</strong>. Per ogni
             controversia relativa alla loro interpretazione ed esecuzione è competente in via
@@ -498,7 +594,7 @@ export default function TerminiPage() {
           </p>
         </Section>
 
-        <Section title="19. Approvazione specifica delle clausole (artt. 1341 e 1342 c.c.)">
+        <Section title="25. Approvazione specifica delle clausole (artt. 1341 e 1342 c.c.)">
           <p>
             Ai sensi e per gli effetti degli <strong>artt. 1341 e 1342 c.c.</strong>, l&apos;Utente
             dichiara di aver letto e di <strong>approvare specificamente</strong>{' '}le seguenti
@@ -521,7 +617,7 @@ export default function TerminiPage() {
         <p className="mt-8 text-[11px] text-pv-slate-500">
           Documento in versione tecnica completa, soggetto a revisione legale prima
           dell&apos;entrata in vigore definitiva. Eventuali aggiornamenti saranno comunicati via
-          email agli Utenti registrati con il preavviso di cui alla clausola 14.
+          email agli Utenti registrati con il preavviso di cui alla clausola 18.
         </p>
       </article>
     </main>

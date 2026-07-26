@@ -28,6 +28,8 @@ import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
 import { formatKm } from '@/lib/distribuzione/format';
+import { getCoperturaPratica } from '@/lib/distribuzione/copertura';
+import { CoperturaCard } from './copertura-card';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
@@ -139,6 +141,12 @@ export default async function PraticaDetailPage({
   });
 
   if (!pratica) notFound();
+
+  // Copertura (diagnostica admin-only): quali agenzie sono in zona e perché
+  // la pratica le ha (o non le ha) raggiunte. È una query su TUTTE le sedi
+  // agenzia — calcolarla per broker/agenzia sarebbe lavoro sprecato, oltre al
+  // fatto che quei ruoli non devono vederne il contenuto.
+  const copertura = isStaff ? await getCoperturaPratica(pratica.id) : null;
 
   // Attestazione firma (Termini art. 11): l'autore è scritto (`firmaForzataDaId`)
   // ma — a differenza di `creatoDaUserId`/`accettataDaUserId` (relazioni
@@ -778,6 +786,11 @@ export default async function PraticaDetailPage({
                   </ul>
                 </Card>
               )}
+
+            {/* Fuori dalla condizione sulle assegnazioni: è proprio quando la
+                pratica non è arrivata a nessuno che questa diagnostica serve
+                di più ("perché nessuna agenzia l'ha ricevuta"). */}
+            {copertura && <CoperturaCard copertura={copertura} />}
           </aside>
         </div>
       </div>

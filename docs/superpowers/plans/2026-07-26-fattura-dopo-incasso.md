@@ -12,7 +12,7 @@
 
 - **Nessuna migration Prisma.** `DocumentoFiscale.feeAddebitoId`, `statoPagamento: PAGATA` e `inviatoEmailAt` esistono già in `packages/db/prisma/schema.prisma`. Se un task sembra richiedere una migration, è il task a essere sbagliato.
 - **Nessun backfill** dei documenti già emessi in produzione: quei dati sono usa-e-getta.
-- Comandi: `pnpm --filter @pv/piattaforma test <path>` per i test mirati, `pnpm typecheck` dalla root. Node ≥ 18 (`nvm use 22.15.0` se la shell è tornata a Node 16).
+- Comandi: `pnpm --filter piattaforma test <path>` per i test mirati, `pnpm typecheck` dalla root. Node ≥ 18 (`nvm use 22.15.0` se la shell è tornata a Node 16).
 - Ogni task termina con un commit. Si lavora direttamente su `main`.
 - Il codice e i commenti di questo repo sono in italiano: mantenere la lingua.
 - Fuori scope in tutto il piano: dispute/rimborsi SEPA post-incasso, nota di credito automatica, pulsante admin di emissione manuale.
@@ -116,7 +116,7 @@ describe('createFatturaPv', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fatturazione/engine.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/fatturazione/engine.test.ts`
 Expected: FAIL — la firma attuale di `createFatturaPv` accetta `{ praticaId, agenziaId, feeAgenziaCent }`, quindi `txMock.feeAddebito.findUnique` non viene mai chiamata e `create` riceve `importoLordoCent: undefined`.
 
 - [ ] **Step 3: Riscrivi `createFatturaPv`**
@@ -253,7 +253,7 @@ Sostituisci la chiamata alla fattura (righe 362-371) con:
 
 - [ ] **Step 5: Esegui i test e il typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fatturazione/engine.test.ts src/lib/pratiche/firma-engine.test.ts src/app/pratiche`
+Run: `pnpm --filter piattaforma test src/lib/fatturazione/engine.test.ts src/lib/pratiche/firma-engine.test.ts src/app/pratiche`
 Expected: PASS. Se `firma-engine.test.ts` o `actions.*.test.ts` falliscono sul mock di `@/lib/fatturazione/engine`, aggiorna il mock a `createFatturaPv: vi.fn(() => Promise.resolve(null))` (già così in `firma-engine.test.ts:63`, `actions.authz.test.ts:59`, `actions.n4-n31.test.ts:69`) e fai in modo che `prismaMock.feeAddebito.create` restituisca `{ id: 'fee-1' }`.
 
 Run: `pnpm typecheck`
@@ -354,7 +354,7 @@ describe('segnaFeeIncassato', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fee/incasso.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/fee/incasso.test.ts`
 Expected: FAIL — "Failed to resolve import ./incasso".
 
 - [ ] **Step 3: Scrivi `lib/fee/incasso.ts`**
@@ -407,7 +407,7 @@ export async function segnaFeeIncassato(feeId: string, providerRef: string): Pro
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fee/incasso.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/fee/incasso.test.ts`
 Expected: PASS (4 test).
 
 - [ ] **Step 5: Aggancia `process.ts`**
@@ -475,7 +475,7 @@ In `apps/piattaforma/src/lib/jobs/stripe-webhook.test.ts`: aggiungi `segnaIncass
 
 - [ ] **Step 8: Esegui tutti i test toccati e il typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fee src/lib/jobs/stripe-webhook.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/fee src/lib/jobs/stripe-webhook.test.ts`
 Expected: PASS.
 
 Run: `pnpm typecheck`
@@ -623,7 +623,7 @@ Se la `findUnique` della sezione notifiche (il secondo `prisma.pratica.findUniqu
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/pratiche/firma-engine.fattura-addebito.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/pratiche/firma-engine.fattura-addebito.test.ts`
 Expected: FAIL sul primo test — oggi la firma emette sempre, quindi `createFatturaPvMock` risulta chiamato anche con provider live.
 
 - [ ] **Step 3: Metti la valvola in `firma-engine.ts`**
@@ -686,7 +686,7 @@ it('SKIPPED: provider non live, non tocca il provider di pagamento', async () =>
 
 - [ ] **Step 6: Esegui i test e il typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/pratiche src/lib/fee`
+Run: `pnpm --filter piattaforma test src/lib/pratiche src/lib/fee`
 Expected: PASS.
 
 Run: `pnpm typecheck`
@@ -737,7 +737,7 @@ describe('avvio addebito alla firma', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/pratiche/firma-engine.fattura-addebito.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/pratiche/firma-engine.fattura-addebito.test.ts`
 Expected: FAIL — `processFeeMock` non è mai chiamato.
 
 - [ ] **Step 3: Fai partire l'addebito dalla firma**
@@ -782,7 +782,7 @@ In `apps/piattaforma/src/app/api/jobs/process-fee-scheduled/route.ts`, correggi 
 
 - [ ] **Step 5: Esegui i test e il typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/pratiche`
+Run: `pnpm --filter piattaforma test src/lib/pratiche`
 Expected: PASS (4 test nel file nuovo).
 
 Run: `pnpm typecheck`
@@ -898,7 +898,7 @@ describe('notificaFatturaDisponibile', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fatturazione/notifica-fattura.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/fatturazione/notifica-fattura.test.ts`
 Expected: FAIL — "Failed to resolve import ./notifica-fattura".
 
 - [ ] **Step 3: Aggiungi il template N53**
@@ -1045,7 +1045,7 @@ export async function notificaFatturaDisponibile(documentoId: string): Promise<v
 
 - [ ] **Step 5: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/fatturazione/notifica-fattura.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/fatturazione/notifica-fattura.test.ts`
 Expected: PASS (3 test).
 
 - [ ] **Step 6: Aggancia la N53 all'incasso**
@@ -1172,7 +1172,7 @@ In `firma-engine.ts`, blocco N8 (righe 469-493), sostituisci con:
 
 - [ ] **Step 8: Esegui i test e il typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/notifiche src/lib/fatturazione src/lib/fee src/lib/pratiche`
+Run: `pnpm --filter piattaforma test src/lib/notifiche src/lib/fatturazione src/lib/fee src/lib/pratiche`
 Expected: PASS. `templates.test.ts` potrebbe costruire un payload N8: aggiungi `fatturaAllegata: true` dove il compilatore lo richiede.
 
 Run: `pnpm typecheck`
@@ -1271,7 +1271,7 @@ describe('riconciliaFattureIncassate', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/jobs/riconcilia-fatture.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/jobs/riconcilia-fatture.test.ts`
 Expected: FAIL — "Failed to resolve import ./riconcilia-fatture".
 
 - [ ] **Step 3: Scrivi `riconcilia-fatture.ts`**
@@ -1343,7 +1343,7 @@ export async function riconciliaFattureIncassate(): Promise<{
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/jobs/riconcilia-fatture.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/jobs/riconcilia-fatture.test.ts`
 Expected: PASS (4 test).
 
 - [ ] **Step 5: Chiamala dal cron**
@@ -1366,7 +1366,7 @@ e nel corpo di `run`:
 
 - [ ] **Step 6: Esegui la suite completa e il typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test`
+Run: `pnpm --filter piattaforma test`
 Expected: PASS.
 
 Run: `pnpm typecheck`

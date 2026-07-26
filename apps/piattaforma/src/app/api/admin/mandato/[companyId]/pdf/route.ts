@@ -3,6 +3,7 @@ import { prisma } from '@pv/db';
 import { auth } from '@/auth';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { storageGetBuffer } from '@/lib/providers/storage';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,7 @@ export async function GET(
   }
 
   // Nome file "parlante": <RagioneSociale>_mandato_firmato_<YYYY-MM-DD>.pdf
-  const data = mandato.firmatoAt ? mandato.firmatoAt.toISOString().slice(0, 10) : 'na';
+  const data = mandato.firmatoAt ? romeIsoDate(mandato.firmatoAt) : 'na';
   const filename = `${slug(company?.ragioneSociale ?? companyId)}_mandato_firmato_${data}.pdf`;
 
   const buffer = await storageGetBuffer(mandato.storageKey);

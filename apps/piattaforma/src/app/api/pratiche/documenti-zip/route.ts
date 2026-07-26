@@ -7,6 +7,7 @@ import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, wherePraticaAttiva, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { hasPermesso } from '@/lib/auth/permessi/guard';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -102,7 +103,7 @@ export async function GET() {
   }
 
   const zipBuffer = await buildDocumentiZip(entries);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = romeIsoDate(new Date());
   const filename = `documenti-pratiche-${today}.zip`;
   const headers = new Headers();
   headers.set('Content-Type', 'application/zip');

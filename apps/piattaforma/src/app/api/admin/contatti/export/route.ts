@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
 import { registraLogAsync } from '@/lib/audit/log-accessi';
 import { buildCatalogoContatti } from '@/lib/catalogo-contatti';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -78,7 +79,7 @@ export async function GET(req: Request) {
     ...rows.map((r) => r.map(csvEscape).join(',')),
   ].join('\n');
 
-  const filename = `contatti-${new Date().toISOString().slice(0, 10)}.csv`;
+  const filename = `contatti-${romeIsoDate(new Date())}.csv`;
 
   return new NextResponse(csv, {
     status: 200,

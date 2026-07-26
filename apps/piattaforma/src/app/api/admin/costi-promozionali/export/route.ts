@@ -8,6 +8,7 @@ import {
 } from '@/lib/fatturazione/giustificativo-filtri';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { csvCell } from '@/lib/csv';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,9 @@ export async function GET(req: Request): Promise<Response> {
     const b = d.datiBeneficiario as unknown as DatiFiscali;
     const righe = (d.righe as unknown as { code: string }[]) ?? [];
     return [
-      d.emessoAt.toISOString().slice(0, 10),
+      // Come nell'export fatture: la data deve coincidere con quella stampata
+      // sul giustificativo, che è in calendario di Roma.
+      romeIsoDate(d.emessoAt),
       d.numeroStr,
       b?.ragioneSociale ?? '',
       (d.importoCent / 100).toFixed(2),

@@ -9,6 +9,7 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { parseFatturaFiltriFromUrl, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import { buildDocumentiZip, type ZipEntry } from '@/lib/documenti/zip';
 import { attachmentContentDisposition } from '@/lib/http/content-disposition';
+import { romeIsoDate } from '@/lib/date/rome-day';
 import { getSessionContext } from '@/lib/auth/session-context';
 import { toSedeScope, whereDocumentoFiscale, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 
@@ -111,7 +112,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const zipBuffer = await buildDocumentiZip(entries);
-  const archive = `fatture_${new Date().toISOString().slice(0, 10)}.zip`;
+  const archive = `fatture_${romeIsoDate(new Date())}.zip`;
   return new Response(new Uint8Array(zipBuffer), {
     status: 200,
     headers: {

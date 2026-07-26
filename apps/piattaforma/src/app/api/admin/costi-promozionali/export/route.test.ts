@@ -41,4 +41,23 @@ describe('GET /api/admin/costi-promozionali/export', () => {
     expect(body.split('\n')[0]).toBe('Data;Numero;Beneficiario;Importo;Codici promo');
     expect(body).toContain('2026-07-10;GI-2026-00001;Rossi Auto;200.00;WELCOME');
   });
+
+  it('la Data segue il calendario di Roma, come il giustificativo stampato', async () => {
+    // 23:30 UTC del 26 luglio = 01:30 del 27 a Roma. Il PDF del giustificativo
+    // stampa "27": se il CSV dicesse "26", lo stesso documento risulterebbe
+    // emesso in due giorni diversi a seconda di dove lo guardi.
+    prismaMock.giustificativoInterno.findMany.mockResolvedValue([
+      {
+        emessoAt: new Date('2026-07-26T23:30:00.000Z'),
+        numeroStr: 'GI-2026-00002',
+        importoCent: 20_000,
+        datiBeneficiario: { ragioneSociale: 'Rossi Auto' },
+        righe: [{ code: 'WELCOME' }],
+      },
+    ]);
+
+    const body = await (await GET(new Request('http://x/api/admin/costi-promozionali/export'))).text();
+
+    expect(body).toContain('2026-07-27;GI-2026-00002');
+  });
 });

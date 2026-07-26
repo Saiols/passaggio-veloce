@@ -7,6 +7,7 @@ import { storageGetBuffer } from '@/lib/providers/storage';
 import { documentoDownloadName } from '@/lib/documenti/labels';
 import { appendToFilename } from '@/lib/documenti/filename';
 import { buildDocumentiZip, type ZipEntry } from '@/lib/documenti/zip';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,7 +102,7 @@ export async function GET(
   }
 
   const zip = await buildDocumentiZip(entries);
-  const giorno = new Date().toISOString().slice(0, 10);
+  const giorno = romeIsoDate(new Date());
   const filename = `${company.ragioneSociale} - documenti - ${giorno}.zip`;
 
   const headers = new Headers();

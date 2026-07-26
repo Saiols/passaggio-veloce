@@ -92,3 +92,30 @@ describe('GET /api/admin/fatturazione/export — il filtro ?emissione= arriva al
     expect(where.AND).toHaveLength(2);
   });
 });
+
+describe('GET /api/admin/fatturazione/export — la data segue il calendario di Roma', () => {
+  it('un documento emesso dopo mezzanotte UTC porta la data del giorno italiano', async () => {
+    // 23:30 UTC del 26 luglio = 01:30 del 27 a Roma. PDF e XML di questo
+    // documento stampano già "27": in UTC il CSV direbbe "26", e la stessa
+    // fattura risulterebbe emessa in due giorni diversi a seconda del canale.
+    authMock.mockResolvedValue(sessione('ADMIN_PIATTAFORMA'));
+    prismaMock.documentoFiscale.findMany.mockResolvedValue([
+      {
+        emessoAt: new Date('2026-07-26T23:30:00.000Z'),
+        numeroDocumentoStr: 'PV-2026-00042',
+        tipo: 'FATTURA_PV',
+        datiEmittente: { ragioneSociale: 'Passaggio Veloce SRL' },
+        datiDestinatario: { ragioneSociale: 'Agenzia Corsico' },
+        imponibileCent: 10_000,
+        ivaCent: 2_200,
+        importoLordoCent: 12_200,
+        pratica: { codicePratica: 'PV-2026-00006' },
+      },
+    ]);
+
+    const body = await (await GET(new Request('http://x/api/admin/fatturazione/export'))).text();
+
+    expect(body).toContain('2026-07-27');
+    expect(body).not.toContain('2026-07-26');
+  });
+});

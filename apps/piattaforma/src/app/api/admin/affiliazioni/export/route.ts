@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -128,7 +129,7 @@ export async function GET(req: Request) {
   );
 
   const csv = [header.join(','), ...lines].join('\n');
-  const filename = `pv-affiliazioni-${new Date().toISOString().slice(0, 10)}.csv`;
+  const filename = `pv-affiliazioni-${romeIsoDate(new Date())}.csv`;
 
   return new NextResponse(csv, {
     headers: {

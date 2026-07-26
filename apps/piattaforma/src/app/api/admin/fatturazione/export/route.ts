@@ -6,6 +6,7 @@ import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { parseFatturaFiltriFromUrl, fatturaWhereFiltri } from '@/lib/fatturazione/filtri';
 import type { DatiFiscali } from '@/lib/fatturazione/pv-emittente';
 import { csvCell } from '@/lib/csv';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,10 @@ export async function GET(req: Request): Promise<Response> {
     const em = d.datiEmittente as unknown as DatiFiscali;
     const de = d.datiDestinatario as unknown as DatiFiscali;
     return [
-      d.emessoAt.toISOString().slice(0, 10),
+      // Stessa data che PDF e XML stampano su questo documento: quelli sono
+      // già in calendario di Roma, e un documento emesso fra le 23:00 e le
+      // 24:00 UTC qui comparirebbe datato al giorno prima della sua fattura.
+      romeIsoDate(d.emessoAt),
       d.numeroDocumentoStr ?? '',
       labelTipoDocumento(d.tipo),
       em?.ragioneSociale ?? '',

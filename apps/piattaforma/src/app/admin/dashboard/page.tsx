@@ -6,27 +6,19 @@ import { Alert, Card, StatCard } from '@/components/ui';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
 import { STATI_IN_DISTRIBUZIONE } from '@/lib/pratiche/stati';
+import {
+  defaultCustomRange,
+  parsePeriodo,
+  periodoDateFilter,
+  periodoLabel,
+  resolvePeriodo,
+  type Periodo,
+} from '@/lib/finanze/periodo';
+import { FiltriPeriodoCustom } from './filtri-periodo';
 
-type Periodo = 'giorno' | 'settimana' | 'mese' | 'anno';
 type TipoFiltro = '' | 'SEMPLICE' | 'MINIVOLTURA';
 
-type SearchParams = { periodo?: Periodo; tipo?: TipoFiltro };
-
-function startOfPeriodo(p: Periodo): Date {
-  const d = new Date();
-  if (p === 'giorno') d.setDate(d.getDate() - 1);
-  else if (p === 'settimana') d.setDate(d.getDate() - 7);
-  else if (p === 'mese') d.setMonth(d.getMonth() - 1);
-  else d.setFullYear(d.getFullYear() - 1);
-  return d;
-}
-
-function periodoLabel(p: Periodo): string {
-  if (p === 'giorno') return 'Ultime 24h';
-  if (p === 'settimana') return 'Ultima settimana';
-  if (p === 'mese') return 'Ultimo mese';
-  return 'Ultimo anno';
-}
+type SearchParams = { periodo?: string; tipo?: TipoFiltro; da?: string; a?: string };
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -50,14 +42,13 @@ export default async function AdminDashboardPage({
   }
 
   const sp = await searchParams;
-  const periodo: Periodo = sp.periodo ?? 'mese';
+  const periodo = parsePeriodo(sp.periodo);
   const tipo: TipoFiltro = sp.tipo ?? '';
-  const since = startOfPeriodo(periodo);
+  const range = resolvePeriodo({ periodo, da: sp.da, a: sp.a });
+  const dateFilter = periodoDateFilter(range);
 
-  const where: Prisma.PraticaWhereInput = {
-    deletedAt: null,
-    createdAt: { gte: since },
-  };
+  const where: Prisma.PraticaWhereInput = { deletedAt: null };
+  if (dateFilter) where.createdAt = dateFilter;
   if (tipo) where.tipo = tipo;
 
   const [
@@ -98,7 +89,7 @@ export default async function AdminDashboardPage({
   // e monitorare la liquidita' in uscita.
   const [payoutsErogati, walletsAggregato] = await Promise.all([
     prisma.payout.aggregate({
-      where: { stato: 'ESEGUITO', eseguitoAt: { gte: since } },
+      where: { stato: 'ESEGUITO', ...(dateFilter ? { eseguitoAt: dateFilter } : {}) },
       _sum: { importoCent: true },
       _count: true,
     }),
@@ -129,7 +120,11 @@ export default async function AdminDashboardPage({
     : [];
   const brokerNameById = new Map(brokerNames.map((b) => [b.id, b.ragioneSociale]));
 
-  const exportHref = `/api/admin/dashboard/export?periodo=${periodo}${tipo ? `&tipo=${tipo}` : ''}`;
+  const exportParams = new URLSearchParams({ periodo });
+  if (tipo) exportParams.set('tipo', tipo);
+  if (range.da) exportParams.set('da', range.da);
+  if (range.a) exportParams.set('a', range.a);
+  const exportHref = `/api/admin/dashboard/export?${exportParams.toString()}`;
 
   return (
     <AppShell session={session} activePath="/admin/dashboard">
@@ -143,7 +138,7 @@ export default async function AdminDashboardPage({
               Dashboard
             </h1>
             <p className="mt-1 text-[13px] text-pv-slate-500">
-              {periodoLabel(periodo)}
+              {range.label}
               {tipo ? ` · solo ${tipo === 'SEMPLICE' ? 'Passaggio di proprietà semplice' : 'Minivoltura'}` : ' · tutti i tipi'}
             </p>
           </div>
@@ -155,8 +150,11 @@ export default async function AdminDashboardPage({
           </a>
         </header>
 
-        <PeriodoTabs current={periodo} tipo={tipo} />
-        <TipoTabs current={tipo} periodo={periodo} />
+        <PeriodoTabs current={periodo} tipo={tipo} da={range.da} a={range.a} />
+        {periodo === 'custom' ? (
+          <FiltriPeriodoCustom da={range.da} a={range.a} tipo={tipo} />
+        ) : null}
+        <TipoTabs current={tipo} periodo={periodo} da={range.da} a={range.a} />
 
         <div className="mt-5 mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
           <StatCard label="Totali" value={totale} accent="navy" />
@@ -209,7 +207,7 @@ export default async function AdminDashboardPage({
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Card className="border-pv-green-500/30 bg-pv-green-50/40">
             <p className="text-[11px] font-bold uppercase tracking-wider text-pv-green-500">
-              Già erogato · {periodoLabel(periodo).toLowerCase()}
+              Già erogato · {range.label.toLowerCase()}
             </p>
             <p className="mt-2 text-[28px] font-extrabold text-pv-navy-900">
               {formatCurrencyCent(erogatoCent)}
@@ -276,13 +274,31 @@ export default async function AdminDashboardPage({
   );
 }
 
-function PeriodoTabs({ current, tipo }: { current: Periodo; tipo: TipoFiltro }) {
-  const periodi: Periodo[] = ['giorno', 'settimana', 'mese', 'anno'];
+function PeriodoTabs({
+  current,
+  tipo,
+  da,
+  a,
+}: {
+  current: Periodo;
+  tipo: TipoFiltro;
+  da: string;
+  a: string;
+}) {
+  const periodi: Periodo[] = ['giorno', 'settimana', 'mese', 'anno', 'custom'];
+  // Il tab personalizzato porta le date già nell'href: precompilare solo il
+  // defaultValue degli input lascerebbe i campi a dire una cosa e le card a
+  // mostrarne un'altra finché non si tocca un input.
+  const preset = defaultCustomRange(new Date());
   return (
-    <div className="flex gap-2 border-b border-pv-slate-200">
+    <div className="flex flex-wrap gap-2 border-b border-pv-slate-200">
       {periodi.map((p) => {
         const params = new URLSearchParams({ periodo: p });
         if (tipo) params.set('tipo', tipo);
+        if (p === 'custom') {
+          params.set('da', da || preset.da);
+          params.set('a', a || preset.a);
+        }
         const active = p === current;
         return (
           <a
@@ -302,7 +318,17 @@ function PeriodoTabs({ current, tipo }: { current: Periodo; tipo: TipoFiltro }) 
   );
 }
 
-function TipoTabs({ current, periodo }: { current: TipoFiltro; periodo: Periodo }) {
+function TipoTabs({
+  current,
+  periodo,
+  da,
+  a,
+}: {
+  current: TipoFiltro;
+  periodo: Periodo;
+  da: string;
+  a: string;
+}) {
   const opzioni: { value: TipoFiltro; label: string }[] = [
     { value: '', label: 'Tutti i tipi' },
     { value: 'SEMPLICE', label: 'Passaggio di proprietà semplice' },
@@ -313,6 +339,12 @@ function TipoTabs({ current, periodo }: { current: TipoFiltro; periodo: Periodo 
       {opzioni.map((o) => {
         const params = new URLSearchParams({ periodo });
         if (o.value) params.set('tipo', o.value);
+        // Senza queste due, cambiare tipo pratica da un range personalizzato
+        // riporterebbe la pagina al periodo di default.
+        if (periodo === 'custom') {
+          if (da) params.set('da', da);
+          if (a) params.set('a', a);
+        }
         const active = o.value === current;
         return (
           <a

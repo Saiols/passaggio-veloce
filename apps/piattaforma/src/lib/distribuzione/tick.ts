@@ -161,17 +161,42 @@ async function creaAssegnazioni(
   return ids;
 }
 
-/** Scrittura "zona non coperta" (update + log) dentro una tx. */
+/**
+ * Scrittura "zona non coperta" (update + log) dentro una tx.
+ *
+ * Ritorna `true` se questa è la PRIMA dichiarazione del ciclo, cioè se
+ * `zonaNonCopertaPrimaAt` è passata da null a un valore. Solo in quel caso il
+ * broker va avvisato: dopo una ripresa fallita la pratica torna scoperta, ma
+ * per lui non è una notizia nuova (I-1: la N52 arrivava una volta per ogni
+ * agenzia che si registrava in zona senza poi accettare).
+ *
+ * `ultimaEspansioneAt: now` non è cosmetico (I-3): con `null` il gate della
+ * durata round in `tickPratica` non scatta mai, e una pratica ferma — che non
+ * esce mai da sola da `IN_DISTRIBUZIONE` — costa una `sede.findMany` senza
+ * filtro geografico più una transazione A OGNI MINUTO, per sempre. Scrivendolo,
+ * i tentativi di ripresa sono throttlati a uno ogni `intervalloMin` minuti
+ * lavorativi. Il prezzo è ≤ `intervalloMin` minuti lavorativi di latenza sulla
+ * ripresa quando un'agenzia si registra in zona: accettabile e voluto.
+ */
 async function markZonaNonCoperta(
   tx: Prisma.TransactionClient,
   praticaId: string,
   cfg: DistribuzioneConfigDTO,
   now: Date,
   meta: Record<string, unknown>,
-): Promise<void> {
+  zonaNonCopertaPrimaAt: Date | null,
+): Promise<boolean> {
+  const primaDichiarazione = zonaNonCopertaPrimaAt == null;
   await tx.pratica.update({
     where: { id: praticaId },
-    data: { raggioCorrenteM: cfg.raggioMaxM, zonaNonCopertaAt: now },
+    data: {
+      raggioCorrenteM: cfg.raggioMaxM,
+      zonaNonCopertaAt: now,
+      ultimaEspansioneAt: now,
+      // Si scrive SOLO se è null: l'anzianità è quella della prima
+      // dichiarazione del ciclo, non dell'ultima.
+      ...(primaDichiarazione ? { zonaNonCopertaPrimaAt: now } : {}),
+    },
   });
   await logCambioStato(tx, {
     praticaId,
@@ -180,6 +205,7 @@ async function markZonaNonCoperta(
     tipoEvento: STATO_EVENTO.ESCALATION,
     meta,
   });
+  return primaDichiarazione;
 }
 
 /**
@@ -268,8 +294,10 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
   // Gate durata round, misurata in minuti LAVORATIVI: i minuti fuori finestra,
   // nei giorni spenti e nei festivi non contano. Così ogni cerchio ha la sua
   // finestra piena per rispondere anche quando la pratica è arrivata di notte.
-  // Solo le notifiche reali muovono `ultimaEspansioneAt`: un round vuoto non
-  // consuma tempo.
+  // Un anello VUOTO attraversato per arrivare al successivo non muove
+  // `ultimaEspansioneAt`: non consuma tempo. Lo muovono invece le notifiche
+  // reali e la dichiarazione di zona non coperta — quest'ultima per throttlare
+  // i tentativi di ripresa (vedi `markZonaNonCoperta`).
   if (
     pratica.ultimaEspansioneAt &&
     minutiLavorativiTra(pratica.ultimaEspansioneAt, now, cfg, cfg.intervalloMin) <
@@ -379,14 +407,23 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
       }
 
       // zona-non-coperta: nessuna sede entro il raggio massimo.
-      await markZonaNonCoperta(tx, praticaId, cfg, now, {
-        zonaNonCoperta: true,
-        raggioM: cfg.raggioMaxM,
-        ciclo: fresh.distribuzioneCiclo,
-      });
+      const prima = await markZonaNonCoperta(
+        tx,
+        praticaId,
+        cfg,
+        now,
+        {
+          zonaNonCoperta: true,
+          raggioM: cfg.raggioMaxM,
+          ciclo: fresh.distribuzioneCiclo,
+        },
+        fresh.zonaNonCopertaPrimaAt,
+      );
       return {
         result: { status: 'zona-non-coperta' },
-        jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId },
+        // N52 solo alla PRIMA dichiarazione del ciclo: una ri-dichiarazione
+        // dopo una ripresa fallita aggiorna lo stato in silenzio.
+        jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: prima ? praticaId : null },
       };
     });
   } catch (e) {
@@ -404,6 +441,13 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
 /**
  * Tx corta che marca "zona non coperta" (usata dalla guardia coord-null di
  * `tickPratica`). Re-legge lo stato e scrive solo se ancora applicabile.
+ *
+ * La transazione ritorna se ha DAVVERO dichiarato la zona scoperta per la prima
+ * volta: il re-check può uscire senza scrivere (pratica non più
+ * `IN_DISTRIBUZIONE`, o già marcata da un tick concorrente) e in quel caso non
+ * va accodato nessun job (M-1). Il caso peggiore che questo evita è una pratica
+ * ACCETTATA fra le due letture che manda al broker una N52 "nessuna agenzia in
+ * zona" a smentire l'accettazione appena avvenuta.
  */
 async function scriviZonaNonCoperta(
   praticaId: string,
@@ -411,15 +455,15 @@ async function scriviZonaNonCoperta(
   now: Date,
   meta: Record<string, unknown>,
 ): Promise<PostCommitJobs> {
-  await prisma.$transaction(async (tx) => {
+  const prima = await prisma.$transaction(async (tx) => {
     const fresh = await tx.pratica.findUnique({
       where: { id: praticaId },
-      select: { stato: true, zonaNonCopertaAt: true },
+      select: { stato: true, zonaNonCopertaAt: true, zonaNonCopertaPrimaAt: true },
     });
-    if (!fresh || fresh.stato !== 'IN_DISTRIBUZIONE' || fresh.zonaNonCopertaAt) return;
-    await markZonaNonCoperta(tx, praticaId, cfg, now, meta);
+    if (!fresh || fresh.stato !== 'IN_DISTRIBUZIONE' || fresh.zonaNonCopertaAt) return false;
+    return markZonaNonCoperta(tx, praticaId, cfg, now, meta, fresh.zonaNonCopertaPrimaAt);
   });
-  return { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId };
+  return { newAssegnazioniIds: [], zonaNonCopertaPraticaId: prima ? praticaId : null };
 }
 
 /**
@@ -477,13 +521,24 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
     const res = primoAnello(candidatiFiltrati, cfg);
 
     if (res.tipo === 'zona-non-coperta') {
+      // Prima dichiarazione del ciclo? Al submit e dopo un ricircolo la colonna
+      // è sempre null (la revoca la azzera insieme agli altri campi di ciclo):
+      // il controllo resta comunque esplicito, perché è la regola — si scrive
+      // solo su null — e da essa dipende anche l'invio della N52.
+      const primaDichiarazione = fresh.zonaNonCopertaPrimaAt == null;
       await tx.pratica.update({
         where: { id: praticaId },
         data: {
           stato: 'IN_DISTRIBUZIONE',
           raggioCorrenteM: cfg.raggioMaxM,
-          ultimaEspansioneAt: null,
+          // Era `null`: il gate della durata round non scattava mai e la
+          // pratica ferma si faceva riscansionare ogni minuto (I-3). Con `now`
+          // i tentativi di ripresa sono uno ogni `intervalloMin` minuti
+          // lavorativi; il prezzo è altrettanta latenza sulla ripresa, ed è
+          // accettabile e voluto.
+          ultimaEspansioneAt: now,
           zonaNonCopertaAt: now,
+          ...(primaDichiarazione ? { zonaNonCopertaPrimaAt: now } : {}),
           // Nessun batch notificato: il round resta a 0 per questo ciclo.
           roundCorrente: 0,
         },
@@ -507,7 +562,10 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
       });
       return {
         result: { assegnazioni: 0, stato: 'IN_DISTRIBUZIONE', newAssegnazioniIds: [] },
-        jobs: { newAssegnazioniIds: [], zonaNonCopertaPraticaId: praticaId },
+        jobs: {
+          newAssegnazioniIds: [],
+          zonaNonCopertaPraticaId: primaDichiarazione ? praticaId : null,
+        },
       };
     }
 

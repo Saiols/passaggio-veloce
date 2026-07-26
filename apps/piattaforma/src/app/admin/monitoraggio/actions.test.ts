@@ -96,6 +96,10 @@ describe('revocaERimettiInCircoloAction', () => {
           raggioCorrenteM: null,
           ultimaEspansioneAt: null,
           zonaNonCopertaAt: null,
+          // Il ciclo cambia: l'anzianità "zona non coperta" del ciclo revocato
+          // non deve sopravvivergli, altrimenti il nuovo giro nascerebbe già
+          // rosso nel monitoraggio e senza N52 (che parte solo su null→valore).
+          zonaNonCopertaPrimaAt: null,
         }),
       }),
     );

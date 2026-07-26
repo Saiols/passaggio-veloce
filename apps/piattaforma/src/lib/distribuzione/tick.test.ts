@@ -88,6 +88,7 @@ function praticaTick(over: Record<string, unknown> = {}) {
     raggioCorrenteM: 500,
     ultimaEspansioneAt: null,
     zonaNonCopertaAt: null,
+    zonaNonCopertaPrimaAt: null,
     roundCorrente: 1,
     assegnazioni: [],
     ...over,
@@ -103,6 +104,8 @@ function praticaSubmit(over: Record<string, unknown> = {}) {
     lng: LNG0,
     distribuzioneCiclo: 1,
     roundCorrente: 0,
+    zonaNonCopertaAt: null,
+    zonaNonCopertaPrimaAt: null,
     assegnazioni: [],
     ...over,
   };
@@ -244,7 +247,11 @@ describe('avviaRound1ForPratica: primo round al submit', () => {
           stato: 'IN_DISTRIBUZIONE',
           raggioCorrenteM: 10000,
           zonaNonCopertaAt: expect.any(Date),
-          ultimaEspansioneAt: null,
+          // Anzianità del ciclo: prima dichiarazione → si valorizza.
+          zonaNonCopertaPrimaAt: expect.any(Date),
+          // I-3: era `null`, e con `null` il gate della durata round non
+          // scattava mai → una scansione completa al minuto, per sempre.
+          ultimaEspansioneAt: expect.any(Date),
           roundCorrente: 0,
         }),
       }),
@@ -252,6 +259,27 @@ describe('avviaRound1ForPratica: primo round al submit', () => {
     expect(sendNotification).toHaveBeenCalledWith(
       expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
     );
+  });
+
+  // Guardia difensiva sulla regola "si scrive solo se è null": il ricircolo
+  // azzera `zonaNonCopertaPrimaAt` prima di richiamare ring1, quindi qui la
+  // colonna è sempre null nei percorsi reali. Se però ci arrivasse valorizzata,
+  // ring1 non deve né riscriverla né rimandare la N52 al broker.
+  it('ring1 con zonaNonCopertaPrimaAt già valorizzata: non la riscrive e non rimanda la N52', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaSubmit({
+        stato: 'IN_DISTRIBUZIONE',
+        zonaNonCopertaPrimaAt: new Date('2026-07-01T08:00:00Z'),
+      }),
+    );
+    tx.sede.findMany.mockResolvedValue([]);
+
+    await avviaRound1ForPratica('p1');
+
+    const data = tx.pratica.update.mock.calls[0][0].data;
+    expect(data.zonaNonCopertaAt).toBeInstanceOf(Date);
+    expect(data).not.toHaveProperty('zonaNonCopertaPrimaAt');
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 
   it('pratica senza coordinate: nessuna query sede, nessuna assegnazione, zona non coperta', async () => {
@@ -266,8 +294,9 @@ describe('avviaRound1ForPratica: primo round al submit', () => {
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          ultimaEspansioneAt: null,
+          ultimaEspansioneAt: expect.any(Date),
           zonaNonCopertaAt: expect.any(Date),
+          zonaNonCopertaPrimaAt: expect.any(Date),
         }),
       }),
     );
@@ -644,7 +673,15 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(res).toEqual({ status: 'zona-non-coperta' });
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ raggioCorrenteM: 10000, zonaNonCopertaAt: NOW }),
+        data: expect.objectContaining({
+          raggioCorrenteM: 10000,
+          zonaNonCopertaAt: NOW,
+          // Prima dichiarazione del ciclo: da qui partono i giorni fermi.
+          zonaNonCopertaPrimaAt: NOW,
+          // I-3: senza questo, il gate della durata round non scatta mai e la
+          // pratica ferma costa una `sede.findMany` + una tx a ogni minuto.
+          ultimaEspansioneAt: NOW,
+        }),
       }),
     );
     // PENDING preesistenti NON toccate.
@@ -654,6 +691,55 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(sendNotification).toHaveBeenCalledWith(
       expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
     );
+  });
+
+  // I-1: il broker riceveva la N52 una volta per ogni agenzia che si registrava
+  // in zona senza poi accettare (ripresa → ri-dichiarazione → nuova N52).
+  it('ri-dichiarazione dopo una ripresa fallita: aggiorna zonaNonCopertaAt ma NON rimanda la N52', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({
+        // Stato tipico dopo una ripresa: il marchio corrente è stato tolto, ma
+        // l'anzianità del ciclo è rimasta.
+        zonaNonCopertaAt: null,
+        zonaNonCopertaPrimaAt: new Date('2026-07-01T08:00:00Z'),
+        raggioCorrenteM: 500,
+      }),
+    );
+    tx.sede.findMany.mockResolvedValue([]); // l'agenzia entrata non è più idonea
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'zona-non-coperta' });
+    const data = tx.pratica.update.mock.calls[0][0].data;
+    expect(data.zonaNonCopertaAt).toEqual(NOW);
+    // `zonaNonCopertaPrimaAt` si scrive SOLO alla prima dichiarazione: la
+    // chiave va OMESSA, non riscritta con la data vecchia.
+    expect(data).not.toHaveProperty('zonaNonCopertaPrimaAt');
+    // Nessuna seconda N52 al broker: la notifica segue la prima dichiarazione.
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('la ripresa azzera zonaNonCopertaAt ma NON tocca zonaNonCopertaPrimaAt', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({
+        zonaNonCopertaAt: new Date('2026-07-05T09:00:00Z'),
+        zonaNonCopertaPrimaAt: new Date('2026-07-01T08:00:00Z'),
+        raggioCorrenteM: CFG.raggioMaxM,
+        roundCorrente: 2,
+      }),
+    );
+    prismaMock.sede.findMany.mockResolvedValue([
+      { id: 'nuova', lat: kmLat(0.4), lng: LNG0, companyId: 'cN' },
+    ]);
+
+    const res = await tickPratica('p1');
+
+    expect(res.status).toBe('ripresa');
+    const data = tx.pratica.update.mock.calls[0][0].data;
+    expect(data.zonaNonCopertaAt).toBeNull();
+    // I-2: se la ripresa azzerasse anche questa, il monitoraggio perderebbe
+    // l'anzianità reale della pratica.
+    expect(data).not.toHaveProperty('zonaNonCopertaPrimaAt');
   });
 
   // Compare-and-set in-tx: protegge da un'accettazione/tick/revoca concorrente
@@ -827,12 +913,67 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.sede.findMany).not.toHaveBeenCalled();
     expect(tx.pratica.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ raggioCorrenteM: 10000, zonaNonCopertaAt: NOW }),
+        data: expect.objectContaining({
+          raggioCorrenteM: 10000,
+          zonaNonCopertaAt: NOW,
+          zonaNonCopertaPrimaAt: NOW,
+          ultimaEspansioneAt: NOW,
+        }),
       }),
     );
     expect(sendNotification).toHaveBeenCalledWith(
       expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
     );
+  });
+
+  // M-1: il re-check dentro `scriviZonaNonCoperta` può uscire SENZA scrivere,
+  // ma la funzione accodava comunque il job della N52. Caso peggiore: una
+  // pratica accettata fra le due letture riceve al broker un "nessuna agenzia
+  // in zona" che smentisce l'accettazione appena avvenuta.
+  it('coordinate mancanti: se la pratica viene ACCETTATA fra le due letture, nessuna scrittura e nessuna N52', async () => {
+    tx.pratica.findUnique
+      // Step 1 (fuori tx): ancora in distribuzione, senza coordinate.
+      .mockResolvedValueOnce(praticaTick({ lat: null, lng: null }))
+      // Re-check dentro la tx: un'agenzia ha accettato nel frattempo.
+      .mockResolvedValueOnce({ stato: 'ACCETTATA', zonaNonCopertaAt: null, zonaNonCopertaPrimaAt: null });
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'zona-non-coperta' });
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('coordinate mancanti: se un tick concorrente ha già marcato la zona, nessuna scrittura e nessuna N52', async () => {
+    tx.pratica.findUnique
+      .mockResolvedValueOnce(praticaTick({ lat: null, lng: null }))
+      .mockResolvedValueOnce({
+        stato: 'IN_DISTRIBUZIONE',
+        zonaNonCopertaAt: new Date('2026-07-21T09:59:00Z'),
+        zonaNonCopertaPrimaAt: new Date('2026-07-21T09:59:00Z'),
+      });
+
+    await tickPratica('p1');
+
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('coordinate mancanti su una pratica con anzianità già registrata: scrive ma non rimanda la N52', async () => {
+    tx.pratica.findUnique
+      .mockResolvedValueOnce(praticaTick({ lat: null, lng: null }))
+      .mockResolvedValueOnce({
+        stato: 'IN_DISTRIBUZIONE',
+        zonaNonCopertaAt: null,
+        zonaNonCopertaPrimaAt: new Date('2026-07-01T08:00:00Z'),
+      });
+
+    await tickPratica('p1');
+
+    const data = tx.pratica.update.mock.calls[0][0].data;
+    expect(data.zonaNonCopertaAt).toEqual(NOW);
+    expect(data).not.toHaveProperty('zonaNonCopertaPrimaAt');
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 
   // Le coordinate mancanti non si valorizzano mai dopo la creazione: a

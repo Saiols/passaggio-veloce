@@ -71,11 +71,28 @@ export function categoriaMonitoraggio(p: {
  * Data da cui contare i giorni fermi, coerente con la categoria: per
  * `ACCETTATA_FERMA` è da quando l'agenzia ha accettato (comportamento
  * invariato); per `ZONA_NON_COPERTA` è da quando il motore ha dichiarato la
- * zona scoperta (l'istante in cui l'espansione si è fermata).
+ * zona scoperta la PRIMA volta nel ciclo corrente.
+ *
+ * Perché non `zonaNonCopertaAt`: quel campo dice "è ferma adesso", non "è ferma
+ * da quando". La ripresa (un'agenzia idonea si registra in zona) lo azzera
+ * legittimamente, e se poi l'agenzia non accetta il motore ri-dichiara la zona
+ * scoperta riscrivendolo a "adesso". Contando da lì, una pratica in sofferenza
+ * da 20 giorni ricomparirebbe in fondo alla lista come "ferma da 0 giorni", in
+ * verde — cioè esattamente il contrario di quello che l'admin deve vedere.
+ * `zonaNonCopertaPrimaAt` non viene toccata dalla ripresa: solo il ricircolo
+ * dopo revoca, che apre un ciclo nuovo, la azzera.
+ *
+ * Fallback a `zonaNonCopertaAt` se la colonna è null: la migration fa il
+ * backfill, ma una riga marcata da un deploy a metà non deve perdere la data.
  */
 export function dataFermaDa(
-  p: { accettataAt: Date | null; zonaNonCopertaAt: Date | null },
+  p: {
+    accettataAt: Date | null;
+    zonaNonCopertaAt: Date | null;
+    zonaNonCopertaPrimaAt: Date | null;
+  },
   categoria: CategoriaMonitoraggio,
 ): Date | null {
-  return categoria === 'ACCETTATA_FERMA' ? p.accettataAt : p.zonaNonCopertaAt;
+  if (categoria === 'ACCETTATA_FERMA') return p.accettataAt;
+  return p.zonaNonCopertaPrimaAt ?? p.zonaNonCopertaAt;
 }

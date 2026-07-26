@@ -55,8 +55,17 @@ export default async function MonitoraggioPage({
       // Le due categorie non condividono un'unica data di riferimento: ordina
       // prima le ACCETTATA ferme (accettataAt), poi fra le rimanenti (senza
       // accettataAt, cioè IN_DISTRIBUZIONE) le zona-non-coperta più vecchie.
+      //
+      // La chiave è `zonaNonCopertaPrimaAt`, la stessa che `dataFermaDa` usa per
+      // i giorni fermi: ordinare per `zonaNonCopertaAt` spedirebbe in fondo alla
+      // lista una pratica ripresa e ri-dichiarata, che il badge mostra invece
+      // (correttamente) come ferma da settimane. `zonaNonCopertaAt` resta come
+      // spareggio per le righe senza la colonna nuova — Prisma non ha un
+      // COALESCE in `orderBy`, quindi il fallback di `dataFermaDa` si rende qui
+      // come chiave successiva.
       orderBy: [
         { accettataAt: { sort: 'asc', nulls: 'last' } },
+        { zonaNonCopertaPrimaAt: { sort: 'asc', nulls: 'last' } },
         { zonaNonCopertaAt: { sort: 'asc', nulls: 'last' } },
         { submittedAt: { sort: 'asc', nulls: 'last' } },
       ],

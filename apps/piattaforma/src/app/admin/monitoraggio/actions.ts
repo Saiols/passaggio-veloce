@@ -90,6 +90,11 @@ export async function revocaERimettiInCircoloAction(
           raggioCorrenteM: null,
           ultimaEspansioneAt: null,
           zonaNonCopertaAt: null,
+          // Anzianità "zona non coperta": è per-ciclo, e qui il ciclo cambia.
+          // Senza questo azzeramento il nuovo giro nascerebbe già rosso nel
+          // monitoraggio e — peggio — non manderebbe mai la N52 al broker, che
+          // parte solo quando questa colonna passa da null a un valore.
+          zonaNonCopertaPrimaAt: null,
           // Il round è relativo al ciclo: il nuovo giro riparte da 1 e la
           // pratica non è più accettata, quindi il round di accettazione del
           // ciclo revocato non deve sopravvivergli (falserebbe la media).

@@ -828,12 +828,20 @@ model Pratica {
   lng Float?
 
   // Distribuzione a raggio (linea d'aria): raggio corrente raggiunto (metri),
-  // istante ultima notifica realmente inviata (governa il gate della durata
-  // round; gli anelli vuoti skippati non lo toccano), istante in cui il raggio
-  // massimo è stato raggiunto senza accettazione.
+  // istante dell'ultima notifica realmente inviata O dell'ultima dichiarazione
+  // di zona non coperta (governa il gate della durata round; gli anelli vuoti
+  // skippati non lo toccano), istante in cui il raggio massimo è stato
+  // raggiunto senza accettazione.
   raggioCorrenteM    Int?
   ultimaEspansioneAt DateTime?
   zonaNonCopertaAt   DateTime?
+
+  /// Prima volta che la pratica è stata dichiarata zona non coperta NEL CICLO
+  /// corrente. A differenza di `zonaNonCopertaAt` non viene azzerata da una
+  /// ripresa: una pratica ripresa e poi ri-dichiarata scoperta è in sofferenza
+  /// dalla PRIMA dichiarazione, ed è quello che l'admin deve vedere nel
+  /// monitoraggio. Serve anche a non ripetere la N52 al broker a ogni ripresa.
+  zonaNonCopertaPrimaAt DateTime?
 
   // Round = ordinale del batch di notifiche realmente inviato, NON del raggio:
   // gli anelli vuoti fanno avanzare `raggioCorrenteM` ma non il round e non

@@ -100,14 +100,47 @@ describe('categoriaMonitoraggio', () => {
 describe('dataFermaDa', () => {
   it('ACCETTATA_FERMA usa accettataAt', () => {
     const accettataAt = new Date('2026-07-15');
-    expect(dataFermaDa({ accettataAt, zonaNonCopertaAt: null }, 'ACCETTATA_FERMA')).toBe(accettataAt);
+    expect(
+      dataFermaDa(
+        { accettataAt, zonaNonCopertaAt: null, zonaNonCopertaPrimaAt: null },
+        'ACCETTATA_FERMA',
+      ),
+    ).toBe(accettataAt);
   });
 
-  it('ZONA_NON_COPERTA usa zonaNonCopertaAt', () => {
+  it('ZONA_NON_COPERTA usa zonaNonCopertaPrimaAt, non l’ultima dichiarazione', () => {
+    // Il cuore del bug I-2: una ripresa fallita ri-dichiara la zona scoperta e
+    // riscrive `zonaNonCopertaAt` a "adesso". Se il monitoraggio contasse da lì,
+    // una pratica in sofferenza da 20 giorni ricomparirebbe come "ferma da 0".
+    const zonaNonCopertaPrimaAt = new Date('2026-06-28');
     const zonaNonCopertaAt = new Date('2026-07-18');
-    expect(dataFermaDa({ accettataAt: null, zonaNonCopertaAt }, 'ZONA_NON_COPERTA')).toBe(
-      zonaNonCopertaAt,
-    );
+    expect(
+      dataFermaDa(
+        { accettataAt: null, zonaNonCopertaAt, zonaNonCopertaPrimaAt },
+        'ZONA_NON_COPERTA',
+      ),
+    ).toBe(zonaNonCopertaPrimaAt);
+  });
+
+  it('ZONA_NON_COPERTA: fallback a zonaNonCopertaAt se zonaNonCopertaPrimaAt è null', () => {
+    // Difensivo: la migration fa il backfill, ma una riga scritta da un deploy
+    // a metà (colonna presente, codice vecchio) non deve perdere la data.
+    const zonaNonCopertaAt = new Date('2026-07-18');
+    expect(
+      dataFermaDa(
+        { accettataAt: null, zonaNonCopertaAt, zonaNonCopertaPrimaAt: null },
+        'ZONA_NON_COPERTA',
+      ),
+    ).toBe(zonaNonCopertaAt);
+  });
+
+  it('ZONA_NON_COPERTA: null se non c’è nessuna delle due date', () => {
+    expect(
+      dataFermaDa(
+        { accettataAt: null, zonaNonCopertaAt: null, zonaNonCopertaPrimaAt: null },
+        'ZONA_NON_COPERTA',
+      ),
+    ).toBeNull();
   });
 });
 

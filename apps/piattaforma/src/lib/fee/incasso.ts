@@ -36,8 +36,12 @@ export async function segnaFeeIncassato(feeId: string, providerRef: string): Pro
   if (fee) await rivalutaBloccoAgenzia(fee.agenziaId);
 
   // I soldi sono arrivati: qualunque cosa vada storta nell'emissione, il fee
-  // resta SUCCESS. La riconciliazione oraria recupera il documento mancante.
-  await createFatturaPv({ feeAddebitoId: feeId, statoPagamento: 'PAGATA' }).catch(() => null);
+  // resta SUCCESS. Logghiamo per non perdere traccia del guasto — best-effort
+  // non vuol dire muto — la riconciliazione oraria recupera il documento mancante.
+  await createFatturaPv({ feeAddebitoId: feeId, statoPagamento: 'PAGATA' }).catch((err) => {
+    console.error(`[segnaFeeIncassato] createFatturaPv fallita per fee ${feeId}:`, err);
+    return null;
+  });
 
   return true;
 }

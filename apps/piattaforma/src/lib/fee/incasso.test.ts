@@ -55,8 +55,18 @@ describe('segnaFeeIncassato', () => {
     });
   });
 
-  it("un errore in emissione non annulla l'incasso", async () => {
-    createFatturaPvMock.mockRejectedValue(new Error('contatore ko'));
-    await expect(segnaFeeIncassato('fee-1', 'pi_1')).resolves.toBe(true);
+  it("un errore in emissione non annulla l'incasso, ma viene loggato", async () => {
+    const errore = new Error('contatore ko');
+    createFatturaPvMock.mockRejectedValue(errore);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(segnaFeeIncassato('fee-1', 'pi_1')).resolves.toBe(true);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('fee-1'),
+        errore,
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });

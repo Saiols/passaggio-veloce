@@ -11,7 +11,13 @@ import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeAgenziaTutte } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
-import { whereTabPratiche, WHERE_ATTESA_FIRMA, SINGOLI_ADMIN, contaGruppi } from '@/lib/pratiche/stati';
+import {
+  whereTabPratiche,
+  WHERE_ATTESA_FIRMA,
+  SINGOLI_ADMIN,
+  contaGruppi,
+  importoMaiIncassato,
+} from '@/lib/pratiche/stati';
 import { giorniTrascorsi, attesaLevel } from '@/lib/pratiche/countdown';
 import {
   tabsPraticheAdmin,
@@ -234,6 +240,7 @@ export default async function AdminPratichePage({
                         <EconomiaCell
                           feeAgenziaCent={p.feeAgenziaCent}
                           creditoBrokerCent={p.creditoBrokerCent}
+                          stato={p.stato as PraticaStato}
                         />
                       </div>
                       <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
@@ -292,13 +299,18 @@ export default async function AdminPratichePage({
 function EconomiaCell({
   feeAgenziaCent,
   creditoBrokerCent,
+  stato,
 }: {
   feeAgenziaCent: number;
   creditoBrokerCent: number;
+  stato: PraticaStato;
 }) {
   if (feeAgenziaCent <= 0 && creditoBrokerCent <= 0) {
     return <span className="text-[13px] text-pv-slate-500">—</span>;
   }
+  // Annullata o scaduta: nessuno dei tre importi si è mosso — nessun
+  // FeeAddebito all'agenzia, nessun accredito al broker, nessun margine.
+  const barrato = importoMaiIncassato(stato);
   const righe = [
     { sigla: 'Ag', titolo: 'Fee a carico agenzia', cent: feeAgenziaCent, forte: false },
     { sigla: 'Br', titolo: 'Credito broker', cent: creditoBrokerCent, forte: false },
@@ -314,13 +326,21 @@ function EconomiaCell({
       {righe.map((r) => (
         <div
           key={r.sigla}
-          title={r.titolo}
+          title={barrato ? `${r.titolo} — mai movimentata (pratica chiusa senza firma)` : r.titolo}
           className={`flex items-baseline justify-between gap-1 ${
-            r.forte ? 'font-bold text-pv-navy-800' : 'text-pv-slate-500'
+            barrato
+              ? 'text-pv-slate-400'
+              : r.forte
+                ? 'font-bold text-pv-navy-800'
+                : 'text-pv-slate-500'
           }`}
         >
           <span>{r.sigla}</span>
-          <span className="tabular-nums">{formatCurrencyCent(r.cent)}</span>
+          {barrato ? (
+            <s className="tabular-nums decoration-pv-slate-400">{formatCurrencyCent(r.cent)}</s>
+          ) : (
+            <span className="tabular-nums">{formatCurrencyCent(r.cent)}</span>
+          )}
         </div>
       ))}
     </div>

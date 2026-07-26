@@ -16,6 +16,7 @@ import {
 } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
 import { margineLordoCent } from '@/lib/pricing';
+import { importoMaiIncassato } from '@/lib/pratiche/stati';
 import {
   markFirmaAvvenutaAction,
   markPraticaProcessataAction,
@@ -312,6 +313,9 @@ export default async function PraticaDetailPage({
     revisioneCompletata: pratica.revisioneCompletata,
     richiedeRevisioneManuale: pratica.richiedeRevisioneManuale,
   });
+
+  // Pratica chiusa senza firma: fee, credito e margine non si sono mai mossi.
+  const importiBarrati = importoMaiIncassato(pratica.stato as PraticaStato);
 
   const ruolo: GuidaRuolo =
     companyType === 'AGENZIA' ? 'AGENZIA' : companyType === 'DEALER' ? 'DEALER' : 'ALTRO';
@@ -712,11 +716,14 @@ export default async function PraticaDetailPage({
                     — nessun gate sulla firma: gli importi nascono col
                       tariffario alla creazione della pratica, e nasconderli
                       fino alla firma rendeva dettaglio e lista incoerenti
-                      (la lista li ha sempre mostrati). */}
+                      (la lista li ha sempre mostrati).
+                    Su pratica annullata o scaduta gli importi sono barrati:
+                    nulla è stato addebitato né accreditato. */}
                 {isStaff ? (
                   <>
                     <InfoRow
                       label="Fee agenzia"
+                      barrato={importiBarrati}
                       value={
                         pratica.feeAgenziaCent > 0
                           ? formatCurrencyCent(pratica.feeAgenziaCent)
@@ -725,6 +732,7 @@ export default async function PraticaDetailPage({
                     />
                     <InfoRow
                       label="Credito broker"
+                      barrato={importiBarrati}
                       value={
                         pratica.creditoBrokerCent > 0
                           ? formatCurrencyCent(pratica.creditoBrokerCent)
@@ -733,6 +741,7 @@ export default async function PraticaDetailPage({
                     />
                     <InfoRow
                       label="Margine PV"
+                      barrato={importiBarrati}
                       value={
                         pratica.feeAgenziaCent > 0
                           ? formatCurrencyCent(
@@ -748,6 +757,7 @@ export default async function PraticaDetailPage({
                 ) : companyType === 'AGENZIA' ? (
                   <InfoRow
                     label="La tua fee"
+                    barrato={importiBarrati}
                     value={
                       pratica.feeAgenziaCent > 0
                         ? formatCurrencyCent(pratica.feeAgenziaCent)
@@ -757,6 +767,7 @@ export default async function PraticaDetailPage({
                 ) : (
                   <InfoRow
                     label="Il tuo compenso"
+                    barrato={importiBarrati}
                     value={
                       pratica.creditoBrokerCent > 0
                         ? formatCurrencyCent(pratica.creditoBrokerCent)
@@ -839,18 +850,27 @@ function InfoRow({
   label,
   value,
   mono,
+  barrato,
 }: {
   label: string;
   value: string | null | undefined;
   mono?: boolean;
+  /** Importo mai movimentato (pratica annullata o scaduta): valore barrato. */
+  barrato?: boolean;
 }) {
   return (
     <div>
       <dt className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">{label}</dt>
       <dd
-        className={`mt-0.5 text-pv-slate-900 ${mono ? 'font-mono text-[12.5px]' : 'text-[13px]'}`}
+        className={`mt-0.5 ${barrato ? 'text-pv-slate-400' : 'text-pv-slate-900'} ${mono ? 'font-mono text-[12.5px]' : 'text-[13px]'}`}
       >
-        {value || '—'}
+        {barrato && value ? (
+          <s className="decoration-pv-slate-400" title="Pratica chiusa senza firma: importo mai movimentato">
+            {value}
+          </s>
+        ) : (
+          value || '—'
+        )}
       </dd>
     </div>
   );

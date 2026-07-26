@@ -17,7 +17,7 @@ import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { mostraColonnaSede, filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
 import { opzioniSedeProprie, opzioniSedeAgenziaDaPratiche } from '@/lib/pratiche/opzioni-sede';
 import { SedeCell } from '@/components/sede/sede-cell';
-import { whereStato, contaGruppi, isInCorso } from '@/lib/pratiche/stati';
+import { whereStato, contaGruppi, isInCorso, importoMaiIncassato } from '@/lib/pratiche/stati';
 import { tabsPratiche, tabAttivo, opzioniStato, hrefPaginaPratiche } from '@/lib/pratiche/tabs';
 import { PraticheTabs } from './tabs';
 import { VisuraBanner } from '@/components/visura-banner';
@@ -361,7 +361,11 @@ export default async function PratichePage({
                           </span>
                         </div>
                         <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
-                          {importoCent > 0 ? formatCurrencyCent(importoCent) : '—'}
+                          <ImportoCella
+                            cent={importoCent}
+                            stato={p.stato as PraticaStato}
+                            isAgenzia={isAgenzia}
+                          />
                         </div>
                         <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
                           {formatRelative(p.submittedAt ?? p.createdAt)}
@@ -380,6 +384,38 @@ export default async function PratichePage({
         )}
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * L'importo della riga. Su una pratica annullata o scaduta è barrato: quel
+ * denaro non è mai stato addebitato all'agenzia né accreditato al broker (vedi
+ * `importoMaiIncassato`), quindi mostrarlo come gli altri lo farebbe sommare a
+ * occhio a un guadagno che non c'è stato.
+ */
+function ImportoCella({
+  cent,
+  stato,
+  isAgenzia,
+}: {
+  cent: number;
+  stato: PraticaStato;
+  isAgenzia: boolean;
+}) {
+  if (cent <= 0) return <>—</>;
+  const importo = formatCurrencyCent(cent);
+  if (!importoMaiIncassato(stato)) return <>{importo}</>;
+  return (
+    <s
+      className="text-pv-slate-400 decoration-pv-slate-400"
+      title={
+        isAgenzia
+          ? 'Pratica chiusa senza firma: questa fee non ti è mai stata addebitata'
+          : 'Pratica chiusa senza firma: questo compenso non ti è mai stato accreditato'
+      }
+    >
+      {importo}
+    </s>
   );
 }
 

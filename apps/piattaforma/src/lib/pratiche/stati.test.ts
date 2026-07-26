@@ -8,6 +8,7 @@ import {
   SINGOLI,
   SINGOLI_ADMIN,
   isInCorso,
+  importoMaiIncassato,
   whereStato,
   contaGruppi,
   whereTabPratiche,
@@ -57,6 +58,28 @@ describe('partizione degli stati', () => {
     const overlap = SINGOLI.filter((s) => (STATI_IN_ATTESA as readonly PraticaStato[]).includes(s));
     expect(overlap).toEqual([]);
   });
+});
+
+describe('importoMaiIncassato', () => {
+  it('ANNULLATA e SCADUTA: importo mai movimentato', () => {
+    expect(importoMaiIncassato('ANNULLATA')).toBe(true);
+    expect(importoMaiIncassato('SCADUTA')).toBe(true);
+  });
+
+  // Il caso che il barrato non deve MAI toccare: sulla firmata il FeeAddebito
+  // è stato creato e il wallet del broker accreditato davvero.
+  it('FIRMATA: importo realmente movimentato', () => {
+    expect(importoMaiIncassato('FIRMATA')).toBe(false);
+  });
+
+  // Una pratica ancora viva non è "mai incassata": è "non ancora". Barrarla
+  // direbbe che quei soldi non arriveranno, che è falso.
+  it.each(TUTTI.filter((s) => s !== 'ANNULLATA' && s !== 'SCADUTA'))(
+    '%s non è barrato',
+    (stato) => {
+      expect(importoMaiIncassato(stato)).toBe(false);
+    },
+  );
 });
 
 describe('STATI_IN_DISTRIBUZIONE', () => {

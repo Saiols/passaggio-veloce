@@ -64,6 +64,30 @@ export function isInCorso(stato: PraticaStato): boolean {
 }
 
 /**
+ * Stati in cui gli importi della pratica (fee agenzia, credito broker, margine)
+ * NON sono mai stati movimentati: le viste li mostrano barrati.
+ *
+ * Non è una convenzione grafica, è una proprietà del write path: fee e credito
+ * si muovono solo alla firma (`lib/pratiche/firma-engine.ts`, che crea il
+ * FeeAddebito dell'agenzia e accredita il wallet del broker), e le due sole
+ * transizioni verso ANNULLATA — `app/pratiche/actions.ts` (annullo del broker) e
+ * `lib/penali/segnalazione.ts` (segnalazione confermata) — rifiutano entrambe le
+ * pratiche già FIRMATA; la seconda annulla anche i FeeAddebito ancora SCHEDULED.
+ * SCADUTA non è mai stata accettata da nessuno. Quindi in questi due stati
+ * l'importo è un valore di listino, non una somma incassata o pagata.
+ *
+ * ⚠️ NON copre la penale broker (`penaleAddebitatoCent`): quella è denaro
+ * realmente addebitato su una pratica annullata, e ha la sua indicazione a parte
+ * in `stato-extra.ts`. Barrato qui riguarda solo fee/credito/margine.
+ */
+export const STATI_SENZA_MOVIMENTO = ['ANNULLATA', 'SCADUTA'] as const satisfies
+  readonly PraticaStato[];
+
+export function importoMaiIncassato(stato: PraticaStato): boolean {
+  return (STATI_SENZA_MOVIMENTO as readonly PraticaStato[]).includes(stato);
+}
+
+/**
  * Valori ammessi per `?stato=`. Gli aggregati (IN_CORSO, CONCLUSE, IN_ATTESA)
  * espandono su più stati DB; gli altri filtrano per uguaglianza.
  *

@@ -53,6 +53,22 @@ function vociSede(isOwner: boolean): VoceNav[] {
       ];
 }
 
+/**
+ * Visura camerale: owner-only e non delegabile come Sedi (l'aggiornamento è
+ * gated su `isOwner` in `app/visura/actions.ts`, non su una chiave del
+ * catalogo) → niente `permesso` qui. La mancanza è deliberata anche per un
+ * secondo motivo: la visura è il RIMEDIO a un blocco — `mappa-sospensione.ts`
+ * marca le sue action `CONSENTI` anche per un account sospeso — e una voce
+ * gated su un permesso sparirebbe proprio a chi ha più bisogno di trovarla.
+ *
+ * Serve una voce fissa perché `VisuraBanner`, l'unico altro ingresso in-app,
+ * si auto-annulla su OK ed ESENTE: senza questa, rinnovare in anticipo o
+ * caricare la prima visura richiedeva di conoscere l'URL a memoria.
+ */
+function voceVisura(isOwner: boolean): VoceNav[] {
+  return isOwner ? [{ href: '/visura', label: 'Visura camerale', icona: 'visura' }] : [];
+}
+
 export function gruppiBroker(input: NavInput): GruppoNav[] {
   const { isOwner, permessi, puoGestireTeam, soloLettura } = input;
   const gruppi: { label: string; items: VoceNav[] }[] = [
@@ -89,6 +105,7 @@ export function gruppiBroker(input: NavInput): GruppoNav[] {
       items: [
         { href: '/notifiche', label: 'Notifiche', icona: 'notifiche', permesso: 'notifiche.view' as const },
         { href: '/profilo', label: 'Profilo', icona: 'profilo' },
+        ...voceVisura(isOwner),
         ...vociSede(isOwner),
         ...voceTeam(puoGestireTeam),
       ],
@@ -142,6 +159,7 @@ export function gruppiAgenzia(input: NavInput): GruppoNav[] {
         { href: '/orari', label: 'Orari', icona: 'orari', permesso: 'orari.view' as const },
         { href: '/notifiche', label: 'Notifiche', icona: 'notifiche', permesso: 'notifiche.view' as const },
         { href: '/profilo', label: 'Profilo', icona: 'profilo' },
+        ...voceVisura(isOwner),
         ...vociSede(isOwner),
         ...voceTeam(puoGestireTeam),
       ],

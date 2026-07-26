@@ -11,6 +11,7 @@ import {
   IconOrari,
   IconPratiche,
   IconProfilo,
+  IconRevisioni,
   IconUtenti,
   IconWallet,
   type AdminIconProps,
@@ -35,6 +36,8 @@ const ICONE: Record<string, ComponentType<AdminIconProps>> = {
   addebiti: IconAddebiti,
   feedback: IconFeedback,
   orari: IconOrari,
+  // Documento con spunta: la visura è un documento certificato, non un'anagrafica.
+  visura: IconRevisioni,
 };
 
 /**

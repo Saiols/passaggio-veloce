@@ -50,6 +50,22 @@ function eseguiCasiComuni(nome: string, fn: (input: NavInput) => GruppoNav[]) {
       expect(hrefs(fn(nonOwnerInput))).not.toContain('/sedi');
     });
 
+    it("Visura camerale compare solo per l'owner", () => {
+      const ownerInput: NavInput = { isOwner: true, permessi: [], puoGestireTeam: false, soloLettura: false };
+      const nonOwnerInput: NavInput = { isOwner: false, permessi: ['sede.view'], puoGestireTeam: false, soloLettura: false };
+      expect(hrefs(fn(ownerInput))).toContain('/visura');
+      expect(hrefs(fn(nonOwnerInput))).not.toContain('/visura');
+    });
+
+    it('Visura camerale resta visibile a un titolare sospeso (è il rimedio, non un privilegio)', () => {
+      // `mappa-sospensione.ts` marca le action visura CONSENTI anche da
+      // sospeso: se un domani la voce venisse gated su un permesso di
+      // scrittura, `soloLettura` la nasconderebbe e il rimedio tornerebbe
+      // raggiungibile solo a memoria d'URL.
+      const input: NavInput = { isOwner: true, permessi: [], puoGestireTeam: false, soloLettura: true };
+      expect(hrefs(fn(input))).toContain('/visura');
+    });
+
     it('un gruppo che perde tutte le voci sparisce (Crescita, senza affiliazione.view)', () => {
       const input: NavInput = { isOwner: false, permessi: [], puoGestireTeam: false, soloLettura: false };
       expect(labels(fn(input))).not.toContain('Crescita');

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { Alert, Button, Field, Input } from '@/components/ui';
@@ -192,6 +193,20 @@ export function VisuraClient({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-5 py-8 sm:px-6">
+      {/* Via d'uscita: la pagina è un interstiziale senza chrome (nessuna
+          sidebar), quindi senza questo link chi ci arriva dalla voce di nav o
+          da un'email — con la visura ancora valida, o dopo l'aggiornamento
+          riuscito — non ha modo di tornare indietro se non col back del
+          browser. Link esplicito e non `router.back()`: chi ci arriva da un
+          redirect (agenzia bloccata) tornerebbe sulla pagina che l'ha
+          rimbalzato. Un'agenzia con anche l'addebito fallito verrà deviata da
+          /dashboard a /blocco-pagamento: è l'interstiziale giusto per lei. */}
+      <Link
+        href="/dashboard"
+        className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 underline-offset-4 hover:underline"
+      >
+        ← Torna alla dashboard
+      </Link>
       <h1 className="text-xl font-bold text-pv-navy-900">Visura camerale</h1>
       <p className="mt-1 text-sm text-pv-navy-700">
         La visura camerale ci serve per fatturarti correttamente. Vale{' '}

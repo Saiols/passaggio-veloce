@@ -18,17 +18,21 @@ const BATCH_SIZE = 30;
  * Interroga i documenti per `praticaId` (che ha un indice) e non per
  * `feeAddebitoId` (che non ce l'ha): niente migration.
  *
- * Non lancia mai: un guasto transitorio nella passata (lettura fee/documenti,
- * o un item imprevisto) viene loggato e la funzione ripiega su
- * `{ emesse: 0, notificate: 0 }`. Il chiamante (il cron di process-fee-scheduled)
- * ha già ottenuto e restituito il risultato di `processFeeScheduled` — quel
- * risultato non deve mai andare perso perché questa passata di recupero,
- * che gira nella stessa richiesta, è inciampata.
+ * Non lancia mai: un guasto a metà passata (lettura fee/documenti, o un item
+ * imprevisto) viene loggato e la funzione ritorna comunque, ma con i contatori
+ * del lavoro davvero fatto FINO A quel punto — non azzerati. Il chiamante (il
+ * cron di process-fee-scheduled) ha già ottenuto e restituito il risultato di
+ * `processFeeScheduled` — quel risultato non deve mai andare perso perché
+ * questa passata di recupero, che gira nella stessa richiesta, si è
+ * interrotta a metà.
  */
 export async function riconciliaFattureIncassate(): Promise<{
   emesse: number;
   notificate: number;
 }> {
+  let emesse = 0;
+  let notificate = 0;
+
   try {
     const da = new Date(Date.now() - FINESTRA_MS);
     const fees = await prisma.feeAddebito.findMany({
@@ -37,9 +41,6 @@ export async function riconciliaFattureIncassate(): Promise<{
       orderBy: { executedAt: 'asc' },
       select: { id: true, praticaId: true },
     });
-
-    let emesse = 0;
-    let notificate = 0;
 
     for (const fee of fees) {
       const doc = await prisma.documentoFiscale.findFirst({
@@ -78,10 +79,9 @@ export async function riconciliaFattureIncassate(): Promise<{
         if (inviata) notificate++;
       }
     }
-
-    return { emesse, notificate };
   } catch (err) {
-    console.error('[riconciliaFatture] passata fallita:', err);
-    return { emesse: 0, notificate: 0 };
+    console.error('[riconciliaFatture] passata interrotta:', err);
   }
+
+  return { emesse, notificate };
 }

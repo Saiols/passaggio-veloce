@@ -117,4 +117,30 @@ describe('riconciliaFattureIncassate', () => {
       errorSpy.mockRestore();
     }
   });
+
+  it('la passata si interrompe a metà: i contatori riflettono il lavoro già fatto, non zero', async () => {
+    feeFindMany.mockResolvedValue([
+      { id: 'fee-1', praticaId: 'pr-1' },
+      { id: 'fee-2', praticaId: 'pr-2' },
+    ]);
+    const errore = new Error('connessione db persa a metà giro');
+    // Primo fee: nessuna fattura, si emette e si notifica con successo.
+    // Secondo fee: la lettura del documento esplode e interrompe il ciclo.
+    docFindFirst.mockResolvedValueOnce(null).mockRejectedValueOnce(errore);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const out = await riconciliaFattureIncassate();
+      expect(out).toEqual({ emesse: 1, notificate: 1 });
+      expect(createFatturaPvMock).toHaveBeenCalledTimes(1);
+      expect(createFatturaPvMock).toHaveBeenCalledWith({
+        feeAddebitoId: 'fee-1',
+        statoPagamento: 'PAGATA',
+      });
+      expect(notificaMock).toHaveBeenCalledTimes(1);
+      expect(notificaMock).toHaveBeenCalledWith('doc-1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('[riconciliaFatture]'), errore);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

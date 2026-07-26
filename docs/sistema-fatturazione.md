@@ -30,7 +30,7 @@ Importi (LORDI IVA inclusa, convenzione PV) — coerenti con `analisi-progetto.m
 
 > **Razionale:** l'agenzia paga sempre €75 lordi a prescindere dal regime broker. Ciò che cambia è la ripartizione interna: il forfettario non scarica IVA quindi PV gli riconosce €20 lordi (≈ pari netto a €25 ordinario meno IVA scaricata), trattenendo €55 invece di €50. Per il broker privato lo split definitivo dipende dal trattamento fiscale (ritenuta d'acconto 20% applicabile?), da chiudere con commercialista (B1).
 
-**Minivoltura — broker non maturà nulla, niente delega:**
+**Minivoltura — broker non matura nulla, niente delega:**
 
 | Tipo | Fee agenzia | Quota PV | Quota broker | Affiliazione | Documenti generati |
 |---|---|---|---|---|---|
@@ -47,8 +47,8 @@ Quote indicate come `(ord)` ordinario / `(forf)` forfettario.
 |---|---|---|---|---|
 | 1 | Pratica `FIRMATA` | — | — | — |
 | 2 | Accredito wallet broker (somme di terzi) | — (transazione interna) | — | Wallet broker (€25 ord / €20 forf) |
-| 3 | Notifica firma a broker e agenzia | Email (N4 broker, N8 agenzia — **senza** fattura allegata) | Sistema | Broker + Agenzia |
-| 4 | Addebito agenzia (SEPA, disposto alla firma) | — | — | PV incassa €75 totali |
+| 3 | Addebito agenzia (SEPA, disposto alla firma) | — | — | PV incassa €75 totali |
+| 4 | Notifica firma a broker e agenzia | Email (N4 broker, N8 agenzia — **senza** fattura allegata) | Sistema | Broker + Agenzia |
 | 5 | **Incasso confermato** → generazione fattura PV | Fattura €50 (ord) / €55 (forf) — PDF + XML TD01 | Passaggio Veloce S.r.l. | Agenzia |
 | 6 | Notifica fattura disponibile (N53) | Email con PDF allegato | Sistema | Agenzia |
 | 7 | Soglia payout raggiunta | — | — | Broker (notifica N5/N24) |
@@ -60,13 +60,13 @@ Quote indicate come `(ord)` ordinario / `(forf)` forfettario.
 
 ### 1.3 Flusso documentale per **minivoltura** (singola o massiva)
 
-Caso degenerato: dealer e broker coincidono, broker non maturà nulla in wallet, **non si applica delega**. Si genera solo la fattura PV verso l'agenzia.
+Caso degenerato: dealer e broker coincidono, broker non matura nulla in wallet, **non si applica delega**. Si genera solo la fattura PV verso l'agenzia.
 
 | Step | Evento | Documento generato | Emittente | Destinatario |
 |---|---|---|---|---|
 | 1 | Pratica `FIRMATA` | — | — | — |
-| 2 | Notifica firma all'agenzia | Email (N8 — **senza** fattura allegata) | Sistema | Agenzia |
-| 3 | Addebito agenzia (SEPA, disposto alla firma) | — | — | PV incassa €30 (standard) o N×€20 (multipla) |
+| 2 | Addebito agenzia (SEPA, disposto alla firma) | — | — | PV incassa €30 (standard) o N×€20 (multipla) |
+| 3 | Notifica firma all'agenzia | Email (N8 — **senza** fattura allegata) | Sistema | Agenzia |
 | 4 | **Incasso confermato** → generazione fattura PV | Fattura €30 (standard) / €20 per veicolo (multipla) — PDF + XML TD01 | Passaggio Veloce S.r.l. | Agenzia |
 | 5 | Notifica fattura disponibile (N53) | Email con PDF allegato | Sistema | Agenzia |
 
@@ -511,15 +511,17 @@ Per **PV emittente** l'`idSoggetto` è la costante letterale `'PV'` (non una Com
 
 Si aggiungono al sistema `NotificaInviata` esistente.
 
-| Codice | Destinatario | Trigger | Subject (it) | Contenuto |
-|---|---|---|---|---|
-| `N26_FATTURA_GENERATA_AGENZIA` | Agenzia | Generazione `FATTURA_PV` | "Nuova fattura — pratica {codice}" | PDF in allegato, link a `/fatturazione` |
-| `N27_DOC_BROKER_GENERATO` | Broker | Generazione `DOC_BROKER` | "Documento fiscale generato — pratica {codice}" | PDF+XML in allegato, ricorda di trasmettere allo SDI |
-| `N28_DOC_BROKER_AGENZIA` | Agenzia | Generazione `DOC_BROKER` | "Documento broker — pratica {codice}" | PDF in allegato (per propria contabilità) |
-| `N29_FATTURA_NON_PAGATA` | Admin | Cron 15gg post-emissione, stato IN_ATTESA | "Fattura scaduta — agenzia {nome}" | Lista fatture scadute |
-| `N30_DOC_BROKER_NON_TRASMESSO` | Broker | Cron 30gg post-emissione, no `trasmessoSdiAt` | "Documento non trasmesso allo SDI" | Reminder con link ai documenti pendenti |
+| Codice | Stato | Destinatario | Trigger | Subject (it) | Contenuto |
+|---|---|---|---|---|---|
+| `N53_AGENZIA_FATTURA_DISPONIBILE` | **implementata** | Agenzia | **Incasso confermato** dell'addebito → emissione `FATTURA_PV` | "Fattura disponibile — pratica {codice}" | PDF in allegato, link a `/fatturazione` |
+| `N27_DOC_BROKER_GENERATO` | da implementare | Broker | Generazione `DOC_BROKER` (al payout) | "Documento fiscale generato" | PDF+XML in allegato, ricorda di trasmettere allo SDI |
+| `N28_DOC_BROKER_AGENZIA` | da implementare | Agenzia | Generazione `DOC_BROKER` | "Documento broker — pratica {codice}" | PDF in allegato (per propria contabilità) |
+| `N29_FATTURA_NON_PAGATA` | da implementare | Admin | Cron 15gg post-emissione, stato IN_ATTESA | "Fattura scaduta — agenzia {nome}" | Lista fatture scadute |
+| `N30_DOC_BROKER_NON_TRASMESSO` | da implementare | Broker | Cron 30gg post-emissione, no `trasmessoSdiAt` | "Documento non trasmesso allo SDI" | Reminder con link ai documenti pendenti |
 
-Aggiunta enum `NotificaTipo` (5 nuovi valori). Template MVP riusa il pattern A6 (header navy + card + footer). Allegati gestiti via `EmailProvider.sendWithAttachments` (estensione provider — Resend già supporta).
+> **`N26_FATTURA_GENERATA_AGENZIA` non esiste e non va creata.** Era la notifica prevista qui in origine, con trigger "generazione `FATTURA_PV`"; non è mai stata implementata e il suo ruolo è oggi coperto dalla **N53**, che parte all'incasso confermato e non alla firma (vedi §1.2 step 6 e §1.3 step 5). Attenzione al numero: nell'enum `NotificaTipo` **`N26` è già occupato** da `N26_EMAIL_PARTENZA` (email di partenza CRM), che con la fatturazione non c'entra nulla. Riesumare la sigla vecchia produrrebbe una collisione oltre che una seconda email per la stessa fattura.
+
+Le notifiche ancora "da implementare" richiedono altrettanti valori nuovi in `NotificaTipo` (oggi nell'enum, di questo gruppo, c'è solo la N53). Template MVP riusa il pattern A6 (header navy + card + footer). Allegati gestiti via `EmailProvider.sendWithAttachments` (estensione provider — Resend già supporta).
 
 ---
 

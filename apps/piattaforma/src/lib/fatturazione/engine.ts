@@ -19,6 +19,19 @@ const ID_SOGGETTO_PV = 'PV';
  * Duck typing invece di `instanceof PrismaClientKnownRequestError`: questo
  * modulo importa `Prisma` solo come tipo, e la forma dell'errore (`code` +
  * `meta.target`) è parte del contratto pubblico di Prisma.
+ *
+ * DUE forme accettate, e non è ridondanza difensiva: `meta.target` arriva a
+ * volte come elenco dei campi (`['praticaId', 'tipo']`), a volte come nome
+ * dell'indice (`'documenti_fiscali_praticaId_tipo_key'`). Il repo ha già
+ * incontrato lo stesso dualismo in `lib/auth/email-univoca.ts:52-66`
+ * (`['email']` oppure `'users_email_key'`). Riconoscere solo l'elenco dei
+ * campi renderebbe questo guard inerte proprio sulla forma nome-indice: il
+ * `P2002` verrebbe rilanciato e l'unique sul DB, invece di rendere idempotente
+ * `createFatturaPv`, la farebbe esplodere.
+ *
+ * Il match sul nome è esatto e non per sottostringa, per lo stesso motivo di
+ * `email-univoca.ts`: un altro indice che contenga "praticaId" nel nome non
+ * deve essere scambiato per questo.
  */
 function isConflittoFatturaPratica(err: unknown): boolean {
   const e = err as { code?: unknown; meta?: { target?: unknown } } | null;
@@ -29,7 +42,10 @@ function isConflittoFatturaPratica(err: unknown): boolean {
     : typeof target === 'string'
       ? [target]
       : [];
-  return campi.includes('praticaId') && campi.includes('tipo');
+  return (
+    (campi.includes('praticaId') && campi.includes('tipo')) ||
+    campi.includes('documenti_fiscali_praticaId_tipo_key')
+  );
 }
 
 /**

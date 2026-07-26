@@ -23,8 +23,8 @@ pratica (il dealer) con l'agenzia giusta nella sua zona.
    al luogo di consegna indicato, in cerchi progressivamente più ampi e in più round se
    necessario. La **prima agenzia che accetta** prende in carico il lavoro.
 3. **Firma e chiusura** — la pratica viene firmata in agenzia; il dealer riceve notifiche in
-   tempo reale e, a firma avvenuta, la pratica si chiude con fatturazione elettronica
-   trasmessa al SDI.
+   tempo reale e, a firma avvenuta, la pratica si chiude. La fatturazione elettronica segue
+   l'incasso dell'addebito, nei giorni lavorativi successivi.
 
 ## Per chi è
 

@@ -461,11 +461,42 @@ git commit -m "docs(fatturazione): i testi descrivono la fattura emessa dopo l'i
    ```
 
    Se restituisce righe, vanno risolte prima: i dati di produzione sono usa-e-getta, quindi cancellare il duplicato più recente è un'opzione legittima.
-2. **Migration su Neon, poi push.** `pnpm --filter @pv/db db:deploy` con `DATABASE_URL` di produzione, verificando con `migrate status` che non resti nulla di pendente.
-3. **Far rivedere al legale** le clausole 9 e 11 riscritte: i Termini sono in produzione ma marcati DRAFT in attesa di revisione, e questo intervento le tocca nel merito.
+
+   **Ri-lancia questa query immediatamente prima di `db:deploy`, non "prima del rilascio".** Pre-controllo e `CREATE UNIQUE INDEX` non sono atomici: fra i due c'è una finestra in cui un incasso può creare la riga che fa fallire l'indice. Se fra il controllo e il deploy è passato del tempo (o c'è stato traffico), rifallo.
+
+2. **Migration su Neon, poi push.** `pnpm --filter @pv/db db:deploy` con `DATABASE_URL` di produzione. Verifica con `pnpm --filter @pv/db exec prisma migrate status` che non resti nulla di pendente — **prima** del push, non dopo: un deploy di codice che presuppone un indice non ancora applicato è la stessa riconciliazione a metà già vista con i permessi granulari.
+
+   Nota di lock: il `CREATE UNIQUE INDEX` è scritto **senza `CONCURRENTLY`** (Prisma non lo emette e dentro una transazione non è ammesso). Prende un lock `SHARE` su `documenti_fiscali`, che **blocca le scritture** su quella tabella per tutta la durata della costruzione dell'indice. Su una tabella di queste dimensioni sono millisecondi, ma vale la pena saperlo: se un domani la tabella crescesse di ordini di grandezza, la stessa istruzione diventerebbe una finestra di indisponibilità sulle emissioni.
+
+3. **Se `db:deploy` fallisce, la migration NON si ritenta e basta.** Un `CREATE UNIQUE INDEX` che sbatte contro un duplicato lascia una riga **failed** in `_prisma_migrations`, e da quel momento **ogni** `migrate deploy` successivo si rifiuta di partire — compresi quelli di rilasci futuri che con questa migration non c'entrano nulla. Chi ha il terminale in mano deve fare, nell'ordine:
+
+   ```
+   # 1. sblocca lo stato: dichiara la migration fallita come "annullata"
+   pnpm --filter @pv/db exec prisma migrate resolve --rolled-back 20260726180000_unique_fattura_per_pratica
+
+   # 2. elimina i duplicati (i dati di produzione sono usa-e-getta: si tiene il piu' vecchio)
+   #    Ri-lancia prima la query del punto 1 per sapere quali praticaId sono coinvolti.
+   DELETE FROM documenti_fiscali d
+   USING documenti_fiscali d2
+   WHERE d.tipo = 'FATTURA_PV' AND d2.tipo = 'FATTURA_PV'
+     AND d."praticaId" = d2."praticaId" AND d."praticaId" IS NOT NULL
+     AND d."emessoAt" > d2."emessoAt";
+
+   # 3. ri-lancia
+   pnpm --filter @pv/db db:deploy
+   pnpm --filter @pv/db exec prisma migrate status   # deve tornare pulito
+   ```
+
+   `--rolled-back` e non `--applied`: l'indice **non** è stato creato, e marcarlo come applicato lascerebbe lo schema in deriva silenziosa (Prisma crederebbe esistente un vincolo che il DB non ha, e `createFatturaPv` tornerebbe a essere un leggi-poi-scrivi senza rete). Non toccare `_prisma_migrations` a mano.
+
+4. **Far rivedere al legale** le clausole 9 e 11 riscritte: i Termini sono in produzione ma marcati DRAFT in attesa di revisione, e questo intervento le tocca nel merito.
 
 ## Fuori scope
 
 - La race fra `anno` (calcolato in JS) ed `emessoAt` (scritto da `now()` del DB) attorno alla mezzanotte di Roma: preesistente, finestra di poche centinaia di millisecondi. Il fix corretto è catturare un solo istante e passarlo anche a `emessoAt` nella `create`.
-- Nota di credito automatica su dispute o rimborsi SEPA: `createNotaCredito` resta non agganciata.
-- La riconciliazione oraria **non** copre la transizione `IN_ATTESA` → `PAGATA`: il suo ramo 1 scarta le pratiche che hanno già una `FATTURA_PV`, quindi non vedrebbe i documenti da allineare. Scelta deliberata — sarebbe macchina in più per una popolazione transitoria.
+- Nota di credito automatica su dispute o rimborsi SEPA: `createNotaCredito` resta non agganciata. **E resta più rotta di quanto sembri:** copia `payoutId: orig.payoutId` nella riga nuova (`lib/fatturazione/engine.ts`, dentro la `create` della `NOTA_VARIAZIONE`) e `payoutId` è `@unique` sul modello `DocumentoFiscale`. Una nota di credito su un `DOC_BROKER` — che il `payoutId` ce l'ha sempre valorizzato — ha quindi **sempre** lanciato `P2002`, da prima di questo rilascio e indipendentemente dal nuovo indice. Chi aggancerà dispute o rimborsi SEPA dovrà riscrivere quella funzione a prescindere: il riferimento al payout va tenuto altrove (per esempio derivandolo da `notaVariazionePer`), non duplicato su un campo unico.
+- **Un allineamento `IN_ATTESA` → `PAGATA` fallito non ha nessuna rete.** Se la `updateMany` in fondo a `segnaFeeIncassato` (`lib/fee/incasso.ts`) fallisce, il fee resta `SUCCESS` e il documento resta `IN_ATTESA` **per sempre**: la riconciliazione oraria non lo recupera, e non per una svista. Il ramo 1 filtra `pratica: { documentiFiscali: { none: { tipo: 'FATTURA_PV' } } }` e quindi salta la pratica, che una fattura ce l'ha; il ramo 2 filtra `statoPagamento: 'PAGATA'` e quindi salta il documento, che `PAGATA` non è. Resta una fattura incassata che all'agenzia si mostra "in attesa" — un dato fiscale falso a video, senza processo che lo corregga.
+
+  La motivazione scritta nella prima stesura di questo piano («popolazione transitoria», «macchina in più») era quella sbagliata: il punto non è quanti documenti riguarda, è che **il caso di guasto non si recupera**. Oggi è accettato consapevolmente perché il guasto richiede che una singola `updateMany` fallisca dopo che tutto il resto è andato a buon fine.
+
+  Se un domani lo si volesse coprire, è un **terzo ramo** su `fee.stato = SUCCESS AND doc.statoPagamento = IN_ATTESA`, **senza N53** (quel documento è già stato consegnato in allegato alla N8: rimandarlo sarebbe una seconda consegna della stessa fattura). E **non** dentro il ramo 2: il suo filtro `statoPagamento: 'PAGATA'` è portante, non incidentale — è ciò che rende la riconciliazione inerte in modalità mock, dove tutti i documenti della valvola sono `IN_ATTESA`. Allargare quel filtro trasformerebbe la rete in una macchina che spamma N53 per fatture già ricevute.

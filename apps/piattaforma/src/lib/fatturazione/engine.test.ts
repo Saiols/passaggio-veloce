@@ -118,6 +118,20 @@ describe('createFatturaPv', () => {
     expect(out).toBeNull();
   });
 
+  it("conflitto consegnato come NOME dell'indice: ritorna null invece di propagare", async () => {
+    // Forma alternativa di `meta.target`: Prisma non consegna sempre l'elenco
+    // dei campi. Vedi `lib/auth/email-univoca.ts`, che gestisce lo stesso
+    // dualismo (`['email']` oppure `'users_email_key'`).
+    prismaMock.$transaction.mockRejectedValueOnce(
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: 'documenti_fiscali_praticaId_tipo_key' },
+      }),
+    );
+    const out = await createFatturaPv({ feeAddebitoId: 'fee-1', statoPagamento: 'PAGATA' });
+    expect(out).toBeNull();
+  });
+
   it('un P2002 su un altro vincolo NON viene inghiottito', async () => {
     prismaMock.$transaction.mockRejectedValueOnce(
       Object.assign(new Error('Unique constraint failed'), {

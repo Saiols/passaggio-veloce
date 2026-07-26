@@ -121,10 +121,16 @@ lo stato della pratica e le notifiche.
 
 ## Documenti fiscali
 
-A pratica completata, i documenti fiscali (fattura di Passaggio Veloce e documento del
-broker) sono gestiti dalla piattaforma secondo il flusso previsto e disponibili dalla
-sezione Fatturazione. (La generazione/trasmissione automatica al SDI è in fase di
-attivazione.)
+I documenti fiscali della pratica (fattura di Passaggio Veloce e documento del broker)
+sono gestiti dalla piattaforma e restano disponibili nella sezione Fatturazione.
+
+La fattura di Passaggio Veloce è emessa quando l'addebito SEPA risulta incassato, quindi
+qualche giorno lavorativo dopo la firma: la ricevi via email con il PDF allegato e la trovi
+in Fatturazione. L'addebito viene disposto alla firma, ma l'incasso segue i tempi dello
+standard SEPA e la fattura non è immediata: nel frattempo la pratica è comunque chiusa a
+tutti gli effetti.
+
+(La generazione/trasmissione automatica al SDI è in fase di attivazione.)
 
 ## Notifiche
 

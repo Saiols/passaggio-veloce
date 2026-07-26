@@ -1720,6 +1720,16 @@ model DocumentoFiscale {
   /// di `createFatturaPv` è un leggi-poi-scrivi che due chiamanti concorrenti
   /// (percorso d'incasso e riconciliazione oraria) possono attraversare
   /// entrambi. I DOC_BROKER hanno `praticaId` NULL e restano liberi.
+  ///
+  /// ATTENZIONE a chi implementerà la penale broker come documento fiscale:
+  /// questo vincolo è su `tipo`, quindi limita a UNO PER PRATICA anche i
+  /// `PENALE_BROKER`. Oggi nessuno li crea, ma la penale è di €25 **per
+  /// veicolo** (Termini clausola 10.4): su una pratica multi-veicolo un
+  /// documento per veicolo collide qui. Chi la implementa deve prima decidere
+  /// se emettere un documento unico multi-riga per pratica (e allora il
+  /// vincolo va bene com'è) oppure restringere l'indice alle sole FATTURA_PV
+  /// con un indice parziale scritto a mano (`WHERE tipo = 'FATTURA_PV'`), che
+  /// Prisma non sa esprimere con `@@unique`.
   @@unique([praticaId, tipo])
   @@index([praticaId])
   @@index([payoutId])

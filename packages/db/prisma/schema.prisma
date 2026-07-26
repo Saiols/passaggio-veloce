@@ -1024,12 +1024,6 @@ model DistribuzioneConfig {
   raggioMaxM    Int      @default(10000)
   intervalloMin Int      @default(60)
 
-  // Legacy: sostituite da `orariSettimana`. Droppate dalla migration
-  // 20260726130000, DOPO il deploy del codice che non le legge più.
-  orarioInizio String @default("09:00")
-  orarioFine   String @default("19:00")
-  giorni       String @default("LUN,MAR,MER,GIO,VEN")
-
   // Calendario della piattaforma. Nullable: `null` è un input legittimo che il
   // parsing difensivo (lib/distribuzione/calendario.ts) traduce nei default.
   orariSettimana Json?

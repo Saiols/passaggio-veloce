@@ -167,6 +167,32 @@ describe('getCoperturaPratica', () => {
     expect(out!.origineMancante).toBe(true);
   });
 
+  it('due assegnazioni per la stessa sede (ricircolo dopo revoca) → vince il ciclo corrente', async () => {
+    // Scenario reale: la sede era stata contattata al ciclo 1 (poi assegnata
+    // altrove), il ciclo è ripartito dopo una revoca e la stessa sede è stata
+    // ricontattata al ciclo 2. Le due righe convivono (vincolo unico è su
+    // praticaId+sedeId+round+ciclo, non su sedeId da solo). L'array è messo
+    // di proposito con la riga del ciclo VECCHIO per ultima: un'implementazione
+    // che riduce a "una riga per sede" prendendo l'ultima incontrata sbaglierebbe
+    // qui, mostrando "in attesa" invece di "contattata".
+    prismaMock.pratica.findUnique.mockResolvedValue({
+      id: 'p1',
+      lat: LAT0,
+      lng: LNG0,
+      raggioCorrenteM: 5000,
+      distribuzioneCiclo: 2,
+      assegnazioni: [
+        { sedeId: 's1', ciclo: 2, round: 3, esito: 'PENDING' },
+        { sedeId: 's1', ciclo: 1, round: 1, esito: 'ASSEGNATA_ALTRO' },
+      ],
+    });
+    prismaMock.sede.findMany.mockResolvedValue([sede()]);
+    const out = await getCoperturaPratica('p1');
+    expect(out!.sedi[0]!.stato).toBe('contattata');
+    expect(out!.sedi[0]!.round).toBe(3);
+    expect(out!.sedi[0]!.esito).toBe('PENDING');
+  });
+
   it('ordina per distanza crescente', async () => {
     prismaMock.sede.findMany.mockResolvedValue([
       sede({ id: 'lontana', lat: kmLat(6) }),

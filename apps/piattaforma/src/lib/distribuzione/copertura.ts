@@ -112,11 +112,21 @@ export async function getCoperturaPratica(praticaId: string): Promise<Copertura 
   });
 
   const now = new Date();
-  const perSede = new Map(
-    pratica.assegnazioni
-      .filter((a): a is typeof a & { sedeId: string } => a.sedeId !== null)
-      .map((a) => [a.sedeId, a]),
-  );
+
+  // Una sede può avere PIÙ righe di assegnazione sulla stessa pratica: il
+  // vincolo unico è su (praticaId, sedeId, round, ciclo), non su sedeId da
+  // solo. È lo scenario reale del ricircolo dopo revoca (`sediDaEscludere`):
+  // una riga del ciclo vecchio (es. ASSEGNATA_ALTRO) convive con una riga del
+  // ciclo corrente per la stessa sede. Raggruppare in una lista — e NON
+  // ridurre a "una riga per sede" — evita di dipendere dall'ordine con cui
+  // Postgres/l'array le restituisce, che qui non è garantito.
+  const perSede = new Map<string, typeof pratica.assegnazioni>();
+  for (const a of pratica.assegnazioni) {
+    if (a.sedeId == null) continue;
+    const list = perSede.get(a.sedeId);
+    if (list) list.push(a);
+    else perSede.set(a.sedeId, [a]);
+  }
 
   for (const s of sedi) {
     if (s.lat == null || s.lng == null) {
@@ -127,7 +137,7 @@ export async function getCoperturaPratica(praticaId: string): Promise<Copertura 
     const distanzaM = Math.round(distanceKm(origine, { lat: s.lat, lng: s.lng }) * 1000);
     if (distanzaM > cfg.raggioMaxM) continue;
 
-    const ass = perSede.get(s.id);
+    const assList = perSede.get(s.id) ?? [];
     const comune = {
       sedeId: s.id,
       nome: s.nome,
@@ -136,19 +146,28 @@ export async function getCoperturaPratica(praticaId: string): Promise<Copertura 
       distanzaM,
     };
 
-    // La revoca admin è permanente e vale su qualunque ciclo: si valuta per
-    // prima, altrimenti una sede revocata sembrerebbe solo "contattata".
-    if (ass?.esito === 'REVOCATA_ADMIN') {
+    // Criterio 1: la revoca admin è permanente e vale su QUALUNQUE ciclo — si
+    // cerca in tutta la lista, non solo nell'ultima riga. Va valutata prima
+    // del criterio "contattata", altrimenti una sede revocata (e poi
+    // eventualmente ricontattata in un ciclo successivo) sembrerebbe solo
+    // "contattata".
+    if (assList.some((a) => a.esito === 'REVOCATA_ADMIN')) {
       base.sedi.push({ ...comune, stato: 'esclusa', round: null, esito: null, motivo: 'REVOCATA_ADMIN' });
       continue;
     }
 
-    if (ass && ass.ciclo === pratica.distribuzioneCiclo) {
+    // Criterio 2: contattata nel ciclo CORRENTE. Se per qualche motivo esistono
+    // più righe nello stesso ciclo (es. escalation manuale a round 99 sopra un
+    // round normale), vince quella con il round più alto — il contatto più
+    // recente — non quella che capita per ultima nell'array.
+    const contattiCicloCorrente = assList.filter((a) => a.ciclo === pratica.distribuzioneCiclo);
+    if (contattiCicloCorrente.length > 0) {
+      const ultima = contattiCicloCorrente.reduce((max, a) => (a.round > max.round ? a : max));
       base.sedi.push({
         ...comune,
         stato: 'contattata',
-        round: ass.round,
-        esito: ass.esito,
+        round: ultima.round,
+        esito: ultima.esito,
         motivo: null,
       });
       continue;

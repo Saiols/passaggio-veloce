@@ -73,6 +73,9 @@ vi.mock('@/lib/eventi/pratica-eventi', () => ({
 }));
 
 import { firmaPraticaCore } from './firma-engine';
+import { createFatturaPv } from '@/lib/fatturazione/engine';
+
+const createFatturaPvMock = vi.mocked(createFatturaPv);
 
 const PID = 'pratica-1';
 const MOTIVO = 'Confermato per telefono col cliente, agenzia irreperibile';
@@ -251,6 +254,29 @@ describe('firmaPraticaCore — gate ADMIN nel motore (Termini art. 11)', () => {
 
       expect(res).toEqual({ ok: false, error: 'Pratica già firmata o non più firmabile' });
       expect(prismaMock.feeAddebito.create).not.toHaveBeenCalled();
+    });
+
+    it('feeAgenziaCent > 0, transazione committata → createFatturaPv riceve l\'id del FeeAddebito appena creato, non uno qualsiasi', async () => {
+      // Id deliberatamente diverso dal default 'fee-1' del beforeEach: se il
+      // motore disallineasse la condizione che crea il FeeAddebito da quella
+      // che valorizza feeAddebitoIdCreato, o passasse un id sbagliato
+      // (es. hardcoded), questo test lo becca — non basta che createFatturaPv
+      // venga chiamata, deve arrivarle ESATTAMENTE l'id restituito dalla
+      // create() reale.
+      prismaMock.pratica.findUnique.mockResolvedValue({
+        ...praticaValida(),
+        feeAgenziaCent: 5000,
+      });
+      prismaMock.feeAddebito.create.mockResolvedValue({ id: 'fee-vero-42' });
+
+      const res = await firmaPraticaCore(PID, { tipo: 'ADMIN', motivo: MOTIVO });
+
+      expect(res).toEqual({ ok: true });
+      expect(prismaMock.feeAddebito.create).toHaveBeenCalledTimes(1);
+      expect(createFatturaPvMock).toHaveBeenCalledWith({
+        feeAddebitoId: 'fee-vero-42',
+        statoPagamento: 'IN_ATTESA',
+      });
     });
   });
 });

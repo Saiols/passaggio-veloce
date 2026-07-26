@@ -22,6 +22,7 @@ import { logCambioStato, STATO_EVENTO } from '@/lib/pratiche/stato-log';
 export type TickResult =
   | { status: 'noop'; reason: string }
   | { status: 'notified'; assegnazioni: number; raggioM: number; round: number }
+  | { status: 'ripresa'; assegnazioni: number; raggioM: number; round: number }
   | { status: 'zona-non-coperta' }
   | { status: 'closed'; finalStato: 'ACCETTATA' | 'ANNULLATA' | 'FIRMATA' | 'SCADUTA' };
 
@@ -230,14 +231,20 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
     return noop(`stato ${pratica.stato} non gestito`);
   }
 
-  // Già dichiarata zona non coperta → espansione ferma.
-  if (pratica.zonaNonCopertaAt) {
-    return noop('zona non coperta');
-  }
+  // Nota: NON c'è più una guardia di uscita anticipata su `zonaNonCopertaAt`.
+  // Una pratica ferma prosegue nel flusso normale: se un'agenzia idonea si è
+  // registrata in zona nel frattempo, la ripresa avviene più sotto (dentro la
+  // tx), ripartendo dal raggio iniziale (vedi `inRipresa`).
 
   // Coordinate mancanti → non calcolabile (guardia difensiva: il submit le rende
-  // obbligatorie). Zona non coperta immediata (scrittura in tx corta), senza crash.
+  // obbligatorie). A differenza della zona non coperta "normale" (nessuna sede in
+  // raggio), qui non esiste ripresa possibile: lat/lng non vengono mai valorizzate
+  // da nessun percorso dopo la creazione. Se già marcata, uscita SENZA scritture
+  // né notifiche: altrimenti ogni tick (ogni minuto) rimanderebbe la N52 al broker.
   if (pratica.lat == null || pratica.lng == null) {
+    if (pratica.zonaNonCopertaAt) {
+      return noop('zona non coperta: coordinate mancanti');
+    }
     const jobs = await scriviZonaNonCoperta(praticaId, cfg, now, {
       zonaNonCoperta: true,
       motivo: 'coordinate-mancanti',
@@ -282,10 +289,11 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
         include: { assegnazioni: { select: { sedeId: true, ciclo: true, esito: true } } },
       });
       // Re-check guardie: qualcosa è cambiato dopo lo Step 1 → abort senza scritture.
+      // `fresh.zonaNonCopertaAt` NON è più fra queste condizioni: è proprio la
+      // ripresa (gestita sotto) che deve poter procedere quando è impostato.
       if (
         !fresh ||
         fresh.stato !== 'IN_DISTRIBUZIONE' ||
-        fresh.zonaNonCopertaAt ||
         fresh.distribuzioneCiclo !== snapCiclo ||
         (fresh.raggioCorrenteM ?? null) !== snapRaggio
       ) {
@@ -297,11 +305,15 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
       const escludere = new Set(sediDaEscludere(fresh));
       const candidatiFiltrati = candidati.filter((c) => !escludere.has(c.sedeId));
 
-      const res = prossimoAnello(
-        candidatiFiltrati,
-        fresh.raggioCorrenteM ?? cfg.raggioStartM,
-        cfg,
-      );
+      // Una pratica ferma in zona non coperta riparte dal raggio INIZIALE: il
+      // suo `raggioCorrenteM` è al massimo, e `prossimoAnello` partendo da lì
+      // non entrerebbe mai nel ciclo. Le agenzie registrate dopo la dichiarazione
+      // possono essere ovunque entro il raggio massimo, quindi si riapre il
+      // ventaglio dalla più vicina, come al primo giro.
+      const inRipresa = fresh.zonaNonCopertaAt !== null;
+      const res = inRipresa
+        ? primoAnello(candidatiFiltrati, cfg)
+        : prossimoAnello(candidatiFiltrati, fresh.raggioCorrenteM ?? cfg.raggioStartM, cfg);
 
       if (res.tipo === 'notifica') {
         // Il round avanza SOLO qui, dove parte un batch reale: gli anelli vuoti
@@ -322,6 +334,8 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
             raggioCorrenteM: res.raggioRaggiuntoM,
             ultimaEspansioneAt: now,
             roundCorrente: round,
+            // La ripresa toglie il marchio: la pratica è di nuovo in gara.
+            ...(inRipresa ? { zonaNonCopertaAt: null } : {}),
           },
         });
         await logCambioStato(tx, {
@@ -329,16 +343,32 @@ export async function tickPratica(praticaId: string): Promise<TickResult> {
           statoDa: 'IN_DISTRIBUZIONE',
           statoA: 'IN_DISTRIBUZIONE',
           tipoEvento: STATO_EVENTO.ROUND_ADVANCE,
-          meta: { raggioM: res.raggioRaggiuntoM, round, ciclo: fresh.distribuzioneCiclo },
+          meta: {
+            raggioM: res.raggioRaggiuntoM,
+            round,
+            ciclo: fresh.distribuzioneCiclo,
+            // Distingue nel monitoraggio un round normale da una ripresa.
+            ...(inRipresa ? { ripresa: true } : {}),
+          },
         });
         return {
           result: {
-            status: 'notified',
+            status: inRipresa ? ('ripresa' as const) : ('notified' as const),
             assegnazioni: newIds.length,
             raggioM: res.raggioRaggiuntoM,
             round,
           },
           jobs: { newAssegnazioniIds: newIds, zonaNonCopertaPraticaId: null },
+        };
+      }
+
+      // Nessuna sede disponibile. Se la pratica era GIÀ in zona non coperta non
+      // si riscrive nulla: lo stato è invariato e una seconda N52 al broker
+      // sarebbe rumore a ogni tick.
+      if (inRipresa) {
+        return {
+          result: noop('zona non coperta: nessuna sede nuova'),
+          jobs: emptyJobs(),
         };
       }
 
@@ -537,21 +567,25 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
 export async function tickAllPraticheInDistribuzione(): Promise<{
   scanned: number;
   expanded: number;
+  riprese: number;
   zonaNonCoperta: number;
   errors: number;
 }> {
   const pratiche = await prisma.pratica.findMany({
-    where: { stato: 'IN_DISTRIBUZIONE', zonaNonCopertaAt: null, deletedAt: null },
+    // `zonaNonCopertaAt` NON è più un filtro: una pratica dichiarata scoperta
+    // deve poter ripartire quando un'agenzia idonea si registra nella sua zona.
+    where: { stato: 'IN_DISTRIBUZIONE', deletedAt: null },
     select: { id: true },
     take: 500,
   });
 
-  const counters = { scanned: 0, expanded: 0, zonaNonCoperta: 0, errors: 0 };
+  const counters = { scanned: 0, expanded: 0, riprese: 0, zonaNonCoperta: 0, errors: 0 };
   for (const p of pratiche) {
     counters.scanned += 1;
     try {
       const r = await tickPratica(p.id);
       if (r.status === 'notified') counters.expanded += 1;
+      if (r.status === 'ripresa') counters.riprese += 1;
       if (r.status === 'zona-non-coperta') counters.zonaNonCoperta += 1;
     } catch {
       // Una pratica non deve mai abortire l'intero giro di cron.

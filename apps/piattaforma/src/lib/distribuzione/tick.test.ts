@@ -673,12 +673,111 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(tx.sede.findMany).not.toHaveBeenCalled();
   });
 
-  it('zonaNonCopertaAt già impostata → noop, nessuna espansione', async () => {
+  // zonaNonCopertaAt non è più un vicolo cieco: la pratica prosegue nel flusso
+  // di ripresa. Senza sedi nuove entro il raggio massimo resta un noop senza
+  // scritture (vedi il describe dedicato più sotto per il caso di successo).
+  it('zonaNonCopertaAt già impostata, nessuna sede nuova → noop senza scritture (ripresa fallita)', async () => {
     tx.pratica.findUnique.mockResolvedValue(praticaTick({ zonaNonCopertaAt: NOW }));
     const res = await tickPratica('p1');
-    expect(res).toEqual({ status: 'noop', reason: 'zona non coperta' });
-    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(res).toEqual({ status: 'noop', reason: 'zona non coperta: nessuna sede nuova' });
+    expect(tx.sede.findMany).toHaveBeenCalled();
     expect(tx.pratica.update).not.toHaveBeenCalled();
+    // Regressione anti-spam: la ripresa fallita non manda una seconda N52.
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('pratica in zona non coperta: riprende se compare una sede idonea', async () => {
+    cfgMock.mockResolvedValue(CFG);
+    orarioMock.mockReturnValue(true);
+    minutiLavorativiMock.mockReturnValue(10_000);
+    const ferma = praticaTick({
+      zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
+      raggioCorrenteM: CFG.raggioMaxM,
+      roundCorrente: 3,
+      ultimaEspansioneAt: new Date('2026-07-24T07:20:00Z'),
+    });
+    prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+    tx.pratica.findUnique.mockResolvedValue(ferma);
+    // Agenzia registrata dopo: 0,4 km, dentro il raggio iniziale (500 m).
+    prismaMock.sede.findMany.mockResolvedValue([
+      { id: 'nuova', lat: kmLat(0.4), lng: LNG0, companyId: 'cN' },
+    ]);
+    tx.praticaAssegnazione.create.mockResolvedValue({ id: 'aN' });
+    tx.pratica.update.mockResolvedValue({});
+    tx.praticaStatoLog.create.mockResolvedValue({});
+
+    const res = await tickPratica('p1');
+
+    expect(res.status).toBe('ripresa');
+    // zonaNonCopertaAt azzerato e round incrementato dal valore precedente.
+    expect(tx.pratica.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ zonaNonCopertaAt: null, roundCorrente: 4 }),
+      }),
+    );
+    // La ripresa riparte dal raggio INIZIALE, non dal massimo.
+    expect(tx.praticaAssegnazione.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ sedeId: 'nuova', raggioMetri: CFG.raggioStartM }),
+      }),
+    );
+    // Nessuna smentita della N52 già ricevuta dal broker: solo la N6 alle agenzie.
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('pratica in zona non coperta: nessuna sede nuova → noop senza scritture', async () => {
+    cfgMock.mockResolvedValue(CFG);
+    orarioMock.mockReturnValue(true);
+    minutiLavorativiMock.mockReturnValue(10_000);
+    const ferma = praticaTick({
+      zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
+      raggioCorrenteM: CFG.raggioMaxM,
+    });
+    prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+    tx.pratica.findUnique.mockResolvedValue(ferma);
+    prismaMock.sede.findMany.mockResolvedValue([]);
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'zona non coperta: nessuna sede nuova' });
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(tx.praticaAssegnazione.create).not.toHaveBeenCalled();
+    // Regressione anti-spam: nessuna seconda N52 al broker.
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('pratica in zona non coperta: una sede già contattata nel ciclo non la fa ripartire', async () => {
+    cfgMock.mockResolvedValue(CFG);
+    orarioMock.mockReturnValue(true);
+    minutiLavorativiMock.mockReturnValue(10_000);
+    const ferma = praticaTick({
+      zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z'),
+      raggioCorrenteM: CFG.raggioMaxM,
+      assegnazioni: [{ sedeId: 'vecchia', ciclo: 1, esito: 'RIFIUTATA' }],
+    });
+    prismaMock.pratica.findUnique.mockResolvedValue(ferma);
+    tx.pratica.findUnique.mockResolvedValue(ferma);
+    prismaMock.sede.findMany.mockResolvedValue([]);
+
+    const res = await tickPratica('p1');
+
+    expect(res.status).toBe('noop');
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    // Regressione anti-spam: nessuna seconda N52 al broker.
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('pratica in zona non coperta: fuori orario non riprende', async () => {
+    cfgMock.mockResolvedValue(CFG);
+    orarioMock.mockReturnValue(false);
+    prismaMock.pratica.findUnique.mockResolvedValue(
+      praticaTick({ zonaNonCopertaAt: new Date('2026-07-24T07:30:00Z') }),
+    );
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'fuori orario' });
+    expect(prismaMock.sede.findMany).not.toHaveBeenCalled();
   });
 
   it('pratica senza lat/lng → zona non coperta (guardia, non crash), nessuna query sede', async () => {
@@ -696,6 +795,23 @@ describe('tickPratica: espansione a raggio incrementale', () => {
     expect(sendNotification).toHaveBeenCalledWith(
       expect.objectContaining({ tipo: 'N52_BROKER_ZONA_NON_COPERTA' }),
     );
+  });
+
+  // Le coordinate mancanti non si valorizzano mai dopo la creazione: a
+  // differenza della zona non coperta "normale" qui non esiste ripresa
+  // possibile. Senza questa guardia, ogni tick (ogni minuto) rimanderebbe la
+  // N52 al broker all'infinito.
+  it('pratica senza lat/lng già marcata zona non coperta → noop senza scritture né N52 ripetuta', async () => {
+    tx.pratica.findUnique.mockResolvedValue(
+      praticaTick({ lat: null, lng: null, zonaNonCopertaAt: NOW }),
+    );
+
+    const res = await tickPratica('p1');
+
+    expect(res).toEqual({ status: 'noop', reason: 'zona non coperta: coordinate mancanti' });
+    expect(tx.sede.findMany).not.toHaveBeenCalled();
+    expect(tx.pratica.update).not.toHaveBeenCalled();
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 });
 
@@ -730,5 +846,18 @@ describe('tickAllPraticheInDistribuzione: isolamento errori per-pratica', () => 
     // pa e pc processate nonostante il crash di pb (nessun anello espanso, sono BOZZA).
     expect(res.expanded).toBe(0);
     expect(res.zonaNonCoperta).toBe(0);
+  });
+
+  it('il cron considera anche le pratiche ferme in zona non coperta', async () => {
+    prismaMock.pratica.findMany.mockResolvedValue([]);
+
+    await tickAllPraticheInDistribuzione();
+
+    // La where NON deve più filtrare su zonaNonCopertaAt: quelle pratiche sono
+    // proprio quelle che possono ripartire quando entra una nuova agenzia.
+    const where = prismaMock.pratica.findMany.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('zonaNonCopertaAt');
+    expect(where.stato).toBe('IN_DISTRIBUZIONE');
+    expect(where.deletedAt).toBeNull();
   });
 });

@@ -226,8 +226,10 @@ export default function TerminiPage() {
           <p>
             Le agenzie autorizzano Passaggio Veloce ad addebitare il proprio conto mediante addebito
             diretto SEPA (SEPA Direct Debit) per gli importi delle fee dovute ai sensi della clausola
-            3, secondo le tempistiche indicate in Piattaforma. Il mandato è revocabile secondo lo
-            standard SDD; la revoca non fa venir meno gli importi già maturati.
+            3, secondo le tempistiche indicate in Piattaforma. L&apos;addebito è disposto alla
+            registrazione della firma; l&apos;incasso segue i tempi dello standard SDD e la fattura è
+            emessa ad avvenuto incasso. Il mandato è revocabile secondo lo standard SDD; la revoca
+            non fa venir meno gli importi già maturati.
           </p>
         </Section>
 
@@ -286,8 +288,8 @@ export default function TerminiPage() {
           </p>
           <p>
             L&apos;attestazione produce <strong>tutti gli effetti della segnalazione ordinaria</strong>:
-            perfezionamento della pratica, maturazione del compenso del Broker, addebito della fee a
-            carico dell&apos;Agenzia ed emissione della relativa fattura.
+            perfezionamento della pratica, maturazione del compenso del Broker e addebito della fee a
+            carico dell&apos;Agenzia. La fattura relativa è emessa ad avvenuto incasso dell&apos;addebito.
           </p>
           <p>
             Il Gestore registra internamente data, autore e motivazione dell&apos;attestazione, e ne

@@ -46,14 +46,17 @@ Quote indicate come `(ord)` ordinario / `(forf)` forfettario.
 | Step | Evento | Documento generato | Emittente | Destinatario |
 |---|---|---|---|---|
 | 1 | Pratica `FIRMATA` | — | — | — |
-| 2 | Generazione fattura PV | Fattura €50 (ord) / €55 (forf) — PDF + XML TD01 | Passaggio Veloce S.r.l. | Agenzia |
-| 3 | Generazione documento broker | Doc. €25 (ord, TD01) / €20 (forf, TD06) — PDF + XML | PV per conto del broker (delega contrattuale) | Agenzia |
-| 4 | Addebito agenzia | — | — | PV incassa €75 totali |
-| 5 | Accredito wallet broker (somme di terzi) | — (transazione interna) | — | Wallet broker (€25 ord / €20 forf) |
-| 6 | Notifica a broker e agenzia | Email con PDF allegato | Sistema | Broker + Agenzia |
+| 2 | Accredito wallet broker (somme di terzi) | — (transazione interna) | — | Wallet broker (€25 ord / €20 forf) |
+| 3 | Notifica firma a broker e agenzia | Email (N4 broker, N8 agenzia — **senza** fattura allegata) | Sistema | Broker + Agenzia |
+| 4 | Addebito agenzia (SEPA, disposto alla firma) | — | — | PV incassa €75 totali |
+| 5 | **Incasso confermato** → generazione fattura PV | Fattura €50 (ord) / €55 (forf) — PDF + XML TD01 | Passaggio Veloce S.r.l. | Agenzia |
+| 6 | Notifica fattura disponibile (N53) | Email con PDF allegato | Sistema | Agenzia |
 | 7 | Soglia payout raggiunta | — | — | Broker (notifica N5/N24) |
 | 8 | Payout | Bonifico SEPA | PV | IBAN broker |
-| 9 | Trasmissione SDI doc. broker | — | Broker (manuale, fuori piattaforma) | SDI / Agenzia delle Entrate |
+| 9 | Generazione documento broker (**al payout**) | Doc. €25 (ord, TD01) / €20 (forf, TD06) — PDF + XML | PV per conto del broker (delega contrattuale) | Passaggio Veloce (somme di terzi) |
+| 10 | Trasmissione SDI doc. broker | — | Broker (manuale, fuori piattaforma) | SDI / Agenzia delle Entrate |
+
+> La fattura PV nasce **all'incasso confermato dell'addebito**, non alla firma: per una prestazione di servizi il momento impositivo è il pagamento (art. 6 D.P.R. 633/1972). Con addebito SEPA la conferma arriva dopo alcuni giorni lavorativi, quindi fra la chiusura della pratica e la fattura passa del tempo.
 
 ### 1.3 Flusso documentale per **minivoltura** (singola o massiva)
 
@@ -62,9 +65,10 @@ Caso degenerato: dealer e broker coincidono, broker non maturà nulla in wallet,
 | Step | Evento | Documento generato | Emittente | Destinatario |
 |---|---|---|---|---|
 | 1 | Pratica `FIRMATA` | — | — | — |
-| 2 | Generazione fattura PV | Fattura €30 (standard) / €20 per veicolo (multipla) — PDF + XML TD01 | Passaggio Veloce S.r.l. | Agenzia |
-| 3 | Addebito agenzia | — | — | PV incassa €30 (standard) o N×€20 (multipla) |
-| 4 | Notifica agenzia | Email con PDF | Sistema | Agenzia |
+| 2 | Notifica firma all'agenzia | Email (N8 — **senza** fattura allegata) | Sistema | Agenzia |
+| 3 | Addebito agenzia (SEPA, disposto alla firma) | — | — | PV incassa €30 (standard) o N×€20 (multipla) |
+| 4 | **Incasso confermato** → generazione fattura PV | Fattura €30 (standard) / €20 per veicolo (multipla) — PDF + XML TD01 | Passaggio Veloce S.r.l. | Agenzia |
+| 5 | Notifica fattura disponibile (N53) | Email con PDF allegato | Sistema | Agenzia |
 
 > **Da confermare:** per la minivoltura multipla emettiamo una fattura unica multi-riga (1 fattura totale = N×€20) o N fatture separate da €20 ciascuna? La spec assume **una fattura unica multi-riga per lotto** (più snello per agenzia + numerazione progressiva pulita), da rivedere con commercialista.
 

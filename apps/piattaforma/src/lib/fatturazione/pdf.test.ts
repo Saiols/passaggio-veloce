@@ -99,6 +99,43 @@ describe('buildDocumentoPdf — robustezza encoding', () => {
   });
 });
 
+describe('buildDocumentoPdf — data di emissione in calendario italiano', () => {
+  // Regressione: `emessoAt` resta l'istante UTC del `now()` del DB (emissione
+  // guidata da cron/webhook, non più da un umano che firma). Il PDF deve
+  // stampare la data del calendario di Roma, non quella del fuso del runtime.
+  //
+  // TZ forzato a UTC — il fuso del runtime Vercel in produzione — e NON
+  // lasciato a quello della macchina: su un portatile italiano una
+  // formattazione SENZA fuso esplicito produce già "1 gen 2027" per puro
+  // caso (il fuso del sistema operativo coincide con Roma), e il test
+  // resterebbe verde anche senza la correzione. La premessa sotto lo
+  // dimostra: se l'override TZ non avesse effetto, il test cadrebbe rosso lì
+  // invece che verde a vuoto.
+  it('capodanno: 23:30 UTC del 31/12 si stampa "1 gen 2027", non la data UTC', async () => {
+    const tzOriginale = process.env.TZ;
+    process.env.TZ = 'UTC';
+    try {
+      expect(
+        new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium' }).format(
+          new Date('2026-12-31T23:30:00Z'),
+        ),
+      ).toBe('31 dic 2026'); // premessa: con TZ=UTC, una formattazione senza fuso esplicito segue l'UTC
+
+      const bytes = await buildDocumentoPdf(baseInput({ emessoAt: new Date('2026-12-31T23:30:00Z') }));
+      const { getDocumentProxy, extractText } = await import('unpdf');
+      const doc = await getDocumentProxy(new Uint8Array(bytes));
+      const res = await extractText(doc, { mergePages: true });
+      const text = Array.isArray(res.text) ? res.text.join('\n') : res.text;
+
+      expect(text).toContain('Emesso il 1 gen 2027');
+      expect(text).not.toContain('31 dic 2026');
+    } finally {
+      if (tzOriginale === undefined) delete process.env.TZ;
+      else process.env.TZ = tzOriginale;
+    }
+  });
+});
+
 describe('wrapText', () => {
   it('spezza il testo lungo in piu righe entro la larghezza massima', async () => {
     const pdf = await PDFDocument.create();

@@ -1,24 +1,12 @@
 import 'server-only';
 import { prisma, type Prisma } from '@pv/db';
-import { romeYmd } from '@/lib/date/rome-day';
+import { romeAnnoCivile } from '@/lib/date/rome-day';
 import { splitImporto, fatturaPaTipoPerRegime } from './calcolo';
 import { prossimoContatore } from './numerazione';
 import { numeroDocumento } from './format';
 import { pvEmittente, snapshotCompany, type DatiFiscali } from './pv-emittente';
 
 const ID_SOGGETTO_PV = 'PV';
-
-/**
- * Anno civile ITALIANO, non UTC. Il registro fiscale e la data del documento
- * seguono il calendario di Roma: fra le 23:00 e le 23:59 UTC del 31 dicembre a
- * Roma è già il 1° gennaio, e `new Date().getFullYear()` numererebbe quella
- * fattura sul registro dell'anno appena chiuso. Ora che l'emissione è guidata
- * da cron e webhook — non più da un umano che firma — quell'ora è raggiungibile
- * da un processo automatico.
- */
-function annoCivileRoma(): number {
-  return romeYmd(new Date())[0];
-}
 
 /**
  * FATTURA_PV verso l'agenzia. Importo = `FeeAddebito.importoCent`, cioè quello
@@ -41,7 +29,7 @@ export async function createFatturaPv(input: {
   feeAddebitoId: string;
   statoPagamento: 'IN_ATTESA' | 'PAGATA';
 }): Promise<{ id: string } | null> {
-  const anno = annoCivileRoma();
+  const anno = romeAnnoCivile(new Date());
   return prisma.$transaction(async (tx) => {
     const fee = await tx.feeAddebito.findUnique({ where: { id: input.feeAddebitoId } });
     if (!fee || fee.importoCent <= 0) return null;
@@ -93,7 +81,7 @@ export async function createFatturaPv(input: {
  * (snapshot). Numerato sul registro dell'emittente. Idempotente per payout.
  */
 export async function createDocBroker(input: { payoutId: string }): Promise<void> {
-  const anno = annoCivileRoma();
+  const anno = romeAnnoCivile(new Date());
   await prisma.$transaction(async (tx) => {
     const esiste = await tx.documentoFiscale.findFirst({
       where: { payoutId: input.payoutId, tipo: 'DOC_BROKER' },
@@ -156,7 +144,7 @@ export async function createDocBroker(input: { payoutId: string }): Promise<void
 export async function createNotaCredito(input: {
   documentoOriginaleId: string;
 }): Promise<void> {
-  const anno = annoCivileRoma();
+  const anno = romeAnnoCivile(new Date());
   await prisma.$transaction(async (tx) => {
     const orig = await tx.documentoFiscale.findUnique({
       where: { id: input.documentoOriginaleId },

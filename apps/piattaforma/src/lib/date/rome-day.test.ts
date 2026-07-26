@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { parseYmd, romeStartOfDay, romeEndOfDay, resolveDayRange, romeYmd, romeWallClockToUtc } from './rome-day';
+import {
+  parseYmd,
+  romeStartOfDay,
+  romeEndOfDay,
+  resolveDayRange,
+  romeYmd,
+  romeWallClockToUtc,
+  romeAnnoCivile,
+  romeIsoDate,
+  romeDataLeggibile,
+} from './rome-day';
 
 describe('parseYmd', () => {
   it('accetta una data di calendario valida', () => {
@@ -73,6 +83,33 @@ describe('resolveDayRange', () => {
     expect(r.da).toBe('');
     expect(r.a).toBe('');
     expect(r.active).toBe(false);
+  });
+});
+
+describe('romeAnnoCivile', () => {
+  it('capodanno: 23:30 UTC del 31/12 è già il 2027 a Roma', () => {
+    expect(romeAnnoCivile(new Date('2026-12-31T23:30:00Z'))).toBe(2027);
+  });
+  it('istante ordinario: segue lo stesso anno UTC', () => {
+    expect(romeAnnoCivile(new Date('2026-06-17T10:00:00Z'))).toBe(2026);
+  });
+});
+
+describe('romeIsoDate', () => {
+  it('capodanno: 23:30 UTC del 31/12 diventa 2027-01-01 a Roma, non 2026-12-31 UTC', () => {
+    expect(romeIsoDate(new Date('2026-12-31T23:30:00Z'))).toBe('2027-01-01');
+  });
+  it('istante ordinario: stessa data del giorno UTC', () => {
+    expect(romeIsoDate(new Date('2026-06-17T10:00:00Z'))).toBe('2026-06-17');
+  });
+});
+
+describe('romeDataLeggibile', () => {
+  it('capodanno: 23:30 UTC del 31/12 si legge "1 gen 2027" a Roma, non "31 dic 2026"', () => {
+    expect(romeDataLeggibile(new Date('2026-12-31T23:30:00Z'))).toBe('1 gen 2027');
+  });
+  it('istante ordinario: stile medium it-IT', () => {
+    expect(romeDataLeggibile(new Date('2026-06-17T10:00:00Z'))).toBe('17 giu 2026');
   });
 });
 

@@ -94,6 +94,37 @@ export function romeYmd(instant: Date): [number, number, number] {
   return [g.year!, g.month!, g.day!];
 }
 
+/**
+ * Anno civile a Roma per un dato istante — non UTC. Il registro fiscale segue
+ * il calendario italiano: fra le 23:00 e le 23:59 UTC del 31 dicembre a Roma
+ * è già il 1° gennaio, e `instant.getUTCFullYear()`/`getFullYear()`
+ * numererebbe quel documento sul registro dell'anno appena chiuso.
+ */
+export function romeAnnoCivile(instant: Date): number {
+  return romeYmd(instant)[0];
+}
+
+/**
+ * Data ISO `YYYY-MM-DD` a Roma per un dato istante — per i documenti fiscali
+ * (`DataDocumento` nell'XML FatturaPA). A differenza di `instant.toISOString()`,
+ * che è sempre UTC per definizione, segue il giorno di calendario italiano.
+ */
+export function romeIsoDate(instant: Date): string {
+  const [y, mo, d] = romeYmd(instant);
+  return `${String(y).padStart(4, '0')}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/**
+ * Data leggibile in italiano a Roma, stile "medium" (es. "17 giu 2026") — per
+ * i documenti fiscali (PDF). Stesso stile di `formatDate` in `@/lib/format`,
+ * ma con `timeZone` esplicito: `formatDate` segue il fuso del runtime (UTC su
+ * Vercel) ed è condivisa da 32 punti della UI, quindi resta com'è — i
+ * documenti fiscali usano questa.
+ */
+export function romeDataLeggibile(instant: Date): string {
+  return new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeZone: ROME_TZ }).format(instant);
+}
+
 export type DayRange = { gte?: Date; lte?: Date; da: string; a: string; active: boolean };
 
 /**

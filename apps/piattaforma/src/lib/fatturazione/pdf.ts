@@ -1,7 +1,8 @@
 import 'server-only';
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { DocumentoFiscaleTipo, FatturaPaTipo } from '@pv/db';
-import { formatCurrencyCent, formatDate } from '@/lib/format';
+import { formatCurrencyCent } from '@/lib/format';
+import { romeDataLeggibile } from '@/lib/date/rome-day';
 import { labelTipoDocumento } from './format';
 import { winAnsiSafe } from '@/lib/pdf/winansi';
 import type { DatiFiscali } from './pv-emittente';
@@ -152,7 +153,7 @@ export async function buildDocumentoPdf(input: DocumentoPdfInput): Promise<Uint8
   });
   y -= 22;
   text(page, `N° ${numero}`, MARGIN, y, { font: helvBold, size: 20, color: NAVY });
-  text(page, `Emesso il ${formatDate(input.emessoAt)}`, PAGE_W - MARGIN - 150, y + 4, { size: 10, color: SLATE_500 });
+  text(page, `Emesso il ${romeDataLeggibile(input.emessoAt)}`, PAGE_W - MARGIN - 150, y + 4, { size: 10, color: SLATE_500 });
   y -= 30;
 
   // ─── Emittente / Destinatario ────────────────────────────────────

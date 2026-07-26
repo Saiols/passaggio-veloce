@@ -1,3 +1,4 @@
+import { romeIsoDate } from '@/lib/date/rome-day';
 import type { DatiFiscali } from './pv-emittente';
 import type { FatturaPaInput, FatturaPaParte } from './xml-fatturapa';
 
@@ -44,10 +45,6 @@ function parte(
   };
 }
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 /**
  * Mappa un DocumentoFiscale sull'input del generatore FatturaPA.
  *
@@ -67,7 +64,7 @@ export function toFatturaPaInput(input: DocumentoXmlInput): FatturaPaInput {
   return {
     tipoDocumento: input.fatturaPaTipo,
     numero: input.numero,
-    data: isoDate(input.data),
+    data: romeIsoDate(input.data),
     cedentePrestatore: parte(input.emittente, { regimeFiscale: regimeCedente }),
     cessionarioCommittente: parte(input.destinatario, { comeCessionario: true }),
     imponibileCent: imponibile,

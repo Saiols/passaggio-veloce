@@ -77,6 +77,16 @@ describe('toFatturaPaInput — FATTURA_PV ordinaria', () => {
     const out = toFatturaPaInput(base());
     expect(out.data).toBe('2026-06-17');
   });
+
+  it('capodanno: la DataDocumento segue il calendario ITALIANO, non UTC', () => {
+    // 23:30 UTC del 31 dicembre è già il 1° gennaio a Roma. `emessoAt` resta
+    // l'istante UTC del `now()` del DB (emissione guidata da cron/webhook, non
+    // più da un umano che firma): in quell'ora una FATTURA_PV numerata sul
+    // registro 2027 non deve portare in XML la data UTC del 2026, altrimenti
+    // il documento è internamente incoerente (numero e data su anni diversi).
+    const out = toFatturaPaInput({ ...base(), data: new Date('2026-12-31T23:30:00Z') });
+    expect(out.data).toBe('2027-01-01');
+  });
 });
 
 describe('toFatturaPaInput — DOC_BROKER per conto terzi', () => {

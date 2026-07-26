@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito, tplN46VisuraInScadenza, tplN47VisuraScaduta, tplN48BrokerPraticaCongelata, tplN49AdminAtecoNonIdoneo, tplN52BrokerZonaNonCoperta } from './templates';
+import { tplN1BrokerInvio, tplN26EmailPartenza, tplN31ValutaAgenzia, tplN40ClienteAvanzamento, tplN9AgenziaAddebitoFallito, tplN41AdminNuovaSegnalazione, tplN42BrokerSegnalazioneGestita, tplN4BrokerFirma, tplN8AgenziaAddebito, tplN46VisuraInScadenza, tplN47VisuraScaduta, tplN48BrokerPraticaCongelata, tplN49AdminAtecoNonIdoneo, tplN52BrokerZonaNonCoperta, tplN53AgenziaFatturaDisponibile } from './templates';
 import type { ClienteAvanzamentoStato, ClienteAvanzamentoRuolo } from './templates';
 import { formatDate } from '@/lib/format';
 
@@ -581,5 +581,57 @@ describe('N52 broker zona non coperta', () => {
     expect(c.html).toContain('&lt;script&gt;');
     expect(c.html).toContain('&lt;img');
     expect(c.html).toContain('&lt;b&gt;Mario&lt;/b&gt;');
+  });
+});
+
+describe('N53 agenzia fattura disponibile', () => {
+  const base = {
+    nomeAgenzia: 'Agenzia Rossi',
+    codicePratica: 'PV-2026-004',
+    numeroDocumento: 'PV-2026-00003',
+    importoCent: 7500,
+    fatturaUrl: 'https://app.test/fatturazione',
+    fatturaAllegata: true,
+  } as const;
+
+  it('subject e body citano numero documento e pratica; passa dal layout istituzionale', () => {
+    const c = tplN53AgenziaFatturaDisponibile(base);
+    expect(c.subject).toContain('PV-2026-00003');
+    expect(c.subject).toContain('PV-2026-004');
+    expect(c.text).toContain('PV-2026-00003');
+    expect(c.text).toContain('75,00');
+    expect(c.html).toContain('PV-2026-00003');
+    // layout istituzionale condiviso
+    expect(c.html).toContain('logo-email.png');
+    expect(c.html).toContain('Passaggio Veloce SRL');
+  });
+
+  it('fatturaAllegata true: dichiara l\'allegato in text e html', () => {
+    const c = tplN53AgenziaFatturaDisponibile({ ...base, fatturaAllegata: true });
+    expect(c.text).toContain('in allegato');
+    expect(c.html).toContain('in allegato');
+  });
+
+  it('fatturaAllegata false: non promette un allegato che non c\'è, in text e html', () => {
+    const c = tplN53AgenziaFatturaDisponibile({ ...base, fatturaAllegata: false });
+    expect(c.text).not.toContain('in allegato');
+    expect(c.text).toContain('sezione Fatturazione');
+    expect(c.html).not.toContain('in allegato');
+    expect(c.html).toContain('Fatturazione');
+  });
+
+  it('escapa l\'HTML in nomeAgenzia, codicePratica e numeroDocumento (XSS stored)', () => {
+    const c = tplN53AgenziaFatturaDisponibile({
+      ...base,
+      nomeAgenzia: '<b>Agenzia</b>',
+      codicePratica: '<script>alert(1)</script>',
+      numeroDocumento: '<img src=x onerror=alert(2)>',
+    });
+    expect(c.html).not.toContain('<b>Agenzia</b>');
+    expect(c.html).not.toContain('<script>');
+    expect(c.html).not.toContain('<img src=x');
+    expect(c.html).toContain('&lt;b&gt;Agenzia&lt;/b&gt;');
+    expect(c.html).toContain('&lt;script&gt;');
+    expect(c.html).toContain('&lt;img');
   });
 });

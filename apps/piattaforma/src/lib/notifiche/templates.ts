@@ -119,6 +119,8 @@ export type N53AgenziaFatturaDisponibilePayload = {
   numeroDocumento: string;
   importoCent: number;
   fatturaUrl: string;
+  /** L'allegato PDF può mancare (fattura non generabile): non promettere un allegato che non c'è. */
+  fatturaAllegata: boolean;
 };
 
 export type N3BrokerSollecitoPayload = {
@@ -1759,11 +1761,17 @@ export function tplN53AgenziaFatturaDisponibile(
   p: N53AgenziaFatturaDisponibilePayload,
 ): NotificaContent {
   const subject = `Fattura ${p.numeroDocumento} — pratica ${p.codicePratica}`;
+  const dovePrenderla = p.fatturaAllegata
+    ? `La trovi in allegato e nella sezione Fatturazione: ${p.fatturaUrl}`
+    : `La trovi nella sezione Fatturazione: ${p.fatturaUrl}`;
   const text =
     `Ciao ${p.nomeAgenzia},\n` +
     `l'addebito di ${formatCurrencyCent(p.importoCent)} per la pratica ${p.codicePratica} ` +
     `è stato incassato e la fattura ${p.numeroDocumento} è stata emessa.\n` +
-    `La trovi in allegato e nella sezione Fatturazione: ${p.fatturaUrl}`;
+    dovePrenderla;
+  const dovePrenderlaHtml = p.fatturaAllegata
+    ? `La trovi in allegato e nella sezione <a href="${p.fatturaUrl}">Fatturazione</a>.`
+    : `La trovi nella sezione <a href="${p.fatturaUrl}">Fatturazione</a>.`;
   const html = wrap(`
     <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Fattura disponibile</h1>
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
@@ -1776,7 +1784,7 @@ export function tplN53AgenziaFatturaDisponibile(
       Importo: <strong>${formatCurrencyCent(p.importoCent)}</strong>
     </div>
     <p style="margin:16px 0 0;font-size:13px;color:#334155">
-      La trovi in allegato e nella sezione <a href="${p.fatturaUrl}">Fatturazione</a>.
+      ${dovePrenderlaHtml}
     </p>
   `);
   return { subject, html, text };

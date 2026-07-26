@@ -12,7 +12,12 @@ import { fatturaPvAttachment } from './documento-pdf';
  * legale, non chi ha lavorato la pratica.
  *
  * `inviatoEmailAt` è il guardiano dell'unicità: il percorso d'incasso e la
- * riconciliazione oraria chiamano questa funzione senza conoscersi.
+ * riconciliazione oraria chiamano questa funzione senza conoscersi. Per questo
+ * si scrive con una prenotazione atomica (`updateMany` con `WHERE
+ * inviatoEmailAt IS NULL`) PRIMA di inviare, non dopo: `sendNotification` è
+ * fire-and-log e non fa sapere se l'invio è davvero riuscito, quindi scrivere
+ * dopo non direbbe nulla sull'esito reale e lascerebbe la porta aperta alla
+ * doppia email in caso di corsa fra i due chiamanti.
  */
 export async function notificaFatturaDisponibile(documentoId: string): Promise<void> {
   const doc = await prisma.documentoFiscale.findUnique({
@@ -46,7 +51,21 @@ export async function notificaFatturaDisponibile(documentoId: string): Promise<v
   const email = admin?.email ?? doc.destinatarioCompany.email;
   if (!email) return;
 
-  const allegato = await fatturaPvAttachment(doc.praticaId).catch(() => null);
+  const allegato = await fatturaPvAttachment(doc.praticaId).catch((err) => {
+    console.error(`[notificaFatturaDisponibile] allegato non generato per documento ${doc.id}:`, err);
+    return null;
+  });
+
+  // Prenotazione atomica: `inviatoEmailAt` si scrive PRIMA dell'invio, non dopo.
+  // `sendNotification` è fire-and-log (non lancia, ritorna void), quindi scriverlo
+  // dopo non direbbe nulla sull'esito reale e lascerebbe due chiamanti — percorso
+  // d'incasso e riconciliazione oraria — liberi di leggere `null` entrambi e
+  // mandare due volte la stessa fattura. Chi perde la prenotazione esce.
+  const prenotazione = await prisma.documentoFiscale.updateMany({
+    where: { id: doc.id, inviatoEmailAt: null },
+    data: { inviatoEmailAt: new Date() },
+  });
+  if (prenotazione.count === 0) return;
 
   await sendNotification(
     {
@@ -57,15 +76,11 @@ export async function notificaFatturaDisponibile(documentoId: string): Promise<v
         codicePratica: doc.pratica?.codicePratica ?? '—',
         numeroDocumento: doc.numeroDocumentoStr ?? '—',
         importoCent: doc.importoLordoCent,
+        fatturaAllegata: allegato != null,
         // Link funzionale: NEXT_PUBLIC_APP_URL, mai BRAND.url (dominio marketing).
         fatturaUrl: `${env.NEXT_PUBLIC_APP_URL}/fatturazione`,
       },
     },
     { praticaId: doc.praticaId, ...(allegato ? { attachments: [allegato] } : {}) },
   );
-
-  await prisma.documentoFiscale.update({
-    where: { id: doc.id },
-    data: { inviatoEmailAt: new Date() },
-  });
 }

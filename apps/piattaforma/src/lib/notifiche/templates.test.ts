@@ -299,6 +299,24 @@ describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 
     expect(out.text).toContain(dataAttesa);
     expect(out.html).toContain(dataAttesa);
   });
+
+  it('fattura non allegata ma fee dovuta: promette la fattura all\'incasso', () => {
+    const out = tplN8AgenziaAddebito({ ...n8, fatturaAllegata: false });
+    expect(out.text).toContain('quando l\'addebito risulterà incassato');
+    expect(out.html).toContain('quando l\'addebito risulterà incassato');
+  });
+
+  it('fee a zero: nessuna fattura nascerà mai, quindi la N8 non deve prometterne una', () => {
+    // Con feeAgenziaCent = 0 la firma non crea alcun FeeAddebito e
+    // createFatturaPv esce su importo <= 0: nessun documento, in live come in
+    // mock. Promettere una fattura qui sarebbe un'affermazione falsa a un
+    // cliente pagante.
+    const out = tplN8AgenziaAddebito({ ...n8, feeCent: 0, fatturaAllegata: false });
+    expect(out.text).not.toContain('fattura');
+    expect(out.text).not.toContain('Fattura');
+    expect(out.html).not.toContain('fattura');
+    expect(out.html).not.toContain('Fattura');
+  });
 });
 
 describe('N26 email di partenza', () => {

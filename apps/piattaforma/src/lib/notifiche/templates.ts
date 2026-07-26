@@ -484,13 +484,21 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
   const attestazioneText = p.attestataDaPv
     ? `\nLa firma è stata registrata dal team Passaggio Veloce${dataAttestazioneN8Text} sulla base delle informazioni in nostro possesso (v. clausola 11 dei Termini). Se ritieni che si tratti di un errore, puoi contestarlo entro 15 giorni scrivendo all'assistenza.`
     : '';
+  // Tre casi, non due. Con `feeCent` a zero la firma non crea alcun
+  // FeeAddebito e `createFatturaPv` esce su importo <= 0: nessuna fattura
+  // nascerà mai, né in live né in mock. Promettere qui che «sarà emessa
+  // all'incasso» sarebbe un'affermazione falsa messa per iscritto a un cliente
+  // pagante — in quel caso non si dice nulla sulla fattura.
+  const fatturaText = p.fatturaAllegata
+    ? 'Trovi la fattura in allegato.'
+    : p.feeCent > 0
+      ? "La fattura sarà emessa e inviata quando l'addebito risulterà incassato."
+      : '';
   const text =
     `Ciao ${p.nomeAgenzia},\n` +
     `il fee di ${formatCurrencyCent(p.feeCent)} per la pratica ${p.codicePratica} ` +
-    `sarà addebitato il ${formatDate(p.autoAddebitoAt)}. ` +
-    (p.fatturaAllegata
-      ? `Trovi la fattura in allegato.`
-      : `La fattura sarà emessa e inviata quando l'addebito risulterà incassato.`) +
+    `sarà addebitato il ${formatDate(p.autoAddebitoAt)}.` +
+    (fatturaText ? ` ${fatturaText}` : '') +
     attestazioneText;
   const dataAttestazioneN8Html = p.attestataDaPvAt
     ? ` il <strong>${formatDate(p.attestataDaPvAt)}</strong>`
@@ -508,11 +516,15 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
       Importo: <strong>${formatCurrencyCent(p.feeCent)}</strong><br>
       Auto-addebito: <strong>${formatDate(p.autoAddebitoAt)}</strong>
     </div>
-    <p style="margin:16px 0 0;font-size:12px;color:#64748b">${
-      p.fatturaAllegata
-        ? 'Trovi la fattura in allegato.'
-        : "La fattura sarà emessa e inviata quando l'addebito risulterà incassato."
-    }</p>
+    ${
+      fatturaText
+        ? `<p style="margin:16px 0 0;font-size:12px;color:#64748b">${
+            p.fatturaAllegata
+              ? 'Trovi la fattura in allegato.'
+              : "La fattura sarà emessa e inviata quando l'addebito risulterà incassato."
+          }</p>`
+        : ''
+    }
     ${attestazioneHtml}
   `);
   return { subject, html, text };

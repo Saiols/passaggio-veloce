@@ -40,7 +40,8 @@ beforeEach(() => {
 
 describe('notificaFatturaDisponibile', () => {
   it("manda la N53 all'admin azienda con il PDF allegato e prenota inviatoEmailAt PRIMA dell'invio", async () => {
-    await notificaFatturaDisponibile('doc-1');
+    const inviata = await notificaFatturaDisponibile('doc-1');
+    expect(inviata).toBe(true);
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         tipo: 'N53_AGENZIA_FATTURA_DISPONIBILE',
@@ -66,14 +67,33 @@ describe('notificaFatturaDisponibile', () => {
 
   it('non rimanda una fattura già inviata', async () => {
     docFindUnique.mockResolvedValue({ ...DOC, inviatoEmailAt: new Date() });
-    await notificaFatturaDisponibile('doc-1');
+    const inviata = await notificaFatturaDisponibile('doc-1');
+    expect(inviata).toBe(false);
     expect(sendMock).not.toHaveBeenCalled();
     expect(docUpdateMany).not.toHaveBeenCalled();
   });
 
   it('prenotazione persa (count 0): nessun invio — evita la doppia email in caso di corsa', async () => {
     docUpdateMany.mockResolvedValue({ count: 0 });
-    await notificaFatturaDisponibile('doc-1');
+    const inviata = await notificaFatturaDisponibile('doc-1');
+    expect(inviata).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('documento senza destinatario: nessun invio e ritorna false (il chiamante non deve contarlo)', async () => {
+    docFindUnique.mockResolvedValue({ ...DOC, destinatarioCompany: null });
+    const inviata = await notificaFatturaDisponibile('doc-1');
+    expect(inviata).toBe(false);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it('nessuna email raggiungibile (né admin né azienda): ritorna false', async () => {
+    docFindUnique.mockResolvedValue({
+      ...DOC,
+      destinatarioCompany: { ...DOC.destinatarioCompany, email: null, users: [] },
+    });
+    const inviata = await notificaFatturaDisponibile('doc-1');
+    expect(inviata).toBe(false);
     expect(sendMock).not.toHaveBeenCalled();
   });
 
@@ -103,6 +123,35 @@ describe('notificaFatturaDisponibile', () => {
         expect.anything(),
       );
       expect(sendMock.mock.calls[0][1].attachments).toBeUndefined();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("l'invio esplode: la prenotazione viene RILASCIATA e l'eccezione propaga", async () => {
+    // Caso reale: enum NotificaTipo non ancora migrata su Neon → la create di
+    // NotificaInviata (dentro sendNotification, PRIMA del suo try/catch) lancia.
+    // Se `inviatoEmailAt` restasse scritto, la riconciliazione oraria
+    // considererebbe inviata per sempre una fattura mai partita.
+    const errore = new Error('invalid input value for enum NotificaTipo');
+    sendMock.mockRejectedValue(errore);
+    await expect(notificaFatturaDisponibile('doc-1')).rejects.toBe(errore);
+    expect(docUpdateMany).toHaveBeenCalledTimes(2);
+    expect(docUpdateMany).toHaveBeenLastCalledWith({
+      where: { id: 'doc-1' },
+      data: { inviatoEmailAt: null },
+    });
+  });
+
+  it("il rilascio della prenotazione fallisce: logga con l'id documento e propaga l'errore originale", async () => {
+    const errore = new Error('resend giù');
+    const erroreRilascio = new Error('db giù');
+    sendMock.mockRejectedValue(errore);
+    docUpdateMany.mockResolvedValueOnce({ count: 1 }).mockRejectedValueOnce(erroreRilascio);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await expect(notificaFatturaDisponibile('doc-1')).rejects.toBe(errore);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('doc-1'), erroreRilascio);
     } finally {
       errorSpy.mockRestore();
     }

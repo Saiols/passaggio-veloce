@@ -373,6 +373,12 @@ export async function firmaPraticaCore(
   // fattura non nascerebbe affatto. In quel caso resta emessa qui, IN_ATTESA,
   // esattamente come prima di questo cambio. La valvola si chiude da sola il
   // giorno del go-live Stripe.
+  //
+  // ATTESA, non fire-and-forget: più sotto la N8 costruisce il proprio allegato
+  // con `fatturaPvAttachment(praticaId)`, che legge il documento appena creato.
+  // Riportarla a `void` "tanto è best-effort" spegnerebbe l'allegato della N8 —
+  // e in modalità mock quella N8 È la sola consegna della fattura, perché la
+  // riconciliazione oraria lì è inerte per costruzione.
   if (feeAddebitoIdCreato && !isPaymentLive()) {
     await createFatturaPv({
       feeAddebitoId: feeAddebitoIdCreato,
@@ -506,7 +512,16 @@ export async function firmaPraticaCore(
         // viaggia con la N53. Solo la valvola (provider mock) la allega qui.
         const fatturaPdf = isPaymentLive()
           ? null
-          : await fatturaPvAttachment(praticaId).catch(() => null);
+          : await fatturaPvAttachment(praticaId).catch((err) => {
+              // Mai muto: in modalità mock la riconciliazione oraria è inerte,
+              // quindi una N8 partita senza allegato è una fattura che
+              // all'agenzia non arriva più con nessun mezzo.
+              console.error(
+                `[firmaPratica] allegato fattura non generato per pratica ${praticaId}:`,
+                err,
+              );
+              return null;
+            });
         // Sul percorso valvola la N8 È la consegna della fattura: la scrittura
         // avviene PRIMA dell'invio, come in notificaFatturaDisponibile — stessa
         // semantica sullo stesso campo. Senza questo timestamp, il giorno in cui

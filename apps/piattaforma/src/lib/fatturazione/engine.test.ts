@@ -65,6 +65,39 @@ describe('createFatturaPv', () => {
     expect(txMock.documentoFiscale.create).not.toHaveBeenCalled();
   });
 
+  it("numera sull'anno civile ITALIANO, non su quello del runtime", async () => {
+    // 23:30 UTC del 31 dicembre = 00:30 del 1° gennaio a Roma. Ora che
+    // l'emissione è guidata da cron e webhook quell'ora è raggiungibile da un
+    // processo automatico: una fattura italiana datata 1° gennaio non deve
+    // prendere numero e anno del registro appena chiuso.
+    //
+    // TZ forzato a UTC — che è il fuso del runtime Vercel in produzione — e NON
+    // lasciato a quello della macchina: su un portatile italiano
+    // `new Date().getFullYear()` restituisce già 2027 e il bug sarebbe
+    // invisibile, cioè il test resterebbe verde anche senza la correzione.
+    const tzOriginale = process.env.TZ;
+    vi.useFakeTimers();
+    try {
+      process.env.TZ = 'UTC';
+      vi.setSystemTime(new Date('2026-12-31T23:30:00Z'));
+      expect(new Date().getFullYear()).toBe(2026); // premessa del test
+      await createFatturaPv({ feeAddebitoId: 'fee-1', statoPagamento: 'PAGATA' });
+      expect(prossimoContatoreMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'PV',
+        'FATTURA_PV',
+        2027,
+      );
+      expect(txMock.documentoFiscale.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ anno: 2027 }) }),
+      );
+    } finally {
+      vi.useRealTimers();
+      if (tzOriginale === undefined) delete process.env.TZ;
+      else process.env.TZ = tzOriginale;
+    }
+  });
+
   it('restituisce null su fee inesistente o importo non positivo', async () => {
     txMock.feeAddebito.findUnique.mockResolvedValue(null);
     expect(await createFatturaPv({ feeAddebitoId: 'x', statoPagamento: 'PAGATA' })).toBeNull();

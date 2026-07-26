@@ -17,53 +17,71 @@ const BATCH_SIZE = 30;
  *
  * Interroga i documenti per `praticaId` (che ha un indice) e non per
  * `feeAddebitoId` (che non ce l'ha): niente migration.
+ *
+ * Non lancia mai: un guasto transitorio nella passata (lettura fee/documenti,
+ * o un item imprevisto) viene loggato e la funzione ripiega su
+ * `{ emesse: 0, notificate: 0 }`. Il chiamante (il cron di process-fee-scheduled)
+ * ha già ottenuto e restituito il risultato di `processFeeScheduled` — quel
+ * risultato non deve mai andare perso perché questa passata di recupero,
+ * che gira nella stessa richiesta, è inciampata.
  */
 export async function riconciliaFattureIncassate(): Promise<{
   emesse: number;
   notificate: number;
 }> {
-  const da = new Date(Date.now() - FINESTRA_MS);
-  const fees = await prisma.feeAddebito.findMany({
-    where: { stato: 'SUCCESS', executedAt: { gte: da } },
-    take: BATCH_SIZE,
-    orderBy: { executedAt: 'asc' },
-    select: { id: true, praticaId: true },
-  });
-
-  let emesse = 0;
-  let notificate = 0;
-
-  for (const fee of fees) {
-    const doc = await prisma.documentoFiscale.findFirst({
-      where: { praticaId: fee.praticaId, tipo: 'FATTURA_PV' },
-      select: { id: true, inviatoEmailAt: true },
+  try {
+    const da = new Date(Date.now() - FINESTRA_MS);
+    const fees = await prisma.feeAddebito.findMany({
+      where: { stato: 'SUCCESS', executedAt: { gte: da } },
+      take: BATCH_SIZE,
+      orderBy: { executedAt: 'asc' },
+      select: { id: true, praticaId: true },
     });
 
-    if (!doc) {
-      const creato = await createFatturaPv({
-        feeAddebitoId: fee.id,
-        statoPagamento: 'PAGATA',
-      }).catch((err) => {
-        console.error(`[riconciliaFatture] emissione fallita per fee ${fee.id}:`, err);
-        return null;
+    let emesse = 0;
+    let notificate = 0;
+
+    for (const fee of fees) {
+      const doc = await prisma.documentoFiscale.findFirst({
+        where: { praticaId: fee.praticaId, tipo: 'FATTURA_PV' },
+        select: { id: true, inviatoEmailAt: true },
       });
-      if (creato) {
-        emesse++;
-        await notificaFatturaDisponibile(creato.id).catch((err) => {
-          console.error(`[riconciliaFatture] N53 fallita per documento ${creato.id}:`, err);
+
+      if (!doc) {
+        const creato = await createFatturaPv({
+          feeAddebitoId: fee.id,
+          statoPagamento: 'PAGATA',
+        }).catch((err) => {
+          console.error(`[riconciliaFatture] emissione fallita per fee ${fee.id}:`, err);
+          return null;
         });
-        notificate++;
+        if (creato) {
+          emesse++;
+          const inviata = await notificaFatturaDisponibile(creato.id)
+            .then(() => true)
+            .catch((err) => {
+              console.error(`[riconciliaFatture] N53 fallita per documento ${creato.id}:`, err);
+              return false;
+            });
+          if (inviata) notificate++;
+        }
+        continue;
       }
-      continue;
+
+      if (!doc.inviatoEmailAt) {
+        const inviata = await notificaFatturaDisponibile(doc.id)
+          .then(() => true)
+          .catch((err) => {
+            console.error(`[riconciliaFatture] N53 fallita per documento ${doc.id}:`, err);
+            return false;
+          });
+        if (inviata) notificate++;
+      }
     }
 
-    if (!doc.inviatoEmailAt) {
-      await notificaFatturaDisponibile(doc.id).catch((err) => {
-        console.error(`[riconciliaFatture] N53 fallita per documento ${doc.id}:`, err);
-      });
-      notificate++;
-    }
+    return { emesse, notificate };
+  } catch (err) {
+    console.error('[riconciliaFatture] passata fallita:', err);
+    return { emesse: 0, notificate: 0 };
   }
-
-  return { emesse, notificate };
 }

@@ -59,4 +59,62 @@ describe('riconciliaFattureIncassate', () => {
       }),
     );
   });
+
+  it("l'emissione fallisce: nessuna eccezione, contatori a zero, errore loggato", async () => {
+    docFindFirst.mockResolvedValue(null);
+    const errore = new Error('contatore ko');
+    createFatturaPvMock.mockRejectedValue(errore);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const out = await riconciliaFattureIncassate();
+      expect(out).toEqual({ emesse: 0, notificate: 0 });
+      expect(notificaMock).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('fee-1'), errore);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('la fattura si emette ma la N53 fallisce: notificate non conta un invio fallito', async () => {
+    docFindFirst.mockResolvedValue(null);
+    const errore = new Error('resend giù');
+    notificaMock.mockRejectedValue(errore);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const out = await riconciliaFattureIncassate();
+      expect(out).toEqual({ emesse: 1, notificate: 0 });
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('doc-1'), errore);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('fattura presente ma email mai partita, la N53 fallisce: notificate resta a zero', async () => {
+    docFindFirst.mockResolvedValue({ id: 'doc-1', inviatoEmailAt: null });
+    const errore = new Error('resend giù');
+    notificaMock.mockRejectedValue(errore);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const out = await riconciliaFattureIncassate();
+      expect(out).toEqual({ emesse: 0, notificate: 0 });
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('doc-1'), errore);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('un guasto nella lettura dei fee non propaga: nessuna eccezione, contatori a zero', async () => {
+    const errore = new Error('connessione db persa');
+    feeFindMany.mockRejectedValue(errore);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const out = await riconciliaFattureIncassate();
+      expect(out).toEqual({ emesse: 0, notificate: 0 });
+      expect(createFatturaPvMock).not.toHaveBeenCalled();
+      expect(notificaMock).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('[riconciliaFatture]'), errore);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

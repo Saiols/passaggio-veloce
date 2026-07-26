@@ -117,10 +117,11 @@ function SuspensionBannerChrome() {
  * un'agenzia lavora davvero (`/pratiche/[id]`, `/inbox/[id]`, `/team`,
  * `/addebiti`, `/profilo/*`, …) non dicevano nulla.
  *
- * ATTENZIONE: le 21 pagine che NON passano da AppShell restano scoperte. Le due
- * raggiungibili da un utente azienda con sessione — `/blocco-pagamento` e
- * `/visura`, due interstiziali senza chrome — montano il banner da sé. Le altre
- * 19 sono pre-sessione, admin (fuori scope) o pubbliche.
+ * ATTENZIONE: le pagine che NON passano da AppShell restano scoperte e montano
+ * il banner da sé: `/blocco-pagamento` sempre, `/visura` nel solo ramo a visura
+ * scaduta (fuori da quel caso passa da qui, v. `app/visura/page.tsx`). Sono le
+ * due raggiungibili da un utente azienda con sessione; le altre sono
+ * pre-sessione, admin (fuori scope) o pubbliche.
  */
 function ChromeBanners({ isAdmin }: { isAdmin: boolean }) {
   return (

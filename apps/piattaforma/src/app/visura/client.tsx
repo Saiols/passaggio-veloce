@@ -69,6 +69,12 @@ type Props = {
   stato: 'OK' | 'PREAVVISO' | 'SCADUTA' | 'ESENTE';
   giorniTrascorsi: number | null;
   giorniRimanenti: number | null;
+  /**
+   * Link "torna alla dashboard". `true` solo nel ramo interstiziale (visura
+   * scaduta): lì la pagina è senza sidebar e senza questo link l'unica uscita
+   * sarebbe il back del browser. Dentro la shell la nav c'è già.
+   */
+  mostraRitornoDashboard: boolean;
   /** Sede legale attuale dell'azienda: fallback di precompilazione, solo per il titolare. */
   sedeAttuale: SedeForm | null;
 };
@@ -79,6 +85,7 @@ export function VisuraClient({
   stato,
   giorniTrascorsi,
   giorniRimanenti,
+  mostraRitornoDashboard,
   sedeAttuale,
 }: Props) {
   const router = useRouter();
@@ -193,20 +200,20 @@ export function VisuraClient({
 
   return (
     <div className="mx-auto w-full max-w-2xl px-5 py-8 sm:px-6">
-      {/* Via d'uscita: la pagina è un interstiziale senza chrome (nessuna
-          sidebar), quindi senza questo link chi ci arriva dalla voce di nav o
-          da un'email — con la visura ancora valida, o dopo l'aggiornamento
-          riuscito — non ha modo di tornare indietro se non col back del
-          browser. Link esplicito e non `router.back()`: chi ci arriva da un
-          redirect (agenzia bloccata) tornerebbe sulla pagina che l'ha
-          rimbalzato. Un'agenzia con anche l'addebito fallito verrà deviata da
-          /dashboard a /blocco-pagamento: è l'interstiziale giusto per lei. */}
-      <Link
-        href="/dashboard"
-        className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 underline-offset-4 hover:underline"
-      >
-        ← Torna alla dashboard
-      </Link>
+      {/* Via d'uscita del ramo interstiziale (v. `mostraRitornoDashboard`):
+          senza sidebar, l'unica alternativa sarebbe il back del browser. Link
+          esplicito e non `router.back()`: chi arriva qui da un redirect
+          (agenzia bloccata) tornerebbe sulla pagina che l'ha rimbalzato.
+          Un'agenzia con anche l'addebito fallito verrà deviata da /dashboard a
+          /blocco-pagamento: è l'interstiziale giusto per lei. */}
+      {mostraRitornoDashboard && (
+        <Link
+          href="/dashboard"
+          className="mb-5 inline-flex items-center gap-1 text-[13px] font-semibold text-pv-navy-600 underline-offset-4 hover:underline"
+        >
+          ← Torna alla dashboard
+        </Link>
+      )}
       <h1 className="text-xl font-bold text-pv-navy-900">Visura camerale</h1>
       <p className="mt-1 text-sm text-pv-navy-700">
         La visura camerale ci serve per fatturarti correttamente. Vale{' '}

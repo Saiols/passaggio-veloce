@@ -9,6 +9,7 @@ import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessDocumento } from '@/lib/pratiche/access';
 import { hasPermesso } from '@/lib/auth/permessi/guard';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { registraLogAsync } from '@/lib/audit/log-accessi';
 
 export async function GET(
   _req: Request,
@@ -75,7 +76,32 @@ export async function GET(
     scope,
   });
 
+  // Log accessi (art. 32 GDPR). Questa route è la ragione principale per cui
+  // il log esiste: è l'unico punto in cui qualcuno legge i documenti
+  // d'identità di venditori e acquirenti — persone che con noi non hanno
+  // alcun rapporto — e l'unico modo di rispondere a «chi ha visto i miei
+  // documenti». `bersaglioCompanyId` isola il caso che conta: lo staff di
+  // piattaforma, o un admin, che apre il documento di un'altra azienda.
+  const bersaglioCompanyId =
+    doc.companyId ?? doc.pratica?.brokerId ?? doc.pratica?.agenziaAssegnataId ?? null;
+  const vocePerDocumento = {
+    azione: 'DOCUMENTO_ACCESSO' as const,
+    userId: session.user.id,
+    email: session.user.email,
+    companyId: userCompanyId ?? null,
+    bersaglioCompanyId: bersaglioCompanyId === userCompanyId ? null : bersaglioCompanyId,
+    risorsaTipo: 'documento',
+    risorsaId: doc.id,
+    // Esplicito e non lasciato al default: «questo accesso è stato
+    // consentito» è un'affermazione del log, non un'omissione. I due rami di
+    // rifiuto qui sotto lo sovrascrivono con lo spread.
+    negato: false,
+  };
+
   if (!allowed) {
+    // Il tentativo NEGATO è il segnale più utile dell'intero log: dice che
+    // qualcuno ha provato ad aprire un documento che non gli spetta.
+    registraLogAsync({ ...vocePerDocumento, negato: true, dettaglio: 'scope o proprietà' });
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
 
@@ -89,8 +115,19 @@ export async function GET(
   // come l'admin, lo ha sempre implicitamente (non ha un'azienda su cui
   // verificare un permesso). Le due righe restano diverse di proposito.
   if (!isAdminOrAssistente(session.user.role) && !(await hasPermesso('pratiche.download'))) {
+    registraLogAsync({
+      ...vocePerDocumento,
+      negato: true,
+      dettaglio: 'permesso pratiche.download mancante',
+    });
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
+
+  // Registrato PRIMA di servire il file, non dopo: la risposta è uno stream e
+  // il chiamante ha già i byte quando la promise del body si risolve. Loggare
+  // in coda significherebbe non registrare nulla se il processo termina a
+  // metà download — e il caso interessante è proprio quello anomalo.
+  registraLogAsync(vocePerDocumento);
 
   try {
     const file = await getStorage().get(doc.storageKey);

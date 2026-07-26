@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { isAdminOrAssistente } from '@/lib/auth/permissions';
+import { registraLogAsync } from '@/lib/audit/log-accessi';
 import { buildCatalogoContatti } from '@/lib/catalogo-contatti';
 
 export const runtime = 'nodejs';
@@ -36,6 +37,20 @@ export async function GET(req: Request) {
   const contatti = ruoloFilter
     ? contattiAll.filter((c) => c.ruolo === ruoloFilter)
     : contattiAll;
+
+  // Log accessi: è un'estrazione massiva dei dati di venditori e acquirenti —
+  // persone che non sono nostri utenti. Se questo elenco finisse dove non
+  // deve, è l'unica riga che dice chi lo ha tirato fuori, quando e quanto
+  // grande era. Il filtro finisce nel dettaglio: serve a ricostruire
+  // l'estrazione, non a giudicarla.
+  registraLogAsync({
+    azione: 'EXPORT_DATI',
+    userId: session.user.id,
+    email: session.user.email,
+    companyId: session.user.companyId ?? null,
+    risorsaTipo: 'contatti-crm',
+    dettaglio: `${contatti.length} contatti${ruoloFilter ? ` (${ruoloFilter})` : ''}${q ? ` · ricerca "${q}"` : ''}`,
+  });
 
   const headers = [
     'nominativo',

@@ -90,7 +90,10 @@ export default function PrivacyPage() {
               . Passaggio Veloce è manlevata da qualsiasi pretesa dei sub-utenti derivante dalla mancata informativa imputabile all&apos;Utente titolare.
             </li>
             <li>
-              <strong>Log di accesso e attività</strong>: registriamo automaticamente gli accessi e le attività compiute sulla Piattaforma da ciascun utente (amministratore titolare, sub-utenti, admin interni di Passaggio Veloce). I log includono data e ora di accesso, indirizzo IP anonimizzato e azioni compiute (caricamento documenti, invio e accettazione pratiche, payout richiesti, modifiche ai dati del profilo, accesso alla dashboard). Sono trattati sulla base del nostro <strong>legittimo interesse</strong> per finalità di sicurezza della Piattaforma, prevenzione delle frodi, audit interno e risoluzione di eventuali controversie. Periodo di conservazione: <strong>24 mesi</strong>.
+              <strong>Log di accesso e attività</strong>: registriamo un numero <strong>circoscritto</strong> di eventi, non ogni operazione svolta sulla Piattaforma. Precisamente: (a) <strong>accessi</strong> — login riuscito, logout e <strong>tentativi di accesso falliti</strong>; (b) <strong>accesso ai documenti</strong> — ogni volta che un documento viene aperto o scaricato, inclusi i tentativi <strong>respinti</strong> perché l&apos;utente non ne aveva diritto; (c) <strong>esportazioni massive di dati</strong> (file CSV o ZIP, elenchi di contatti). Di ciascun evento conserviamo data e ora, l&apos;utente e l&apos;azienda che lo ha compiuto, l&apos;azienda i cui dati sono stati interessati, la risorsa toccata, l&apos;<strong>indirizzo IP anonimizzato</strong> e il browser utilizzato. Base giuridica: <strong>legittimo interesse</strong> (art. 6.1.f GDPR) alla sicurezza della Piattaforma, alla prevenzione delle frodi e alla difesa in eventuali controversie, e adempimento dell&apos;obbligo di adottare misure di sicurezza adeguate (art. 32 GDPR). Periodo di conservazione: <strong>24 mesi</strong>, dopo i quali i log sono cancellati automaticamente.
+            </li>
+            <li>
+              <strong>Tracciamento delle operazioni sulle pratiche</strong>: separatamente dai log di cui sopra, ogni cambio di stato di una pratica è registrato con l&apos;indicazione di chi lo ha determinato e quando, insieme allo storico delle comunicazioni email inviate. Serve a ricostruire la lavorazione di una pratica in caso di contestazione ed è conservato insieme ai dati della pratica.
             </li>
             <li>
               <strong>Dati operativi</strong>: documenti caricati per le pratiche (libretto di circolazione, carta d&apos;identità, patente, passaporto, codice fiscale, visure), dati estratti via OCR, comunicazioni con le agenzie.
@@ -133,7 +136,7 @@ export default function PrivacyPage() {
               Sicurezza della piattaforma, anti-abuso e investigazione di eventuali frodi (legittimo interesse, art. 6.1.f GDPR).
             </li>
             <li>
-              Gestione dei log di accesso e delle attività degli utenti per finalità di sicurezza, audit e risoluzione controversie (legittimo interesse, art. 6.1.f GDPR).
+              Registrazione degli accessi, degli accessi ai documenti e delle esportazioni di dati per finalità di sicurezza, prevenzione delle frodi e difesa in giudizio (legittimo interesse, art. 6.1.f GDPR, e misure di sicurezza ex art. 32 GDPR). Questa registrazione è <strong>indipendente dal consenso ai cookie</strong>: riguarda la sicurezza del servizio, non la misurazione dell&apos;utilizzo, e non viene disattivata rifiutando le statistiche.
             </li>
             <li>
               Comunicazioni di servizio sul ciclo di vita della pratica (esecuzione del contratto).
@@ -169,7 +172,7 @@ export default function PrivacyPage() {
               <strong>Dati delle pratiche portate a termine e dati contabili e fiscali</strong>: conservati per il periodo imposto dalla normativa fiscale italiana (<strong>minimo 10 anni</strong>) e dagli obblighi connessi agli adempimenti sul veicolo.
             </li>
             <li>
-              <strong>Log di accesso e attività</strong>: conservati per <strong>24 mesi</strong>{' '}dalla data di registrazione del log.
+              <strong>Log di accesso e attività</strong>: conservati per <strong>24 mesi</strong>{' '}dalla data di registrazione, poi <strong>cancellati automaticamente</strong>{' '}da una procedura giornaliera. Non sono conservati oltre tale termine per alcuna finalità.
             </li>
             <li>
               <strong>Dati degli utenti operativi e sub-utenti</strong> (nome, cognome, email, ruolo): conservati per tutta la durata del rapporto contrattuale con l&apos;Utente titolare e per <strong>24 mesi</strong>{' '}dalla cessazione dell&apos;account o dalla revoca dell&apos;utenza, salvo obblighi di legge che richiedano una conservazione più lunga.

@@ -40,6 +40,10 @@
     {
       "path": "/api/jobs/preavviso-visura",
       "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/jobs/purge-log-accessi",
+      "schedule": "0 4 * * *"
     }
   ]
 }

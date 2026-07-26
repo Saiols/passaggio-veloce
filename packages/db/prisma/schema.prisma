@@ -513,6 +513,12 @@ model Company {
   // Clausola 3: variazioni tariffarie rilevanti riaccettate da questa azienda.
   riaccettazioniTariffa RiaccettazioneTariffa[]
 
+  // Log accessi (art. 32 GDPR): righe in cui questa azienda è quella
+  // dell'attore. Il caso "azienda bersaglio" NON è una relazione
+  // (`bersaglioCompanyId` è un id nudo): il log deve sopravvivere alla
+  // cancellazione dell'azienda che descrive.
+  logAccessi LogAccesso[] @relation("LogAccessoCompany")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -601,6 +607,9 @@ model User {
   // Clausola 3: riaccettazioni di variazioni tariffarie rilevanti prestate
   // da questa persona per conto della propria azienda.
   riaccettazioniTariffa RiaccettazioneTariffa[] @relation("RiaccettazioneTariffaUser")
+
+  // Log accessi (art. 32 GDPR): righe generate da questo utente.
+  logAccessi LogAccesso[] @relation("LogAccessoUser")
 
   // Multi-sede: sedi su cui questo utente può operare (login multi-sede).
   sediMembership UserSede[]
@@ -1892,6 +1901,82 @@ model TariffaPiattaforma {
   @@index([efficaceDal])
   @@index([createdAt])
   @@map("tariffe_piattaforma")
+}
+
+/// Cosa viene registrato nel log accessi. Elenco VOLUTAMENTE CORTO: la privacy
+/// policy descrive esattamente queste voci, e allungarlo senza aggiornarla
+/// renderebbe falsa l'informativa. Non si registra "ogni azione": il ciclo di
+/// vita delle pratiche ha gia' il suo tracciato in `PraticaStatoLog` (con
+/// `attoreUserId`), le email in `NotificaInviata`, gli atti contrattuali in
+/// `BrokerDichiarazione` / `MandatoFatturazione` / `RiaccettazioneTariffa`.
+enum LogAccessoAzione {
+  LOGIN
+  LOGIN_FALLITO
+  LOGOUT
+  /// Lettura o download di un documento (art. 32 GDPR): e' l'evento che
+  /// permette di dire a un venditore CHI ha visto i suoi documenti.
+  DOCUMENTO_ACCESSO
+  /// Estrazione massiva di dati: CSV, ZIP, elenchi contatti.
+  EXPORT_DATI
+}
+
+/// Log accessi e attivita' (art. 32 GDPR), conservato 24 mesi.
+///
+/// Copre quattro cose e basta: autenticazione, accesso ai documenti, export di
+/// dati. Serve a rispondere a domande a cui nient'altro risponde — «chi ha
+/// scaricato la carta d'identita' di questo venditore», «chi ha esportato
+/// l'elenco contatti» — e non e' sostituibile da Google Analytics: quello e'
+/// subordinato al consenso (chi rifiuta sparisce), non conosce l'identita'
+/// dell'utente, non vede nulla di cio' che accade lato server e non e'
+/// utilizzabile come prova.
+///
+/// Il log e' esso stesso un dato personale: IP anonimizzato come altrove
+/// (IPv4 = primi 3 ottetti), retention 24 mesi applicata da un job di purge.
+model LogAccesso {
+  id String @id @default(uuid()) @db.Uuid
+
+  azione LogAccessoAzione
+
+  /// NULL sui LOGIN_FALLITO con un'email che non esiste: l'evento va
+  /// registrato lo stesso, ed e' anzi quello piu' interessante.
+  userId String? @db.Uuid
+  user   User?   @relation("LogAccessoUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  /// Email tentata: unico modo di dare un senso a un LOGIN_FALLITO senza utente.
+  email String?
+
+  /// Azienda dell'ATTORE al momento del fatto, denormalizzata: l'utente puo'
+  /// essere eliminato o cambiare azienda, il log deve restare leggibile.
+  companyId String?  @db.Uuid
+  company   Company? @relation("LogAccessoCompany", fields: [companyId], references: [id], onDelete: SetNull)
+
+  /// Azienda BERSAGLIO, quando diversa da quella dell'attore. E' il campo che
+  /// isola il caso che conta davvero: lo staff di piattaforma, o un admin, che
+  /// tocca i dati di un'altra azienda.
+  bersaglioCompanyId String? @db.Uuid
+
+  /// Cosa e' stato toccato: `documento`, `pratica`, `contatti-crm`, ... e il
+  /// suo id. Testo libero e non una relazione, perche' il log deve
+  /// sopravvivere alla cancellazione della risorsa che descrive.
+  risorsaTipo String?
+  risorsaId   String?
+
+  /// Vero se il tentativo e' stato RIFIUTATO. Un 403 su un documento altrui e'
+  /// il segnale piu' utile dell'intero log: dice che qualcuno ha provato.
+  negato Boolean @default(false)
+
+  dettaglio String?
+
+  ip        String? // GDPR: IPv4 = primi 3 ottetti; IPv6 = primi 4 hextet
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([risorsaTipo, risorsaId])
+  @@index([bersaglioCompanyId, createdAt])
+  @@map("log_accessi")
 }
 
 /// Riaccettazione esplicita di una variazione tariffaria rilevante (clausola 3,

@@ -7,6 +7,7 @@ import { prisma } from '@pv/db';
 import { authConfig } from './auth.config';
 import { verifyTwoFactor } from '@/lib/auth/totp';
 import { activeUserCredentialsQuery } from '@/lib/auth/credentials-query';
+import { registraLog } from '@/lib/audit/log-accessi';
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -36,8 +37,30 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           include: { company: true },
         });
 
-        if (!matched) return null;
-        if (!(await bcrypt.compare(password, matched.passwordHash))) return null;
+        // Log accessi: questi due rami sono una RETE DI SICUREZZA, non il
+        // punto di registrazione principale. Nel flusso reale non si
+        // raggiungono: `loginAction` fa il proprio pre-check e ritorna
+        // «credenziali non valide» senza mai chiamare `signIn`, quindi i
+        // fallimenti su email e password sono registrati là. Restano qui per
+        // coprire un eventuale secondo chiamante di `signIn`.
+        if (!matched) {
+          await registraLog({
+            azione: 'LOGIN_FALLITO',
+            email,
+            dettaglio: 'utente inesistente (via authorize)',
+          });
+          return null;
+        }
+        if (!(await bcrypt.compare(password, matched.passwordHash))) {
+          await registraLog({
+            azione: 'LOGIN_FALLITO',
+            email,
+            userId: matched.id,
+            companyId: matched.companyId,
+            dettaglio: 'password errata (via authorize)',
+          });
+          return null;
+        }
 
         // P4: se il 2FA è attivo, il codice TOTP (o un backup code) è obbligatorio.
         // authorize è la fonte autoritativa: consuma il backup code se usato.
@@ -50,7 +73,20 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             { secret: matched.twoFactorSecret, backupCodeHashes: backupHashes },
             code,
           );
-          if (!res.ok) return null;
+          if (!res.ok) {
+            // QUESTO invece è raggiungibile davvero: `loginAction` con la
+            // password giusta e il 2FA attivo chiama `signIn`, e il codice
+            // sbagliato fallisce qui. Un secondo fattore sbagliato su una
+            // password corretta è il segnale che qualcuno ha già la password.
+            await registraLog({
+              azione: 'LOGIN_FALLITO',
+              email,
+              userId: matched.id,
+              companyId: matched.companyId,
+              dettaglio: 'codice 2FA errato',
+            });
+            return null;
+          }
           if (res.consumedBackupIndex !== null) {
             const remaining = backupHashes.filter((_, i) => i !== res.consumedBackupIndex);
             await prisma.user.update({
@@ -63,6 +99,15 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         await prisma.user.update({
           where: { id: matched.id },
           data: { lastLoginAt: new Date() },
+        });
+        // `lastLoginAt` tiene solo l'ULTIMO accesso e viene sovrascritto ogni
+        // volta: da solo non è uno storico e non risponde a «da quale IP e
+        // quante volte». Il log lo affianca, non lo sostituisce.
+        await registraLog({
+          azione: 'LOGIN',
+          userId: matched.id,
+          email: matched.email,
+          companyId: matched.companyId,
         });
 
         return {

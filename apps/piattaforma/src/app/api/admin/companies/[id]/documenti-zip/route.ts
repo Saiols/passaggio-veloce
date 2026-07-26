@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@pv/db';
 import { isAdminPiattaforma } from '@/lib/auth/permissions';
+import { registraLogAsync } from '@/lib/audit/log-accessi';
 import { storageGetBuffer } from '@/lib/providers/storage';
 import { documentoDownloadName } from '@/lib/documenti/labels';
 import { appendToFilename } from '@/lib/documenti/filename';
@@ -54,6 +55,22 @@ export async function GET(
   if (!company || company.deletedAt) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
+
+  // Log accessi: scarica in un colpo solo TUTTI i documenti aziendali di
+  // un'altra azienda — carta d'identità del legale rappresentante, codice
+  // fiscale, visura, mandato. È l'operazione più invasiva che lo staff di
+  // piattaforma possa compiere, ed è per definizione cross-azienda: qui
+  // `bersaglioCompanyId` è sempre valorizzato.
+  registraLogAsync({
+    azione: 'EXPORT_DATI',
+    userId: session.user.id,
+    email: session.user.email,
+    companyId: session.user.companyId ?? null,
+    bersaglioCompanyId: id,
+    risorsaTipo: 'documenti-azienda-zip',
+    risorsaId: id,
+    dettaglio: `${company.ragioneSociale} · ${company.documenti.length} documenti`,
+  });
 
   const entries: ZipEntry[] = [];
 

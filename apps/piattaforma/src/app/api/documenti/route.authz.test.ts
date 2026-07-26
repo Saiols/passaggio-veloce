@@ -7,14 +7,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * scaricare. Storage mockato: qui si verifica solo l'autorizzazione.
  */
 
-const { authMock, getSessionContextMock, prismaMock, storageGetMock } = vi.hoisted(() => ({
-  authMock: vi.fn(),
-  getSessionContextMock: vi.fn(),
-  prismaMock: {
-    documento: { findUnique: vi.fn() },
-  },
-  storageGetMock: vi.fn(),
-}));
+const { authMock, getSessionContextMock, prismaMock, storageGetMock, registraLogMock } = vi.hoisted(
+  () => ({
+    authMock: vi.fn(),
+    getSessionContextMock: vi.fn(),
+    prismaMock: {
+      documento: { findUnique: vi.fn() },
+    },
+    storageGetMock: vi.fn(),
+    registraLogMock: vi.fn(),
+  }),
+);
 
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
 vi.mock('@/auth', () => ({ auth: authMock }));
@@ -23,6 +26,7 @@ vi.mock('@/lib/providers/storage', () => ({
   getStorage: () => ({ get: storageGetMock }),
   StorageNotFoundError: class StorageNotFoundError extends Error {},
 }));
+vi.mock('@/lib/audit/log-accessi', () => ({ registraLogAsync: registraLogMock }));
 
 import { GET } from './[id]/route';
 
@@ -107,6 +111,85 @@ describe('GET /api/documenti/[id] — gate pratiche.download', () => {
     const res = await GET(new Request('http://x'), params());
 
     expect(res.status).toBe(200);
+  });
+});
+
+/**
+ * Log accessi (art. 32 GDPR). Questa route è la ragione principale per cui il
+ * log esiste: è l'unico punto in cui qualcuno apre i documenti d'identità di
+ * venditori e acquirenti, e l'unico modo di rispondere a «chi ha visto i miei
+ * documenti».
+ *
+ * Il ramo consentito è stato verificato anche sul database reale (una
+ * riga `DOCUMENTO_ACCESSO` con l'azienda bersaglio corretta). I due rami
+ * NEGATI si esercitano qui, perché nel browser richiederebbero di costruire
+ * una seconda utenza priva di permessi — e sono proprio quelli che contano:
+ * un tentativo respinto dice che qualcuno ha provato.
+ */
+describe('GET /api/documenti/[id] — log accessi', () => {
+  it('403 per scope/proprietà → registra un tentativo NEGATO', async () => {
+    authMock.mockResolvedValue(sessione('UTENTE_AZIENDA', 'AGENZIA', 'azienda-estranea'));
+    getSessionContextMock.mockResolvedValue({
+      ...ctx({ permessi: ['pratiche.download'] }),
+      companyId: 'azienda-estranea',
+      scopeIds: ['sede-estranea'],
+      currentSede: { kind: 'ONE' as const, sede: { id: 'sede-estranea' } },
+    });
+
+    const res = await GET(new Request('http://x'), params());
+
+    expect(res.status).toBe(403);
+    expect(registraLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        azione: 'DOCUMENTO_ACCESSO',
+        negato: true,
+        risorsaTipo: 'documento',
+        risorsaId: 'd1',
+      }),
+    );
+  });
+
+  it('403 per permesso mancante → registra un tentativo NEGATO, con la ragione', async () => {
+    authMock.mockResolvedValue(sessione('UTENTE_AZIENDA', 'AGENZIA'));
+    getSessionContextMock.mockResolvedValue(ctx({ permessi: [] }));
+
+    const res = await GET(new Request('http://x'), params());
+
+    expect(res.status).toBe(403);
+    expect(registraLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ negato: true, dettaglio: expect.stringContaining('pratiche.download') }),
+    );
+  });
+
+  it('accesso consentito → registrato come NON negato, prima di leggere il file', async () => {
+    authMock.mockResolvedValue(sessione('UTENTE_AZIENDA', 'AGENZIA'));
+    getSessionContextMock.mockResolvedValue(ctx({ permessi: ['pratiche.download'] }));
+
+    await GET(new Request('http://x'), params());
+
+    expect(registraLogMock).toHaveBeenCalledWith(
+      expect.objectContaining({ azione: 'DOCUMENTO_ACCESSO', negato: false, risorsaId: 'd1' }),
+    );
+    // Il log precede la lettura dallo storage: la risposta è uno stream, e
+    // loggare in coda significherebbe non registrare nulla se il processo
+    // muore a metà download — cioè proprio nel caso anomalo.
+    expect(registraLogMock.mock.invocationCallOrder[0]).toBeLessThan(
+      storageGetMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("un file mancante nello storage non cancella la traccia dell'accesso", async () => {
+    // Verificato anche in locale: il documento fixture non esiste nel blob
+    // store di sviluppo, la route ha risposto 404 e la riga di log c'era.
+    authMock.mockResolvedValue(sessione('ADMIN_PIATTAFORMA', undefined as unknown as string, undefined as unknown as string));
+    getSessionContextMock.mockResolvedValue(null);
+    const { StorageNotFoundError } = await import('@/lib/providers/storage');
+    storageGetMock.mockRejectedValue(new StorageNotFoundError('assente'));
+
+    const res = await GET(new Request('http://x'), params());
+
+    expect(res.status).toBe(404);
+    expect(registraLogMock).toHaveBeenCalledWith(expect.objectContaining({ negato: false }));
   });
 });
 

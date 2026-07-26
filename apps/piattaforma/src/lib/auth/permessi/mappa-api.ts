@@ -49,6 +49,7 @@ export const MAPPA_API: Record<string, Permesso | null> = {
   'src/app/api/jobs/process-payouts/route.ts': null,
   'src/app/api/jobs/purge-deleted-documenti/route.ts': null,
   'src/app/api/jobs/purge-deleted-team-users/route.ts': null,
+  'src/app/api/jobs/purge-log-accessi/route.ts': null,
   'src/app/api/jobs/send-solleciti/route.ts': null,
   'src/app/api/jobs/trigger-auto-payout/route.ts': null,
 

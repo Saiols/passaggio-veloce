@@ -5,7 +5,8 @@ import bcrypt from 'bcryptjs';
 import { Prisma } from '@pv/db';
 import { prisma } from '@pv/db';
 
-import { signIn, signOut } from '@/auth';
+import { auth, signIn, signOut } from '@/auth';
+import { registraLog } from '@/lib/audit/log-accessi';
 import { env } from '@/env';
 import { hashPassword, validatePasswordPolicy } from '@/lib/auth/password';
 import { generateSecureToken, expiresIn } from '@/lib/auth/tokens';
@@ -84,6 +85,14 @@ export async function loginAction(
   const LOGIN_WINDOW_SEC = 15 * 60;
   const rl = await rateLimit(rateKey, LOGIN_LIMIT, LOGIN_WINDOW_SEC);
   if (!rl.allowed) {
+    // Log accessi: il rate limit scattato è il segnale di forza bruta più
+    // netto che abbiamo. Va registrato qui perché da questo punto la funzione
+    // ritorna e non arriva mai all'autenticazione vera.
+    await registraLog({
+      azione: 'LOGIN_FALLITO',
+      email: emailLower,
+      dettaglio: 'rate limit superato',
+    });
     const minutes = Math.ceil(LOGIN_WINDOW_SEC / 60);
     return {
       error: `Troppi tentativi. Riprova tra ${minutes} minut${minutes === 1 ? 'o' : 'i'}.`,
@@ -97,7 +106,9 @@ export async function loginAction(
   // mostrare il campo codice. La password NON viene mai ritornata al client.
   const found = await prisma.user.findFirst({
     ...activeUserCredentialsQuery(emailLower),
-    select: { passwordHash: true, twoFactorEnabled: true },
+    // `id` e `companyId` non servono al pre-check ma al log accessi: senza,
+    // un tentativo fallito su un account esistente non sarebbe attribuibile.
+    select: { id: true, companyId: true, passwordHash: true, twoFactorEnabled: true },
   });
   const matched =
     found && (await bcrypt.compare(parsed.data.password, found.passwordHash)) ? found : null;
@@ -117,8 +128,32 @@ export async function loginAction(
       select: { passwordHash: true },
     });
     if (pending && (await bcrypt.compare(parsed.data.password, pending.passwordHash))) {
+      await registraLog({
+        azione: 'LOGIN_FALLITO',
+        email: emailLower,
+        dettaglio: 'email non ancora verificata',
+      });
       return { needsEmailVerification: true, email: emailLower };
     }
+    // ⚠️ IL LOG DEI FALLIMENTI VIVE QUI, non in `authorize`.
+    //
+    // Questa action fa un pre-check che rispecchia `authorize` e, quando non
+    // combacia, ritorna «credenziali non valide» SENZA MAI chiamare `signIn`:
+    // `authorize` non viene raggiunto e un hook messo là non vedrebbe un solo
+    // tentativo fallito. È esattamente l'errore che questo commento esiste per
+    // non far ripetere — trovato solo provando un login sbagliato col browser
+    // e guardando la tabella, non leggendo il codice.
+    //
+    // Il DETTAGLIO distingue «utente inesistente» da «password errata»: resta
+    // interno al log e non cambia di una virgola la risposta al client, che è
+    // identica nei due casi (nessuna enumerazione di account).
+    await registraLog({
+      azione: 'LOGIN_FALLITO',
+      email: emailLower,
+      userId: found?.id ?? null,
+      companyId: found?.companyId ?? null,
+      dettaglio: found ? 'password errata' : 'utente inesistente',
+    });
     return { error: 'Credenziali non valide' };
   }
   if (matched.twoFactorEnabled && !totp) {
@@ -156,6 +191,17 @@ export async function loginAction(
 // ============================================================
 
 export async function logoutAction() {
+  // Log accessi: la sessione va letta PRIMA di `signOut`, che la distrugge —
+  // dopo non c'è più nessuno da registrare. Best-effort come tutto il log.
+  const session = await auth();
+  if (session?.user) {
+    await registraLog({
+      azione: 'LOGOUT',
+      userId: session.user.id,
+      email: session.user.email,
+      companyId: session.user.companyId ?? null,
+    });
+  }
   await signOut({ redirectTo: '/login' });
 }
 

@@ -1714,6 +1714,13 @@ model DocumentoFiscale {
   inviatoEmailAt DateTime?
 
   @@unique([emittenteCompanyId, anno, numeroProgressivo, tipo])
+  /// Una sola FATTURA_PV per pratica. Lo unique sopra NON la copre: per le
+  /// FATTURA_PV `emittenteCompanyId` è NULL e in Postgres i NULL sono
+  /// distinti, quindi non vincola nulla. Senza questo indice l'idempotenza
+  /// di `createFatturaPv` è un leggi-poi-scrivi che due chiamanti concorrenti
+  /// (percorso d'incasso e riconciliazione oraria) possono attraversare
+  /// entrambi. I DOC_BROKER hanno `praticaId` NULL e restano liberi.
+  @@unique([praticaId, tipo])
   @@index([praticaId])
   @@index([payoutId])
   @@index([destinatarioCompanyId, statoPagamento])

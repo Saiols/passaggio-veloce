@@ -9,6 +9,30 @@ import { pvEmittente, snapshotCompany, type DatiFiscali } from './pv-emittente';
 const ID_SOGGETTO_PV = 'PV';
 
 /**
+ * Conflitto sul vincolo `@@unique([praticaId, tipo])`, cioè: qualcun altro ha
+ * appena creato la fattura di questa pratica mentre la creavamo noi.
+ *
+ * Il controllo è ristretto al target e non al solo codice: un `P2002` sul
+ * `numeroDocumentoStr` è un'altra cosa — segnala un contatore fiscale che ha
+ * prodotto un numero già usato — e non deve passare in silenzio.
+ *
+ * Duck typing invece di `instanceof PrismaClientKnownRequestError`: questo
+ * modulo importa `Prisma` solo come tipo, e la forma dell'errore (`code` +
+ * `meta.target`) è parte del contratto pubblico di Prisma.
+ */
+function isConflittoFatturaPratica(err: unknown): boolean {
+  const e = err as { code?: unknown; meta?: { target?: unknown } } | null;
+  if (e?.code !== 'P2002') return false;
+  const target = e.meta?.target;
+  const campi = Array.isArray(target)
+    ? target.map(String)
+    : typeof target === 'string'
+      ? [target]
+      : [];
+  return campi.includes('praticaId') && campi.includes('tipo');
+}
+
+/**
  * FATTURA_PV verso l'agenzia. Importo = `FeeAddebito.importoCent`, cioè quello
  * davvero addebitato: se l'addebito è stato modificato dopo la firma, la
  * fattura segue lui e non il preventivo scritto sulla pratica.
@@ -18,9 +42,10 @@ const ID_SOGGETTO_PV = 'PV';
  * alla firma quando il provider di pagamento non è live.
  *
  * Ritorna il documento creato, oppure `null` se non c'era niente da creare —
- * fee assente, importo non positivo, agenzia assente, o fattura già esistente
- * per quella pratica. Il `null` è il segnale che fa partire la N53 una volta
- * sola da chiamanti che non si conoscono (percorso d'incasso e riconciliazione).
+ * fee assente, importo non positivo, agenzia assente, fattura già esistente
+ * per quella pratica, o perché un altro chiamante l'ha creata nello stesso
+ * istante. Il `null` è il segnale che fa partire la N53 una volta sola da
+ * chiamanti che non si conoscono (percorso d'incasso e riconciliazione).
  *
  * Idempotente per pratica: è la seconda rete sotto il compare-and-set di
  * `segnaFeeIncassato`.
@@ -30,48 +55,57 @@ export async function createFatturaPv(input: {
   statoPagamento: 'IN_ATTESA' | 'PAGATA';
 }): Promise<{ id: string } | null> {
   const anno = romeAnnoCivile(new Date());
-  return prisma.$transaction(async (tx) => {
-    const fee = await tx.feeAddebito.findUnique({ where: { id: input.feeAddebitoId } });
-    if (!fee || fee.importoCent <= 0) return null;
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const fee = await tx.feeAddebito.findUnique({ where: { id: input.feeAddebitoId } });
+      if (!fee || fee.importoCent <= 0) return null;
 
-    const esiste = await tx.documentoFiscale.findFirst({
-      where: { praticaId: fee.praticaId, tipo: 'FATTURA_PV' },
-      select: { id: true },
+      const esiste = await tx.documentoFiscale.findFirst({
+        where: { praticaId: fee.praticaId, tipo: 'FATTURA_PV' },
+        select: { id: true },
+      });
+      if (esiste) return null;
+
+      const agenzia = await tx.company.findUnique({ where: { id: fee.agenziaId } });
+      if (!agenzia) return null;
+
+      const split = splitImporto(fee.importoCent, 'ORDINARIO');
+      const num = await prossimoContatore(tx, ID_SOGGETTO_PV, 'FATTURA_PV', anno);
+      const numeroStr = numeroDocumento({ tipo: 'FATTURA_PV', numeroProgressivo: num, anno });
+
+      return tx.documentoFiscale.create({
+        data: {
+          tipo: 'FATTURA_PV',
+          fatturaPaTipo: 'TD01',
+          praticaId: fee.praticaId,
+          // Legame documento ↔ incasso: il campo esisteva in schema ma non veniva
+          // mai scritto. Serve alla lettura admin, non alla riconciliazione (che
+          // interroga per praticaId, l'unico dei due che ha un indice).
+          feeAddebitoId: fee.id,
+          emittenteCompanyId: null,
+          destinatarioCompanyId: agenzia.id,
+          datiEmittente: pvEmittente() as unknown as Prisma.InputJsonValue,
+          datiDestinatario: snapshotCompany(agenzia) as unknown as Prisma.InputJsonValue,
+          numeroProgressivo: num,
+          anno,
+          numeroDocumentoStr: numeroStr,
+          importoLordoCent: fee.importoCent,
+          imponibileCent: split.imponibileCent,
+          ivaCent: split.ivaCent,
+          aliquotaIvaPct: split.aliquotaIvaPct,
+          statoPagamento: input.statoPagamento,
+        },
+        select: { id: true },
+      });
     });
-    if (esiste) return null;
-
-    const agenzia = await tx.company.findUnique({ where: { id: fee.agenziaId } });
-    if (!agenzia) return null;
-
-    const split = splitImporto(fee.importoCent, 'ORDINARIO');
-    const num = await prossimoContatore(tx, ID_SOGGETTO_PV, 'FATTURA_PV', anno);
-    const numeroStr = numeroDocumento({ tipo: 'FATTURA_PV', numeroProgressivo: num, anno });
-
-    return tx.documentoFiscale.create({
-      data: {
-        tipo: 'FATTURA_PV',
-        fatturaPaTipo: 'TD01',
-        praticaId: fee.praticaId,
-        // Legame documento ↔ incasso: il campo esisteva in schema ma non veniva
-        // mai scritto. Serve alla lettura admin, non alla riconciliazione (che
-        // interroga per praticaId, l'unico dei due che ha un indice).
-        feeAddebitoId: fee.id,
-        emittenteCompanyId: null,
-        destinatarioCompanyId: agenzia.id,
-        datiEmittente: pvEmittente() as unknown as Prisma.InputJsonValue,
-        datiDestinatario: snapshotCompany(agenzia) as unknown as Prisma.InputJsonValue,
-        numeroProgressivo: num,
-        anno,
-        numeroDocumentoStr: numeroStr,
-        importoLordoCent: fee.importoCent,
-        imponibileCent: split.imponibileCent,
-        ivaCent: split.ivaCent,
-        aliquotaIvaPct: split.aliquotaIvaPct,
-        statoPagamento: input.statoPagamento,
-      },
-      select: { id: true },
-    });
-  });
+  } catch (err) {
+    // Chi perde la corsa si comporta come chi arriva secondo: `null` è già la
+    // semantica di "esisteva di già". Il rollback della transazione riporta
+    // indietro anche il contatore fiscale, quindi non resta un buco di
+    // numerazione.
+    if (isConflittoFatturaPratica(err)) return null;
+    throw err;
+  }
 }
 
 /**

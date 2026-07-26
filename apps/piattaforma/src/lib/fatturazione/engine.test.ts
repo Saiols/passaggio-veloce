@@ -106,4 +106,34 @@ describe('createFatturaPv', () => {
     expect(await createFatturaPv({ feeAddebitoId: 'fee-1', statoPagamento: 'PAGATA' })).toBeNull();
     expect(txMock.documentoFiscale.create).not.toHaveBeenCalled();
   });
+
+  it('conflitto sul vincolo (praticaId, tipo): ritorna null invece di propagare', async () => {
+    prismaMock.$transaction.mockRejectedValueOnce(
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: ['praticaId', 'tipo'] },
+      }),
+    );
+    const out = await createFatturaPv({ feeAddebitoId: 'fee-1', statoPagamento: 'PAGATA' });
+    expect(out).toBeNull();
+  });
+
+  it('un P2002 su un altro vincolo NON viene inghiottito', async () => {
+    prismaMock.$transaction.mockRejectedValueOnce(
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: ['numeroDocumentoStr'] },
+      }),
+    );
+    await expect(
+      createFatturaPv({ feeAddebitoId: 'fee-1', statoPagamento: 'PAGATA' }),
+    ).rejects.toThrow('Unique constraint failed');
+  });
+
+  it('un errore qualsiasi NON viene inghiottito', async () => {
+    prismaMock.$transaction.mockRejectedValueOnce(new Error('connessione persa'));
+    await expect(
+      createFatturaPv({ feeAddebitoId: 'fee-1', statoPagamento: 'PAGATA' }),
+    ).rejects.toThrow('connessione persa');
+  });
 });

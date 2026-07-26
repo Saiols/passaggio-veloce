@@ -2,19 +2,10 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
+import { parsePeriodo, resolvePeriodo, periodoDateFilter } from '@/lib/finanze/periodo';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-type Periodo = 'settimana' | 'mese' | 'anno';
-
-function startOfPeriodo(p: Periodo): Date {
-  const d = new Date();
-  if (p === 'settimana') d.setDate(d.getDate() - 7);
-  else if (p === 'mese') d.setMonth(d.getMonth() - 1);
-  else d.setFullYear(d.getFullYear() - 1);
-  return d;
-}
 
 function csvEscape(v: unknown): string {
   if (v === null || v === undefined) return '';
@@ -35,14 +26,17 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const periodo: Periodo = (url.searchParams.get('periodo') as Periodo) ?? 'mese';
+  const periodo = parsePeriodo(url.searchParams.get('periodo'));
+  const range = resolvePeriodo({
+    periodo,
+    da: url.searchParams.get('da') ?? undefined,
+    a: url.searchParams.get('a') ?? undefined,
+  });
   const tipo = url.searchParams.get('tipo') ?? '';
-  const since = startOfPeriodo(periodo);
 
-  const where: Prisma.PraticaWhereInput = {
-    deletedAt: null,
-    createdAt: { gte: since },
-  };
+  const where: Prisma.PraticaWhereInput = { deletedAt: null };
+  const dateFilter = periodoDateFilter(range);
+  if (dateFilter) where.createdAt = dateFilter;
   if (tipo === 'SEMPLICE' || tipo === 'MINIVOLTURA') {
     where.tipo = tipo;
   }
@@ -96,7 +90,11 @@ export async function GET(req: Request) {
     ...rows.map((r) => r.map(csvEscape).join(',')),
   ].join('\n');
 
-  const filename = `pratiche-${periodo}${tipo ? `-${tipo.toLowerCase()}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`;
+  // Su `custom` la parola "custom" non direbbe nulla una volta salvato sul
+  // disco: nel nome ci vanno le due date.
+  const periodoSlug =
+    periodo === 'custom' ? `${range.da || 'inizio'}_${range.a || 'oggi'}` : periodo;
+  const filename = `pratiche-${periodoSlug}${tipo ? `-${tipo.toLowerCase()}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new NextResponse(csv, {
     status: 200,

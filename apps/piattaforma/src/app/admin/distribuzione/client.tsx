@@ -198,12 +198,6 @@ export function DistribuzioneConfigClient({
         <p className="mt-3 text-[12.5px] text-pv-slate-500">
           Misura del raggio: linea d&apos;aria.
         </p>
-
-        <div className="mt-5 flex justify-end">
-          <Button type="submit" loading={pending} loadingLabel="Salvataggio…">
-            Salva
-          </Button>
-        </div>
       </div>
 
       <OrariSettimanaEditor
@@ -218,6 +212,21 @@ export function DistribuzioneConfigClient({
         oggiIso={oggiIso}
         errore={field('festivi').error}
       />
+
+      {/* Un solo Salva, in fondo, FUORI dalle card: il form è uno e salva tutto
+          insieme (raggi, giorni e orari, festivi). Finché stava dentro la prima
+          card sembrava salvare solo quella, e le due card sotto restavano senza
+          un pulsante proprio. Un tasto per card sarebbe stato peggio: tre
+          pulsanti che fanno la stessa identica cosa, dichiarando il contrario. */}
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-pv-slate-200 pt-5">
+        <p className="mr-auto text-[12.5px] text-pv-slate-500">
+          Il salvataggio vale per l&apos;intera pagina: parametri del raggio, giorni e orari,
+          festivi.
+        </p>
+        <Button type="submit" loading={pending} loadingLabel="Salvataggio…">
+          Salva
+        </Button>
+      </div>
 
       <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>

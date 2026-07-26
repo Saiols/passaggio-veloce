@@ -16,6 +16,7 @@ export default async function DashboardPage({
     tick?: string;
     scanned?: string;
     expanded?: string;
+    riprese?: string;
     zonaNonCoperta?: string;
   }>;
 }) {
@@ -52,6 +53,7 @@ export default async function DashboardPage({
               ? {
                   scanned: sp.scanned,
                   expanded: sp.expanded,
+                  riprese: sp.riprese,
                   zonaNonCoperta: sp.zonaNonCoperta,
                 }
               : undefined

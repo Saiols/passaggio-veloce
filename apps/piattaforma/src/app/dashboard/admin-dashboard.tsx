@@ -7,6 +7,7 @@ import { STATI_IN_DISTRIBUZIONE } from '@/lib/pratiche/stati';
 type TickBanner = {
   scanned?: string;
   expanded?: string;
+  riprese?: string;
   zonaNonCoperta?: string;
 };
 
@@ -45,9 +46,12 @@ export async function AdminDashboard({ tickBanner }: { tickBanner?: TickBanner }
       {tickBanner && (
         <div className="mb-5">
           <Alert variant="info" title="Tick distribuzione eseguito">
+            {/* Ogni nodo di testo su UNA riga: un testo JSX spezzato su più
+                righe perde lo spazio iniziale (vedi /termini, 21 parole
+                incollate). Dove serve andare a capo, lo spazio è esplicito. */}
             Pratiche ispezionate: <b>{tickBanner.scanned ?? '0'}</b> · Anelli espansi:{' '}
-            <b>{tickBanner.expanded ?? '0'}</b> · Zona non coperta:{' '}
-            <b>{tickBanner.zonaNonCoperta ?? '0'}</b>
+            <b>{tickBanner.expanded ?? '0'}</b> · Riprese: <b>{tickBanner.riprese ?? '0'}</b> ·{' '}
+            Zona non coperta: <b>{tickBanner.zonaNonCoperta ?? '0'}</b>
           </Alert>
         </div>
       )}

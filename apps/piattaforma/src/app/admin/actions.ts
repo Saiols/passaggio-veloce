@@ -13,10 +13,15 @@ export async function runDistribuzioneTickAction(): Promise<void> {
   }
 
   const result = await tickAllPraticheInDistribuzione();
+  // `riprese` va tenuto in fila con gli altri: è l'unica osservabilità manuale
+  // della ripresa da zona non coperta. Dimenticarlo qui non rompe niente, ma
+  // fa leggere all'admin "Anelli espansi: 0 · Zona non coperta: 0" dopo un tick
+  // che ha appena rimesso in gara delle pratiche.
   const params = new URLSearchParams({
     tick: '1',
     scanned: String(result.scanned),
     expanded: String(result.expanded),
+    riprese: String(result.riprese),
     zonaNonCoperta: String(result.zonaNonCoperta),
   });
 

@@ -31,12 +31,18 @@ const STATI_TERMINALI = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as cons
  * Grazia (min) sul gate della durata round. Il cron gira ogni minuto
  * (vercel.json) e Vercel non garantisce il trigger al secondo: senza grazia
  * un tick che arriva un istante prima della scadenza slitterebbe di un giro
- * intero. 0,2 min = 12 secondi assorbono il jitter senza accorciare in modo
- * percepibile un round.
+ * intero.
  *
- * ⚠️ Deve restare MOLTO minore della più breve durata di round configurabile
- * (il minimo vive in `validate.ts`, non qui, e non va duplicato): una grazia
- * comparabile alla durata di un round corto lo dimezzerebbe di fatto.
+ * È un valore ASSOLUTO — 0,2 min = 12 secondi — non proporzionale alla durata
+ * del round (il minimo vive in `validate.ts`, non qui, e non va duplicato).
+ * Su un round da 1 minuto quei 12 secondi sono il 20% della durata; su un
+ * round da 60 minuti sono lo 0,3%: l'incidenza cambia molto, ed è accettato
+ * consapevolmente. L'alternativa — una grazia proporzionale, quindi più
+ * stretta sui round corti — sembra più fedele ma peggiora l'esito: un tick
+ * che arriva a ridosso della scadenza verrebbe respinto e il round
+ * slitterebbe al giro di cron successivo, RADDOPPIANDO la sua durata (1 min
+ * → 2 min). Restare corti di 12 secondi è un errore molto più piccolo che
+ * raddoppiare il round.
  */
 const ESPANSIONE_GRACE_MIN = 0.2;
 

@@ -16,6 +16,7 @@ import { onPraticaFirmata } from '@/lib/crm/sync';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { isPaymentLive } from '@/lib/jobs/payment-live';
+import { processFeeAddebito } from '@/lib/fee/process';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
 import { fatturaPvAttachment } from '@/lib/fatturazione/documento-pdf';
 import { autoPayoutBrokerDopoFirma } from '@/lib/wallet/auto-payout';
@@ -382,6 +383,25 @@ export async function firmaPraticaCore(
         err,
       );
       return null;
+    });
+  }
+
+  // L'addebito parte da qui, non dal cron: `scheduledAt` è già `now` dal commit
+  // 0d245ff ("addebito istantaneo"), ma il tentativo lo faceva solo il job
+  // giornaliero — fino a 24h di attesa prima ancora che il settlement SEPA
+  // cominciasse.
+  //
+  // ATTESO, non fire-and-forget: su Vercel una promise lasciata pendente può
+  // morire quando la response parte. Best-effort comunque — la firma è già
+  // committata e se questa chiamata fallisce il fee resta SCHEDULED, che è
+  // esattamente ciò che il cron orario raccoglie.
+  if (feeAddebitoIdCreato) {
+    await processFeeAddebito(feeAddebitoIdCreato).catch((err) => {
+      console.error(
+        `[firmaPratica] avvio addebito fallito per fee ${feeAddebitoIdCreato} (pratica ${praticaId}):`,
+        err,
+      );
+      return undefined;
     });
   }
 

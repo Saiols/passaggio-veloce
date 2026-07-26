@@ -5,7 +5,9 @@ import { requireAdminOrCron } from '@/lib/jobs/auth';
 export const maxDuration = 60;
 
 /**
- * Processa FeeAddebito SCHEDULED scaduti. Schedule cron Vercel: ogni 6h.
+ * Rete di recupero degli addebiti: l'addebito normale parte dalla firma
+ * (firma-engine.ts). Qui restano il reaper, i retry orfani e i fee la cui
+ * chiamata dalla firma non è mai partita. Schedule cron Vercel: ogni ora.
  */
 async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);

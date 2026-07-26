@@ -105,3 +105,18 @@ describe('emissione fattura alla firma', () => {
     });
   });
 });
+
+describe('avvio addebito alla firma', () => {
+  it('provider live: chiama processFeeAddebito col fee appena creato', async () => {
+    isPaymentLiveMock.mockReturnValue(true);
+    await firmaPraticaCore('pr-1', { tipo: 'ADMIN', motivo: 'attestazione di test' });
+    expect(processFeeMock).toHaveBeenCalledWith('fee-1');
+  });
+
+  it('un addebito che esplode non fa fallire la firma', async () => {
+    isPaymentLiveMock.mockReturnValue(true);
+    processFeeMock.mockRejectedValue(new Error('stripe giù'));
+    const out = await firmaPraticaCore('pr-1', { tipo: 'ADMIN', motivo: 'attestazione di test' });
+    expect(out.ok).toBe(true);
+  });
+});

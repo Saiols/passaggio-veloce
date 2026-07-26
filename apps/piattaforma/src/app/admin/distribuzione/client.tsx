@@ -211,7 +211,12 @@ export function DistribuzioneConfigClient({
         errore={field('orariSettimana').error}
       />
 
-      <FestiviEditor value={festivi} onChange={setFestivi} oggiIso={oggiIso} />
+      <FestiviEditor
+        value={festivi}
+        onChange={setFestivi}
+        oggiIso={oggiIso}
+        errore={field('festivi').error}
+      />
 
       <LoadingOverlay show={pending} label="Salvataggio…" />
     </form>

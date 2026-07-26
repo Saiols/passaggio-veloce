@@ -2,9 +2,13 @@
 
 import { useState } from 'react';
 import { Alert, Button, Card, Input } from '@/components/ui';
-import { parseYmd } from '@/lib/date/rome-day';
 import type { Festivo } from '@/lib/distribuzione/calendario';
 import { serveAggiornareFestivi } from './festivi-avviso';
+import {
+  MESSAGGIO_ESITO_AGGIUNTA,
+  validaAggiuntaFestivo,
+  type EsitoAggiuntaFestivo,
+} from './festivi-validazione';
 
 /** "2026-12-25" → "25/12/2026". */
 function formatData(iso: string): string {
@@ -21,23 +25,43 @@ export function FestiviEditor({
   value,
   onChange,
   oggiIso,
+  errore,
 }: {
   value: Festivo[];
   onChange: (v: Festivo[]) => void;
   oggiIso: string;
+  errore?: string;
 }) {
   const [data, setData] = useState('');
   const [nome, setNome] = useState('');
+  // Esito dell'ultimo tentativo di "Aggiungi": è feedback su un'azione
+  // esplicita dell'utente (il click), quindi è legittimo mostrarlo subito —
+  // a differenza dei campi di un form, che non devono aprirsi già in rosso.
+  const [esitoAggiungi, setEsitoAggiungi] = useState<EsitoAggiuntaFestivo | null>(null);
 
   const aggiungi = (): void => {
-    const nomeTrim = nome.trim();
-    if (!parseYmd(data) || !nomeTrim) return;
-    if (value.some((f) => f.data === data)) return;
+    const esito = validaAggiuntaFestivo(value, data, nome);
+    if (esito) {
+      setEsitoAggiungi(esito);
+      return;
+    }
     onChange(
-      [...value, { data, nome: nomeTrim.slice(0, 60) }].sort((a, b) => a.data.localeCompare(b.data)),
+      [...value, { data, nome: nome.trim().slice(0, 60) }].sort((a, b) => a.data.localeCompare(b.data)),
     );
     setData('');
     setNome('');
+    setEsitoAggiungi(null);
+  };
+
+  // Corregge l'input → il messaggio del tentativo precedente sparisce: non
+  // deve restare appiccicato a un campo che l'utente sta già modificando.
+  const onData = (v: string): void => {
+    setData(v);
+    setEsitoAggiungi(null);
+  };
+  const onNome = (v: string): void => {
+    setNome(v);
+    setEsitoAggiungi(null);
   };
 
   // `oggiIso` arriva dal server (giorno di Roma): costruire l'orario a
@@ -94,21 +118,30 @@ export function FestiviEditor({
         <Input
           type="date"
           value={data}
-          onChange={(e) => setData(e.currentTarget.value)}
+          onChange={(e) => onData(e.currentTarget.value)}
           aria-label="Data del festivo"
+          invalid={esitoAggiungi === 'data-invalida' || esitoAggiungi === 'data-duplicata'}
           className="w-[170px]"
         />
         <Input
           value={nome}
-          onChange={(e) => setNome(e.currentTarget.value)}
+          onChange={(e) => onNome(e.currentTarget.value)}
           placeholder="Nome (es. Ferragosto)"
           aria-label="Nome del festivo"
+          invalid={esitoAggiungi === 'nome-mancante'}
           className="w-[220px]"
         />
         <Button type="button" variant="secondary" onClick={aggiungi}>
           Aggiungi
         </Button>
       </div>
+      {esitoAggiungi && (
+        <p className="mt-1.5 text-xs font-medium text-pv-red-500">
+          {MESSAGGIO_ESITO_AGGIUNTA[esitoAggiungi]}
+        </p>
+      )}
+
+      {errore && <p className="mt-3 text-xs font-medium text-pv-red-500">{errore}</p>}
     </Card>
   );
 }

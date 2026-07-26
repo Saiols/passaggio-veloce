@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { rivalutaBloccoAgenzia } from './blocco';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
+import { notificaFatturaDisponibile } from '@/lib/fatturazione/notifica-fattura';
 
 /**
  * UNICO punto in cui un FeeAddebito diventa SUCCESS.
@@ -38,10 +39,21 @@ export async function segnaFeeIncassato(feeId: string, providerRef: string): Pro
   // I soldi sono arrivati: qualunque cosa vada storta nell'emissione, il fee
   // resta SUCCESS. Logghiamo per non perdere traccia del guasto — best-effort
   // non vuol dire muto — la riconciliazione oraria recupera il documento mancante.
-  await createFatturaPv({ feeAddebitoId: feeId, statoPagamento: 'PAGATA' }).catch((err) => {
+  const documento = await createFatturaPv({
+    feeAddebitoId: feeId,
+    statoPagamento: 'PAGATA',
+  }).catch((err) => {
     console.error(`[segnaFeeIncassato] createFatturaPv fallita per fee ${feeId}:`, err);
     return null;
   });
+
+  // Solo chi ha davvero creato il documento notifica: `null` significa che
+  // esisteva già, e la sua N53 è partita a suo tempo.
+  if (documento) {
+    await notificaFatturaDisponibile(documento.id).catch((err) => {
+      console.error(`[segnaFeeIncassato] N53 fallita per documento ${documento.id}:`, err);
+    });
+  }
 
   return true;
 }

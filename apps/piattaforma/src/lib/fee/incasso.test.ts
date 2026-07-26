@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { feeUpdateMany, feeFindUnique, rivaluta, createFatturaPvMock } = vi.hoisted(() => ({
+const { feeUpdateMany, feeFindUnique, rivaluta, createFatturaPvMock, notificaMock } = vi.hoisted(() => ({
   feeUpdateMany: vi.fn(),
   feeFindUnique: vi.fn(),
   rivaluta: vi.fn(),
   createFatturaPvMock: vi.fn(),
+  notificaMock: vi.fn(),
 }));
 
 vi.mock('@pv/db', () => ({
@@ -12,6 +13,7 @@ vi.mock('@pv/db', () => ({
 }));
 vi.mock('./blocco', () => ({ rivalutaBloccoAgenzia: rivaluta }));
 vi.mock('@/lib/fatturazione/engine', () => ({ createFatturaPv: createFatturaPvMock }));
+vi.mock('@/lib/fatturazione/notifica-fattura', () => ({ notificaFatturaDisponibile: notificaMock }));
 
 import { segnaFeeIncassato } from './incasso';
 
@@ -21,6 +23,7 @@ beforeEach(() => {
   feeFindUnique.mockResolvedValue({ agenziaId: 'ag-1' });
   rivaluta.mockResolvedValue(undefined);
   createFatturaPvMock.mockResolvedValue({ id: 'doc-1' });
+  notificaMock.mockResolvedValue(undefined);
 });
 
 describe('segnaFeeIncassato', () => {
@@ -68,5 +71,16 @@ describe('segnaFeeIncassato', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+
+  it('notifica la fattura appena creata', async () => {
+    await segnaFeeIncassato('fee-1', 'pi_1');
+    expect(notificaMock).toHaveBeenCalledWith('doc-1');
+  });
+
+  it('fattura già esistente: nessuna seconda N53', async () => {
+    createFatturaPvMock.mockResolvedValue(null);
+    await segnaFeeIncassato('fee-1', 'pi_1');
+    expect(notificaMock).not.toHaveBeenCalled();
   });
 });

@@ -502,9 +502,11 @@ export async function firmaPraticaCore(
       // sparire in silenzio (coerente con N3/N6/N9).
       const agenziaEmail = agenziaUser?.email ?? full.agenziaAssegnata?.email;
       if (full.agenziaAssegnata && agenziaEmail && full.autoAddebitoAt) {
-        // Allega il PDF della fattura PV all'addebito. Best-effort: se la
-        // fattura non c'è (fee 0) o il PDF fallisce, si invia senza allegato.
-        const fatturaPdf = await fatturaPvAttachment(praticaId).catch(() => null);
+        // Con provider live la fattura non esiste ancora: nasce all'incasso e
+        // viaggia con la N53. Solo la valvola (provider mock) la allega qui.
+        const fatturaPdf = isPaymentLive()
+          ? null
+          : await fatturaPvAttachment(praticaId).catch(() => null);
         await sendNotification(
           {
             tipo: 'N8_AGENZIA_ADDEBITO',
@@ -521,10 +523,26 @@ export async function firmaPraticaCore(
               // Vedi la N4 sopra: `Boolean`, non `!== null`.
               attestataDaPv: Boolean(full.firmaForzataAt),
               attestataDaPvAt: full.firmaForzataAt ?? null,
+              fatturaAllegata: fatturaPdf != null,
             },
           },
           { praticaId, ...(fatturaPdf ? { attachments: [fatturaPdf] } : {}) },
         ).catch(() => undefined);
+        // Sul percorso valvola la N8 È la consegna della fattura: senza questo
+        // timestamp, il giorno in cui il provider passa da mock a stripe gli
+        // addebiti arretrati arriverebbero a SUCCESS e la riconciliazione
+        // manderebbe una N53 per fatture già ricevute in allegato.
+        if (fatturaPdf) {
+          await prisma.documentoFiscale
+            .updateMany({
+              where: { praticaId, tipo: 'FATTURA_PV', inviatoEmailAt: null },
+              data: { inviatoEmailAt: new Date() },
+            })
+            .catch((err) => {
+              console.error(`[firmaPratica] inviatoEmailAt non scritto per pratica ${praticaId}:`, err);
+              return undefined;
+            });
+        }
       }
       if (full.codicePratica) {
         await emitEventoPratica(

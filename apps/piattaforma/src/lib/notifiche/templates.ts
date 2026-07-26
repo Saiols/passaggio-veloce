@@ -76,6 +76,11 @@ export type N8AgenziaAddebitoPayload = {
   attestataDaPv?: boolean;
   /** Data dell'attestazione (Termini art. 11) — v. N4BrokerFirmaPayload. */
   attestataDaPvAt?: Date | null;
+  /**
+   * La fattura viaggia allegata a questa email (provider mock, emissione alla
+   * firma) oppure arriverà con la N53 quando l'addebito sarà incassato.
+   */
+  fatturaAllegata: boolean;
 };
 
 export type N9AgenziaAddebitoFallitoPayload = {
@@ -106,6 +111,14 @@ export type N52BrokerZonaNonCopertaPayload = {
   nomeBroker: string;
   /** Raggio massimo configurato (km) raggiunto senza nessuna agenzia disponibile */
   raggioMaxKm: number;
+};
+
+export type N53AgenziaFatturaDisponibilePayload = {
+  nomeAgenzia: string;
+  codicePratica: string;
+  numeroDocumento: string;
+  importoCent: number;
+  fatturaUrl: string;
 };
 
 export type N3BrokerSollecitoPayload = {
@@ -473,7 +486,9 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
     `Ciao ${p.nomeAgenzia},\n` +
     `il fee di ${formatCurrencyCent(p.feeCent)} per la pratica ${p.codicePratica} ` +
     `sarà addebitato il ${formatDate(p.autoAddebitoAt)}. ` +
-    `In caso di "firma avvenuta" anticipata l'addebito avviene al momento.` +
+    (p.fatturaAllegata
+      ? `Trovi la fattura in allegato.`
+      : `La fattura sarà emessa e inviata quando l'addebito risulterà incassato.`) +
     attestazioneText;
   const dataAttestazioneN8Html = p.attestataDaPvAt
     ? ` il <strong>${formatDate(p.attestataDaPvAt)}</strong>`
@@ -491,7 +506,11 @@ export function tplN8AgenziaAddebito(p: N8AgenziaAddebitoPayload): NotificaConte
       Importo: <strong>${formatCurrencyCent(p.feeCent)}</strong><br>
       Auto-addebito: <strong>${formatDate(p.autoAddebitoAt)}</strong>
     </div>
-    <p style="margin:16px 0 0;font-size:12px;color:#64748b">L'integrazione pagamenti SEPA sarà attiva in una fase successiva.</p>
+    <p style="margin:16px 0 0;font-size:12px;color:#64748b">${
+      p.fatturaAllegata
+        ? 'Trovi la fattura in allegato.'
+        : "La fattura sarà emessa e inviata quando l'addebito risulterà incassato."
+    }</p>
     ${attestazioneHtml}
   `);
   return { subject, html, text };
@@ -1728,6 +1747,37 @@ export function tplN51BrokerRimessaInCircolo(p: N51BrokerRimessaInCircoloPayload
       quindi la stiamo riassegnando a un'altra agenzia della zona.
     </p>
     <p style="margin:16px 0 0;font-size:12px;color:#64748b">Ti aggiorniamo appena viene accettata.</p>
+  `);
+  return { subject, html, text };
+}
+
+/**
+ * La fattura esiste solo ora perché l'addebito è stato incassato ora: fino al
+ * settlement SEPA non c'era nulla da fatturare (v. lib/fee/incasso.ts).
+ */
+export function tplN53AgenziaFatturaDisponibile(
+  p: N53AgenziaFatturaDisponibilePayload,
+): NotificaContent {
+  const subject = `Fattura ${p.numeroDocumento} — pratica ${p.codicePratica}`;
+  const text =
+    `Ciao ${p.nomeAgenzia},\n` +
+    `l'addebito di ${formatCurrencyCent(p.importoCent)} per la pratica ${p.codicePratica} ` +
+    `è stato incassato e la fattura ${p.numeroDocumento} è stata emessa.\n` +
+    `La trovi in allegato e nella sezione Fatturazione: ${p.fatturaUrl}`;
+  const html = wrap(`
+    <h1 style="margin:0 0 8px;font-size:20px;color:#0a2540">Fattura disponibile</h1>
+    <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeAgenzia)}</strong>,</p>
+    <p style="margin:0 0 16px;color:#334155;font-size:14px">
+      l&apos;addebito per la pratica <strong>${escapeHtml(p.codicePratica)}</strong> è stato incassato
+      e la fattura è stata emessa.
+    </p>
+    <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;font-size:13px;color:#334155">
+      Numero: <strong>${escapeHtml(p.numeroDocumento)}</strong><br>
+      Importo: <strong>${formatCurrencyCent(p.importoCent)}</strong>
+    </div>
+    <p style="margin:16px 0 0;font-size:13px;color:#334155">
+      La trovi in allegato e nella sezione <a href="${p.fatturaUrl}">Fatturazione</a>.
+    </p>
   `);
   return { subject, html, text };
 }

@@ -273,6 +273,7 @@ describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 
     feeCent: 3000,
     autoAddebitoAt: new Date('2026-07-13T10:00:00Z'),
     nomeAgenzia: 'Agenzia Rossi',
+    fatturaAllegata: true,
   };
 
   it('firma normale: nessuna menzione dell\'attestazione (retrocompatibilità)', () => {

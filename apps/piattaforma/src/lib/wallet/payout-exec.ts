@@ -5,7 +5,6 @@ import { createGiustificativoPromo } from '@/lib/fatturazione/giustificativo-pro
 import { getPayment } from '@/lib/providers/payment';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 import { WALLET } from './config';
-import { hasNegativeCompanyWallet } from './negative-wallet-guard';
 import { ERRORE_PAYOUT_SOSPESO, payoutBloccatoPerSospensione } from './sospensione-payout';
 
 export type EseguiPayoutResult =
@@ -231,11 +230,20 @@ export async function eseguiPayoutImmediato(
 
       const wallet = await tx.wallet.findUnique({
         where: { id: walletId },
-        include: { sede: { select: { companyId: true } } },
+        select: { id: true, saldoCent: true },
       });
       if (!wallet) return { ok: false, error: 'Wallet non trovato' };
       // Un saldo <= 0 non è mai erogabile, nemmeno alla cessazione: non si
       // bonifica un debito.
+      //
+      // Clausola 5 dei Termini: il saldo negativo di un wallet blocca il
+      // prelievo DA QUEL WALLET e basta. «Gli altri wallet dell'Utente (altre
+      // sedi e wallet di affiliazione) non sono in alcun modo vincolati o
+      // bloccati per effetto del saldo negativo di un singolo wallet.» Fino al
+      // 2026-07-26 qui c'era un guard aziendale (`hasNegativeCompanyWallet`)
+      // che sospendeva TUTTI i payout dell'azienda: il documento v8 dei Termini
+      // lo ha eliminato, e con esso il guard. Resta in piedi il solo controllo
+      // per-wallet — queste due righe.
       if (wallet.saldoCent <= 0) {
         return { ok: false, error: 'Saldo non erogabile' };
       }
@@ -244,26 +252,6 @@ export async function eseguiPayoutImmediato(
           ok: false,
           error: `Saldo sotto la soglia minima di ${WALLET.MIN_PAYOUT_CENT / 100}€`,
         };
-      }
-
-      // Clausola 5 dei Termini: finché un wallet qualsiasi dell'azienda (altra
-      // sede, o il wallet madre) è in saldo negativo — tipicamente per una
-      // penale, clausola 10.6 — TUTTI i payout dell'azienda sono sospesi, non
-      // solo quelli del wallet in negativo. Il controllo qui sotto è saltato
-      // per la liquidazione di cessazione (`ignoraSoglia`, clausola 12.4), ma
-      // il debito NON viene ignorato in quel flusso: per la cessazione il
-      // blocco è imposto a monte, a livello di intera azienda, dal chiamante
-      // (`deleteCompanyAction`, cfr. negative-wallet-guard.ts), che non
-      // richiama nemmeno questa funzione se esiste un wallet negativo.
-      if (!ignoraSoglia) {
-        const companyId = wallet.companyId ?? wallet.sede?.companyId ?? null;
-        if (companyId && (await hasNegativeCompanyWallet(tx, companyId))) {
-          return {
-            ok: false,
-            error:
-              'Un wallet della tua azienda è in saldo negativo: i payout sono sospesi finché non torna positivo (clausola 5 dei Termini).',
-          };
-        }
       }
 
       const inflight = await tx.payout.findFirst({

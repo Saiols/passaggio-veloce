@@ -113,8 +113,10 @@ describe('eseguiPayoutImmediato — liquidazione alla cessazione', () => {
    * dopo il soft delete l'utente non può più sanare la visura scaduta
    * (`/visura` richiede login, che richiede `deletedAt: null` — irraggiungibile).
    * Il denaro dovuto restava intrappolato per sempre. Una visura scaduta non è
-   * un debito verso PV: il guard deve saltare, esattamente come già succede
-   * per il debito da saldo negativo aziendale (vedi describe sopra).
+   * un debito verso PV: il guard deve saltare. (Il debito da saldo negativo,
+   * invece, non passa più di qui: dal 2026-07-26 blocca solo il proprio
+   * wallet — clausola 5 — e alla cessazione lo intercetta a monte
+   * `deleteCompanyAction`.)
    */
   it('visura SCADUTA con ignoraSoglia → eseguito comunque (una visura scaduta non è un debito)', async () => {
     visuraScadutaMock.mockResolvedValue(true);

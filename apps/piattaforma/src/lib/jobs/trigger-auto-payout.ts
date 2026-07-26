@@ -1,6 +1,5 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import { hasNegativeCompanyWallet } from '@/lib/wallet/negative-wallet-guard';
 import { payoutBloccatoPerSospensione } from '@/lib/wallet/sospensione-payout';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
 
@@ -17,14 +16,13 @@ export type TriggerAutoPayoutResult = { created: number };
  * MANUALE, funziona anche in mock (Strada B): il safeguard sui soldi reali vive
  * nel provider dentro `settlePayout`, non qui.
  *
- * Clausole 5, 8 e 12.3 dei Termini: questo path NON passa da
+ * Clausole 8 e 12.3 dei Termini: questo path NON passa da
  * `eseguiPayoutImmediato` (crea il Payout direttamente, `processPayouts` lo
- * salda via `settlePayout`), quindi i guard sul saldo negativo aziendale, sulla
- * visura camerale scaduta e sulla sospensione dell'azienda vanno replicati
- * qui — altrimenti la rete di sicurezza periodica pagherebbe un wallet anche
- * quando un altro wallet della stessa azienda è in negativo, quando la visura
- * dell'azienda è scaduta o quando l'azienda è sospesa, riaprendo lo stesso buco
- * chiuso in `eseguiPayoutImmediato`. Il guard sospensione è arrivato per ultimo
+ * salda via `settlePayout`), quindi i guard sulla visura camerale scaduta e
+ * sulla sospensione dell'azienda vanno replicati qui — altrimenti la rete di
+ * sicurezza periodica pagherebbe un wallet anche quando la visura dell'azienda
+ * è scaduta o quando l'azienda è sospesa, riaprendo lo stesso buco chiuso in
+ * `eseguiPayoutImmediato`. Il guard sospensione è arrivato per ultimo
  * proprio così: nato nel solo motore, non bloccava il payout automatico, lo
  * rimandava di una notte (il trigger in tempo reale rifiutava, il saldo restava
  * sopra soglia, questo cron pagava). Chiudere QUI non basta comunque: una riga
@@ -74,7 +72,11 @@ export async function triggerAutoPayout(): Promise<TriggerAutoPayoutResult> {
     // l'unico a costo zero: non interroga il DB.
     if (payoutBloccatoPerSospensione(w)) continue;
 
-    if (companyId && (await hasNegativeCompanyWallet(prisma, companyId))) continue;
+    // Nessun guard sul saldo negativo di ALTRI wallet: dal documento v8 dei
+    // Termini (2026-07-26) la clausola 5 confina il blocco al wallet in rosso,
+    // e questo wallet è già sopra soglia (quindi positivo) per il `continue`
+    // qui sopra. Prima c'era `hasNegativeCompanyWallet`, rimosso insieme al
+    // gemello di `eseguiPayoutImmediato`.
     if (companyId && (await isVisuraScadutaCompany(companyId))) continue;
 
     const inflight = await prisma.payout.findFirst({

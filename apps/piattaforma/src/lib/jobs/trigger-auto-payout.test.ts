@@ -1,28 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-/**
- * IMPORTANT 3 (review finale pre-merge): questo job crea Payout RICHIESTO
- * direttamente (non passa da `eseguiPayoutImmediato`), quindi il guard sul
- * saldo negativo aziendale (clausola 5 dei Termini) va replicato qui —
- * altrimenti la rete di sicurezza periodica (cron notturno) pagherebbe un
- * wallet anche quando un altro wallet della stessa azienda è in negativo,
- * riaprendo lo stesso buco chiuso in `eseguiPayoutImmediato`.
- */
-
-const { prismaMock, hasNegativeCompanyWalletMock, visuraScadutaMock } = vi.hoisted(() => ({
+const { prismaMock, visuraScadutaMock } = vi.hoisted(() => ({
   prismaMock: {
-    wallet: { findMany: vi.fn() },
+    wallet: { findMany: vi.fn(), findFirst: vi.fn() },
     payout: { findFirst: vi.fn(), create: vi.fn() },
   },
-  hasNegativeCompanyWalletMock: vi.fn(),
   visuraScadutaMock: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
 vi.mock('@pv/db', () => ({ prisma: prismaMock }));
-vi.mock('@/lib/wallet/negative-wallet-guard', () => ({
-  hasNegativeCompanyWallet: hasNegativeCompanyWalletMock,
-}));
 vi.mock('@/lib/visura/stato', () => ({ isVisuraScadutaCompany: visuraScadutaMock }));
 
 import { triggerAutoPayout } from './trigger-auto-payout';
@@ -31,12 +18,25 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.payout.findFirst.mockResolvedValue(null);
   prismaMock.payout.create.mockResolvedValue({});
-  hasNegativeCompanyWalletMock.mockResolvedValue(false);
+  // Se qualcuno rimettesse un guard aziendale sul saldo negativo, passerebbe
+  // di qui: il mock risponde "c'è un wallet in rosso" e i test sotto
+  // diventerebbero rossi.
+  prismaMock.wallet.findFirst.mockResolvedValue({ id: 'w-negativo' });
   visuraScadutaMock.mockResolvedValue(false);
 });
 
-describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', () => {
-  it('wallet sopra soglia ma un altro wallet della stessa azienda è negativo → nessun payout creato', async () => {
+/**
+ * Clausola 5 dei Termini, documento v8 (2026-07-26): il saldo negativo di un
+ * wallet blocca il prelievo da quel wallet e basta. Questo job seleziona solo
+ * wallet SOPRA soglia — quindi positivi — e non deve interessarsi degli altri.
+ *
+ * Prima del 2026-07-26 qui c'era il gemello del guard aziendale di
+ * `eseguiPayoutImmediato` (`hasNegativeCompanyWallet`), messo perché il cron
+ * crea il Payout RICHIESTO da sé e saltava il motore. Con la clausola
+ * riscritta il guard non ha più ragione di esistere in nessuno dei due punti.
+ */
+describe('triggerAutoPayout — il saldo negativo altrui non ferma il cron (clausola 5)', () => {
+  it("wallet sopra soglia con un altro wallet dell'azienda in rosso → payout creato comunque", async () => {
     prismaMock.wallet.findMany.mockResolvedValue([
       {
         id: 'w1',
@@ -46,26 +46,6 @@ describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', ()
         company: null,
       },
     ]);
-    hasNegativeCompanyWalletMock.mockResolvedValue(true);
-
-    const res = await triggerAutoPayout();
-
-    expect(res).toEqual({ created: 0 });
-    expect(hasNegativeCompanyWalletMock).toHaveBeenCalledWith(prismaMock, 'company-1');
-    expect(prismaMock.payout.create).not.toHaveBeenCalled();
-  });
-
-  it("wallet sopra soglia e nessun wallet dell'azienda in negativo → payout creato normalmente", async () => {
-    prismaMock.wallet.findMany.mockResolvedValue([
-      {
-        id: 'w1',
-        saldoCent: 150_000,
-        companyId: null,
-        sede: { payoutThresholdCent: 100_000, companyId: 'company-1' },
-        company: null,
-      },
-    ]);
-    hasNegativeCompanyWalletMock.mockResolvedValue(false);
 
     const res = await triggerAutoPayout();
 
@@ -82,7 +62,7 @@ describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', ()
     );
   });
 
-  it('wallet sotto soglia → skip prima ancora di interrogare il guard (nessuna query in più)', async () => {
+  it('wallet sotto soglia → skip, nessun payout creato', async () => {
     prismaMock.wallet.findMany.mockResolvedValue([
       {
         id: 'w1',
@@ -96,7 +76,23 @@ describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', ()
     const res = await triggerAutoPayout();
 
     expect(res).toEqual({ created: 0 });
-    expect(hasNegativeCompanyWalletMock).not.toHaveBeenCalled();
+    expect(prismaMock.payout.create).not.toHaveBeenCalled();
+  });
+
+  it('wallet a saldo negativo → sotto soglia per definizione, nessun payout', async () => {
+    prismaMock.wallet.findMany.mockResolvedValue([
+      {
+        id: 'w1',
+        saldoCent: -2_500,
+        companyId: null,
+        sede: { payoutThresholdCent: 100_000, companyId: 'company-1' },
+        company: null,
+      },
+    ]);
+
+    const res = await triggerAutoPayout();
+
+    expect(res).toEqual({ created: 0 });
     expect(prismaMock.payout.create).not.toHaveBeenCalled();
   });
 });
@@ -106,8 +102,9 @@ describe('triggerAutoPayout — guard saldo negativo aziendale (clausola 5)', ()
  * Payout RICHIESTO direttamente (non passa da `eseguiPayoutImmediato`, che
  * ha il proprio guard visura), quindi il guard va replicato qui — altrimenti
  * la rete di sicurezza periodica (cron notturno) pagherebbe un wallet di
- * un'azienda con la visura scaduta, riaprendo lo stesso bypass già chiuso
- * per il saldo negativo aziendale (vedi sopra).
+ * un'azienda con la visura scaduta. A differenza del saldo negativo (vedi
+ * sopra), questo guard è tuttora aziendale: la clausola 8 sospende il prelievo
+ * di TUTTI i wallet finché la visura non è aggiornata.
  */
 /**
  * CRITICAL (review whole-branch): la sospensione era stata chiusa nel solo

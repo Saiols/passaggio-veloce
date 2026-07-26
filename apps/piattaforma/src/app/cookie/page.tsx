@@ -1,13 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/site-header';
+import { CookiePreferencesButton } from '@/components/cookie-preferences-button';
 import { JsonLd } from '@/lib/seo/JsonLdScript';
 import { webPageJsonLd } from '@/lib/seo/jsonLd';
 import { siteUrl } from '@/lib/seo/brand';
 
 export const metadata: Metadata = {
   title: 'Cookie Policy',
-  description: 'Cookie policy di Passaggio Veloce: cookie tecnici, analytics, finalità, gestione delle preferenze.',
+  description:
+    'Cookie policy di Passaggio Veloce: cookie tecnici, Google Analytics 4 previo consenso, finalità, durate, gestione e revoca delle preferenze.',
   alternates: { canonical: '/cookie' },
   robots: { index: true, follow: true },
 };
@@ -21,7 +23,7 @@ export default function CookiePage() {
           url: siteUrl('/cookie'),
           name: 'Cookie Policy',
           description: 'Cookie policy di Passaggio Veloce.',
-          lastModified: '2026-05-06',
+          lastModified: '2026-07-26',
         })}
       />
       <article className="mx-auto w-full max-w-3xl px-5 py-10 text-[14px] leading-relaxed text-pv-slate-700 sm:px-6">
@@ -29,7 +31,7 @@ export default function CookiePage() {
           Cookie Policy
         </h1>
         <p className="mt-2 text-[12px] text-pv-slate-500">
-          Ultimo aggiornamento: 2026-05-06
+          Ultimo aggiornamento: 2026-07-26
         </p>
 
         <Section title="Cosa sono i cookie">
@@ -54,7 +56,7 @@ export default function CookiePage() {
               <code>authjs.csrf-token</code>{' '}— protezione CSRF
             </li>
             <li>
-              <code>pv-cookie-consent-v1</code>{' '}— memorizza la tua scelta sui
+              <code>pv-cookie-consent-v2</code>{' '}— memorizza la tua scelta sui
               cookie (LocalStorage)
             </li>
           </ul>
@@ -65,12 +67,38 @@ export default function CookiePage() {
           </p>
 
           <h3 className="mt-4 text-[15px] font-bold text-pv-navy-900">
-            Analytics
+            Analytics (solo con il tuo consenso)
           </h3>
           <p>
-            <strong>Nessuno attualmente attivo.</strong>{' '}Quando attiveremo
-            analytics aggregato (privacy-friendly, server-side) chiederemo
-            consenso esplicito.
+            Usiamo <strong>Google Analytics 4</strong>{' '}per capire come viene
+            usata la piattaforma (pagine viste, percorsi di navigazione,
+            dispositivo) e migliorarla. Il fornitore è Google Ireland Ltd.
+          </p>
+          <ul className="list-disc pl-5">
+            <li>
+              <code>_ga</code>{' '}— identificativo del browser, durata 2 anni
+            </li>
+            <li>
+              <code>_ga_&lt;ID&gt;</code>{' '}— stato della sessione di
+              misurazione, durata 2 anni
+            </li>
+          </ul>
+          <p>
+            Sono cookie <strong>non tecnici</strong>: vengono scritti{' '}
+            <strong>solo dopo il tuo consenso</strong>. Finché non lo presti,
+            lo script di Google non viene nemmeno scaricato. Il trattamento può
+            comportare un trasferimento di dati negli Stati Uniti, protetto
+            dalle clausole contrattuali standard e dal EU-US Data Privacy
+            Framework. Puoi opporti anche installando il{' '}
+            <a
+              href="https://tools.google.com/dlpage/gaoptout"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-pv-navy-700 hover:underline"
+            >
+              componente di opt-out di Google
+            </a>
+            .
           </p>
 
           <h3 className="mt-4 text-[15px] font-bold text-pv-navy-900">
@@ -80,16 +108,24 @@ export default function CookiePage() {
             Il programma affiliazione tracking utilizza un cookie di prima
             parte di durata 30 giorni per attribuire gli utenti che si
             registrano dopo aver cliccato un link <code>/r/&lt;code&gt;</code>.
-            Il dato salvato è solo l&apos;identificativo del referente.
+            Il dato salvato è solo l&apos;identificativo del referente. Non
+            usiamo cookie di terze parti a scopo pubblicitario.
           </p>
         </Section>
 
         <Section title="Come gestire i cookie">
           <p>
-            Puoi modificare le tue preferenze cookie in qualsiasi momento dal
-            banner che appare al primo accesso o cancellando il LocalStorage
-            del browser. Le scelte di terze parti possono essere gestite
-            anche dalle impostazioni del browser.
+            Puoi cambiare o revocare le tue scelte in qualsiasi momento, con la
+            stessa facilità con cui le hai date: il pulsante qui sotto riapre il
+            banner. Revocando il consenso analytics disattiviamo subito Google
+            Analytics ed eliminiamo i suoi cookie.
+          </p>
+          <div className="mt-3">
+            <CookiePreferencesButton />
+          </div>
+          <p>
+            Le impostazioni del browser restano un&apos;alternativa, così come
+            la cancellazione manuale dei cookie e del LocalStorage.
           </p>
         </Section>
 

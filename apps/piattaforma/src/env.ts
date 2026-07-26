@@ -49,6 +49,18 @@ export const env = createEnv({
   },
   client: {
     NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
+
+    /**
+     * Measurement ID della proprietà GA4. Assente ⇒ nessuno script di Google
+     * viene caricato (`lib/analytics/ga.ts`): è lo stato normale finché la
+     * proprietà non esiste. Il formato è validato qui perché un ID sbagliato
+     * non dà errori a runtime — semplicemente non arriva un dato, e ce ne si
+     * accorge settimane dopo guardando una dashboard vuota.
+     */
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: z
+      .string()
+      .regex(/^G-[A-Z0-9]{4,}$/, 'Deve essere un Measurement ID GA4, es. G-ABCD1234')
+      .optional(),
   },
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
@@ -82,6 +94,7 @@ export const env = createEnv({
     CHATBOT_RATE_PER_MIN: process.env.CHATBOT_RATE_PER_MIN,
     CHATBOT_RATE_PER_DAY_PER_IP: process.env.CHATBOT_RATE_PER_DAY_PER_IP,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
   },
   emptyStringAsUndefined: true,
 });

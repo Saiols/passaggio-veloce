@@ -99,7 +99,10 @@ export default function PrivacyPage() {
               <strong>Dati finanziari</strong>: addebiti, payout, transazioni wallet (importi e timestamp; i dati di pagamento sono trattati direttamente dal processor).
             </li>
             <li>
-              <strong>Dati tecnici</strong>: indirizzo IP (anonimizzato a 3 ottetti), user-agent, log di accesso. Nessun cookie di tracciamento di terze parti attivo al momento.
+              <strong>Dati tecnici</strong>: indirizzo IP (anonimizzato a 3 ottetti), user-agent, log di accesso.
+            </li>
+            <li>
+              <strong>Dati di utilizzo raccolti via Google Analytics 4</strong>, e <strong>solo se hai prestato il consenso</strong>: pagine visitate, percorso di navigazione, provenienza, tipo di dispositivo e browser, dati approssimativi di localizzazione derivati dall&apos;indirizzo IP. Google Analytics assegna al browser un identificativo pseudonimo (cookie <code>_ga</code>) e non riceve da noi il tuo nome, l&apos;email o i documenti della pratica. In assenza di consenso lo script di Google non viene caricato e nessuno di questi dati viene raccolto: v. la sezione Cookie Policy più sotto.
             </li>
           </ul>
 
@@ -137,6 +140,9 @@ export default function PrivacyPage() {
             </li>
             <li>
               Analisi e miglioramento del servizio tramite <strong>dati aggregati e anonimizzati</strong>{' '}— dati che non consentono l&apos;identificazione dei singoli utenti (legittimo interesse, art. 6.1.f GDPR).
+            </li>
+            <li>
+              <strong>Statistiche di utilizzo tramite Google Analytics 4</strong>, per capire come viene usata la piattaforma e migliorarla: base giuridica il tuo <strong>consenso</strong>{' '}(art. 6.1.a GDPR), prestato tramite il banner cookie e <strong>revocabile in ogni momento</strong>, senza pregiudicare la liceità del trattamento svolto prima della revoca. Nessun&apos;altra funzione dipende da questo consenso: negarlo non limita in alcun modo l&apos;uso della Piattaforma.
             </li>
             <li>
               Sviluppo e miglioramento del servizio, e finalità commerciali, tramite un elenco aggregato dei contatti (nome, contatti, identificativo fiscale, numero di pratiche) emersi dalle pratiche gestite (legittimo interesse, art. 6.1.f GDPR). Puoi opporti in ogni momento (art. 21 GDPR) scrivendo a{' '}
@@ -267,6 +273,18 @@ export default function PrivacyPage() {
               <strong>Vercel Blob</strong>: archiviazione dei documenti caricati (libretti, documenti di identità, visure). Agisce come responsabile del trattamento per nostro conto.
             </li>
             <li>
+              <strong>Google Ireland Ltd. – Google Analytics 4</strong>: statistiche di utilizzo della Piattaforma. Agisce come responsabile del trattamento per nostro conto in forza delle condizioni di trattamento dei dati di Google Analytics. Attivo <strong>solo previo consenso</strong>: senza, lo script non viene caricato. Il trattamento può comportare un trasferimento negli <strong>Stati Uniti</strong>, coperto dalle clausole contrattuali standard (art. 46 GDPR) e dall&apos;adesione di Google al <strong>EU-US Data Privacy Framework</strong>. Conservazione dei dati di utilizzo sulla proprietà GA4: <strong>14 mesi</strong>. Informativa di Google:{' '}
+              <a
+                href="https://policies.google.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-pv-navy-700 hover:underline"
+              >
+                policies.google.com/privacy
+              </a>
+              .
+            </li>
+            <li>
               <strong>Stripe, Inc.</strong>: processor dei pagamenti per la gestione degli addebiti SEPA e dei payout. Il rapporto con Stripe si articola su <strong>due livelli distinti</strong>: (a) per le operazioni di pagamento eseguite su incarico di Passaggio Veloce (addebiti SEPA, payout verso i broker), Stripe agisce come <strong>responsabile del trattamento</strong> ai sensi dell&apos;art. 28 GDPR, in forza di un Data Processing Agreement stipulato con Passaggio Veloce; (b) per le proprie finalità autonome (prevenzione delle frodi, compliance finanziaria, miglioramento dei propri servizi), Stripe agisce come <strong>titolare autonomo</strong>, soggetto alla propria informativa privacy (
               <a
                 href="https://stripe.com/it/privacy"
@@ -283,7 +301,7 @@ export default function PrivacyPage() {
 
         <Section title="Trasferimenti internazionali">
           <p>
-            La maggior parte dei trattamenti avviene su server nell&apos;Unione Europea (si veda la sezione &laquo;Fornitori terzi&raquo; per i dettagli per singolo fornitore). Alcuni servizi — Sentry per l&apos;error monitoring, Stripe per i pagamenti — possono comportare trasferimenti extra-UE protetti da <strong>clausole contrattuali standard</strong>{' '}(SCC) ai sensi dell&apos;art. 46 GDPR.
+            La maggior parte dei trattamenti avviene su server nell&apos;Unione Europea (si veda la sezione &laquo;Fornitori terzi&raquo; per i dettagli per singolo fornitore). Alcuni servizi — Sentry per l&apos;error monitoring, Stripe per i pagamenti e <strong>Google Analytics</strong>{' '}per le statistiche di utilizzo — possono comportare trasferimenti extra-UE, in particolare verso gli <strong>Stati Uniti</strong>, protetti da <strong>clausole contrattuali standard</strong>{' '}(SCC) ai sensi dell&apos;art. 46 GDPR e, dove applicabile, dall&apos;adesione del fornitore al EU-US Data Privacy Framework. Il trasferimento legato a Google Analytics avviene <strong>solo se hai prestato il consenso</strong>{' '}e cessa se lo revochi.
           </p>
         </Section>
 
@@ -298,16 +316,19 @@ export default function PrivacyPage() {
 
         <Section title="Cookie Policy">
           <p>
-            La Piattaforma utilizza <strong>esclusivamente cookie tecnici</strong>{' '}necessari al funzionamento del servizio. Non sono utilizzati cookie di profilazione, cookie di tracciamento comportamentale o cookie di terze parti a scopo pubblicitario.
+            La Piattaforma utilizza <strong>cookie tecnici</strong>, necessari al funzionamento del servizio, e — <strong>soltanto previo consenso</strong>{' '}— i <strong>cookie analitici di Google Analytics 4</strong>. Non sono utilizzati cookie di profilazione pubblicitaria, di tracciamento comportamentale a fini di marketing o di terze parti a scopo pubblicitario.
           </p>
           <p>
-            I cookie tecnici utilizzati includono: (a) <strong>cookie di sessione</strong> — necessari per mantenere la sessione dell&apos;Utente autenticato durante la navigazione, eliminati automaticamente alla chiusura del browser; (b) <strong>cookie di preferenze</strong> — necessari per ricordare le impostazioni dell&apos;Utente (lingua, preferenze di visualizzazione), con durata massima di 12 mesi; (c) <strong>cookie di sicurezza</strong> — necessari per prevenire attacchi CSRF (Cross-Site Request Forgery) e garantire la sicurezza delle sessioni, eliminati alla chiusura del browser; (d) <strong>cookie di attribuzione dell&apos;affiliazione</strong>{' '}— cookie di prima parte, di durata 30 giorni, che memorizza il solo identificativo del referente per attribuire le registrazioni effettuate dopo il clic su un link di invito.
+            I <strong>cookie tecnici</strong>{' '}utilizzati includono: (a) <strong>cookie di sessione</strong> — necessari per mantenere la sessione dell&apos;Utente autenticato durante la navigazione, eliminati automaticamente alla chiusura del browser; (b) <strong>cookie di preferenze</strong> — necessari per ricordare le impostazioni dell&apos;Utente (lingua, preferenze di visualizzazione, scelta espressa sui cookie), con durata massima di 12 mesi; (c) <strong>cookie di sicurezza</strong> — necessari per prevenire attacchi CSRF (Cross-Site Request Forgery) e garantire la sicurezza delle sessioni, eliminati alla chiusura del browser; (d) <strong>cookie di attribuzione dell&apos;affiliazione</strong>{' '}— cookie di prima parte, di durata 30 giorni, che memorizza il solo identificativo del referente per attribuire le registrazioni effettuate dopo il clic su un link di invito.
+          </p>
+          <p>
+            I <strong>cookie analitici</strong>{' '}di Google Analytics 4 (<code>_ga</code> e <code>_ga_&lt;ID&gt;</code>, durata 2 anni) <strong>non</strong>{' '}sono cookie tecnici: vengono installati <strong>solo dopo il consenso</strong>{' '}prestato tramite il banner. Fino a quel momento lo script di Google non viene neppure scaricato, quindi nessun dato — nemmeno l&apos;indirizzo IP — raggiunge il fornitore. Il consenso è <strong>revocabile in qualunque momento</strong>{' '}dal pulsante &laquo;Gestisci le preferenze cookie&raquo; nella cookie policy: alla revoca il tag è disattivato e i relativi cookie eliminati.
           </p>
           <p>
             I cookie tecnici non richiedono il consenso dell&apos;Utente ai sensi dell&apos;art. 122 del D.Lgs. 196/2003 (Codice Privacy) e del Provvedimento del Garante dell&apos;8 maggio 2014. L&apos;Utente può disabilitare i cookie dal proprio browser, ma ciò potrebbe compromettere il corretto funzionamento della Piattaforma.
           </p>
           <p>
-            Qualora in futuro venissero introdotti cookie non tecnici, la presente sezione sarà aggiornata e — ove richiesto dalla normativa — sarà richiesto il consenso esplicito dell&apos;Utente prima dell&apos;attivazione. Il dettaglio dei singoli cookie è nella{' '}
+            Qualora in futuro venissero introdotti ulteriori cookie non tecnici, la presente sezione sarà aggiornata e sarà richiesto il consenso esplicito dell&apos;Utente prima dell&apos;attivazione. Il dettaglio dei singoli cookie, con nomi e durate, è nella{' '}
             <Link href="/cookie" className="font-semibold text-pv-navy-700 hover:underline">
               cookie policy
             </Link>

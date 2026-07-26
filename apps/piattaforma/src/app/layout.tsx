@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { Suspense } from 'react';
 import './globals.css';
 import { CookieBanner } from '@/components/cookie-banner';
+import { GoogleAnalytics } from '@/components/google-analytics';
 import { SiteChatbot } from '@/components/site-chatbot';
 import { NumberInputWheelGuard } from '@/components/number-input-wheel-guard';
 import { GlobalNavOverlay } from '@/components/ui/global-nav-overlay';
@@ -117,6 +118,14 @@ export default function RootLayout({
         <NumberInputWheelGuard />
         <Suspense fallback={null}>
           <GlobalNavOverlay />
+        </Suspense>
+        {/*
+          GA4 subordinato al consenso: senza `analytics` accettato (o senza
+          NEXT_PUBLIC_GA_MEASUREMENT_ID) non monta alcuno script. Il Suspense
+          è obbligatorio — dentro usa `useSearchParams()`.
+        */}
+        <Suspense fallback={null}>
+          <GoogleAnalytics />
         </Suspense>
       </body>
     </html>

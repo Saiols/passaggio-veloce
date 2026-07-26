@@ -80,4 +80,16 @@ describe('GET /api/admin/dashboard/export — periodo', () => {
     const res = await GET(new Request(`${URL_BASE}?periodo=custom&da=2026-06-01&a=2026-06-30`));
     expect(res.headers.get('Content-Disposition')).toContain('pratiche-2026-06-01_2026-06-30');
   });
+
+  it('il suffisso del nome file segue il giorno di Roma, non quello UTC', async () => {
+    // 23:01 UTC del 26 luglio = 01:01 del 27 a Roma: il file è "di oggi 27".
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-26T23:01:00.000Z'));
+    try {
+      const res = await GET(new Request(`${URL_BASE}?periodo=custom&da=2026-06-01&a=2026-06-30`));
+      expect(res.headers.get('Content-Disposition')).toContain('2026-06-01_2026-06-30-2026-07-27.csv');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

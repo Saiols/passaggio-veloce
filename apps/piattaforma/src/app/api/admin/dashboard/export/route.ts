@@ -3,6 +3,7 @@ import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { canViewAggregatedFinancials } from '@/lib/auth/permissions';
 import { parsePeriodo, resolvePeriodo, periodoDateFilter } from '@/lib/finanze/periodo';
+import { romeIsoDate } from '@/lib/date/rome-day';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -94,7 +95,7 @@ export async function GET(req: Request) {
   // disco: nel nome ci vanno le due date.
   const periodoSlug =
     periodo === 'custom' ? `${range.da || 'inizio'}_${range.a || 'oggi'}` : periodo;
-  const filename = `pratiche-${periodoSlug}${tipo ? `-${tipo.toLowerCase()}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`;
+  const filename = `pratiche-${periodoSlug}${tipo ? `-${tipo.toLowerCase()}` : ''}-${romeIsoDate(new Date())}.csv`;
 
   return new NextResponse(csv, {
     status: 200,

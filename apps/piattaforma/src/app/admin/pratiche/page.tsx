@@ -5,6 +5,7 @@ import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { StatusChip, TipoPraticaChip, type PraticaStato } from '@/components/ui';
 import { formatCurrencyCent, formatRelative } from '@/lib/format';
+import { margineLordoCent } from '@/lib/pricing';
 import { AdminPraticheFilters } from './filters';
 import { PRATICHE_GRID, PRATICHE_TABLE_MIN_W } from '@/lib/pratiche/table-grid';
 import { filtroSede, SEDE_NON_ASSEGNATA } from '@/lib/pratiche/colonna-sede';
@@ -166,7 +167,12 @@ export default async function AdminPratichePage({
                   <div className="hidden px-3 py-3 lg:block" title="Round in cui è stata accettata">
                     Round
                   </div>
-                  <div className="hidden px-3 py-3 lg:block">Fee</div>
+                  <div
+                    className="hidden px-3 py-3 lg:block"
+                    title="Fee agenzia · credito broker · margine piattaforma"
+                  >
+                    Economia
+                  </div>
                   <div className="py-3 pl-3 pr-5 text-right">
                     {isTabAttesaFirma ? 'In attesa da' : 'Quando'}
                   </div>
@@ -224,8 +230,11 @@ export default async function AdminPratichePage({
                       <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
                         {p.roundAccettazione ?? '—'}
                       </div>
-                      <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
-                        {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                      <div className="hidden min-w-0 px-3 py-3 lg:block">
+                        <EconomiaCell
+                          feeAgenziaCent={p.feeAgenziaCent}
+                          creditoBrokerCent={p.creditoBrokerCent}
+                        />
                       </div>
                       <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
                         {isTabAttesaFirma ? (
@@ -269,6 +278,52 @@ export default async function AdminPratichePage({
         )}
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * L'intera catena economica della pratica, riservata all'admin: quanto l'agenzia
+ * paga (FeeAddebito alla firma), quanto viene accreditato al broker sul wallet e
+ * quanto resta a PV. Broker e agenzia, nelle loro viste, vedono solo il proprio.
+ *
+ * Tre righe in un'unica colonna: separarle in tre tracce stringeva le colonne
+ * Broker/Agenzia/Sede al punto di troncare le ragioni sociali (vedi table-grid).
+ */
+function EconomiaCell({
+  feeAgenziaCent,
+  creditoBrokerCent,
+}: {
+  feeAgenziaCent: number;
+  creditoBrokerCent: number;
+}) {
+  if (feeAgenziaCent <= 0 && creditoBrokerCent <= 0) {
+    return <span className="text-[13px] text-pv-slate-500">—</span>;
+  }
+  const righe = [
+    { sigla: 'Ag', titolo: 'Fee a carico agenzia', cent: feeAgenziaCent, forte: false },
+    { sigla: 'Br', titolo: 'Credito broker', cent: creditoBrokerCent, forte: false },
+    {
+      sigla: 'PV',
+      titolo: 'Margine piattaforma (fee agenzia − credito broker)',
+      cent: margineLordoCent({ feeAgenziaCent, creditoBrokerCent }),
+      forte: true,
+    },
+  ];
+  return (
+    <div className="space-y-0.5 text-[11.5px] leading-tight">
+      {righe.map((r) => (
+        <div
+          key={r.sigla}
+          title={r.titolo}
+          className={`flex items-baseline justify-between gap-1 ${
+            r.forte ? 'font-bold text-pv-navy-800' : 'text-pv-slate-500'
+          }`}
+        >
+          <span>{r.sigla}</span>
+          <span className="tabular-nums">{formatCurrencyCent(r.cent)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

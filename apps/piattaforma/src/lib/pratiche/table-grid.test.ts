@@ -16,7 +16,7 @@ function traccePerBreakpoint(cls: string): Record<string, number> {
 }
 
 describe('PRATICHE_GRID — le tracce combaciano con le celle visibili', () => {
-  it('utenteSenzaSede: 4 → +proprietario → +controparte → +fee', () => {
+  it('utenteSenzaSede: 4 → +proprietario → +controparte → +importo', () => {
     expect(traccePerBreakpoint(PRATICHE_GRID.utenteSenzaSede)).toEqual({
       base: 4,
       sm: 5,
@@ -34,7 +34,7 @@ describe('PRATICHE_GRID — le tracce combaciano con le celle visibili', () => {
     });
   });
 
-  it('admin: nessuna colonna nuova su sm, broker+agenzia da md, sede+round+fee da lg', () => {
+  it('admin: nessuna colonna nuova su sm, broker+agenzia da md, sede+round+economia da lg', () => {
     expect(traccePerBreakpoint(PRATICHE_GRID.admin)).toEqual({
       base: 4,
       sm: 4,

@@ -52,6 +52,22 @@ export function rowToTariffario(row: TariffaRow | null): Tariffario {
   };
 }
 
+/**
+ * Margine lordo della piattaforma su UNA pratica, dagli importi già persistiti
+ * su di essa: l'agenzia paga `feeAgenziaCent` (FeeAddebito), al broker viene
+ * accreditato `creditoBrokerCent` (wallet), a PV resta la differenza.
+ *
+ * Stessa formula di `computeFees().ricavoLordoCent`, ma applicabile a una riga
+ * DB (dove il tariffario del momento non è più disponibile): le viste devono
+ * leggerla da qui, non ricalcolarla a mano.
+ */
+export function margineLordoCent(p: {
+  feeAgenziaCent: number;
+  creditoBrokerCent: number;
+}): number {
+  return p.feeAgenziaCent - p.creditoBrokerCent;
+}
+
 export function computeFees(
   input: { tipo: PraticaTipoEconomico; numeroVeicoli: number },
   tariffario: Tariffario,

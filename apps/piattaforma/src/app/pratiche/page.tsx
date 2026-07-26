@@ -257,11 +257,20 @@ export default async function PratichePage({
                   </div>
                   {mostraSede && <div className="hidden px-3 py-3 lg:block">Sede</div>}
                   <div className="px-3 py-3">Stato</div>
-                  <div className="hidden px-3 py-3 lg:block">Fee</div>
+                  {/* Ognuno vede il PROPRIO importo: l'agenzia la fee che le
+                      viene addebitata alla firma, il broker il credito che le
+                      viene accreditato sul wallet. Mai quello dell'altra parte. */}
+                  <div className="hidden px-3 py-3 lg:block">
+                    {isAgenzia ? 'Fee' : 'Compenso'}
+                  </div>
                   <div className="py-3 pl-3 pr-5 text-right">Quando</div>
                 </div>
                 <div className="divide-y divide-pv-slate-200">
                   {items.map((p) => {
+                    // Vedi l'intestazione della colonna: agenzia → fee a suo
+                    // carico, broker → suo credito. Su MINIVOLTURA il credito
+                    // broker è 0 a tariffario: la cella mostra "—", non uno zero.
+                    const importoCent = isAgenzia ? p.feeAgenziaCent : p.creditoBrokerCent;
                     const extra = statoExtra({
                       stato: p.stato as PraticaStato,
                       flagSegnalata: p.flagSegnalata,
@@ -352,7 +361,7 @@ export default async function PratichePage({
                           </span>
                         </div>
                         <div className="hidden min-w-0 truncate px-3 py-3 text-pv-slate-700 lg:block">
-                          {p.feeAgenziaCent > 0 ? formatCurrencyCent(p.feeAgenziaCent) : '—'}
+                          {importoCent > 0 ? formatCurrencyCent(importoCent) : '—'}
                         </div>
                         <div className="min-w-0 truncate py-3 pl-3 pr-5 text-right text-pv-slate-500">
                           {formatRelative(p.submittedAt ?? p.createdAt)}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFees, rowToTariffario, DEFAULT_TARIFFARIO } from './pricing';
+import { computeFees, rowToTariffario, margineLordoCent, DEFAULT_TARIFFARIO } from './pricing';
 
 describe('computeFees (tariffario esplicito)', () => {
   it('SEMPLICE 1 veicolo coi default: 75/25/50/10', () => {
@@ -28,6 +28,19 @@ describe('computeFees (tariffario esplicito)', () => {
   });
   it('lancia se numeroVeicoli < 1', () => {
     expect(() => computeFees({ tipo: 'SEMPLICE', numeroVeicoli: 0 }, DEFAULT_TARIFFARIO)).toThrow();
+  });
+});
+
+describe('margineLordoCent (importi già persistiti sulla pratica)', () => {
+  it('SEMPLICE coi default: 75 − 25 = 50', () => {
+    expect(margineLordoCent({ feeAgenziaCent: 7500, creditoBrokerCent: 2500 })).toBe(5000);
+  });
+  it('MINIVOLTURA (nessun credito broker): il margine è tutta la fee', () => {
+    expect(margineLordoCent({ feeAgenziaCent: 1500, creditoBrokerCent: 0 })).toBe(1500);
+  });
+  it('coincide con il ricavo lordo calcolato dal tariffario, multi-veicolo incluso', () => {
+    const fees = computeFees({ tipo: 'SEMPLICE', numeroVeicoli: 3 }, DEFAULT_TARIFFARIO);
+    expect(margineLordoCent(fees)).toBe(fees.ricavoLordoCent);
   });
 });
 

@@ -21,26 +21,39 @@
  * costruiti a runtime.
  */
 export const PRATICHE_GRID = {
-  /** Codice · Targa · Proprietario(sm) · Controparte(md) · Stato · Fee(lg) · Quando */
+  /**
+   * Codice · Targa · Proprietario(sm) · Controparte(md) · Stato · Importo(lg) · Quando
+   *
+   * La traccia dell'importo è 6rem, non 5: l'intestazione è "Fee" per l'agenzia
+   * ma "Compenso" per il broker, e a 5rem quest'ultima andava a capo.
+   */
   utenteSenzaSede:
     'grid-cols-[8.5rem_minmax(0,1fr)_7.5rem_6.5rem] ' +
     'sm:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_9.5rem_6.5rem] ' +
     'md:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6.5rem] ' +
-    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_5rem_7rem]',
+    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6rem_7rem]',
 
   /** Come sopra, con Sede(lg) fra Controparte e Stato. */
   utenteConSede:
     'grid-cols-[8.5rem_minmax(0,1fr)_7.5rem_6.5rem] ' +
     'sm:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_9.5rem_6.5rem] ' +
     'md:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6.5rem] ' +
-    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_9.5rem_5rem_7rem]',
+    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6rem_7rem]',
 
-  /** Codice · Targa · Broker(md) · Agenzia(md) · Sede(lg) · Stato · Round(lg) · Fee(lg) · Quando */
+  /**
+   * Codice · Targa · Broker(md) · Agenzia(md) · Sede(lg) · Stato · Round(lg) ·
+   * Economia(lg) · Quando
+   *
+   * "Economia" impila fee agenzia / credito broker / margine PV in un'unica
+   * traccia da 6.5rem: come tre colonne separate le tracce `1fr` di
+   * Broker/Agenzia/Sede scendevano sotto le 6rem su un desktop 1280px e le
+   * ragioni sociali risultavano troncate.
+   */
   admin:
     'grid-cols-[8.5rem_minmax(0,1fr)_7.5rem_6.5rem] ' +
     'sm:grid-cols-[8.5rem_minmax(0,1fr)_9.5rem_6.5rem] ' +
     'md:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_9.5rem_6.5rem] ' +
-    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_9.5rem_4rem_5rem_7rem]',
+    'lg:grid-cols-[8.5rem_6.5rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_9.5rem_4rem_6.5rem_7rem]',
 } as const;
 
 /**

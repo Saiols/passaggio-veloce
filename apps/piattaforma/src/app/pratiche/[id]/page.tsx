@@ -15,6 +15,7 @@ import {
   type PraticaStato,
 } from '@/components/ui';
 import { formatCurrencyCent, formatDate, formatDateTime } from '@/lib/format';
+import { margineLordoCent } from '@/lib/pricing';
 import {
   markFirmaAvvenutaAction,
   markPraticaProcessataAction,
@@ -311,10 +312,6 @@ export default async function PraticaDetailPage({
     revisioneCompletata: pratica.revisioneCompletata,
     richiedeRevisioneManuale: pratica.richiedeRevisioneManuale,
   });
-
-  // Spec §1.4 demo: il prezzo è informativo solo dopo la firma (dashboard
-  // economica). Per agenzie e broker, prima della firma non viene mostrato.
-  const showFee = pratica.firmaAvvenutaAt !== null;
 
   const ruolo: GuidaRuolo =
     companyType === 'AGENZIA' ? 'AGENZIA' : companyType === 'DEALER' ? 'DEALER' : 'ALTRO';
@@ -707,7 +704,16 @@ export default async function PraticaDetailPage({
                   />
                 )}
                 <InfoRow label="Comune" value={pratica.comune} />
-                {showFee && (
+                {/* Economia della pratica. Due regole:
+                    — ognuno vede solo il proprio importo (l'agenzia la fee che
+                      le viene addebitata alla firma, il broker il credito che
+                      le viene accreditato); l'intera catena, margine PV
+                      compreso, resta allo staff di piattaforma;
+                    — nessun gate sulla firma: gli importi nascono col
+                      tariffario alla creazione della pratica, e nasconderli
+                      fino alla firma rendeva dettaglio e lista incoerenti
+                      (la lista li ha sempre mostrati). */}
+                {isStaff ? (
                   <>
                     <InfoRow
                       label="Fee agenzia"
@@ -725,7 +731,38 @@ export default async function PraticaDetailPage({
                           : '—'
                       }
                     />
+                    <InfoRow
+                      label="Margine PV"
+                      value={
+                        pratica.feeAgenziaCent > 0
+                          ? formatCurrencyCent(
+                              margineLordoCent({
+                                feeAgenziaCent: pratica.feeAgenziaCent,
+                                creditoBrokerCent: pratica.creditoBrokerCent,
+                              }),
+                            )
+                          : '—'
+                      }
+                    />
                   </>
+                ) : companyType === 'AGENZIA' ? (
+                  <InfoRow
+                    label="La tua fee"
+                    value={
+                      pratica.feeAgenziaCent > 0
+                        ? formatCurrencyCent(pratica.feeAgenziaCent)
+                        : '—'
+                    }
+                  />
+                ) : (
+                  <InfoRow
+                    label="Il tuo compenso"
+                    value={
+                      pratica.creditoBrokerCent > 0
+                        ? formatCurrencyCent(pratica.creditoBrokerCent)
+                        : '—'
+                    }
+                  />
                 )}
                 <InfoRow label="Codice interno" value={pratica.codiceAgenziaInterno} />
               </dl>

@@ -20,12 +20,12 @@ vi.mock('next/navigation', () => ({
 import { salvaConfigDistribuzione } from './actions';
 import type { ConfigDistribuzioneInput } from './validate';
 
-/** Input valido di riferimento: 1 km iniziale, +1 km, max 10 km, 1 h per round. */
+/** Input valido di riferimento: 1 km iniziale, +1 km, max 10 km, 60 min per round. */
 const INPUT_OK: ConfigDistribuzioneInput = {
   raggioStartKm: 1,
   stepKm: 1,
   raggioMaxKm: 10,
-  durataRoundOre: 1,
+  durataRoundMin: 60,
 };
 
 const ADMIN = { user: { id: 'adm', role: 'ADMIN_PIATTAFORMA' } };
@@ -88,21 +88,21 @@ describe('salvaConfigDistribuzione', () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
-  // Il cron gira ogni 10 minuti: una durata più corta non sarebbe rispettabile.
-  it('rifiuta una durata round sotto i 15 minuti, nessuna scrittura', async () => {
+  // Il cron gira ogni minuto: una durata sotto il minimo non sarebbe rispettabile.
+  it('rifiuta una durata round sotto il minimo di 1 minuto, nessuna scrittura', async () => {
     authMock.mockResolvedValue(ADMIN);
 
-    const res = await salvaConfigDistribuzione({ ...INPUT_OK, durataRoundOre: 0.1 });
+    const res = await salvaConfigDistribuzione({ ...INPUT_OK, durataRoundMin: 0 });
 
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/durata minima/i);
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
-  it('rifiuta una durata round oltre le 24 h, nessuna scrittura', async () => {
+  it('rifiuta una durata round oltre i 60 minuti, nessuna scrittura', async () => {
     authMock.mockResolvedValue(ADMIN);
 
-    const res = await salvaConfigDistribuzione({ ...INPUT_OK, durataRoundOre: 48 });
+    const res = await salvaConfigDistribuzione({ ...INPUT_OK, durataRoundMin: 61 });
 
     expect(res.ok).toBe(false);
     expect(upsertMock).not.toHaveBeenCalled();
@@ -142,16 +142,17 @@ describe('salvaConfigDistribuzione', () => {
     expect(revalidateMock).toHaveBeenCalledWith('/admin/distribuzione');
   });
 
-  // I decimali del form (0,5 km / 1,5 h) devono arrivare interi al DB: le
-  // colonne sono INTEGER, un float ci finirebbe troncato dal driver.
-  it('converte i decimali in interi: 0,5 km → 500 m, 1,5 h → 90 min', async () => {
+  // I decimali del form (0,5 km) devono arrivare interi al DB: le colonne
+  // sono INTEGER, un float ci finirebbe troncato dal driver. I minuti del
+  // round sono già un intero lato form (lo schema li rifiuta, non li arrotonda).
+  it('converte i decimali km in interi: 0,5 km → 500 m', async () => {
     authMock.mockResolvedValue(ADMIN);
 
     const res = await salvaConfigDistribuzione({
       raggioStartKm: 0.5,
       stepKm: 2.5,
       raggioMaxKm: 7.5,
-      durataRoundOre: 1.5,
+      durataRoundMin: 45,
     });
 
     expect(res.ok).toBe(true);
@@ -161,7 +162,7 @@ describe('salvaConfigDistribuzione', () => {
           raggioStartM: 500,
           stepM: 2500,
           raggioMaxM: 7500,
-          intervalloMin: 90,
+          intervalloMin: 45,
         },
       }),
     );

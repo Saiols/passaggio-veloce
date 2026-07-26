@@ -6,8 +6,8 @@ export const maxDuration = 60;
 
 /**
  * Tick distribuzione: espande il raggio delle pratiche IN_DISTRIBUZIONE in
- * orario lavorativo (un anello non vuoto per tick, gate 10 min).
- * Schedule cron Vercel: ogni 10min (vercel.json).
+ * orario lavorativo (un anello non vuoto per tick, gate al minuto).
+ * Schedule cron Vercel: ogni minuto (vercel.json).
  */
 async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);

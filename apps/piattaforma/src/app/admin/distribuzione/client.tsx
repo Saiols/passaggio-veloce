@@ -9,15 +9,15 @@ import { GIORNI_ORDINE } from '@/lib/distribuzione/calendario';
 import { salvaConfigDistribuzione } from './actions';
 import {
   configDistribuzioneSchema,
-  DURATA_ROUND_ORE_MAX,
-  DURATA_ROUND_ORE_MIN,
+  DURATA_ROUND_MIN_MAX,
+  DURATA_ROUND_MIN_MIN,
   RAGGIO_MAX_KM_MAX,
   RAGGIO_MAX_KM_MIN,
   RAGGIO_START_KM_MIN,
+  STEP_DURATA_MIN_INPUT,
   STEP_KM_INPUT,
   STEP_KM_MAX,
   STEP_KM_MIN,
-  STEP_ORE_INPUT,
   STEP_RAGGIO_MAX_KM_INPUT,
 } from './validate';
 
@@ -36,11 +36,6 @@ function toKm(metri: number): number {
   return metri / 1000;
 }
 
-/** Minuti → ore per il form: la persistenza resta in minuti. */
-function toOre(minuti: number): number {
-  return minuti / 60;
-}
-
 /** "0,1" invece di "0.1" negli hint: sono testo italiano, non codice. */
 function num(v: number): string {
   return v.toLocaleString('it-IT');
@@ -50,7 +45,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
   const [raggioStartKm, setRaggioStartKm] = useState<number | null>(toKm(config.raggioStartM));
   const [stepKm, setStepKm] = useState<number | null>(toKm(config.stepM));
   const [raggioMaxKm, setRaggioMaxKm] = useState<number | null>(toKm(config.raggioMaxM));
-  const [durataRoundOre, setDurataRoundOre] = useState<number | null>(toOre(config.intervalloMin));
+  const [durataRoundMin, setDurataRoundMin] = useState<number | null>(config.intervalloMin);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [pending, start] = useTransition();
 
@@ -61,13 +56,13 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
     raggioStartKm: raggioStartKm ?? NaN,
     stepKm: stepKm ?? NaN,
     raggioMaxKm: raggioMaxKm ?? NaN,
-    durataRoundOre: durataRoundOre ?? NaN,
+    durataRoundMin: durataRoundMin ?? NaN,
   });
   const { field, gatedSubmit } = useFieldErrorsState(errors);
   const fStart = field('raggioStartKm');
   const fStep = field('stepKm');
   const fMax = field('raggioMaxKm');
-  const fDurata = field('durataRoundOre');
+  const fDurata = field('durataRoundMin');
 
   // Quanti round servono, al più, per arrivare dal raggio iniziale al massimo:
   // il primo anello vale 1, poi uno per ogni passo. È il tetto teorico — gli
@@ -89,7 +84,7 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
         raggioStartKm: raggioStartKm ?? NaN,
         stepKm: stepKm ?? NaN,
         raggioMaxKm: raggioMaxKm ?? NaN,
-        durataRoundOre: durataRoundOre ?? NaN,
+        durataRoundMin: durataRoundMin ?? NaN,
       });
       setMsg(
         res.ok
@@ -161,19 +156,19 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
           </Field>
 
           <Field
-            label="Durata round (ore)"
+            label="Durata round (minuti)"
             required
             error={fDurata.error}
-            hint={`Attesa prima di allargare il raggio. Tra ${num(DURATA_ROUND_ORE_MIN)} e ${num(DURATA_ROUND_ORE_MAX)} h.`}
+            hint={`Attesa di orario lavorativo prima di allargare il raggio. Tra ${DURATA_ROUND_MIN_MIN} e ${DURATA_ROUND_MIN_MAX} minuti. Il cron gira ogni minuto: sotto i 2 minuti la cadenza reale può variare di un minuto.`}
           >
             <NumberInput
-              value={durataRoundOre}
-              onChange={setDurataRoundOre}
+              value={durataRoundMin}
+              onChange={setDurataRoundMin}
               onBlur={fDurata.onBlur}
               invalid={fDurata.invalid}
-              min={DURATA_ROUND_ORE_MIN}
-              max={DURATA_ROUND_ORE_MAX}
-              step={STEP_ORE_INPUT}
+              min={DURATA_ROUND_MIN_MIN}
+              max={DURATA_ROUND_MIN_MAX}
+              step={STEP_DURATA_MIN_INPUT}
             />
           </Field>
         </div>
@@ -183,11 +178,11 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
             Con questi valori la distribuzione arriva al raggio massimo in al più{' '}
             <strong className="text-pv-navy-800">{roundMax}</strong>{' '}
             {roundMax === 1 ? 'round' : 'round'}
-            {durataRoundOre != null && durataRoundOre > 0 && (
+            {durataRoundMin != null && durataRoundMin > 0 && (
               <>
                 , cioè circa{' '}
                 <strong className="text-pv-navy-800">
-                  {formatOre((roundMax - 1) * durataRoundOre)}
+                  {formatMinuti((roundMax - 1) * durataRoundMin)}
                 </strong>{' '}
                 di orario lavorativo
               </>
@@ -228,11 +223,11 @@ export function DistribuzioneConfigClient({ config }: { config: DistribuzioneCon
   );
 }
 
-/** "2 h", "30 min", "1 h 30 min" — evita "0,5 h" nella frase di riepilogo. */
-function formatOre(ore: number): string {
-  const minutiTotali = Math.round(ore * 60);
-  const h = Math.floor(minutiTotali / 60);
-  const m = minutiTotali % 60;
+/** "2 h", "30 min", "1 h 30 min" — dai minuti, senza passare dalle ore. */
+function formatMinuti(minutiTotali: number): string {
+  const tot = Math.round(minutiTotali);
+  const h = Math.floor(tot / 60);
+  const m = tot % 60;
   if (h === 0) return `${m} min`;
   if (m === 0) return `${h} h`;
   return `${h} h ${m} min`;

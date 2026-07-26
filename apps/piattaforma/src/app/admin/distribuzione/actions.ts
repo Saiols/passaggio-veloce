@@ -18,9 +18,10 @@ export type SalvaConfigDistribuzioneResult = { ok: true } | { ok: false; error: 
  * `distribuzione_config`. Solo ADMIN_PIATTAFORMA (stesso gate di
  * `/admin/tariffe` e `/admin/monitoraggio`).
  *
- * L'input arriva in km e ore (le unità del form) e viene convertito in metri e
- * minuti da `toConfigPersistita` DOPO la validazione: i limiti e i messaggi
- * d'errore restano espressi nelle unità che l'admin vede.
+ * L'input arriva in km e minuti (le unità del form); solo il raggio va
+ * convertito in metri, da `toConfigPersistita` DOPO la validazione — i minuti
+ * sono già l'unità di persistenza. I limiti e i messaggi d'errore restano
+ * espressi nelle unità che l'admin vede.
  *
  * `getDistribuzioneConfig` è avvolta in React `cache()`: dedup SOLO
  * per-request, nessuna cache persistente da invalidare. Il prossimo request

@@ -28,7 +28,7 @@ export type TickResult =
 const STATI_TERMINALI = ['ACCETTATA', 'FIRMATA', 'ANNULLATA', 'SCADUTA'] as const;
 
 /**
- * Grazia (min) sul gate della durata round. Il cron gira ogni 10 minuti
+ * Grazia (min) sul gate della durata round. Il cron gira ogni minuto
  * (vercel.json) e Vercel non garantisce il trigger al secondo: senza grazia
  * un tick che arriva un istante prima della scadenza slitterebbe di un giro
  * intero. 0,2 min = 12 secondi assorbono il jitter senza accorciare in modo
@@ -521,7 +521,7 @@ export async function avviaRound1ForPratica(praticaId: string): Promise<{
 }
 
 /**
- * Tick di tutte le pratiche in distribuzione (chiamato dal cron ogni 10 min).
+ * Tick di tutte le pratiche in distribuzione (chiamato dal cron ogni minuto).
  * Paginazione difensiva: `take` cap per non fare esplodere un tick.
  *
  * Isolamento per-pratica: un errore su una pratica (P2028, blip DB, ...) è

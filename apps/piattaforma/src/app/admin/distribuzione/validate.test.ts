@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
   configDistribuzioneSchema,
   toConfigPersistita,
-  DURATA_ROUND_ORE_MAX,
-  DURATA_ROUND_ORE_MIN,
+  DURATA_ROUND_MIN_MAX,
+  DURATA_ROUND_MIN_MIN,
   RAGGIO_MAX_KM_MAX,
   RAGGIO_MAX_KM_MIN,
   RAGGIO_START_KM_MIN,
+  STEP_DURATA_MIN_INPUT,
   STEP_KM_INPUT,
   STEP_KM_MAX,
   STEP_KM_MIN,
-  STEP_ORE_INPUT,
   STEP_RAGGIO_MAX_KM_INPUT,
 } from './validate';
 
@@ -32,7 +32,6 @@ describe('passo dei campi numerici — ogni valore ammesso è raggiungibile', ()
     ['raggio iniziale', RAGGIO_START_KM_MIN, STEP_KM_INPUT, [0.5, 1, 2, 10]],
     ['passo per round', STEP_KM_MIN, STEP_KM_INPUT, [0.5, 1, 2, STEP_KM_MAX]],
     ['raggio massimo', RAGGIO_MAX_KM_MIN, STEP_RAGGIO_MAX_KM_INPUT, [1, 10, RAGGIO_MAX_KM_MAX]],
-    ['durata round', DURATA_ROUND_ORE_MIN, STEP_ORE_INPUT, [0.25, 0.5, 1, 2, DURATA_ROUND_ORE_MAX]],
   ])('%s: i valori tipici cadono sulla griglia min + n·step', (_campo, min, step, valori) => {
     for (const v of valori as number[]) {
       expect(suGriglia(v, min as number, step as number), `${v} non è su min+n·step`).toBe(true);
@@ -41,7 +40,7 @@ describe('passo dei campi numerici — ogni valore ammesso è raggiungibile', ()
 });
 
 describe('configDistribuzioneSchema', () => {
-  const OK = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundOre: 1 };
+  const OK = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundMin: 60 };
 
   it('accetta i valori di default', () => {
     expect(configDistribuzioneSchema.safeParse(OK).success).toBe(true);
@@ -52,7 +51,7 @@ describe('configDistribuzioneSchema', () => {
       raggioStartKm: RAGGIO_START_KM_MIN,
       stepKm: STEP_KM_MAX,
       raggioMaxKm: RAGGIO_MAX_KM_MAX,
-      durataRoundOre: DURATA_ROUND_ORE_MAX,
+      durataRoundMin: DURATA_ROUND_MIN_MAX,
     };
     expect(configDistribuzioneSchema.safeParse(estremi).success).toBe(true);
   });
@@ -67,29 +66,58 @@ describe('configDistribuzioneSchema', () => {
   });
 
   it('NaN (campo vuoto nel form) non passa', () => {
-    expect(configDistribuzioneSchema.safeParse({ ...OK, durataRoundOre: NaN }).success).toBe(false);
+    expect(configDistribuzioneSchema.safeParse({ ...OK, durataRoundMin: NaN }).success).toBe(false);
   });
 });
 
 describe('toConfigPersistita', () => {
-  it('converte km→metri e ore→minuti arrotondando a interi', () => {
+  it('converte km→metri arrotondando a interi; i minuti passano invariati', () => {
     expect(
-      toConfigPersistita({ raggioStartKm: 0.3, stepKm: 1.5, raggioMaxKm: 12.4, durataRoundOre: 0.25 }),
+      toConfigPersistita({ raggioStartKm: 0.3, stepKm: 1.5, raggioMaxKm: 12.4, durataRoundMin: 15 }),
     ).toEqual({ raggioStartM: 300, stepM: 1500, raggioMaxM: 12400, intervalloMin: 15 });
   });
 
   // 0,1 km in floating point è 100.00000000000001 m: senza arrotondamento
   // finirebbe in una colonna INTEGER.
-  it('nessun residuo decimale sui valori scomodi in binario', () => {
+  it('nessun residuo decimale sui valori scomodi in binario (km)', () => {
     const out = toConfigPersistita({
       raggioStartKm: 0.1,
       stepKm: 0.7,
       raggioMaxKm: 2.9,
-      durataRoundOre: 0.35,
+      durataRoundMin: 21,
     });
     for (const v of Object.values(out)) {
       expect(Number.isInteger(v)).toBe(true);
     }
     expect(out).toEqual({ raggioStartM: 100, stepM: 700, raggioMaxM: 2900, intervalloMin: 21 });
+  });
+});
+
+const BASE = { raggioStartKm: 1, stepKm: 1, raggioMaxKm: 10, durataRoundMin: 60 };
+
+describe('durata round in minuti', () => {
+  it('accetta il minimo e il massimo', () => {
+    expect(configDistribuzioneSchema.safeParse({ ...BASE, durataRoundMin: 1 }).success).toBe(true);
+    expect(configDistribuzioneSchema.safeParse({ ...BASE, durataRoundMin: 60 }).success).toBe(true);
+  });
+
+  it('rifiuta sotto 1 e sopra 60', () => {
+    expect(configDistribuzioneSchema.safeParse({ ...BASE, durataRoundMin: 0 }).success).toBe(false);
+    expect(configDistribuzioneSchema.safeParse({ ...BASE, durataRoundMin: 61 }).success).toBe(false);
+  });
+
+  it('rifiuta i minuti frazionari: il cron gira al minuto', () => {
+    expect(configDistribuzioneSchema.safeParse({ ...BASE, durataRoundMin: 1.5 }).success).toBe(false);
+  });
+
+  it('copia i minuti in intervalloMin senza convertire', () => {
+    const out = toConfigPersistita({ ...BASE, durataRoundMin: 7 });
+    expect(out.intervalloMin).toBe(7);
+  });
+
+  it('lo step dell input divide la griglia dei valori ammessi', () => {
+    // Il browser considera validi solo `min + n·step`: uno step che non divide
+    // l'intervallo marcherebbe come invalidi dei valori legittimi.
+    expect((DURATA_ROUND_MIN_MAX - DURATA_ROUND_MIN_MIN) % STEP_DURATA_MIN_INPUT).toBe(0);
   });
 });

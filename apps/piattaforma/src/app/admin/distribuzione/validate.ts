@@ -1,17 +1,17 @@
 import { z } from 'zod';
 
 /**
- * Limiti dei parametri di distribuzione, in unità umane (km e ore): sono le
- * stesse unità del form, così i messaggi d'errore parlano la lingua dell'admin.
- * La persistenza resta in metri e minuti (vedi `toConfigPersistita`).
+ * Limiti dei parametri di distribuzione, in unità umane (km e minuti): sono
+ * le stesse unità del form, così i messaggi d'errore parlano la lingua
+ * dell'admin. La persistenza resta in metri e minuti (vedi `toConfigPersistita`).
  *
  * - Raggio massimo: sotto 1 km la copertura sarebbe irrealisticamente stretta
  *   (quasi ogni pratica finirebbe in "zona non coperta"); oltre 50 km si perde
  *   il senso di distribuzione locale.
- * - Durata round: il cron gira ogni 10 minuti, quindi sotto i 15 minuti la
- *   durata configurata non sarebbe comunque rispettabile.
  * - Passo: cap a 25 km perché un passo più largo del raggio utile renderebbe
  *   il secondo round un salto diretto al massimo.
+ *
+ * La durata del round ha costanti e commento dedicati, più sotto.
  */
 export const RAGGIO_START_KM_MIN = 0.1;
 export const RAGGIO_START_KM_MAX = 50;
@@ -19,8 +19,18 @@ export const STEP_KM_MIN = 0.1;
 export const STEP_KM_MAX = 25;
 export const RAGGIO_MAX_KM_MIN = 1;
 export const RAGGIO_MAX_KM_MAX = 50;
-export const DURATA_ROUND_ORE_MIN = 0.25;
-export const DURATA_ROUND_ORE_MAX = 24;
+
+/**
+ * Durata del round in MINUTI: è l'unità con cui il DB già memorizza
+ * `intervalloMin`, e quella in cui ragiona chi configura la piattaforma.
+ *
+ * Il minimo di 1 minuto è il limite del cron, che gira ogni minuto. Vercel non
+ * garantisce il trigger al secondo, quindi un round da 1 minuto vale in pratica
+ * 1-2 minuti: l'hint del form lo dice esplicitamente.
+ */
+export const DURATA_ROUND_MIN_MIN = 1;
+export const DURATA_ROUND_MIN_MAX = 60;
+export const STEP_DURATA_MIN_INPUT = 1;
 
 /**
  * Passo delle frecce di `<input type="number">`.
@@ -34,7 +44,6 @@ export const DURATA_ROUND_ORE_MAX = 24;
  */
 export const STEP_KM_INPUT = 0.1;
 export const STEP_RAGGIO_MAX_KM_INPUT = 1;
-export const STEP_ORE_INPUT = 0.25;
 
 const numero = (campo: string) =>
   z.number({ invalid_type_error: `Inserisci un numero valido per ${campo}` });
@@ -62,9 +71,10 @@ export const configDistribuzioneSchema = z
     raggioMaxKm: numero('il raggio massimo')
       .min(RAGGIO_MAX_KM_MIN, `Il raggio massimo minimo è ${RAGGIO_MAX_KM_MIN} km`)
       .max(RAGGIO_MAX_KM_MAX, `Il raggio massimo non può superare ${RAGGIO_MAX_KM_MAX} km`),
-    durataRoundOre: numero('la durata del round')
-      .min(DURATA_ROUND_ORE_MIN, `La durata minima di un round è ${DURATA_ROUND_ORE_MIN} h (15 min)`)
-      .max(DURATA_ROUND_ORE_MAX, `La durata di un round non può superare ${DURATA_ROUND_ORE_MAX} h`),
+    durataRoundMin: numero('la durata del round')
+      .int('La durata del round va indicata in minuti interi')
+      .min(DURATA_ROUND_MIN_MIN, `La durata minima di un round è ${DURATA_ROUND_MIN_MIN} min`)
+      .max(DURATA_ROUND_MIN_MAX, `La durata di un round non può superare ${DURATA_ROUND_MIN_MAX} min`),
   })
   .refine((d) => d.raggioMaxKm > d.raggioStartKm, {
     message: 'Il raggio massimo deve essere maggiore del raggio iniziale',
@@ -73,7 +83,10 @@ export const configDistribuzioneSchema = z
 
 export type ConfigDistribuzioneInput = z.infer<typeof configDistribuzioneSchema>;
 
-/** km/ore del form → metri/minuti, le unità con cui il motore lavora. */
+/**
+ * km del form → metri; i minuti sono già l'unità di `intervalloMin` nel DB,
+ * quindi passano invariati (nessuna conversione da fare).
+ */
 export function toConfigPersistita(input: ConfigDistribuzioneInput): {
   raggioStartM: number;
   stepM: number;
@@ -84,6 +97,6 @@ export function toConfigPersistita(input: ConfigDistribuzioneInput): {
     raggioStartM: Math.round(input.raggioStartKm * 1000),
     stepM: Math.round(input.stepKm * 1000),
     raggioMaxM: Math.round(input.raggioMaxKm * 1000),
-    intervalloMin: Math.round(input.durataRoundOre * 60),
+    intervalloMin: input.durataRoundMin,
   };
 }

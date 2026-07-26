@@ -1,12 +1,13 @@
 import { it, expect, vi, beforeEach } from 'vitest';
 
-const { feeFindUnique, feeUpdate, feeUpdateMany, chargeFee, blocca, rivaluta } = vi.hoisted(() => ({
+const { feeFindUnique, feeUpdate, feeUpdateMany, chargeFee, blocca, rivaluta, segnaIncassato } = vi.hoisted(() => ({
   feeFindUnique: vi.fn(),
   feeUpdate: vi.fn(),
   feeUpdateMany: vi.fn(),
   chargeFee: vi.fn(),
   blocca: vi.fn(),
   rivaluta: vi.fn(),
+  segnaIncassato: vi.fn(),
 }));
 
 vi.mock('@pv/db', () => ({
@@ -14,6 +15,7 @@ vi.mock('@pv/db', () => ({
 }));
 vi.mock('@/lib/providers/payment', () => ({ getPayment: () => ({ chargeFee }) }));
 vi.mock('./blocco', () => ({ bloccaAgenziaPerAddebito: blocca, rivalutaBloccoAgenzia: rivaluta }));
+vi.mock('./incasso', () => ({ segnaFeeIncassato: segnaIncassato }));
 
 import { processFeeAddebito } from './process';
 
@@ -25,14 +27,15 @@ beforeEach(() => {
   feeUpdateMany.mockResolvedValue({ count: 1 }); // CAS success per default
   blocca.mockResolvedValue(undefined);
   rivaluta.mockResolvedValue(undefined);
+  segnaIncassato.mockResolvedValue(true);
   feeFindUnique.mockResolvedValue(FEE);
 });
 
-it('SUCCESS: marca SUCCESS e rivaluta lo sblocco', async () => {
+it('SUCCESS: delega la transizione a segnaFeeIncassato', async () => {
   chargeFee.mockResolvedValue({ ok: true, providerRef: 'pi_1' });
   const s = await processFeeAddebito('f1');
   expect(s).toBe('SUCCESS');
-  expect(rivaluta).toHaveBeenCalledWith('a1');
+  expect(segnaIncassato).toHaveBeenCalledWith('f1', 'pi_1');
   expect(blocca).not.toHaveBeenCalled();
 });
 

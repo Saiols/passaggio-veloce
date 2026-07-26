@@ -1,7 +1,8 @@
 import 'server-only';
 import { prisma } from '@pv/db';
 import type Stripe from 'stripe';
-import { bloccaAgenziaPerAddebito, rivalutaBloccoAgenzia } from '@/lib/fee/blocco';
+import { bloccaAgenziaPerAddebito } from '@/lib/fee/blocco';
+import { segnaFeeIncassato } from '@/lib/fee/incasso';
 import { ritentaAddebitiAgenzia } from '@/lib/fee/retry';
 
 /** Routing idempotente degli eventi Stripe rilevanti. Fonte di verità per il
@@ -12,14 +13,8 @@ export async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       const pi = event.data.object as Stripe.PaymentIntent;
       const feeId = pi.metadata?.feeAddebitoId;
       if (feeId) {
-        const r = await prisma.feeAddebito.updateMany({
-          where: { id: feeId, stato: { not: 'SUCCESS' } },
-          data: { stato: 'SUCCESS', providerRef: pi.id, executedAt: new Date(), errorMessage: null },
-        });
-        if (r?.count && r.count > 0) {
-          const fee = await prisma.feeAddebito.findUnique({ where: { id: feeId }, select: { agenziaId: true } });
-          if (fee) await rivalutaBloccoAgenzia(fee.agenziaId);
-        } else {
+        const vinto = await segnaFeeIncassato(feeId, pi.id);
+        if (!vinto) {
           console.warn(`[stripe-webhook] succeeded: nessun FeeAddebito aggiornato (id=${feeId}, pi=${pi.id})`);
         }
       } else {

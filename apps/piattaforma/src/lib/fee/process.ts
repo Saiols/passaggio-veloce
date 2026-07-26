@@ -2,7 +2,8 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { getPayment } from '@/lib/providers/payment';
 import { feeOutcomeFromResult } from '@/lib/jobs/fee-outcome';
-import { bloccaAgenziaPerAddebito, rivalutaBloccoAgenzia } from './blocco';
+import { bloccaAgenziaPerAddebito } from './blocco';
+import { segnaFeeIncassato } from './incasso';
 
 export type ProcessFeeStatus = 'SUCCESS' | 'PENDING' | 'RETRY' | 'FAILED' | 'SKIPPED';
 
@@ -30,11 +31,9 @@ export async function processFeeAddebito(feeId: string): Promise<ProcessFeeStatu
   const outcome = feeOutcomeFromResult(result);
 
   if (outcome.status === 'SUCCESS') {
-    await prisma.feeAddebito.update({
-      where: { id: feeId },
-      data: { stato: 'SUCCESS', providerRef: outcome.providerRef, executedAt: new Date(), errorMessage: null },
-    });
-    await rivalutaBloccoAgenzia(fee.agenziaId);
+    // Transizione + sblocco + fattura: tutto dentro segnaFeeIncassato, che è
+    // l'unico proprietario del passaggio a SUCCESS (v. incasso.ts).
+    await segnaFeeIncassato(feeId, outcome.providerRef);
   } else if (outcome.status === 'PENDING') {
     await prisma.feeAddebito.update({ where: { id: feeId }, data: { providerRef: outcome.providerRef } });
     // resta IN_LAVORAZIONE: l'agenzia (se bloccata) resta bloccata fino al webhook

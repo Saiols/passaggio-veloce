@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { feeUpdateMany, feeFindUnique, companyUpdateMany, blocca, rivaluta, isBloccata, ritentaMock } = vi.hoisted(() => ({
-  feeUpdateMany: vi.fn(),
-  feeFindUnique: vi.fn(),
-  companyUpdateMany: vi.fn(),
-  blocca: vi.fn(),
-  rivaluta: vi.fn(),
-  isBloccata: vi.fn(),
-  ritentaMock: vi.fn(),
-}));
+const { feeUpdateMany, feeFindUnique, companyUpdateMany, blocca, rivaluta, isBloccata, ritentaMock, segnaIncassato } =
+  vi.hoisted(() => ({
+    feeUpdateMany: vi.fn(),
+    feeFindUnique: vi.fn(),
+    companyUpdateMany: vi.fn(),
+    blocca: vi.fn(),
+    rivaluta: vi.fn(),
+    isBloccata: vi.fn(),
+    ritentaMock: vi.fn(),
+    segnaIncassato: vi.fn(),
+  }));
 vi.mock('@pv/db', () => ({
   prisma: {
     feeAddebito: { updateMany: feeUpdateMany, findUnique: feeFindUnique },
@@ -20,6 +22,7 @@ vi.mock('@/lib/fee/blocco', () => ({
   rivalutaBloccoAgenzia: rivaluta,
   isAgenziaBloccata: isBloccata,
 }));
+vi.mock('@/lib/fee/incasso', () => ({ segnaFeeIncassato: segnaIncassato }));
 vi.mock('@/lib/fee/retry', () => ({ ritentaAddebitiAgenzia: ritentaMock }));
 
 import { handleStripeEvent } from './stripe-webhook';
@@ -33,12 +36,14 @@ describe('handleStripeEvent', () => {
     rivaluta.mockReset();
     isBloccata.mockReset();
     ritentaMock.mockReset();
+    segnaIncassato.mockReset();
     feeUpdateMany.mockResolvedValue({ count: 1 });
     feeFindUnique.mockResolvedValue({ agenziaId: 'a1' });
     blocca.mockResolvedValue(undefined);
     rivaluta.mockResolvedValue(undefined);
     isBloccata.mockResolvedValue(false);
     ritentaMock.mockResolvedValue(undefined);
+    segnaIncassato.mockResolvedValue(true);
   });
 
   it('payment_intent.succeeded → fee SUCCESS via metadata', async () => {
@@ -46,10 +51,7 @@ describe('handleStripeEvent', () => {
       type: 'payment_intent.succeeded',
       data: { object: { id: 'pi_1', metadata: { feeAddebitoId: 'fee-1' } } },
     } as never);
-    expect(feeUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'fee-1', stato: { not: 'SUCCESS' } },
-      data: { stato: 'SUCCESS', providerRef: 'pi_1', executedAt: expect.any(Date), errorMessage: null },
-    });
+    expect(segnaIncassato).toHaveBeenCalledWith('fee-1', 'pi_1');
   });
 
   it('payment_intent.payment_failed → fee FAILED', async () => {

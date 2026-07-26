@@ -1,19 +1,22 @@
 import { it, expect, vi, beforeEach } from 'vitest';
 
-const { feeFindUnique, feeUpdate, feeUpdateMany, chargeFee, blocca, rivaluta, segnaIncassato } = vi.hoisted(() => ({
-  feeFindUnique: vi.fn(),
-  feeUpdate: vi.fn(),
-  feeUpdateMany: vi.fn(),
-  chargeFee: vi.fn(),
-  blocca: vi.fn(),
-  rivaluta: vi.fn(),
-  segnaIncassato: vi.fn(),
-}));
+const { feeFindUnique, feeUpdate, feeUpdateMany, chargeFee, blocca, rivaluta, segnaIncassato, isPaymentLiveMock } =
+  vi.hoisted(() => ({
+    feeFindUnique: vi.fn(),
+    feeUpdate: vi.fn(),
+    feeUpdateMany: vi.fn(),
+    chargeFee: vi.fn(),
+    blocca: vi.fn(),
+    rivaluta: vi.fn(),
+    segnaIncassato: vi.fn(),
+    isPaymentLiveMock: vi.fn(),
+  }));
 
 vi.mock('@pv/db', () => ({
   prisma: { feeAddebito: { findUnique: feeFindUnique, update: feeUpdate, updateMany: feeUpdateMany } },
 }));
 vi.mock('@/lib/providers/payment', () => ({ getPayment: () => ({ chargeFee }) }));
+vi.mock('@/lib/jobs/payment-live', () => ({ isPaymentLive: isPaymentLiveMock }));
 vi.mock('./blocco', () => ({ bloccaAgenziaPerAddebito: blocca, rivalutaBloccoAgenzia: rivaluta }));
 vi.mock('./incasso', () => ({ segnaFeeIncassato: segnaIncassato }));
 
@@ -29,6 +32,7 @@ beforeEach(() => {
   rivaluta.mockResolvedValue(undefined);
   segnaIncassato.mockResolvedValue(true);
   feeFindUnique.mockResolvedValue(FEE);
+  isPaymentLiveMock.mockReturnValue(true);
 });
 
 it('SUCCESS: delega la transizione a segnaFeeIncassato', async () => {
@@ -87,4 +91,12 @@ it('SKIPPED: CAS updateMany restituisce count=0 (worker concorrente già ha il f
   const s = await processFeeAddebito('f1');
   expect(s).toBe('SKIPPED');
   expect(chargeFee).not.toHaveBeenCalled();
+});
+
+it('SKIPPED: provider non live, non tocca il provider di pagamento', async () => {
+  isPaymentLiveMock.mockReturnValue(false);
+  const s = await processFeeAddebito('f1');
+  expect(s).toBe('SKIPPED');
+  expect(chargeFee).not.toHaveBeenCalled();
+  expect(feeUpdateMany).not.toHaveBeenCalled();
 });

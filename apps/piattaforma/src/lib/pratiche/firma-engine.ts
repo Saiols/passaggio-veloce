@@ -15,6 +15,7 @@ import {
 import { onPraticaFirmata } from '@/lib/crm/sync';
 import { isAgenziaBloccata } from '@/lib/fee/blocco';
 import { isVisuraScadutaCompany } from '@/lib/visura/stato';
+import { isPaymentLive } from '@/lib/jobs/payment-live';
 import { createFatturaPv } from '@/lib/fatturazione/engine';
 import { fatturaPvAttachment } from '@/lib/fatturazione/documento-pdf';
 import { autoPayoutBrokerDopoFirma } from '@/lib/wallet/auto-payout';
@@ -362,16 +363,26 @@ export async function firmaPraticaCore(
   // ricorrente). Best-effort, non blocca il flusso firma.
   void onPraticaFirmata(praticaId);
 
-  // FT-A: genera la fattura PV verso l'agenzia. ATTESA (era fire-and-forget):
-  // il PDF della fattura va allegato alla N8, quindi deve esistere prima di
-  // costruire l'allegato. Resta best-effort — la firma è già committata, un
-  // errore qui non blocca nulla e la N8 partirà comunque (eventualmente senza
-  // allegato).
-  if (feeAddebitoIdCreato) {
+  // FT-A: la fattura PV nasce all'INCASSO confermato (lib/fee/incasso.ts), non
+  // qui: emetterla alla firma la renderebbe una fattura anticipata, con l'IVA
+  // esigibile su denaro che può non arrivare mai.
+  //
+  // VALVOLA: con provider di pagamento `mock` nessun addebito parte (il gate è
+  // in processFeeAddebito), quindi nessun fee arriverà mai a SUCCESS e la
+  // fattura non nascerebbe affatto. In quel caso resta emessa qui, IN_ATTESA,
+  // esattamente come prima di questo cambio. La valvola si chiude da sola il
+  // giorno del go-live Stripe.
+  if (feeAddebitoIdCreato && !isPaymentLive()) {
     await createFatturaPv({
       feeAddebitoId: feeAddebitoIdCreato,
       statoPagamento: 'IN_ATTESA',
-    }).catch(() => null);
+    }).catch((err) => {
+      console.error(
+        `[firmaPratica] createFatturaPv fallita per fee ${feeAddebitoIdCreato} (pratica ${praticaId}):`,
+        err,
+      );
+      return null;
+    });
   }
 
   // AF-N: notifiche affiliazione post-firma (N23 prima pratica del referral,

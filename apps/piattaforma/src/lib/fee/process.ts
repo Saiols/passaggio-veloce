@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { getPayment } from '@/lib/providers/payment';
 import { feeOutcomeFromResult } from '@/lib/jobs/fee-outcome';
+import { isPaymentLive } from '@/lib/jobs/payment-live';
 import { bloccaAgenziaPerAddebito } from './blocco';
 import { segnaFeeIncassato } from './incasso';
 
@@ -13,6 +14,11 @@ export type ProcessFeeStatus = 'SUCCESS' | 'PENDING' | 'RETRY' | 'FAILED' | 'SKI
  * Su FAILED/RETRY blocca l'agenzia; su SUCCESS rivaluta lo sblocco.
  */
 export async function processFeeAddebito(feeId: string): Promise<ProcessFeeStatus> {
+  // Gate unico per i tre chiamanti (firma, cron, retry manuale). Prima viveva
+  // solo nel job: `ritentaAddebitiAgenzia` poteva così portare a SUCCESS soldi
+  // finti del provider mock — e ora un SUCCESS emette una fattura.
+  if (!isPaymentLive()) return 'SKIPPED';
+
   const fee = await prisma.feeAddebito.findUnique({ where: { id: feeId } });
   if (!fee || fee.stato === 'SUCCESS' || fee.stato === 'ANNULLATO') return 'SKIPPED';
 

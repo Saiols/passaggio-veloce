@@ -32,7 +32,7 @@ export async function segnaFeeIncassato(feeId: string, providerRef: string): Pro
 
   const fee = await prisma.feeAddebito.findUnique({
     where: { id: feeId },
-    select: { agenziaId: true },
+    select: { agenziaId: true, praticaId: true },
   });
   if (fee) await rivalutaBloccoAgenzia(fee.agenziaId);
 
@@ -53,6 +53,29 @@ export async function segnaFeeIncassato(feeId: string, providerRef: string): Pro
     await notificaFatturaDisponibile(documento.id).catch((err) => {
       console.error(`[segnaFeeIncassato] N53 fallita per documento ${documento.id}:`, err);
     });
+  }
+
+  // Allinea il documento nato dalla valvola: in modalità mock la fattura è
+  // emessa alla firma con `IN_ATTESA`, e senza questo passaggio resterebbe
+  // "non pagata" anche dopo che i soldi sono arrivati davvero. Idempotente:
+  // se il documento è appena nato è già `PAGATA` e la updateMany non tocca
+  // nulla.
+  //
+  // Nessuna N53 qui: quel documento ha già viaggiato allegato alla N8 e ha
+  // `inviatoEmailAt` valorizzato — rimandarlo sarebbe una seconda consegna
+  // della stessa fattura.
+  if (fee) {
+    await prisma.documentoFiscale
+      .updateMany({
+        where: { praticaId: fee.praticaId, tipo: 'FATTURA_PV', statoPagamento: 'IN_ATTESA' },
+        data: { statoPagamento: 'PAGATA' },
+      })
+      .catch((err) => {
+        console.error(
+          `[segnaFeeIncassato] allineamento statoPagamento fallito per pratica ${fee.praticaId}:`,
+          err,
+        );
+      });
   }
 
   return true;

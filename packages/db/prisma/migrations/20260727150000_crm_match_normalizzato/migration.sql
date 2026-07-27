@@ -14,11 +14,20 @@
 -- quindi lascia telNorm/waNorm/emailNorm/pivaNorm a NULL sulle righe toccate
 -- in quella finestra. Quelle righe restano invisibili sia al nuovo
 -- anti-duplicato sia al motore di match, che leggono solo le colonne
--- normalizzate. I sei UPDATE di backfill qui sotto sono idempotenti: vanno
--- RIESEGUITI (query intere, o filtrate con `WHERE "telNorm" IS NULL` /
--- `"waNorm" IS NULL` / `"emailNorm" IS NULL` / `"pivaNorm" IS NULL` per
--- toccare solo le righe mancanti) SUBITO DOPO il deploy del codice nuovo, per
--- chiudere quel buco.
+-- normalizzate. Va rieseguito un backfill (idempotente, query intere o
+-- filtrate con `WHERE "telNorm" IS NULL` ecc. per toccare solo le righe
+-- mancanti) SUBITO DOPO il deploy del codice nuovo, per chiudere quel buco.
+--
+-- ⚠️ NON usare gli UPDATE di backfill qui sotto per il re-run: sono SUPERATI
+-- dalla migration successiva `20260727153000_crm_match_prefisso_390`, che ha
+-- corretto un bug su telNorm/waNorm (un blocco di cifre che inizia per '390'
+-- è sempre prefisso internazionale + fisso, qualunque sia la lunghezza — qui
+-- sotto non c'è ancora questa regola). Rieseguire alla lettera solo questi
+-- UPDATE ripopolerebbe righe nuove con la formula vecchia, riaprendo in
+-- silenzio lo stesso bug. La versione DEFINITIVA e riutilizzabile del
+-- backfill (tutte e quattro le colonne, con la correzione) è in
+-- `20260727153000_crm_match_prefisso_390/backfill-post-deploy.sql` — usa
+-- SEMPRE quel file per i re-run.
 ALTER TABLE "crm_contacts" ADD COLUMN "telNorm" TEXT;
 ALTER TABLE "crm_contacts" ADD COLUMN "waNorm" TEXT;
 ALTER TABLE "crm_contacts" ADD COLUMN "emailNorm" TEXT;

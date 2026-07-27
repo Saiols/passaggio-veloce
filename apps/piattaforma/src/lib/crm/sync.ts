@@ -117,27 +117,26 @@ export async function syncCrmFromPlatform(): Promise<{
   for (const c of contacts) {
     if (!c.companyId) continue;
 
-    const [company, totalAgg, monthAgg, firmateAgg, lastUser] = await Promise.all([
-      prisma.company.findUnique({
-        where: { id: c.companyId },
-        select: { suspendedAt: true, deletedAt: true },
+    const company = await prisma.company.findUnique({
+      where: { id: c.companyId },
+      select: { type: true, suspendedAt: true, deletedAt: true },
+    });
+    if (!company) continue;
+
+    // Le pratiche di un'agenzia stanno su agenziaAssegnataId: contarle su
+    // brokerId lasciava ogni agenzia agganciata a 0 pratiche e INATTIVO.
+    const wherePratica =
+      company.type === 'AGENZIA'
+        ? { agenziaAssegnataId: c.companyId }
+        : { brokerId: c.companyId };
+
+    const [totalAgg, monthAgg, firmateAgg, lastUser] = await Promise.all([
+      prisma.pratica.count({ where: { ...wherePratica, deletedAt: null } }),
+      prisma.pratica.count({
+        where: { ...wherePratica, deletedAt: null, createdAt: { gte: startOfMonth } },
       }),
       prisma.pratica.count({
-        where: { brokerId: c.companyId, deletedAt: null },
-      }),
-      prisma.pratica.count({
-        where: {
-          brokerId: c.companyId,
-          deletedAt: null,
-          createdAt: { gte: startOfMonth },
-        },
-      }),
-      prisma.pratica.count({
-        where: {
-          brokerId: c.companyId,
-          deletedAt: null,
-          stato: 'FIRMATA',
-        },
+        where: { ...wherePratica, deletedAt: null, stato: 'FIRMATA' },
       }),
       prisma.user.findFirst({
         where: { companyId: c.companyId, deletedAt: null },
@@ -145,8 +144,6 @@ export async function syncCrmFromPlatform(): Promise<{
         select: { lastLoginAt: true },
       }),
     ]);
-
-    if (!company) continue;
 
     const tassoComp =
       totalAgg > 0 ? Math.round((firmateAgg / totalAgg) * 100) : 0;

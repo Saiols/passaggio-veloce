@@ -7,6 +7,18 @@
 --
 -- ⚠️ MIGRATION DI SOLA ESPANSIONE, colonne NULLABLE: va lanciata PRIMA del
 -- deploy del codice nuovo ed è compatibile con quello vecchio, che le ignora.
+--
+-- ⚠️ BUCO DI ROLLOUT: nella finestra fra questa migration e il deploy del
+-- codice nuovo, il codice VECCHIO continua a creare/modificare CrmContact
+-- scrivendo tel/wa/email/piva grezzi ma NON conosce ancora `crmNormFields`,
+-- quindi lascia telNorm/waNorm/emailNorm/pivaNorm a NULL sulle righe toccate
+-- in quella finestra. Quelle righe restano invisibili sia al nuovo
+-- anti-duplicato sia al motore di match, che leggono solo le colonne
+-- normalizzate. I sei UPDATE di backfill qui sotto sono idempotenti: vanno
+-- RIESEGUITI (query intere, o filtrate con `WHERE "telNorm" IS NULL` /
+-- `"waNorm" IS NULL` / `"emailNorm" IS NULL` / `"pivaNorm" IS NULL` per
+-- toccare solo le righe mancanti) SUBITO DOPO il deploy del codice nuovo, per
+-- chiudere quel buco.
 ALTER TABLE "crm_contacts" ADD COLUMN "telNorm" TEXT;
 ALTER TABLE "crm_contacts" ADD COLUMN "waNorm" TEXT;
 ALTER TABLE "crm_contacts" ADD COLUMN "emailNorm" TEXT;

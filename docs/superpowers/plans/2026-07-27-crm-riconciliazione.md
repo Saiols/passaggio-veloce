@@ -2919,6 +2919,6 @@ Scrivi nel messaggio finale: numero di righe agganciate sul DB locale, distribuz
 
 ## Note di rilascio
 
-- Ordine obbligato: **migration su Neon prima del push**. Le colonne sono nullable e il codice vecchio le ignora, quindi la finestra intermedia è sicura.
+- Ordine obbligato: **migration su Neon prima del push**. Le colonne sono nullable e il codice vecchio le ignora, quindi la finestra intermedia è sicura per lo schema — ma NON per i dati: il codice vecchio, in quella finestra, continua a creare/modificare CrmContact scrivendo tel/wa/email/piva grezzi senza popolare le colonne normalizzate (non le conosce). Quelle righe restano con telNorm/waNorm/emailNorm/pivaNorm a NULL finché qualcuno non le tocca di nuovo. **Subito dopo il deploy del codice nuovo, rieseguire gli UPDATE di backfill della migration `20260727150000_crm_match_normalizzato`** (query intere, o filtrate con `WHERE "telNorm" IS NULL` ecc. per toccare solo le righe mancanti — sono idempotenti) per chiudere il buco.
 - Dopo il deploy, la prima passata del cron `crm-sync` riconcilia da sola; l'anteprima admin serve a controllare prima, non a far partire il processo.
 - Nessuna variabile d'ambiente nuova.

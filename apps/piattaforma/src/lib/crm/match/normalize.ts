@@ -16,14 +16,28 @@ const SOLO_CIFRE = /\D/g;
 /**
  * Telefono → chiave. Solo cifre, prefisso internazionale italiano rimosso:
  * '+39 02 447 8712', '0039 02 4478712' e '02 4478712' danno '024478712'.
- * Il taglio del '39' iniziale scatta solo oltre le 10 cifre, così i cellulari
- * 39x (391/392/393…) restano interi. Sotto le 8 cifre la chiave è troppo debole
- * per fare da prova d'identità (in lista ci sono 19 righe 'N/D').
+ *
+ * Due regole distinte per il taglio del prefisso '39':
+ * - blocco che inizia per '390': è SEMPRE prefisso internazionale + fisso,
+ *   qualunque sia la lunghezza. I fissi italiani iniziano sempre per '0' (il
+ *   distrettuale) e nessun prefisso mobile italiano è '390' — quindi '390...'
+ *   non può essere altro che '+39' + '0...'. Senza questa regola un fisso
+ *   corto con internazionale (es. '+39 055 46501', 10 cifre) restava
+ *   sbagliato: '3905546501' invece di '05546501' (206 righe reali su 19.103).
+ * - blocco che inizia per '39' ma non '390', taglio solo oltre le 10 cifre:
+ *   così i cellulari 39x (391/392/393…) a 10 cifre restano interi — per loro
+ *   il taglio scatterebbe solo se il numero fosse scritto con l'internazionale
+ *   E più lungo del previsto, cosa che con un cellulare a 10 cifre non succede
+ *   mai (l'internazionale li porterebbe a 12).
+ *
+ * Sotto le 8 cifre la chiave è troppo debole per fare da prova d'identità (in
+ * lista ci sono 19 righe 'N/D').
  */
 export function normalizeTel(raw: string | null | undefined): string {
   if (!raw) return '';
   let d = raw.replace(SOLO_CIFRE, '');
   if (d.startsWith('0039')) d = d.slice(4);
+  else if (d.startsWith('390')) d = d.slice(2);
   else if (d.startsWith('39') && d.length > 10) d = d.slice(2);
   return d.length >= 8 ? d : '';
 }

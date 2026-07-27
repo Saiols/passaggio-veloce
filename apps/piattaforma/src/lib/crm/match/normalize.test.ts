@@ -24,6 +24,13 @@ describe('normalizeTel', () => {
     expect(normalizeTel('3912345678')).toBe('3912345678');
   });
 
+  it('taglia il prefisso internazionale anche sui fissi corti (blocco che inizia per 390)', () => {
+    // Nessun prefisso mobile italiano è '390': un blocco che inizia così è
+    // sempre '+39' + fisso, qualunque sia la lunghezza (206 righe reali).
+    expect(normalizeTel('+39 055 46501')).toBe('05546501');
+    expect(normalizeTel('+39 06 502681')).toBe('06502681');
+  });
+
   it('scarta i valori troppo corti per essere una prova', () => {
     expect(normalizeTel('N/D')).toBe('');
     expect(normalizeTel('1234567')).toBe('');

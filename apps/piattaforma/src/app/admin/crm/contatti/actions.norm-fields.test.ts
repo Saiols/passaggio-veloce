@@ -1,10 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Presidio sui DUE write path di CrmContact (create manuale e bulk import
- * CSV): entrambi DEVONO scrivere le colonne normalizzate via `crmNormFields`,
- * altrimenti la query indicizzata del dedup e il motore di riconciliazione
- * (Task 4+) smettono silenziosamente di trovare corrispondenze.
+ * Presidio sui TRE write path di CrmContact (create manuale, update manuale e
+ * bulk import CSV): tutti DEVONO scrivere le colonne normalizzate via
+ * `crmNormFields`, altrimenti la query indicizzata del dedup e il motore di
+ * riconciliazione (Task 4+) smettono silenziosamente di trovare
+ * corrispondenze.
+ *
+ * `updateCrmContactAction` oggi è corretto solo perché `dataFromInputForUpdate`
+ * fa lo spread di `dataFromInput` (che include `crmNormFields`) — non ha una
+ * chiamata propria. È esattamente il punto in cui, in questo repo, un
+ * consumer ha già fatto sparire in silenzio un campo enumerando le chiavi a
+ * mano invece di riusare la fonte unica: il test qui sotto non presidia "una
+ * riga di codice specifica", presidia il comportamento a runtime, quindi
+ * regge anche se l'implementazione cambiasse forma.
  *
  * Un test che leggesse il sorgente e contasse le occorrenze testuali di
  * `crmNormFields(` passerebbe anche se la chiamata scrivesse dati sbagliati,
@@ -40,7 +49,11 @@ vi.mock('@/lib/auth/permissions', () => ({
 }));
 
 import { auth } from '@/auth';
-import { createCrmContactAction, bulkImportCrmContactsAction } from './actions';
+import {
+  createCrmContactAction,
+  bulkImportCrmContactsAction,
+  updateCrmContactAction,
+} from './actions';
 
 const authMock = vi.mocked(auth);
 
@@ -86,6 +99,32 @@ describe('write path CRM: colonne normalizzate', () => {
         { telNorm: '024478712' },
       ]),
     );
+  });
+
+  it('updateCrmContactAction scrive telNorm/emailNorm/waNorm/pivaNorm coerenti con crmNormFields', async () => {
+    crmContactMock.update.mockResolvedValue({ id: 'existing-id' });
+
+    const result = await updateCrmContactAction('existing-id', {
+      nome: 'Agenzia Corsico Pratiche Auto',
+      cat: 'AGENZIA',
+      tel: '+39 02 447 8712',
+      wa: '+39 346 287 7310',
+      email: ' Test@Esempio.IT ',
+      piva: 'IT 06199680155',
+      status: 'S0',
+      fonte: 'CSV_INIZIALE',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(crmContactMock.update).toHaveBeenCalledTimes(1);
+    const call = crmContactMock.update.mock.calls[0][0];
+    expect(call.where).toEqual({ id: 'existing-id' });
+    expect(call.data).toMatchObject({
+      telNorm: '024478712',
+      waNorm: '3462877310',
+      emailNorm: 'test@esempio.it',
+      pivaNorm: '06199680155',
+    });
   });
 
   it('bulkImportCrmContactsAction scrive le colonne normalizzate per ogni riga importata', async () => {

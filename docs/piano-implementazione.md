@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-07-26 (A15 distribuzione: round in minuti + calendario piattaforma con festivi + attesa in minuti lavorativi + card Copertura + ripresa zona non coperta — vedi §0.5 e Mappa lavoro residuo)
+> Ultimo aggiornamento: 2026-07-27 (A16 riconciliazione CRM ↔ aziende registrate: motore unico di match, agganci ambigui solo da pagina admin, **tre migration Neon prima del codice** — vedi Mappa lavoro residuo)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -736,12 +736,12 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 
 ### 14.7 CRM-G — Sync con piattaforma (cron + hook in-process) ✅ DONE
 - [x] `lib/crm/sync.ts` engine sync interno (CRM nativo, no webhook esterno HMAC)
-- [x] `tryMatchCrmContact(companyId)` cascade email → tel → P.IVA + auto-promote a S7
+- [x] `tryMatchCrmContact(companyId)` delega al motore unico `lib/crm/match/` (dal 2026-07-27, vedi A16): stato allineato allo storico reale, non più auto-promote fisso a S7
 - [x] Hook post-registrazione (`app/(auth)/actions.ts`) chiama il match best-effort
-- [x] `onPraticaFirmata(praticaId)` hook in `app/pratiche/actions.ts`: S7→S8 prima volta, S8→S9 ricorrente, set `primaPratica`
+- [x] `onPraticaFirmata(praticaId)` hook in `lib/pratiche/firma-engine.ts`: riallinea **tutti** i contatti agganciati alle due aziende della pratica (broker su `brokerId`, agenzia su `agenziaAssegnataId`) con `datiFunnel` — mai indietro, S10 mai toccato, SOSPESO per le aziende sospese
 - [x] Cron `syncCrmFromPlatform()` aggrega `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`, `tassoComp` per i contatti agganciati
 - [x] Endpoint `POST /api/jobs/crm-sync` admin-only, con bottone in `/admin/demo-control` per trigger manuale
-- [x] Util puri (`isPreIscrizione`) testabili senza prisma; normalizzazione telefono unificata in `lib/crm/match/normalize.ts` (`normalizeTel`, fonte unica dal 2026-07-27) — unit test dedicati
+- [x] Normalizzazione telefono unificata in `lib/crm/match/normalize.ts` (`normalizeTel`, fonte unica dal 2026-07-27) e ordine del funnel in `lib/crm/match/stato.ts` — unit test dedicati. `lib/crm/util.ts#isPreIscrizione` **rimosso**: era la terza copia dell'ordine degli stati e non aveva più consumer
 - L'outbox HMAC + retry è applicabile solo per CRM esterno e resta nella vecchia FASE 10 (non più attiva)
 
 ### 14.8 CRM-H — Vapi.ai integration (deferito post account esterno)
@@ -970,6 +970,21 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - `createDocBroker` **invariato**: filtra esplicitamente `CREDITO_PRATICA`/`CREDITO_AFFILIAZIONE`, il bonus promo resta sempre fuori dalla fattura (regressione blindata da test)
 - Pagina `/admin/costi-promozionali`: lista + filtro intervallo date + export CSV (`lib/fatturazione/giustificativo-filtri.ts`), internal only, nessuna esposizione lato broker/agenzia
 - Spec: `docs/superpowers/specs/2026-07-19-giustificativo-costo-promo-design.md` · Plan: `docs/superpowers/plans/2026-07-19-giustificativo-costo-promo.md`
+
+**A16. ✅ DONE — [2026-07-27] Riconciliazione CRM ↔ aziende registrate (motore unico di match)**
+- **Motore unico** in `apps/piattaforma/src/lib/crm/match/` (`normalize` → `identita` → `score` → `assign` → `engine` → `apply`), tre chiamanti: registrazione (`lib/crm/sync.ts#tryMatchCrmContact`), cron `crm-sync` e pagina admin `/admin/crm/riconciliazione` con anteprima. Prima l'aggancio non scattava mai: il match confrontava il telefono normalizzato con `CrmContact.tel` grezzo e la lista non ha né P.IVA né (quasi) email — **0 contatti agganciati su 19.103**
+- Quattro colonne normalizzate su `crm_contacts` (`telNorm`, `waNorm`, `emailNorm`, `pivaNorm`) più `sedeId`/`matchVia`/`matchedAt`; helper unico `crmNormFields` usato da **tutti** i write path (import CSV, create, update), altrimenti le colonne si desincronizzano in silenzio
+- **Ogni sede è un'identità a sé** (spec D3): un'azienda con 3 sedi può agganciare fino a 4 righe. Stato del contatto allineato allo storico reale (0 firmate → S7, 1 → S8, ≥2 → S9), **solo in salita** e **S10 mai toccato**; `datiFunnel` in `match/stato.ts` è la fonte unica, condivisa con `onPraticaFirmata`
+- Il **canale automatico applica solo le proposte non ambigue** (ex aequo di punteggio: 2.373 numeri di telefono sono condivisi da più righe della lista). Le ambigue restano marcate nell'anteprima admin, dove una persona decide; il numero lasciato indietro (`ambigueSaltate`) va nel log del cron
+- ⚠️ **Prereq deploy — tre migration Neon a mano, tutte PRIMA del push del codice, in quest'ordine**:
+  1. `20260727150000_crm_match_normalizzato` (colonne + indici + backfill)
+  2. `20260727153000_crm_match_prefisso_390` (correzione prefisso `390`)
+  3. `20260727160000_crm_contacts_company_sede_unique` — **solo dopo aver verificato** che non esistano coppie `(companyId, sedeId)` duplicate: `SELECT "companyId","sedeId",count(*) FROM crm_contacts WHERE "companyId" IS NOT NULL AND "deletedAt" IS NULL GROUP BY 1,2 HAVING count(*) > 1;` → se torna righe, la `CREATE UNIQUE INDEX` fallisce ed è corretto che fallisca
+  
+  Poi il deploy del codice e, **subito dopo**, il re-run del backfill `packages/db/prisma/migrations/20260727153000_crm_match_prefisso_390/backfill-post-deploy.sql`: nella finestra fra migration e deploy il codice vecchio scrive righe con le colonne normalizzate vuote, e il nuovo anti-duplicato dell'import CSV legge quelle colonne dal DB invece di ricalcolarle — una riga con `telNorm` nullo è un duplicato che entra senza rumore. **Query di chiusura, deve tornare 0**: è in fondo a `backfill-post-deploy.sql` (conta le righe con telefono utilizzabile e `telNorm` vuoto). ⚠️ La soglia delle 8 cifre va misurata sul telefono **normalizzato**: la variante grezza `length(regexp_replace(tel,'[^0-9]','','g')) >= 8` torna 6 anche a backfill perfetto (numeri come `+39 041 8890`, che dopo il taglio del prefisso `390` scendono a 6 cifre e restano `NULL` per costruzione)
+- ⚠️ **Cautela operativa**: su Neon risultano pendenti migration arrivate da `main`. Un `prisma migrate deploy` a valanga le applicherebbe tutte insieme. Lanciare **prima** `prisma migrate status` su Neon, poi applicare **solo** le tre migration di questa feature (e registrarle con `prisma migrate resolve --applied`)
+- Nessuna variabile d'ambiente nuova. Il primo run del cron dopo il deploy è il più lungo (smaltisce tutto il pregresso, `maxDuration` a 300s) ma è idempotente e ritentabile
+- Spec: `docs/superpowers/specs/2026-07-27-crm-riconciliazione-design.md` · Plan: `docs/superpowers/plans/2026-07-27-crm-riconciliazione.md`
 
 ### B · Bloccato da account/decisione esterna
 

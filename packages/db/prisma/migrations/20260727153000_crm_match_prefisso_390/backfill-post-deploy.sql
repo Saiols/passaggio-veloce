@@ -24,8 +24,23 @@
 -- aveva chiuso sui dati storici. Usa SEMPRE questo file per i re-run.
 --
 -- Idempotente: si può rilanciare tutto, oppure filtrare con
--- `AND "telNorm" IS NULL` / `AND "waNorm" IS NULL` / `AND "emailNorm" IS NULL`
--- / `AND "pivaNorm" IS NULL` per toccare solo le righe mancanti.
+-- `WHERE "telNorm" IS NULL` / `WHERE "waNorm" IS NULL` / `WHERE "emailNorm" IS
+-- NULL` / `WHERE "pivaNorm" IS NULL` per toccare solo le righe mancanti.
+-- (`WHERE`, non `AND`: i quattro UPDATE qui sotto non hanno alcuna clausola
+-- WHERE propria, quindi chi seguisse l'istruzione alla lettera scriverebbe
+-- SQL non valido.)
+--
+-- ⚠️ ORDINE DI RILASCIO E CAUTELA SU NEON
+-- Le tre migration di questa feature vanno applicate a mano su Neon PRIMA del
+-- push del codice, in quest'ordine: `20260727150000_crm_match_normalizzato`,
+-- `20260727153000_crm_match_prefisso_390`, e infine
+-- `20260727160000_crm_contacts_company_sede_unique` (quest'ultima solo dopo la
+-- verifica di assenza duplicati documentata nel suo migration.sql).
+-- Su Neon risultano pendenti anche migration arrivate da `main`: un
+-- `prisma migrate deploy` a valanga le applicherebbe tutte insieme. Lanciare
+-- SEMPRE `prisma migrate status` sul database di produzione prima, e poi
+-- applicare in modo mirato solo le tre migration di questa feature.
+-- Questo file va rieseguito DOPO il deploy del codice.
 
 -- telNorm / waNorm: stessa logica di normalizeTel (0039% → 390% → 39% con
 -- più di 10 cifre → invariato), poi azzeramento sotto le 8 cifre.
@@ -58,3 +73,43 @@ UPDATE "crm_contacts" SET "emailNorm" = NULLIF(lower(btrim(COALESCE("email", '')
 
 UPDATE "crm_contacts" SET "pivaNorm" = regexp_replace(COALESCE("piva", ''), '[^0-9]', '', 'g');
 UPDATE "crm_contacts" SET "pivaNorm" = NULL WHERE length(COALESCE("pivaNorm", '')) <> 11;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- QUERY DI CHIUSURA — deve restituire 0. Se restituisce un numero > 0 il
+-- backfill post-deploy NON è servito (non è stato lanciato, è stato lanciato
+-- prima del deploy, o è fallito a metà) e va rilanciato.
+--
+-- Perché conta: nella finestra fra la migration e il deploy il codice VECCHIO
+-- continua a scrivere righe con le colonne normalizzate vuote. Il nuovo
+-- anti-duplicato dell'import CSV legge `telNorm`/`emailNorm` DAL DB invece di
+-- ricalcolarli dal grezzo: una riga con `telNorm` nullo è invisibile a quel
+-- controllo, quindi un duplicato che entra in lista senza fare rumore (ed è
+-- anche invisibile al motore di match, che i candidati li sceglie sulle stesse
+-- colonne). Questa query conta esattamente quelle righe: hanno un telefono
+-- utilizzabile (≥ 8 cifre DOPO la normalizzazione) ma la chiave normalizzata
+-- vuota.
+--
+-- ⚠️ La soglia delle 8 cifre va misurata sul telefono NORMALIZZATO, non sulle
+-- cifre grezze. Verificato sul DB locale (copia di prod): la versione grezza
+-- `length(regexp_replace(tel,'[^0-9]','','g')) >= 8` restituisce 6 righe anche
+-- con il backfill perfettamente applicato — sono numeri come `+39 041 8890`
+-- (9 cifre grezze) che dopo il taglio del prefisso `390` scendono a 6 cifre e
+-- quindi hanno `telNorm` NULL per costruzione, correttamente. Con quella
+-- versione la verifica non tornerebbe MAI 0 e l'operatore rilancerebbe il
+-- backfill all'infinito.
+--
+-- SELECT count(*) FROM crm_contacts
+-- WHERE "deletedAt" IS NULL AND "telNorm" IS NULL AND tel IS NOT NULL
+--   AND length(CASE
+--       WHEN regexp_replace(tel,'[^0-9]','','g') LIKE '0039%'
+--         THEN substr(regexp_replace(tel,'[^0-9]','','g'), 5)
+--       WHEN regexp_replace(tel,'[^0-9]','','g') LIKE '390%'
+--         THEN substr(regexp_replace(tel,'[^0-9]','','g'), 3)
+--       WHEN regexp_replace(tel,'[^0-9]','','g') LIKE '39%'
+--        AND length(regexp_replace(tel,'[^0-9]','','g')) > 10
+--         THEN substr(regexp_replace(tel,'[^0-9]','','g'), 3)
+--       ELSE regexp_replace(tel,'[^0-9]','','g')
+--     END) >= 8;
+--
+-- Sul DB locale, oggi, torna 0.
+-- ═══════════════════════════════════════════════════════════════════════════

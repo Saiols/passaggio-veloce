@@ -2919,6 +2919,27 @@ Scrivi nel messaggio finale: numero di righe agganciate sul DB locale, distribuz
 
 ## Note di rilascio
 
+> La voce ufficiale del rilascio sta in `docs/piano-implementazione.md` (**A16**),
+> che è la fonte di verità del progetto per i prerequisiti di deploy. Quanto
+> segue è il dettaglio operativo.
+
+- ⚠️ **Prima di qualunque migration, `prisma migrate status` su Neon.** Su Neon
+  risultano pendenti anche migration arrivate da `main`: un
+  `prisma migrate deploy` a valanga le applicherebbe **tutte** insieme, incluse
+  quelle che non fanno parte di questo rilascio. Applicare in modo **mirato**
+  solo le tre di questa feature, nell'ordine `20260727150000` →
+  `20260727153000` → `20260727160000`, e registrarle con
+  `prisma migrate resolve --applied`.
+- **Verifica di chiusura del backfill post-deploy** (deve tornare 0): è in
+  fondo a `backfill-post-deploy.sql`. Conta le righe con `deletedAt IS NULL`,
+  `telNorm IS NULL` e un telefono che **una volta normalizzato** ha ≥ 8 cifre.
+  Se torna > 0 il backfill non è servito e va rilanciato: quelle righe sono
+  invisibili sia al motore di match sia al nuovo anti-duplicato dell'import CSV
+  (che legge le colonne normalizzate dal DB invece di ricalcolarle), quindi
+  sono duplicati che entrano in lista senza fare rumore. La soglia va misurata
+  sul normalizzato: la variante grezza torna 6 anche a backfill perfetto
+  (numeri tipo `+39 041 8890`, che dopo il taglio del prefisso `390` scendono a
+  6 cifre e restano NULL per costruzione).
 - Ordine obbligato: **migration su Neon prima del push**. Le colonne sono nullable e il codice vecchio le ignora, quindi la finestra intermedia è sicura per lo schema — ma NON per i dati: il codice vecchio, in quella finestra, continua a creare/modificare CrmContact scrivendo tel/wa/email/piva grezzi senza popolare le colonne normalizzate (non le conosce). Quelle righe restano con telNorm/waNorm/emailNorm/pivaNorm a NULL finché qualcuno non le tocca di nuovo. **Subito dopo il deploy del codice nuovo, rieseguire il backfill** (idempotente, query intere o filtrate con `WHERE "telNorm" IS NULL` ecc. per toccare solo le righe mancanti) per chiudere il buco — usare SEMPRE `packages/db/prisma/migrations/20260727153000_crm_match_prefisso_390/backfill-post-deploy.sql`, **non** gli UPDATE della migration `20260727150000_crm_match_normalizzato`: quella SQL è superata, non ha la correzione del prefisso `390` (vedi migration `20260727153000_crm_match_prefisso_390`) e ripopolerebbe righe nuove con la formula vecchia.
 - Dopo il deploy, la prima passata del cron `crm-sync` riconcilia da sola; l'anteprima admin serve a controllare prima, non a far partire il processo.
 - Il **primo run del cron dopo il deploy è il più lungo**: smaltisce da solo tutto il pregresso mai riconciliato (fino a ~19k contatti CRM, di cui ~7.880 righe agenzia) più il ciclo di aggregati sui contatti appena agganciati, per questo `maxDuration` è a 300s. È **idempotente e ritentabile**: se un run viene troncato (timeout, redeploy a metà) il tick successivo riparte semplicemente dal residuo, senza doppie scritture (compare-and-set su `applicaProposte`, upsert per contatto su `syncCrmFromPlatform`). La pagina admin `/admin/crm/riconciliazione` resta la via supervisionata per smaltire il grosso a mano, con controllo visivo, se si preferisce non aspettare il primo tick automatico.

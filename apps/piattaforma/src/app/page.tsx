@@ -79,8 +79,8 @@ export default async function HomePage() {
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-[15px] leading-relaxed text-pv-slate-700 sm:text-base">
               <strong>Passaggio Veloce</strong>{' '}è il broker digitale italiano che connette
-              concessionarie auto e agenzie pratiche in un&apos;unica piattaforma: gestisci pratiche,
-              documenti e pagamenti senza carta, in conformità ACI, GDPR e SDI.
+              concessionarie auto e agenzie pratiche in un&apos;unica piattaforma: gestisci pratiche
+              e documenti, in conformità ACI, GDPR e SDI.
             </p>
 
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
@@ -192,7 +192,6 @@ export default async function HomePage() {
             features={[
               'Ricevi solo pratiche complete: zero rilavorazione',
               'Decidi quali accettare in base ai tuoi orari di apertura',
-              'Pagamento commissioni automatizzato a 20 giorni dalla firma',
               'Ricevi le pratiche più vicine alla tua sede, per raggio stradale reale',
               "Importi le tue tariffe una volta, l'osservatorio prezzi le aggiorna",
             ]}
@@ -214,16 +213,11 @@ export default async function HomePage() {
             </h2>
           </div>
 
-          <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <FeatureCard
               icon={<FileIcon />}
               title="Gestione documentale"
               text="Upload, verifica IA, archivio cifrato, scarica come ZIP."
-            />
-            <FeatureCard
-              icon={<ChartIcon />}
-              title="Osservatorio prezzi"
-              text="Confronta le tue tariffe con la media di zona, sempre aggiornato."
             />
             <FeatureCard
               icon={<EuroIcon />}
@@ -550,15 +544,6 @@ function FileIcon() {
       />
       <path d="M14 3v5h5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
       <path d="M9 13h6M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChartIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-      <path d="M4 19V5M4 19h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M8 15v-3M12 15V9M16 15v-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

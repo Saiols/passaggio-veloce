@@ -19,7 +19,7 @@ export function buildFaqItems(compensoBrokerEuro: number): readonly FaqItem[] {
     },
     {
       q: 'Quanto tempo serve per chiudere una pratica?',
-      a: "In media 48 ore lavorative dal caricamento del libretto alla firma in agenzia. La distribuzione automatica trova un'agenzia disponibile entro 1 giorno lavorativo nel 92% dei casi.",
+      a: "In media 12 ore lavorative dal caricamento del libretto alla firma in agenzia. La distribuzione automatica trova un'agenzia disponibile entro 1 giorno lavorativo nel 92% dei casi.",
     },
     {
       q: 'Cosa succede se nessuna agenzia accetta la pratica?',

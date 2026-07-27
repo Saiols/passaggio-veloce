@@ -139,7 +139,7 @@ const CAMPAIGN_SCHEMA = z.object({
 export type CampaignInput = z.infer<typeof CAMPAIGN_SCHEMA>;
 
 export type CampaignResult =
-  | { ok: true; id: string; assegnati: number }
+  | { ok: true; id: string; assegnati: number; esclusi: number }
   | { ok: false; error: string };
 
 function emptyToUndef<T>(v: T | ''): T | undefined {
@@ -170,23 +170,31 @@ export async function createCampaignAction(
   const d = parsed.data;
 
   // Match contatti per filtri al momento del lancio
-  const where: Prisma.CrmContactWhereInput = { deletedAt: null };
+  const filtri: Prisma.CrmContactWhereInput = { deletedAt: null };
   const cat = emptyToUndef(d.cat);
   const stato = emptyToUndef(d.statoTarget);
   const regione = emptyToUndef(d.regione);
-  if (cat) where.cat = cat;
-  if (stato) where.status = stato;
+  if (cat) filtri.cat = cat;
+  if (stato) filtri.status = stato;
   // Regione: match tollerante (case/formato) perché i dati importati sono
   // disomogenei (es. "VENETO" vs "Veneto", "TRENTINO ALTO ADIGE").
-  if (regione) where.regione = { in: regioneVarianti(regione) };
+  if (regione) filtri.regione = { in: regioneVarianti(regione) };
+
+  // Chi è già agganciato a un'azienda registrata resta FUORI dal target,
+  // qualunque filtro sia stato scelto: il sales agent propone l'iscrizione, e
+  // telefonare a un cliente già a bordo per iscriverlo è il danno peggiore che
+  // possa fare. L'esclusione non è silenziosa — `esclusi` finisce nel modale.
+  const where: Prisma.CrmContactWhereInput = { ...filtri, companyId: null };
 
   // Qualsiasi errore (DB/validazione) diventa un risultato leggibile nel modale,
   // mai un throw non gestito che farebbe "page not load".
   try {
-    const matchingContacts = await prisma.crmContact.findMany({
-      where,
-      select: { id: true },
-    });
+    const [matchingContacts, esclusi] = await Promise.all([
+      prisma.crmContact.findMany({ where, select: { id: true } }),
+      prisma.crmContact.count({
+        where: { ...filtri, companyId: { not: null } },
+      }),
+    ]);
 
     const created = await prisma.crmCampaign.create({
       data: {
@@ -219,7 +227,12 @@ export async function createCampaignAction(
     }
 
     revalidatePath('/admin/crm/sales');
-    return { ok: true, id: created.id, assegnati: matchingContacts.length };
+    return {
+      ok: true,
+      id: created.id,
+      assegnati: matchingContacts.length,
+      esclusi,
+    };
   } catch (e) {
     return {
       ok: false,
@@ -276,7 +289,7 @@ export async function updateCampaignAction(
   revalidatePath('/admin/crm/sales');
   // Update non re-assegna contatti (i nuovi match con filtri diversi non
   // diventano automaticamente assegnati — è un'operazione manuale separata).
-  return { ok: true, id, assegnati: 0 };
+  return { ok: true, id, assegnati: 0, esclusi: 0 };
 }
 
 export async function setCampaignStatusAction(

@@ -572,9 +572,19 @@ function CampaignModal({
         return;
       }
       if (isCreate) {
-        // Per il primo lancio, comunica quanti contatti sono stati assegnati
+        // Per il primo lancio, comunica quanti contatti sono stati assegnati.
+        // Chi è già registrato sulla piattaforma resta sempre fuori dal target:
+        // il numero non deve calare in silenzio, quindi lo diciamo qui.
+        const esclusi =
+          res.esclusi > 0
+            ? ` Esclusi ${res.esclusi} contatt${
+                res.esclusi === 1 ? 'o' : 'i'
+              } già registrat${
+                res.esclusi === 1 ? 'o' : 'i'
+              } sulla piattaforma.`
+            : '';
         alert(
-          `Campagna creata. ${res.assegnati} contatti assegnati con i filtri correnti.`,
+          `Campagna creata. ${res.assegnati} contatti assegnati con i filtri correnti.${esclusi}`,
         );
       }
       onSaved();

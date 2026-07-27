@@ -43,6 +43,7 @@ const PROPOSTA = {
   punteggio: 80,
   campi: ['tel', 'indirizzo'],
   registrataAt: new Date('2026-03-15T00:00:00Z'),
+  ambigua: false,
 };
 
 describe('applicaProposte', () => {
@@ -315,6 +316,7 @@ describe('riconciliaTutto', () => {
     expect(calcolaProposte).toHaveBeenCalledTimes(1);
     expect(esito).toEqual({
       proposte: 2,
+      ambigueSaltate: 0,
       agganciati: 2,
       saltati: 0,
       errori: 0,
@@ -327,10 +329,59 @@ describe('riconciliaTutto', () => {
     expect(contactUpdateMany).not.toHaveBeenCalled();
     expect(esito).toEqual({
       proposte: 0,
+      ambigueSaltate: 0,
       agganciati: 0,
       saltati: 0,
       errori: 0,
     });
   });
 
+  // Il canale automatico (cron delle 02:00) non deve scrivere agganci che
+  // nessuno può disfare quando la scelta è un ex aequo: le ambigue restano
+  // alla pagina admin.
+  it('di default NON applica le proposte ambigue', async () => {
+    vi.mocked(calcolaProposte).mockResolvedValue([
+      { ...PROPOSTA, contactId: 'x-amb', ambigua: true },
+      { ...PROPOSTA, contactId: 'x-ok' },
+    ]);
+    const esito = await riconciliaTutto();
+    expect(contactUpdateMany).toHaveBeenCalledTimes(1);
+    expect(contactUpdateMany.mock.calls[0]![0].where.id).toBe('x-ok');
+    expect(esito).toMatchObject({
+      proposte: 2,
+      ambigueSaltate: 1,
+      agganciati: 1,
+    });
+  });
+
+  // Niente tetti silenziosi: quante ne sono state lasciate indietro deve
+  // stare nel valore di ritorno (finisce nel log del cron).
+  it('conta esattamente le ambigue lasciate indietro', async () => {
+    vi.mocked(calcolaProposte).mockResolvedValue([
+      { ...PROPOSTA, contactId: 'a', ambigua: true },
+      { ...PROPOSTA, contactId: 'b', ambigua: true },
+      { ...PROPOSTA, contactId: 'c', ambigua: true },
+      { ...PROPOSTA, contactId: 'd' },
+    ]);
+    const esito = await riconciliaTutto();
+    expect(esito.ambigueSaltate).toBe(3);
+    expect(esito.agganciati).toBe(1);
+    expect(esito.proposte).toBe(4);
+  });
+
+  // L'azione della pagina admin le applica tutte: lì una persona ha appena
+  // visto l'anteprima con le ambigue marcate.
+  it('con includiAmbigue applica anche le ambigue', async () => {
+    vi.mocked(calcolaProposte).mockResolvedValue([
+      { ...PROPOSTA, contactId: 'x-amb', ambigua: true },
+      { ...PROPOSTA, contactId: 'x-ok' },
+    ]);
+    const esito = await riconciliaTutto({ includiAmbigue: true });
+    expect(contactUpdateMany).toHaveBeenCalledTimes(2);
+    expect(esito).toMatchObject({
+      proposte: 2,
+      ambigueSaltate: 0,
+      agganciati: 2,
+    });
+  });
 });

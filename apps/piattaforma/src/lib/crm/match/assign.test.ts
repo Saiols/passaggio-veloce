@@ -133,6 +133,64 @@ describe('assegna', () => {
     expect(out[0]!.campi).toContain('email');
   });
 
+  it('nessuna rivale a pari punteggio → proposta non ambigua', () => {
+    const out = assegna([ident()], [cont()]);
+    expect(out[0]!.ambigua).toBe(false);
+  });
+
+  it('due righe della lista contendono la stessa identità a pari punteggio → ambigua', () => {
+    // Il caso dei centralini condivisi: due righe con lo STESSO telefono e gli
+    // stessi campi deboli fanno lo stesso punteggio sulla stessa azienda. Lo
+    // spareggio (contatto più vecchio) è deterministico ma arbitrario nel
+    // merito, e l'aggancio non si può disfare.
+    const a = cont({ id: 'a', createdAt: new Date('2026-01-01T00:00:00Z') });
+    const b = cont({ id: 'b', createdAt: new Date('2026-02-01T00:00:00Z') });
+    const out = assegna([ident()], [a, b]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.contatto.id).toBe('a');
+    expect(out[0]!.ambigua).toBe(true);
+  });
+
+  it('due AZIENDE diverse contendono lo stesso contatto a pari punteggio → ambigua', () => {
+    // Stesso centralino, stessi campi deboli, due aziende registrate diverse:
+    // qui l'aggancio può finire sull'azienda sbagliata. È l'ambiguità che
+    // conta davvero, e il canale automatico non deve deciderla da solo.
+    const a = ident({ companyId: 'c1' });
+    const b = ident({ companyId: 'c2' });
+    const out = assegna([a, b], [cont()]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.ambigua).toBe(true);
+  });
+
+  it('madre e sua sede a pari punteggio NON è ambigua (stessa azienda, regola esplicita)', () => {
+    // Misurato sul DB reale: la registrazione crea la "sede principale"
+    // copiando nome/indirizzo/telefono/email dalla madre, quindi 20 sedi su
+    // 22 sono il gemello della madre e contendono SEMPRE lo stesso contatto
+    // con lo stesso punteggio. Se questo pareggio contasse come ambiguo, il
+    // caso reale Corsico — il match di riferimento dell'intera feature — non
+    // verrebbe mai applicato dal cron. Il pareggio però è già risolto da una
+    // regola di progetto (vince la sede) e l'azienda agganciata è la stessa
+    // in entrambi i casi.
+    const madre = ident({ sedeId: null });
+    const sede = ident({ sedeId: 's1' });
+    const out = assegna([madre, sede], [cont()]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.identita.sedeId).toBe('s1');
+    expect(out[0]!.ambigua).toBe(false);
+  });
+
+  it('rivale con punteggio DIVERSO non rende ambigua la vincente', () => {
+    // La vincente ha più campi in comune: la scelta è nel merito, non un
+    // ex aequo. Un'implementazione che marcasse ambigua ogni coppia con una
+    // concorrente qualsiasi bloccherebbe il cron su quasi tutto.
+    const ricco = cont({ id: 'ricco' });
+    const scarso = cont({ id: 'scarso', nome: 'Altro', indirizzo: null, citta: null, cap: null });
+    const out = assegna([ident()], [ricco, scarso]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.contatto.id).toBe('ricco');
+    expect(out[0]!.ambigua).toBe(false);
+  });
+
   it('scopre candidati via P.IVA come unica prova forte', () => {
     // P.IVA in comune, telefono e email assenti: scoperta via indice P.IVA.
     const idWithPiva = ident({

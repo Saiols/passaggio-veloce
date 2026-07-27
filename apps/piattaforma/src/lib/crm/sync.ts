@@ -32,6 +32,11 @@ export type MatchResult =
  * Match alla registrazione: stesse regole della riconciliazione retroattiva,
  * limitate all'azienda appena creata (e alle sue sedi).
  *
+ * Anche questo è un canale AUTOMATICO (nessuno guarda un'anteprima prima che
+ * scriva), quindi vale la stessa regola del cron: le proposte ambigue —
+ * ex aequo di punteggio, spareggio arbitrario nel merito e nessun percorso di
+ * sgancio — non si applicano qui e restano alla pagina admin.
+ *
  * Best-effort: chiamata dopo la tx di registrazione, non deve mai farla
  * fallire. Prima qui viveva una cascade email → tel → P.IVA che confrontava il
  * telefono normalizzato con `CrmContact.tel` grezzo e quindi non trovava mai
@@ -41,7 +46,8 @@ export async function tryMatchCrmContact(
   companyId: string,
 ): Promise<MatchResult> {
   try {
-    const proposte = await calcolaProposte({ companyId });
+    const tutte = await calcolaProposte({ companyId });
+    const proposte = tutte.filter((p) => !p.ambigua);
     if (proposte.length === 0) return { matched: false };
     const esito = await applicaProposte(proposte);
     if (esito.agganciati === 0) return { matched: false };

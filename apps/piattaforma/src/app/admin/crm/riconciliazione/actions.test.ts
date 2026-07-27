@@ -23,6 +23,7 @@ describe('applicaRiconciliazioneAction', () => {
     revalidatePath.mockReset();
     riconciliaTutto.mockResolvedValue({
       proposte: 3,
+      ambigueSaltate: 0,
       agganciati: 2,
       saltati: 1,
       errori: 0,
@@ -37,6 +38,14 @@ describe('applicaRiconciliazioneAction', () => {
       saltati: 1,
       errori: 0,
     });
+  });
+
+  // Qui, a differenza del cron, c'è una persona che ha appena visto
+  // l'anteprima con le ambigue marcate: è la sede dove si decidono.
+  it('applica anche le proposte ambigue (canale presidiato da un umano)', async () => {
+    auth.mockResolvedValue({ user: { id: 'u1', role: 'ADMIN_PIATTAFORMA' } });
+    await applicaRiconciliazioneAction();
+    expect(riconciliaTutto).toHaveBeenCalledWith({ includiAmbigue: true });
   });
 
   it('invalida le pagine che mostrano dati agganciati dopo il successo', async () => {

@@ -31,6 +31,8 @@ export type Proposta = {
    * sedi faceva dire al campo una data che non è quella di quel punto vendita.
    */
   registrataAt: Date;
+  /** Ex aequo: vedi `Coppia.ambigua` in assign.ts. */
+  ambigua: boolean;
 };
 
 const SELECT_COMPANY = {
@@ -135,5 +137,6 @@ export async function calcolaProposte(
     punteggio: co.punteggio,
     campi: co.campi,
     registrataAt: co.identita.registrataAt,
+    ambigua: co.ambigua,
   }));
 }

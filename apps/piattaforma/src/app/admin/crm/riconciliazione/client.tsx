@@ -23,12 +23,14 @@ export function RiconciliazioneClient({
   totale,
   broker,
   agenzia,
+  ambigue,
   mostrate,
 }: {
   proposte: Proposta[];
   totale: number;
   broker: number;
   agenzia: number;
+  ambigue: number;
   mostrate: number;
 }) {
   const router = useRouter();
@@ -87,6 +89,21 @@ export function RiconciliazioneClient({
             </Button>
           </div>
 
+          {ambigue > 0 ? (
+            <div className="mb-4">
+              <Alert variant="info" title="Righe ambigue: le applica solo questa pagina">
+                {ambigue === 1
+                  ? '1 riga ha un pari merito'
+                  : `${ambigue} righe hanno un pari merito`}{' '}
+                con un&apos;altra: stesso punteggio, stessa prova. La scelta fra
+                le due è deterministica ma arbitraria, e un aggancio non si può
+                disfare. Per questo la passata automatica notturna le lascia
+                indietro: vengono agganciate solo se sei tu a premere «Applica»
+                qui. Sono marcate «Ambigua» in elenco e messe in cima.
+              </Alert>
+            </div>
+          ) : null}
+
           <div className="overflow-x-auto rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
             <table className="w-full min-w-[880px] text-left text-[13px]">
               <thead>
@@ -104,7 +121,16 @@ export function RiconciliazioneClient({
                     className="border-b border-pv-slate-100 last:border-0"
                   >
                     <td className="px-4 py-2.5">
-                      <span className="font-semibold text-pv-navy-900">{p.contactNome}</span>
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-pv-navy-900">
+                          {p.contactNome}
+                        </span>
+                        {p.ambigua ? (
+                          <span className="rounded-full bg-pv-amber-50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-pv-amber-500">
+                            Ambigua
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="block text-[12px] text-pv-slate-500">
                         {[p.contactTel, p.contactCitta].filter(Boolean).join(' · ') || '—'}
                       </span>

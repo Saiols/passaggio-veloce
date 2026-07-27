@@ -14,6 +14,10 @@ export type EsitoRiconciliazione =
  * Applica la riconciliazione. Le proposte si ricalcolano qui: quelle mostrate
  * in anteprima non tornano indietro dal client, così non c'è modo di far
  * agganciare al server una coppia che l'algoritmo non avrebbe scelto.
+ *
+ * `includiAmbigue: true`: a differenza del cron, qui l'anteprima — ambigue
+ * marcate comprese — è appena stata vista da una persona che ha premuto
+ * «Applica». È la sede dove le ambigue vanno decise.
  */
 export async function applicaRiconciliazioneAction(): Promise<EsitoRiconciliazione> {
   const session = await auth();
@@ -22,7 +26,7 @@ export async function applicaRiconciliazioneAction(): Promise<EsitoRiconciliazio
     return { ok: false, error: 'Non hai i permessi per la riconciliazione CRM' };
   }
 
-  const esito = await riconciliaTutto();
+  const esito = await riconciliaTutto({ includiAmbigue: true });
   revalidatePath('/admin/crm/riconciliazione');
   revalidatePath('/admin/crm/contatti');
   revalidatePath('/admin/crm/dashboard');

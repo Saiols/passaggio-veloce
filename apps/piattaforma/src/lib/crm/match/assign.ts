@@ -32,6 +32,16 @@ export type Coppia = {
   contatto: ContattoPerMatch;
   punteggio: number;
   campi: string[];
+  /**
+   * La coppia ha vinto un ex aequo, non un confronto. Vale true quando esiste
+   * un'altra coppia ammessa con lo STESSO punteggio che contende la stessa
+   * identità (due righe della lista per la stessa azienda) oppure lo stesso
+   * contatto da parte di un'ALTRA azienda. Lo spareggio qui sotto è
+   * deterministico ma arbitrario nel merito, e non esiste un percorso di
+   * sgancio: chi applica senza guardare (il cron) deve poterle lasciare
+   * indietro. Vedi `riconciliaTutto` in apply.ts.
+   */
+  ambigua: boolean;
 };
 
 /** Le due sole chiavi che identificano una coppia (azienda, sede|madre). */
@@ -90,9 +100,54 @@ export function assegna(
     for (const c of candidati.values()) {
       const v = valuta(id, c);
       if (v.ammesso) {
-        coppie.push({ identita: id, contatto: c, punteggio: v.punteggio, campi: v.campi });
+        coppie.push({
+          identita: id,
+          contatto: c,
+          punteggio: v.punteggio,
+          campi: v.campi,
+          ambigua: false, // calcolata sotto, quando tutte le rivali sono note
+        });
       }
     }
+  }
+
+  // Rivali a pari punteggio, misurate su TUTTE le coppie ammesse (non solo su
+  // quelle che sopravvivono al greedy: una coppia scartata perché il contatto
+  // era già preso resta comunque la prova che la scelta era un ex aequo).
+  //
+  // Due indici, uno per clausola:
+  // - per identità: quanti contatti diversi la contendono a quel punteggio.
+  //   È il caso dei 2.373 numeri di telefono condivisi da più righe della
+  //   lista — la clausola che conta davvero.
+  // - per contatto: quante AZIENDE diverse lo contendono a quel punteggio.
+  //   Si guardano le aziende, non le identità, di proposito: madre e "sede
+  //   principale" della stessa azienda hanno per costruzione gli stessi
+  //   recapiti (la registrazione crea la sede copiando nome/indirizzo/
+  //   telefono/email dalla madre, vedi `(auth)/actions.ts`), quindi
+  //   contendono SEMPRE lo stesso contatto con lo stesso punteggio. Misurato
+  //   sul DB locale: 20 sedi su 22 sono il gemello della madre, e il caso
+  //   reale Corsico risulterebbe ambiguo — cioè il match di riferimento
+  //   dell'intera feature non verrebbe mai applicato dal cron. Quel pareggio
+  //   però NON è arbitrario: è risolto sopra da una regola esplicita di
+  //   progetto (vince la sede, aggancio più preciso) e in entrambi i casi
+  //   l'azienda agganciata è la stessa. L'ambiguità che va fermata è quella
+  //   che può legare la riga all'AZIENDA sbagliata.
+  const contattiPerIdentita = new Map<string, number>();
+  const aziendePerContatto = new Map<string, Set<string>>();
+  for (const co of coppie) {
+    const kI = `${chiaveIdentita(co.identita)}|${co.punteggio}`;
+    contattiPerIdentita.set(kI, (contattiPerIdentita.get(kI) ?? 0) + 1);
+    const kC = `${co.contatto.id}|${co.punteggio}`;
+    const aziende = aziendePerContatto.get(kC);
+    if (aziende) aziende.add(co.identita.companyId);
+    else aziendePerContatto.set(kC, new Set([co.identita.companyId]));
+  }
+  for (const co of coppie) {
+    const kI = `${chiaveIdentita(co.identita)}|${co.punteggio}`;
+    const kC = `${co.contatto.id}|${co.punteggio}`;
+    co.ambigua =
+      (contattiPerIdentita.get(kI) ?? 0) > 1 ||
+      (aziendePerContatto.get(kC)?.size ?? 0) > 1;
   }
 
   coppie.sort(

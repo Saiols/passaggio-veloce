@@ -102,11 +102,38 @@ export async function applicaProposte(
   return { agganciati, saltati, errori };
 }
 
-export type EsitoRiconciliazione = EsitoApply & { proposte: number };
+export type EsitoRiconciliazione = EsitoApply & {
+  proposte: number;
+  /** Proposte ambigue lasciate alla pagina admin (mai un tetto silenzioso). */
+  ambigueSaltate: number;
+};
 
-/** Passata completa: calcola e applica. Usata dal cron e dall'azione admin. */
-export async function riconciliaTutto(): Promise<EsitoRiconciliazione> {
+/**
+ * Passata completa: calcola e applica.
+ *
+ * Di default applica SOLO le proposte non ambigue. Una proposta ambigua è una
+ * per cui esiste una rivale a pari punteggio (stesso contatto conteso da due
+ * AZIENDE diverse, oppure stessa identità contesa da due contatti): lo
+ * spareggio in `assign.ts` è deterministico ma arbitrario nel merito, e sui
+ * dati reali 2.373 numeri di telefono sono condivisi da più righe della lista.
+ * Il cron gira alle 02:00 e non esiste alcun percorso di sgancio: una scelta
+ * arbitraria scritta lì è irreversibile. Le ambigue restano quindi
+ * all'anteprima admin, dove una persona le vede marcate e decide.
+ *
+ * `includiAmbigue: true` è per l'azione della pagina admin: lì l'anteprima è
+ * stata vista da un umano, quindi si applica tutto.
+ */
+export async function riconciliaTutto(
+  opts: { includiAmbigue?: boolean } = {},
+): Promise<EsitoRiconciliazione> {
   const proposte = await calcolaProposte();
-  const esito = await applicaProposte(proposte);
-  return { proposte: proposte.length, ...esito };
+  const daApplicare = opts.includiAmbigue
+    ? proposte
+    : proposte.filter((p) => !p.ambigua);
+  const esito = await applicaProposte(daApplicare);
+  return {
+    proposte: proposte.length,
+    ambigueSaltate: proposte.length - daApplicare.length,
+    ...esito,
+  };
 }

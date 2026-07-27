@@ -21,6 +21,7 @@ const PROPOSTA = {
   punteggio: 80,
   campi: ['tel', 'indirizzo'],
   registrataAt: new Date('2026-01-10T00:00:00Z'),
+  ambigua: false,
 };
 
 describe('tryMatchCrmContact', () => {
@@ -54,4 +55,25 @@ describe('tryMatchCrmContact', () => {
     expect(await tryMatchCrmContact('c1')).toEqual({ matched: false });
   });
 
+  // Anche la registrazione è un canale automatico: nessuno guarda
+  // un'anteprima prima che scriva, e l'aggancio non si può disfare. Le
+  // proposte ambigue restano alla pagina admin, come per il cron.
+  it('non applica le proposte ambigue', async () => {
+    calcolaProposte.mockResolvedValue([{ ...PROPOSTA, ambigua: true }]);
+    expect(await tryMatchCrmContact('c1')).toEqual({ matched: false });
+    expect(applicaProposte).not.toHaveBeenCalled();
+  });
+
+  it('con una ambigua e una no, applica solo la non ambigua', async () => {
+    applicaProposte.mockResolvedValue({ agganciati: 1, saltati: 0, errori: 0 });
+    calcolaProposte.mockResolvedValue([
+      { ...PROPOSTA, contactId: 'amb', ambigua: true },
+      { ...PROPOSTA, contactId: 'ok' },
+    ]);
+    const res = await tryMatchCrmContact('c1');
+    expect(applicaProposte).toHaveBeenCalledWith([
+      expect.objectContaining({ contactId: 'ok' }),
+    ]);
+    expect(res).toEqual({ matched: true, contactId: 'ok', via: 'tel+indirizzo' });
+  });
 });

@@ -25,6 +25,10 @@ export const maxDuration = 300;
 async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);
   if (guard) return guard;
+  // Solo le proposte NON ambigue: qui non c'è nessuno che guarda. Le ambigue
+  // (ex aequo di punteggio, spareggio arbitrario nel merito) restano alla
+  // pagina admin e vengono contate in `ambigueSaltate`, che finisce nel log
+  // qui sotto — una passata incompleta si deve vedere.
   const riconciliazione = await riconciliaTutto();
   // Log subito dopo la prima passata, PRIMA di avviare gli aggregati: il
   // ciclo per-contatto di syncCrmFromPlatform (migliaia di iterazioni al

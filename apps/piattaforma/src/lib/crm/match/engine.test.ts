@@ -114,6 +114,7 @@ describe('calcolaProposte', () => {
       punteggio: 80,
       // madre: data di registrazione dell'azienda
       registrataAt: new Date('2026-01-10T00:00:00Z'),
+      ambigua: false,
     });
     expect(proposte[0]!.campi).toContain('tel');
   });

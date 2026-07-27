@@ -28,6 +28,14 @@ export default async function AdminCrmRiconciliazionePage() {
   const proposte = await calcolaProposte();
   const broker = proposte.filter((p) => p.cat === 'BROKER').length;
   const agenzia = proposte.length - broker;
+  const ambigue = proposte.filter((p) => p.ambigua).length;
+  // In anteprima si mostrano solo le prime ANTEPRIMA_MAX: le ambigue vanno in
+  // testa, perché sono le uniche che il cron non applica da solo e quindi le
+  // sole per cui questa pagina è indispensabile. Ordinamento stabile: dentro
+  // ciascun gruppo resta l'ordine del motore (punteggio decrescente).
+  const inAnteprima = [...proposte].sort(
+    (a, b) => Number(b.ambigua) - Number(a.ambigua),
+  );
 
   return (
     <AppShell session={session} activePath="/admin/crm/riconciliazione">
@@ -47,10 +55,11 @@ export default async function AdminCrmRiconciliazionePage() {
         </header>
 
         <RiconciliazioneClient
-          proposte={proposte.slice(0, ANTEPRIMA_MAX)}
+          proposte={inAnteprima.slice(0, ANTEPRIMA_MAX)}
           totale={proposte.length}
           broker={broker}
           agenzia={agenzia}
+          ambigue={ambigue}
           mostrate={Math.min(proposte.length, ANTEPRIMA_MAX)}
         />
       </div>

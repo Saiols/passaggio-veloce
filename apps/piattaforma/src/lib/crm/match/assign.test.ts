@@ -37,11 +37,14 @@ const cont = (over: Partial<ContattoGrezzo> = {}) =>
 
 describe('assegna', () => {
   it('una identità prende solo il contatto col punteggio più alto', () => {
-    const scarso = cont({ id: 'x2', nome: 'Altro', indirizzo: null, citta: null, cap: null });
-    const ricco = cont({ id: 'x1' });
+    // Usa id 'z' (scarso) e 'a' (ricco) per contraddire l'ordine alfabetico:
+    // se il punteggio non fosse il criterio dominante, vincerebbe 'a',
+    // ma è il punteggio che conta, quindi vince 'a' per score, non per id.
+    const scarso = cont({ id: 'z', nome: 'Altro', indirizzo: null, citta: null, cap: null });
+    const ricco = cont({ id: 'a' });
     const out = assegna([ident()], [scarso, ricco]);
     expect(out).toHaveLength(1);
-    expect(out[0]!.contatto.id).toBe('x1');
+    expect(out[0]!.contatto.id).toBe('a');
   });
 
   it('a parità di punteggio vince il contatto più vecchio', () => {
@@ -80,13 +83,58 @@ describe('assegna', () => {
     expect(out.map((o) => o.identita.sedeId).sort()).toEqual([null, 's1']);
   });
 
-  it('scarta le coppie non ammesse', () => {
-    const out = assegna([ident()], [cont({ telNorm: null, tel: null })]);
+  it('scarta le coppie non ammesse (categoria discorde senza secondo indizio)', () => {
+    // Stessa prova forte (telefono), ma categoria diversa (BROKER vs AGENZIA)
+    // e nessun secondo indizio identificante (nome, indirizzo, piva, email discordi).
+    // Entra nell'indice via telefono, valuta() viene chiamato, ma ammesso=false.
+    const brokerIdent = ident({ cat: 'BROKER' });
+    const agenziaCont = cont({ cat: 'AGENZIA', nome: 'Altro Negozio', indirizzo: null });
+    const out = assegna([brokerIdent], [agenziaCont]);
     expect(out).toEqual([]);
   });
 
   it('chiaveIdentita distingue madre e sede', () => {
     expect(chiaveIdentita(ident())).toBe('c1:madre');
     expect(chiaveIdentita(ident({ sedeId: 's1' }))).toBe('c1:s1');
+  });
+
+  it('scopre candidati via email come unica prova forte', () => {
+    // Email in comune, telefono assente: scoperta via indice email.
+    const idWithEmail = ident({ telKeys: [], emailKeys: ['info@autorossi.it'] });
+    const contWithEmail = cont({
+      id: 'email-match',
+      telNorm: null,
+      tel: null,
+      emailNorm: 'info@autorossi.it',
+      // Nome e indirizzo non perfetti, ma email è prova forte
+      nome: 'Auto Rossi srl',
+      indirizzo: 'Via Fiume 10',
+    });
+    const out = assegna([idWithEmail], [contWithEmail]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.contatto.id).toBe('email-match');
+    expect(out[0]!.campi).toContain('email');
+  });
+
+  it('scopre candidati via P.IVA come unica prova forte', () => {
+    // P.IVA in comune, telefono e email assenti: scoperta via indice P.IVA.
+    const idWithPiva = ident({
+      telKeys: [],
+      emailKeys: [],
+      pivaKeys: ['12345678901'],
+    });
+    const contWithPiva = cont({
+      id: 'piva-match',
+      telNorm: null,
+      tel: null,
+      emailNorm: null,
+      pivaNorm: '12345678901',
+      nome: 'Auto Rossi',
+      indirizzo: 'Via Fiume 6',
+    });
+    const out = assegna([idWithPiva], [contWithPiva]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.contatto.id).toBe('piva-match');
+    expect(out[0]!.campi).toContain('piva');
   });
 });

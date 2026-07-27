@@ -7,7 +7,10 @@
  * riga, quindi la concorrenza è la norma, non l'eccezione.
  *
  * L'ordine è deterministico — punteggio desc, poi contatto più vecchio, poi id
- * — così due esecuzioni sulla stessa fotografia del DB danno lo stesso esito.
+ * e chiave identità in ordine codepoint puro (non localeCompare, che dipende da
+ * ICU/locale del runtime: Windows, CI e Vercel potrebbero ordinare diversamente).
+ * Così due esecuzioni sulla stessa fotografia del DB danno lo stesso esito anche
+ * in ambienti diversi.
  *
  * Costo: i candidati si prendono da un indice sulle chiavi forti, non dal
  * prodotto cartesiano (19k contatti × N identità sarebbe insostenibile).
@@ -70,11 +73,18 @@ export function assegna(
   }
 
   coppie.sort(
-    (a, b) =>
-      b.punteggio - a.punteggio ||
-      a.contatto.createdAt.getTime() - b.contatto.createdAt.getTime() ||
-      a.contatto.id.localeCompare(b.contatto.id) ||
-      chiaveIdentita(a.identita).localeCompare(chiaveIdentita(b.identita)),
+    (a, b) => {
+      if (b.punteggio !== a.punteggio) return b.punteggio - a.punteggio;
+      const timeA = a.contatto.createdAt.getTime();
+      const timeB = b.contatto.createdAt.getTime();
+      if (timeA !== timeB) return timeA - timeB;
+      const idA = a.contatto.id;
+      const idB = b.contatto.id;
+      if (idA !== idB) return idA < idB ? -1 : 1;
+      const kA = chiaveIdentita(a.identita);
+      const kB = chiaveIdentita(b.identita);
+      return kA < kB ? -1 : kA > kB ? 1 : 0;
+    },
   );
 
   const contattiPresi = new Set<string>();

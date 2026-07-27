@@ -94,7 +94,7 @@ export default function GuideHubPage() {
               dell&apos;invio: niente rilavorazione, niente sorprese.
             </li>
             <li>
-              <strong className="text-pv-navy-900">Pratica completa in 48 ore</strong> grazie
+              <strong className="text-pv-navy-900">Pratica completa in 12 ore</strong> grazie
               alla distribuzione automatica alle agenzie partner della zona.
             </li>
             <li>

@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Passaggio Veloce — Broker digitale per passaggi di proprietà auto',
     description:
-      'Connettiamo dealer e agenzie pratiche auto in una piattaforma unica. Gestisci pratiche, documenti e pagamenti senza carta, in conformità ACI.',
+      'Connettiamo dealer e agenzie pratiche auto in una piattaforma unica. Gestisci pratiche e documenti, in conformità ACI.',
     url: '/',
   },
 };
@@ -124,7 +124,7 @@ export default async function HomePage() {
           />
           <TrustCard
             title="Veloce"
-            text="Pratica completa in 48 ore, con notifiche in tempo reale."
+            text="Pratica completa in 12 ore, con notifiche in tempo reale."
             icon={<BoltIcon />}
           />
           <TrustCard

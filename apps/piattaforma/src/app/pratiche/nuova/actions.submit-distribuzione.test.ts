@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { sessionCtx, buildValidFormData, DEALER } from './test-harness';
 
 /**
  * Distribuzione a raggio-km v2 (Task 7 — wiring submit pratica): il submit
@@ -24,12 +25,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * sessione/permessi) sono mockate: l'obiettivo è isolare la wiring, non
  * ri-testare l'engine documentale o l'OCR (hanno già test dedicati). Nessuna
  * rete/DB reale: stesso approccio di `actions.authz.test.ts`.
+ *
+ * Fixture di sessione/FormData/mock Prisma condivise con
+ * `actions.attestazioni.test.ts` via `./test-harness` — le chiamate
+ * `vi.mock(...)` invece restano qui: Vitest le hoista per-modulo.
  */
 
 const {
   authMock,
   getSessionContextMock,
   prismaMock,
+  txMock,
   redirectMock,
   ocrExtractTextMock,
   getOcrMock,
@@ -44,39 +50,9 @@ const {
   crossCheckPerVeicoloMock,
   calcolaDocumentiRichiestiMock,
   getTariffarioCorrenteMock,
-} = vi.hoisted(() => {
-  const prismaMock = {
-    pratica: {
-      count: vi.fn(async () => 0),
-      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-        id: 'pratica-1',
-        ...data,
-      })),
-      update: vi.fn(),
-    },
-    atecoAllowedCode: { findMany: vi.fn(async () => []) },
-    brokerDichiarazione: { create: vi.fn(async () => ({})) },
-    veicolo: {
-      create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
-        id: `veicolo-${data.ordine}`,
-        ...data,
-      })),
-    },
-    documento: { create: vi.fn(async () => ({ id: 'doc-x' })) },
-    venditore: {
-      create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
-        id: `venditore-${data.ordine}`,
-        ...data,
-      })),
-    },
-    coAcquirente: {
-      create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
-        id: `coacq-${data.ordine}`,
-        ...data,
-      })),
-    },
-    $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
-  };
+} = await vi.hoisted(async () => {
+  const { createPrismaMock } = await import('./test-harness');
+  const { prismaMock, txMock } = createPrismaMock();
 
   const ocrExtractTextMock = vi.fn(async () => ({ text: 'stub ocr text', confidence: 1 }));
 
@@ -84,6 +60,7 @@ const {
     authMock: vi.fn(),
     getSessionContextMock: vi.fn(),
     prismaMock,
+    txMock,
     redirectMock: vi.fn((url: string) => {
       throw new Error(`__REDIRECT__:${url}`);
     }),
@@ -174,100 +151,6 @@ vi.mock('@/lib/tariffe/riaccettazione', () => ({
 
 import { submitNuovaPraticaAction } from './actions';
 
-const DEALER = 'dealer-1';
-const SEDE = { id: 'sede-1', nome: 'Sede test', type: 'DEALER' as const, citta: 'Milano' };
-
-function sessionCtx() {
-  return {
-    user: { id: 'u1', companyId: DEALER, companyType: 'DEALER', role: 'OPERATORE' },
-    companyId: DEALER,
-    companyType: 'DEALER' as const,
-    isOwner: false,
-    accessibleSedi: [SEDE],
-    currentSede: { kind: 'ONE' as const, sede: SEDE },
-    scopeIds: [SEDE.id],
-    membershipRuoli: {},
-    permessi: new Set(['pratiche.create']),
-    sospensione: { sospeso: false, motivo: null, origine: null },
-  };
-}
-
-/** File di upload valido (già su Blob): forma attesa dallo slot `blobRefs`. */
-const ref = (key: string) => ({
-  key,
-  name: `${key}.pdf`,
-  size: 1024,
-  type: 'application/pdf',
-});
-
-/**
- * FormData minima e valida per una pratica SEMPLICE, 1 veicolo, 1 venditore
- * privato italiano (CIE, niente CF/visura/permesso da allegare), acquirente
- * privato italiano. Coordinate valide di default — `overrides` permette di
- * costruire il caso "senza coordinate" per il test di regressione.
- */
-function buildValidFormData(overrides: Record<string, string | undefined> = {}): FormData {
-  const fd = new FormData();
-  const fields: Record<string, string | undefined> = {
-    tipo: 'SEMPLICE',
-    numeroVeicoli: '1',
-    veicoli: JSON.stringify([
-      {
-        tipoDocumento: 'LIBRETTO',
-        targa: 'AB123CD',
-        telaio: 'WBA12345678901234',
-        proprietarioAttuale: 'Mario Rossi',
-        preImm2015: false,
-        flagComodatoDuso: false,
-        flagDelegaVendita: false,
-        prezzoVenditaCent: 500000,
-      },
-    ]),
-    venditori: JSON.stringify([
-      {
-        ordine: 1,
-        veicoloOrdine: 1,
-        isPG: false,
-        tipoSoggetto: 'PRIVATO_ITALIANO',
-        ciTipo: 'ELETTRONICA',
-        nome: 'Mario',
-        cognome: 'Rossi',
-        cf: 'RSSMRA80A01H501U',
-        telefono: '3331234567',
-        email: 'venditore@example.com',
-        docId: 'CI',
-      },
-    ]),
-    coAcquirenti: '[]',
-    acquirenteIsPG: 'false',
-    acquirenteTelefono: '3339876543',
-    acquirenteEmail: 'acquirente@example.com',
-    acquirenteDocumentoIdentita: 'CI',
-    acquirenteTipoSoggetto: 'PRIVATO_ITALIANO',
-    acquirenteCiTipo: 'ELETTRONICA',
-    comune: 'Milano',
-    provincia: 'MI',
-    lat: '45.4642',
-    lng: '9.19',
-    dichiarazioneAccettata: 'true',
-    attestazioneTerziAccettata: 'true',
-    dichiarazionePopupVersion: 'v4.0',
-    blobRefs: JSON.stringify({
-      LIBRETTO_1_FRONTE: ref('LIBRETTO_1_FRONTE'),
-      LIBRETTO_1_RETRO: ref('LIBRETTO_1_RETRO'),
-      VEND1_ID_FRONTE: ref('VEND1_ID_FRONTE'),
-      VEND1_ID_RETRO: ref('VEND1_ID_RETRO'),
-      ACQ_ID_FRONTE: ref('ACQ_ID_FRONTE'),
-      ACQ_ID_RETRO: ref('ACQ_ID_RETRO'),
-    }),
-    ...overrides,
-  };
-  for (const [k, v] of Object.entries(fields)) {
-    if (v !== undefined) fd.set(k, v);
-  }
-  return fd;
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({
@@ -277,7 +160,7 @@ beforeEach(() => {
   ocrExtractTextMock.mockResolvedValue({ text: 'stub ocr text', confidence: 1 });
   storageGetBufferMock.mockResolvedValue(Buffer.from('stub-bytes'));
   getStorageMock.mockReturnValue({ name: 'local' });
-  prismaMock.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(prismaMock));
+  prismaMock.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(txMock));
   avviaRound1ForPraticaMock.mockResolvedValue({
     assegnazioni: 2,
     stato: 'IN_DISTRIBUZIONE',

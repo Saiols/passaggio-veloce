@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { sessionCtx, buildValidFormData, DEALER } from './test-harness';
 
 /**
  * Attestazioni pre-invio (spec 2026-07-27, Task 4): il submit deve validare
@@ -9,16 +10,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * pratica partiva comunque e la prova non esisteva, senza che nessuno se ne
  * accorgesse.
  *
- * Setup copiato da `actions.submit-distribuzione.test.ts` (mocka già
- * sessione, permessi, OCR, gating documentale, pricing, notifiche e
- * distribuzione): qui interessa solo il comportamento sulle attestazioni, non
- * ri-testare la wiring della distribuzione (già coperta altrove).
+ * Fixture di sessione/FormData/mock Prisma condivise con
+ * `actions.submit-distribuzione.test.ts` via `./test-harness` — le chiamate
+ * `vi.mock(...)` invece restano qui: Vitest le hoista per-modulo.
+ *
+ * `prismaMock` e `txMock` sono DUE client distinti (vedi `test-harness.ts`):
+ * `txMock.brokerDichiarazione.create` è quello che il codice DEVE chiamare
+ * (dentro `$transaction`); `prismaMock.brokerDichiarazione.create` non deve
+ * MAI essere invocato. Con un solo mock condiviso per i due client, uno
+ * scrittore che tornasse a scrivere fuori transazione (con l'errore
+ * comunque propagato, senza il vecchio `catch` vuoto) risulterebbe
+ * indistinguibile da quello corretto — è la distinzione che rende il test
+ * sull'atomicità (sotto) una prova reale, non solo della propagazione
+ * dell'eccezione.
  */
 
 const {
   authMock,
   getSessionContextMock,
   prismaMock,
+  txMock,
   redirectMock,
   ocrExtractTextMock,
   getOcrMock,
@@ -33,45 +44,9 @@ const {
   crossCheckPerVeicoloMock,
   calcolaDocumentiRichiestiMock,
   getTariffarioCorrenteMock,
-} = vi.hoisted(() => {
-  const prismaMock = {
-    pratica: {
-      count: vi.fn(async () => 0),
-      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-        id: 'pratica-1',
-        ...data,
-      })),
-      update: vi.fn(),
-    },
-    atecoAllowedCode: { findMany: vi.fn(async () => []) },
-    brokerDichiarazione: {
-      // Tipizzato con `data` (invece di `vi.fn(async () => ({}))`) perché i
-      // test qui sotto leggono `mock.calls[0]![0].data` per ispezionare cosa
-      // viene scritto — a differenza degli altri file di test di questa
-      // cartella, che si limitano a verificare SE è stato chiamato.
-      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...data })),
-    },
-    veicolo: {
-      create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
-        id: `veicolo-${data.ordine}`,
-        ...data,
-      })),
-    },
-    documento: { create: vi.fn(async () => ({ id: 'doc-x' })) },
-    venditore: {
-      create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
-        id: `venditore-${data.ordine}`,
-        ...data,
-      })),
-    },
-    coAcquirente: {
-      create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
-        id: `coacq-${data.ordine}`,
-        ...data,
-      })),
-    },
-    $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(prismaMock)),
-  };
+} = await vi.hoisted(async () => {
+  const { createPrismaMock } = await import('./test-harness');
+  const { prismaMock, txMock } = createPrismaMock();
 
   const ocrExtractTextMock = vi.fn(async () => ({ text: 'stub ocr text', confidence: 1 }));
 
@@ -79,6 +54,7 @@ const {
     authMock: vi.fn(),
     getSessionContextMock: vi.fn(),
     prismaMock,
+    txMock,
     redirectMock: vi.fn((url: string) => {
       throw new Error(`__REDIRECT__:${url}`);
     }),
@@ -171,101 +147,7 @@ vi.mock('@/lib/tariffe/riaccettazione', () => ({
   ERRORE_RIACCETTAZIONE_PENDENTE: 'riaccettazione pendente',
 }));
 
-import { submitNuovaPraticaAction } from './actions';
-
-const DEALER = 'dealer-1';
-const SEDE = { id: 'sede-1', nome: 'Sede test', type: 'DEALER' as const, citta: 'Milano' };
-
-function sessionCtx() {
-  return {
-    user: { id: 'u1', companyId: DEALER, companyType: 'DEALER', role: 'OPERATORE' },
-    companyId: DEALER,
-    companyType: 'DEALER' as const,
-    isOwner: false,
-    accessibleSedi: [SEDE],
-    currentSede: { kind: 'ONE' as const, sede: SEDE },
-    scopeIds: [SEDE.id],
-    membershipRuoli: {},
-    permessi: new Set(['pratiche.create']),
-    sospensione: { sospeso: false, motivo: null, origine: null },
-  };
-}
-
-/** File di upload valido (già su Blob): forma attesa dallo slot `blobRefs`. */
-const ref = (key: string) => ({
-  key,
-  name: `${key}.pdf`,
-  size: 1024,
-  type: 'application/pdf',
-});
-
-/**
- * FormData minima e valida per una pratica SEMPLICE, 1 veicolo, 1 venditore
- * privato italiano (CIE, niente CF/visura/permesso da allegare), acquirente
- * privato italiano. Entrambe le attestazioni accettate con la versione
- * corrente del registro — `overrides` permette di costruire i casi di rifiuto.
- */
-function buildValidFormData(overrides: Record<string, string | undefined> = {}): FormData {
-  const fd = new FormData();
-  const fields: Record<string, string | undefined> = {
-    tipo: 'SEMPLICE',
-    numeroVeicoli: '1',
-    veicoli: JSON.stringify([
-      {
-        tipoDocumento: 'LIBRETTO',
-        targa: 'AB123CD',
-        telaio: 'WBA12345678901234',
-        proprietarioAttuale: 'Mario Rossi',
-        preImm2015: false,
-        flagComodatoDuso: false,
-        flagDelegaVendita: false,
-        prezzoVenditaCent: 500000,
-      },
-    ]),
-    venditori: JSON.stringify([
-      {
-        ordine: 1,
-        veicoloOrdine: 1,
-        isPG: false,
-        tipoSoggetto: 'PRIVATO_ITALIANO',
-        ciTipo: 'ELETTRONICA',
-        nome: 'Mario',
-        cognome: 'Rossi',
-        cf: 'RSSMRA80A01H501U',
-        telefono: '3331234567',
-        email: 'venditore@example.com',
-        docId: 'CI',
-      },
-    ]),
-    coAcquirenti: '[]',
-    acquirenteIsPG: 'false',
-    acquirenteTelefono: '3339876543',
-    acquirenteEmail: 'acquirente@example.com',
-    acquirenteDocumentoIdentita: 'CI',
-    acquirenteTipoSoggetto: 'PRIVATO_ITALIANO',
-    acquirenteCiTipo: 'ELETTRONICA',
-    comune: 'Milano',
-    provincia: 'MI',
-    lat: '45.4642',
-    lng: '9.19',
-    dichiarazioneAccettata: 'true',
-    attestazioneTerziAccettata: 'true',
-    dichiarazionePopupVersion: 'v4.0',
-    blobRefs: JSON.stringify({
-      LIBRETTO_1_FRONTE: ref('LIBRETTO_1_FRONTE'),
-      LIBRETTO_1_RETRO: ref('LIBRETTO_1_RETRO'),
-      VEND1_ID_FRONTE: ref('VEND1_ID_FRONTE'),
-      VEND1_ID_RETRO: ref('VEND1_ID_RETRO'),
-      ACQ_ID_FRONTE: ref('ACQ_ID_FRONTE'),
-      ACQ_ID_RETRO: ref('ACQ_ID_RETRO'),
-    }),
-    ...overrides,
-  };
-  for (const [k, v] of Object.entries(fields)) {
-    if (v !== undefined) fd.set(k, v);
-  }
-  return fd;
-}
+import { attestazioniPerVersione } from '@/lib/legal/attestazioni';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -276,7 +158,7 @@ beforeEach(() => {
   ocrExtractTextMock.mockResolvedValue({ text: 'stub ocr text', confidence: 1 });
   storageGetBufferMock.mockResolvedValue(Buffer.from('stub-bytes'));
   getStorageMock.mockReturnValue({ name: 'local' });
-  prismaMock.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(prismaMock));
+  prismaMock.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(txMock));
   avviaRound1ForPraticaMock.mockResolvedValue({
     assegnazioni: 2,
     stato: 'IN_DISTRIBUZIONE',
@@ -293,8 +175,11 @@ beforeEach(() => {
   calcolaDocumentiRichiestiMock.mockReturnValue({ kind: 'OK', documentiRichiesti: [] });
 });
 
-import { attestazioniPerVersione } from '@/lib/legal/attestazioni';
-
+/**
+ * Import dinamico (non un `import` statico in testa al file): deve avvenire
+ * DOPO che i `vi.mock(...)` sopra sono attivi, altrimenti `submitNuovaPraticaAction`
+ * catturerebbe i moduli reali invece dei mock.
+ */
 async function submit(fd: FormData): Promise<string | null> {
   const { submitNuovaPraticaAction } = await import('./actions');
   try {
@@ -308,10 +193,6 @@ async function submit(fd: FormData): Promise<string | null> {
 }
 
 describe('attestazioni pre-invio', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('senza la spunta sui terzi la pratica non parte', async () => {
     const url = await submit(buildValidFormData({ attestazioneTerziAccettata: 'false' }));
     expect(url).toContain('error=');
@@ -334,11 +215,36 @@ describe('attestazioni pre-invio', () => {
 
   it('persiste i testi del registro, la versione e il numero di clausola', async () => {
     await submit(buildValidFormData());
-    expect(prismaMock.brokerDichiarazione.create).toHaveBeenCalledTimes(1);
-    const { data } = prismaMock.brokerDichiarazione.create.mock.calls[0]![0];
+
+    // La scrittura deve avvenire sul client di transazione, mai su quello
+    // esterno — vedi il commento in testa al file sul perché i due mock sono
+    // distinti.
+    expect(txMock.brokerDichiarazione.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.brokerDichiarazione.create).not.toHaveBeenCalled();
+
+    const { data } = txMock.brokerDichiarazione.create.mock.calls[0]![0];
     expect(data.popupVersion).toBe('v4.0');
     expect(data.clausolaTerzi).toBe(23);
     expect(data.testoAttestazioni).toEqual(
+      attestazioniPerVersione('v4.0')!.map((a) => ({ id: a.id, testo: a.testo })),
+    );
+  });
+
+  // Il registro tiene anche le versioni storiche (vedi `attestazioni.ts`):
+  // è quello che rende accettabile fidarsi della versione mandata dal client
+  // (il browser può avere ancora il bundle di un deploy precedente). Una
+  // versione storica nota va accettata e deve persistere IL SUO testo, non
+  // quello — diverso — della versione corrente.
+  it('una versione storica nota viene accettata con il suo testo, non quello corrente', async () => {
+    const url = await submit(buildValidFormData({ dichiarazionePopupVersion: 'v3.1' }));
+    expect(url).toBeNull();
+
+    const { data } = txMock.brokerDichiarazione.create.mock.calls[0]![0];
+    expect(data.popupVersion).toBe('v3.1');
+    expect(data.testoAttestazioni).toEqual(
+      attestazioniPerVersione('v3.1')!.map((a) => ({ id: a.id, testo: a.testo })),
+    );
+    expect(data.testoAttestazioni).not.toEqual(
       attestazioniPerVersione('v4.0')!.map((a) => ({ id: a.id, testo: a.testo })),
     );
   });
@@ -347,21 +253,29 @@ describe('attestazioni pre-invio', () => {
   // nel record una dichiarazione diversa da quella resa a schermo.
   it('ignora un testo iniettato dal client', async () => {
     await submit(buildValidFormData({ testoAttestazioni: '[{"id":"TERZI","testo":"nulla"}]' }));
-    const { data } = prismaMock.brokerDichiarazione.create.mock.calls[0]![0];
+    const { data } = txMock.brokerDichiarazione.create.mock.calls[0]![0];
     expect(JSON.stringify(data.testoAttestazioni)).not.toContain('nulla');
   });
 
   // IL test della release: prima era un log best-effort in un catch vuoto, e
   // una pratica poteva partire senza la sua prova senza che nessuno lo sapesse.
+  // Il rigetto deve avvenire PERCHÉ la create è dentro la transazione: se
+  // tornasse fuori (anche senza il vecchio `catch` vuoto, con l'errore
+  // comunque propagato), forzare il fallimento su `txMock` non fermerebbe più
+  // nulla — la scrittura vera finirebbe sul `prismaMock` esterno, che qui non
+  // viene mai fatto fallire, e la pratica risulterebbe comunque creata.
   it('se la scrittura della prova fallisce, la pratica non esiste', async () => {
-    prismaMock.brokerDichiarazione.create.mockRejectedValueOnce(new Error('db down'));
+    txMock.brokerDichiarazione.create.mockRejectedValueOnce(new Error('db down'));
     await expect(submit(buildValidFormData())).rejects.toThrow('db down');
     expect(avviaRound1ForPraticaMock).not.toHaveBeenCalled();
   });
 
   it("l'IP registrato resta anonimizzato a 3 ottetti", async () => {
     await submit(buildValidFormData());
-    const { data } = prismaMock.brokerDichiarazione.create.mock.calls[0]![0];
-    expect(data.ip).toMatch(/\.x$/);
+    const { data } = txMock.brokerDichiarazione.create.mock.calls[0]![0];
+    // Valore esatto, non solo il pattern finale: prova che anche i primi tre
+    // ottetti sono quelli in arrivo (93.45.201.77), non un valore qualsiasi
+    // che per caso termina in ".x".
+    expect(data.ip).toBe('93.45.201.x');
   });
 });

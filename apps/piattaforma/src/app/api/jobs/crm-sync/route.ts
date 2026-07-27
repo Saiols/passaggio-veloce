@@ -7,11 +7,11 @@ import { requireAdminOrCron } from '@/lib/jobs/auth';
 // deploy smaltisce tutto il pregresso mai riconciliato (fino a ~19k contatti
 // CRM, di cui ~7.880 righe agenzia) più il ciclo di aggregati sui contatti
 // appena agganciati — entrambe le passate sono loop sequenziali con più
-// round-trip al DB ciascuna, condivisi ora nella stessa request. I run
-// successivi lavorano solo sul residuo (righe non ancora agganciate, contatti
-// già agganciati) e restano ben sotto la soglia; 60s bastava quando la route
-// faceva solo syncCrmFromPlatform, non basta più col backlog iniziale della
-// riconciliazione.
+// round-trip al DB ciascuna, condivisi ora nella stessa request. È una
+// decisione operativa deliberata, non un dettaglio implementativo:
+// riportarlo a 60 riapre esattamente il rischio di timeout sul primo run in
+// produzione. I run successivi lavorano solo sul residuo e restano ben
+// sotto la soglia.
 export const maxDuration = 300;
 
 /**
@@ -26,13 +26,16 @@ async function run(req: NextRequest): Promise<NextResponse> {
   const guard = await requireAdminOrCron(req);
   if (guard) return guard;
   const riconciliazione = await riconciliaTutto();
+  // Log subito dopo la prima passata, PRIMA di avviare gli aggregati: il
+  // ciclo per-contatto di syncCrmFromPlatform (migliaia di iterazioni al
+  // primo run) è il punto più a rischio di sforare maxDuration. Un log
+  // messo solo a fine funzione non verrebbe mai scritto se il job viene
+  // troncato lì — questa riga invece resta agli atti anche in quel caso,
+  // ed è l'informazione che serve per capire dove si era arrivati.
+  console.log('[crm-sync] riconciliazione', riconciliazione);
   const result = await syncCrmFromPlatform();
-  // Log strutturato a fine job: se un run viene troncato (timeout, crash,
-  // redeploy a metà) è l'unico modo per capire a che punto si era arrivati
-  // prima del tentativo successivo — il job è idempotente e ritentabile, ma
-  // senza questo log un run parziale è indistinguibile da uno riuscito nei
-  // log della piattaforma.
-  console.log('[crm-sync]', { ...riconciliazione, ...result });
+  // Log finale: solo per il caso completo, ricapitola anche gli aggregati.
+  console.log('[crm-sync] completato', { ...riconciliazione, ...result });
   return NextResponse.json({ ok: true, riconciliazione, ...result });
 }
 

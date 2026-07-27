@@ -43,6 +43,8 @@ import { extractCf } from '@/lib/kyc/extract-cf';
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { computeFees } from '@/lib/pricing';
 import { getTariffarioCorrente } from '@/lib/tariffario';
+import { attestazioniPerVersione } from '@/lib/legal/attestazioni';
+import { ART_DATI_TERZI } from '@/lib/legal/clausole-vessatorie';
 import {
   ERRORE_RIACCETTAZIONE_PENDENTE,
   getRiaccettazionePendente,
@@ -571,8 +573,12 @@ const submitSchema = z.object({
   // distribuzione a raggio, vedi `praticaCoordsSchema` sopra per il dettaglio).
   ...praticaCoordsSchema.shape,
 
-  // Sistema Penali Broker (SP-A): popup di responsabilità accettato
+  // Attestazioni pre-invio (spec 2026-07-27): due spunte distinte + la versione
+  // del testo reso a schermo. La versione arriva dal client di proposito — dopo
+  // un deploy il browser puo' avere ancora il bundle precedente, ed e' QUEL
+  // testo che l'utente ha letto. E' validata contro il registro piu' sotto.
   dichiarazioneAccettata: formBool,
+  attestazioneTerziAccettata: formBool,
   dichiarazionePopupVersion: z.string().trim().min(1).max(20),
 });
 
@@ -750,10 +756,21 @@ export async function submitNuovaPraticaAction(
     veicoloDocRefs.push({ tipo: 'LIBRETTO', fronte: rFronte!, retro: rRetro! });
   }
 
-  // Sistema Penali Broker (SP-A): la dichiarazione popup è bloccante
-  if (!d.dichiarazioneAccettata) {
+  // Attestazioni pre-invio: entrambe obbligatorie. Il wizard scrive i flag di
+  // suo (il gate sul gesto e' il bottone disabilitato), quindi qui non stiamo
+  // verificando il click: stiamo rifiutando una richiesta malformata.
+  if (!d.dichiarazioneAccettata || !d.attestazioneTerziAccettata) {
     redirect(
-      '/pratiche/nuova?error=Devi%20accettare%20la%20dichiarazione%20di%20responsabilita%20prima%20di%20inviare',
+      '/pratiche/nuova?error=Devi%20accettare%20entrambe%20le%20dichiarazioni%20prima%20di%20inviare',
+    );
+  }
+
+  // Versione fuori registro: rifiutiamo l'invio invece di registrare
+  // un'attestazione di cui non conosciamo il testo.
+  const attestazioniRese = attestazioniPerVersione(d.dichiarazionePopupVersion);
+  if (!attestazioniRese) {
+    redirect(
+      '/pratiche/nuova?error=La%20pagina%20non%20e%20aggiornata%3A%20ricarica%20e%20riprova',
     );
   }
 
@@ -1338,6 +1355,10 @@ export async function submitNuovaPraticaAction(
     ];
   });
 
+  // Fuori dalla transazione: `headers()` e' async e non ha ragione di tenere
+  // aperta una connessione al DB.
+  const metaRichiesta = await getRequestMetadata();
+
   // Crea la pratica in BOZZA + i veicoli + i libretti in un'unica transazione.
   // L'apertura del round 1 avviene subito dopo tramite l'engine di
   // distribuzione (gestisce selezione agenzie + countdown).
@@ -1666,26 +1687,24 @@ export async function submitNuovaPraticaAction(
       });
     }
 
-    return created;
-  });
-
-  // Sistema Penali Broker (SP-A): log immutabile dell'accettazione popup.
-  // Best-effort: se fallisce il log non blocchiamo il submit, ma resta
-  // tracciata l'accettazione via flag formData.
-  try {
-    const meta = await getRequestMetadata();
-    await prisma.brokerDichiarazione.create({
+    // La prova dell'attestazione nasce e muore con la pratica: nessuna pratica
+    // inviata senza prova, nessuna prova senza pratica. Era un log best-effort
+    // in un catch vuoto — se falliva, la pratica partiva comunque e la prova
+    // non esisteva, senza che nessuno se ne accorgesse.
+    await tx.brokerDichiarazione.create({
       data: {
-        praticaId: pratica.id,
+        praticaId: created.id,
         userId,
-        ip: meta.ip || null,
-        userAgent: meta.userAgent || null,
+        ip: metaRichiesta.ip || null,
+        userAgent: metaRichiesta.userAgent || null,
         popupVersion: d.dichiarazionePopupVersion,
+        testoAttestazioni: attestazioniRese.map((a) => ({ id: a.id, testo: a.testo })),
+        clausolaTerzi: ART_DATI_TERZI,
       },
     });
-  } catch {
-    // best-effort log
-  }
+
+    return created;
+  });
 
   // Apre il round 1 tramite engine distribuzione: crea PraticaAssegnazione
   // con countdown per-agenzia basato sugli orari di apertura dichiarati.

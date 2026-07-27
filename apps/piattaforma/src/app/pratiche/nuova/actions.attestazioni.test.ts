@@ -1,29 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Distribuzione a raggio-km v2 (Task 7 — wiring submit pratica): il submit
- * deve aprire la distribuzione chiamando SEMPRE `avviaRound1ForPratica`
- * (Task 6, engine v2) — mai uno stato legacy tipo `IN_ATTESA_ROUND_1` scritto
- * a mano dentro l'action. Questo file esercita l'INTERO `submitNuovaPraticaAction`
- * a valle di un submit valido (a differenza di `actions.coords.test.ts`, che
- * verifica solo lo schema zod delle coordinate) per provare la wiring:
+ * Attestazioni pre-invio (spec 2026-07-27, Task 4): il submit deve validare
+ * `dichiarazionePopupVersion` contro il registro (`attestazioniPerVersione`),
+ * leggere i testi persistiti DAL REGISTRO server-side (mai dal payload
+ * client) e scrivere `BrokerDichiarazione` DENTRO la stessa transazione della
+ * pratica — prima era un log best-effort in un catch vuoto: se falliva, la
+ * pratica partiva comunque e la prova non esisteva, senza che nessuno se ne
+ * accorgesse.
  *
- *  1. `avviaRound1ForPratica` viene invocato esattamente una volta con l'id
- *     della pratica appena creata.
- *  2. L'unico `stato` scritto DIRETTAMENTE dall'action è `BOZZA` (alla create):
- *     nessun `prisma.pratica.update` avviene nell'action stessa — la
- *     transizione a `IN_DISTRIBUZIONE`/`raggioCorrenteM` è responsabilità
- *     esclusiva di `avviaRound1ForPratica` (già coperta da tick.test.ts).
- *  3. L'email cliente "AVVIATA" viene sempre inviata dopo `avviaRound1ForPratica`
- *     (che porta sempre a IN_DISTRIBUZIONE — Task 12: rimosso il vecchio ramo
- *     condizionale su uno stato BOZZA che non può più verificarsi qui).
- *  4. Submit senza coordinate continua a fallire la validazione PRIMA di
- *     invocare `avviaRound1ForPratica` (invariato).
- *
- * Tutte le dipendenze pesanti (OCR, gating documentale, pricing, notifiche,
- * sessione/permessi) sono mockate: l'obiettivo è isolare la wiring, non
- * ri-testare l'engine documentale o l'OCR (hanno già test dedicati). Nessuna
- * rete/DB reale: stesso approccio di `actions.authz.test.ts`.
+ * Setup copiato da `actions.submit-distribuzione.test.ts` (mocka già
+ * sessione, permessi, OCR, gating documentale, pricing, notifiche e
+ * distribuzione): qui interessa solo il comportamento sulle attestazioni, non
+ * ri-testare la wiring della distribuzione (già coperta altrove).
  */
 
 const {
@@ -55,7 +44,13 @@ const {
       update: vi.fn(),
     },
     atecoAllowedCode: { findMany: vi.fn(async () => []) },
-    brokerDichiarazione: { create: vi.fn(async () => ({})) },
+    brokerDichiarazione: {
+      // Tipizzato con `data` (invece di `vi.fn(async () => ({}))`) perché i
+      // test qui sotto leggono `mock.calls[0]![0].data` per ispezionare cosa
+      // viene scritto — a differenza degli altri file di test di questa
+      // cartella, che si limitano a verificare SE è stato chiamato.
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...data })),
+    },
     veicolo: {
       create: vi.fn(async ({ data }: { data: { ordine: number } }) => ({
         id: `veicolo-${data.ordine}`,
@@ -102,8 +97,8 @@ const {
       { email: 'broker@example.com', userId: 'u1', nome: 'Mario Rossi' },
     ]),
     // Gating documentale/OCR fail-closed: mockati a "tutto passa" perché
-    // hanno già copertura dedicata altrove — qui contano solo il submit e la
-    // wiring verso la distribuzione, non le regole di business dei documenti.
+    // hanno già copertura dedicata altrove — qui contano solo il submit e le
+    // attestazioni, non le regole di business dei documenti.
     validaParteMock: vi.fn(() => ({ ok: true, problemi: [] as string[] })),
     documentiRichiestiParteMock: vi.fn(() => ({
       identita: true,
@@ -131,7 +126,14 @@ vi.mock('@/lib/auth/session-context', async (orig) => {
 });
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
-vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
+// A differenza del modello copiato: qui l'IP conta (ultimo test della suite),
+// quindi l'header arriva valorizzato invece di un `new Headers()` vuoto.
+vi.mock('next/headers', () => ({
+  headers: vi.fn(
+    async () =>
+      new Headers({ 'x-forwarded-for': '93.45.201.77', 'user-agent': 'vitest' }),
+  ),
+}));
 
 vi.mock('@/lib/providers/ocr', () => ({ getOcr: getOcrMock }));
 vi.mock('@/lib/providers/storage', () => ({
@@ -142,9 +144,6 @@ vi.mock('@/lib/kyc/visura-parser', () => ({
   extractVisura: vi.fn(async () => ({})),
 }));
 
-// Il consumer del Task 6 (engine v2): la wiring del submit è esattamente
-// "chiama questa funzione con l'id pratica", niente di più. Mockata per
-// isolare la wiring dall'engine (già testato in tick.test.ts).
 vi.mock('@/lib/distribuzione', () => ({ avviaRound1ForPratica: avviaRound1ForPraticaMock }));
 
 vi.mock('@/lib/notifiche', () => ({
@@ -155,7 +154,7 @@ vi.mock('@/lib/notifiche/pratica', () => ({ destinatariBroker: destinatariBroker
 
 // Gating documentale/cross-check/pricing: bypassati (vedi commento sopra sui
 // mock hoisted) così il submit raggiunge la scrittura DB senza dover
-// ricostruire l'intero motore OCR/gating in questo test di wiring.
+// ricostruire l'intero motore OCR/gating in questo file.
 vi.mock('@/lib/kyc/parte-docs', async (orig) => {
   const actual = (await orig()) as object;
   return { ...actual, validaParte: validaParteMock, documentiRichiestiParte: documentiRichiestiParteMock };
@@ -203,8 +202,8 @@ const ref = (key: string) => ({
 /**
  * FormData minima e valida per una pratica SEMPLICE, 1 veicolo, 1 venditore
  * privato italiano (CIE, niente CF/visura/permesso da allegare), acquirente
- * privato italiano. Coordinate valide di default — `overrides` permette di
- * costruire il caso "senza coordinate" per il test di regressione.
+ * privato italiano. Entrambe le attestazioni accettate con la versione
+ * corrente del registro — `overrides` permette di costruire i casi di rifiuto.
  */
 function buildValidFormData(overrides: Record<string, string | undefined> = {}): FormData {
   const fd = new FormData();
@@ -294,44 +293,75 @@ beforeEach(() => {
   calcolaDocumentiRichiestiMock.mockReturnValue({ kind: 'OK', documentiRichiesti: [] });
 });
 
-describe('submitNuovaPraticaAction — wiring distribuzione v2 (Task 7)', () => {
-  it('submit valido: chiama avviaRound1ForPratica con l\'id pratica, niente scrittura di stato diretta', async () => {
-    const res = await submitNuovaPraticaAction(buildValidFormData());
+import { attestazioniPerVersione } from '@/lib/legal/attestazioni';
 
-    expect(res).toEqual({ ok: true, id: 'pratica-1' });
+async function submit(fd: FormData): Promise<string | null> {
+  const { submitNuovaPraticaAction } = await import('./actions');
+  try {
+    await submitNuovaPraticaAction(fd);
+    return null;
+  } catch (e) {
+    const m = /^__REDIRECT__:(.*)$/.exec((e as Error).message);
+    if (m) return m[1]!;
+    throw e;
+  }
+}
 
-    // La wiring: il submit delega TUTTA l'apertura della distribuzione a
-    // avviaRound1ForPratica (Task 6) — chiamato una volta con l'id appena creato.
-    expect(avviaRound1ForPraticaMock).toHaveBeenCalledTimes(1);
-    expect(avviaRound1ForPraticaMock).toHaveBeenCalledWith('pratica-1');
-
-    // Nessuno stato legacy scritto a mano: l'unica scrittura di `stato` è la
-    // create iniziale in BOZZA; `IN_DISTRIBUZIONE`/`raggioCorrenteM` sono
-    // scritti SOLO dentro avviaRound1ForPratica (mockato qui, testato in
-    // tick.test.ts) — il submit stesso non deve mai chiamare pratica.update.
-    expect(prismaMock.pratica.update).not.toHaveBeenCalled();
-    expect(prismaMock.pratica.create).toHaveBeenCalledTimes(1);
-    const createArgs = prismaMock.pratica.create.mock.calls[0]![0] as {
-      data: Record<string, unknown>;
-    };
-    expect(createArgs.data.stato).toBe('BOZZA');
-
-    // Il ritorno di avviaRound1ForPratica guida le notifiche a valle: stato
-    // IN_DISTRIBUZIONE (non BOZZA) → email cliente "AVVIATA" inviata.
-    expect(notifyClientiAvanzamentoMock).toHaveBeenCalledWith('pratica-1', 'AVVIATA');
-    expect(destinatariBrokerMock).toHaveBeenCalledWith('pratica-1');
-    expect(sendNotificationMock).toHaveBeenCalled();
-
-    // Nessun redirect di validazione: il submit valido arriva in fondo.
-    expect(redirectMock).not.toHaveBeenCalled();
+describe('attestazioni pre-invio', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('submit senza coordinate: redirect di validazione, avviaRound1ForPratica MAI invocato', async () => {
-    const fd = buildValidFormData({ lat: undefined, lng: undefined });
-
-    await expect(submitNuovaPraticaAction(fd)).rejects.toThrow(/__REDIRECT__/);
-
-    expect(avviaRound1ForPraticaMock).not.toHaveBeenCalled();
+  it('senza la spunta sui terzi la pratica non parte', async () => {
+    const url = await submit(buildValidFormData({ attestazioneTerziAccettata: 'false' }));
+    expect(url).toContain('error=');
     expect(prismaMock.pratica.create).not.toHaveBeenCalled();
+  });
+
+  it('senza la spunta di responsabilita la pratica non parte', async () => {
+    const url = await submit(buildValidFormData({ dichiarazioneAccettata: 'false' }));
+    expect(url).toContain('error=');
+    expect(prismaMock.pratica.create).not.toHaveBeenCalled();
+  });
+
+  // Registrare un'attestazione di cui non conosciamo il testo non e' una prova:
+  // meglio rifiutare l'invio e far ricaricare la pagina.
+  it('una versione fuori registro viene rifiutata', async () => {
+    const url = await submit(buildValidFormData({ dichiarazionePopupVersion: 'v9.9' }));
+    expect(url).toContain('error=');
+    expect(prismaMock.pratica.create).not.toHaveBeenCalled();
+  });
+
+  it('persiste i testi del registro, la versione e il numero di clausola', async () => {
+    await submit(buildValidFormData());
+    expect(prismaMock.brokerDichiarazione.create).toHaveBeenCalledTimes(1);
+    const { data } = prismaMock.brokerDichiarazione.create.mock.calls[0]![0];
+    expect(data.popupVersion).toBe('v4.0');
+    expect(data.clausolaTerzi).toBe(23);
+    expect(data.testoAttestazioni).toEqual(
+      attestazioniPerVersione('v4.0')!.map((a) => ({ id: a.id, testo: a.testo })),
+    );
+  });
+
+  // Il testo e' merce del server. Un payload manomesso non deve poter scrivere
+  // nel record una dichiarazione diversa da quella resa a schermo.
+  it('ignora un testo iniettato dal client', async () => {
+    await submit(buildValidFormData({ testoAttestazioni: '[{"id":"TERZI","testo":"nulla"}]' }));
+    const { data } = prismaMock.brokerDichiarazione.create.mock.calls[0]![0];
+    expect(JSON.stringify(data.testoAttestazioni)).not.toContain('nulla');
+  });
+
+  // IL test della release: prima era un log best-effort in un catch vuoto, e
+  // una pratica poteva partire senza la sua prova senza che nessuno lo sapesse.
+  it('se la scrittura della prova fallisce, la pratica non esiste', async () => {
+    prismaMock.brokerDichiarazione.create.mockRejectedValueOnce(new Error('db down'));
+    await expect(submit(buildValidFormData())).rejects.toThrow('db down');
+    expect(avviaRound1ForPraticaMock).not.toHaveBeenCalled();
+  });
+
+  it("l'IP registrato resta anonimizzato a 3 ottetti", async () => {
+    await submit(buildValidFormData());
+    const { data } = prismaMock.brokerDichiarazione.create.mock.calls[0]![0];
+    expect(data.ip).toMatch(/\.x$/);
   });
 });

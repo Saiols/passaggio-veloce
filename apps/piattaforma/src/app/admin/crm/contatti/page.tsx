@@ -99,6 +99,8 @@ export default async function AdminCrmPipelinePage({
       take: PAGE_SIZE,
       include: {
         assignedTo: { select: { id: true, nome: true, cognome: true } },
+        company: { select: { ragioneSociale: true } },
+        sede: { select: { nome: true } },
       },
     }),
     prisma.crmContact.count({ where }),
@@ -147,6 +149,10 @@ export default async function AdminCrmPipelinePage({
       ? `${c.assignedTo.nome} ${c.assignedTo.cognome}`.trim()
       : null,
     assignedTo: undefined,
+    aziendaNome: c.company?.ragioneSociale ?? null,
+    sedeNome: c.sede?.nome ?? null,
+    company: undefined,
+    sede: undefined,
     lastContactAt: c.lastContactAt?.toISOString() ?? null,
     nextContactAt: c.nextContactAt?.toISOString() ?? null,
     linkInviatoAt: c.linkInviatoAt?.toISOString() ?? null,

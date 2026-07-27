@@ -13,7 +13,8 @@ import {
   canBulkImportCrm,
 } from '@/lib/auth/permissions';
 import { parseContactsCsv } from '@/lib/crm/csv-import';
-import { normalizePhone } from '@/lib/crm/phone';
+import { normalizeTel, normalizeEmail } from '@/lib/crm/match/normalize';
+import { crmNormFields } from '@/lib/crm/match/norm-fields';
 import { sendNotification } from '@/lib/notifiche';
 import { nextStatoInvio } from '@/lib/crm/email-partenza';
 import { evaluatePromoCode } from '@/lib/promo/evaluate';
@@ -135,6 +136,7 @@ function dataFromInput(d: CrmContactInput): Prisma.CrmContactCreateInput {
     wa: emptyToNull(d.wa),
     email: emptyToNull(d.email)?.toLowerCase() ?? null,
     piva: emptyToNull(d.piva),
+    ...crmNormFields({ tel: d.tel, wa: d.wa, email: d.email, piva: d.piva }),
     indirizzo: emptyToNull(d.indirizzo),
     citta: emptyToNull(d.citta),
     cap: emptyToNull(d.cap),
@@ -207,22 +209,20 @@ export async function createCrmContactAction(
     };
   }
 
-  // Anti-duplicato: blocca se esiste già un contatto non eliminato con la stessa
-  // email o lo stesso telefono (normalizzato). Niente overwrite: si modifica
-  // l'esistente dalla scheda. Il telefono normalizzato si confronta in memoria
-  // (nessuna colonna dedicata).
-  const emailNorm = parsed.data.email ? parsed.data.email.trim().toLowerCase() : '';
-  const telNorm = normalizePhone(parsed.data.tel);
-  const candidates = await prisma.crmContact.findMany({
-    where: { deletedAt: null },
-    select: { email: true, tel: true },
-  });
-  const isDup = candidates.some(
-    (c) =>
-      (emailNorm !== '' && c.email === emailNorm) ||
-      (telNorm !== '' && normalizePhone(c.tel) === telNorm),
-  );
-  if (isDup) {
+  // Anti-duplicato: query indicizzata sulle colonne normalizzate. Niente
+  // overwrite: si modifica l'esistente dalla scheda.
+  const norm = crmNormFields({ tel: parsed.data.tel, email: parsed.data.email });
+  const orDup: Prisma.CrmContactWhereInput[] = [];
+  if (norm.emailNorm) orDup.push({ emailNorm: norm.emailNorm });
+  if (norm.telNorm) orDup.push({ telNorm: norm.telNorm });
+  const dup =
+    orDup.length > 0
+      ? await prisma.crmContact.findFirst({
+          where: { deletedAt: null, OR: orDup },
+          select: { id: true },
+        })
+      : null;
+  if (dup) {
     return {
       ok: false,
       error: 'Esiste già un contatto con questa email o questo telefono.',
@@ -366,28 +366,30 @@ export async function bulkImportCrmContactsAction(
   let created = 0;
   let skipped = parsed.rowErrors.length;
 
-  // Dedup contro gli esistenti (email + telefono normalizzato), caricati una
-  // volta sola; i Set si aggiornano man mano per intercettare anche i duplicati
-  // interni allo stesso file. Niente overwrite: nel dubbio si salta.
+  // Dedup contro gli esistenti (email + telefono normalizzati), caricati una
+  // volta sola dalle colonne già pronte; i Set si aggiornano man mano per
+  // intercettare anche i duplicati interni allo stesso file. Niente overwrite:
+  // nel dubbio si salta.
   const existing = await prisma.crmContact.findMany({
     where: { deletedAt: null },
-    select: { email: true, tel: true },
+    select: { emailNorm: true, telNorm: true },
   });
   const emailSet = new Set(
-    existing.map((c) => c.email).filter((e): e is string => !!e),
+    existing.map((c) => c.emailNorm).filter((e): e is string => !!e),
   );
   const telSet = new Set(
-    existing.map((c) => normalizePhone(c.tel)).filter((t) => t !== ''),
+    existing.map((c) => c.telNorm).filter((t): t is string => !!t),
   );
 
   for (const row of parsed.rows) {
     // Dedup per email e per telefono normalizzato (no overwrite massivo).
-    if (row.email && emailSet.has(row.email)) {
+    const emailNorm = normalizeEmail(row.email);
+    if (emailNorm !== '' && emailSet.has(emailNorm)) {
       skipped++;
       errors.push(`Riga ${row.line}: email "${row.email}" già presente — salto`);
       continue;
     }
-    const telNorm = normalizePhone(row.tel);
+    const telNorm = normalizeTel(row.tel);
     if (telNorm !== '' && telSet.has(telNorm)) {
       skipped++;
       errors.push(`Riga ${row.line}: telefono "${row.tel}" già presente — salto`);
@@ -407,12 +409,18 @@ export async function bulkImportCrmContactsAction(
           citta: row.citta,
           cap: row.cap,
           regione: row.regione,
+          ...crmNormFields({
+            tel: row.tel,
+            wa: row.wa,
+            email: row.email,
+            piva: row.piva,
+          }),
           status: row.status,
           fonte: row.fonte,
         },
       });
       created++;
-      if (row.email) emailSet.add(row.email);
+      if (emailNorm !== '') emailSet.add(emailNorm);
       if (telNorm !== '') telSet.add(telNorm);
     } catch (err) {
       skipped++;

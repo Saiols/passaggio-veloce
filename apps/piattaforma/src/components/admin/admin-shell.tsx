@@ -105,6 +105,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/crm/dashboard', label: 'Dashboard', icon: IconDashboard },
       { href: '/admin/crm/mappa', label: 'Mappa', icon: IconMappa },
       { href: '/admin/crm/contatti', label: 'Contatti', icon: IconCrm },
+      { href: '/admin/crm/riconciliazione', label: 'Riconciliazione', icon: IconCrm },
       { href: '/admin/crm/contatti-operativi', label: 'Acquirenti/venditori', icon: IconContatti },
       { href: '/admin/crm/sales', label: 'Sales', icon: IconSales },
       { href: '/admin/crm/chatbot', label: 'Chatbot', icon: IconChatbot },

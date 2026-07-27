@@ -703,6 +703,7 @@ model Sede {
   commissioniAttribuite CommissioneAffiliazione[] @relation("SedeAffiliante")
   companiesAffiliate    Company[]                 @relation("SedeReferral")
   segnalazioniCreazione SegnalazioneCreazione[]   @relation("SegnalazioniCreazioneSede")
+  crmContactMatches     CrmContact[]              @relation("CrmContactSede")
 
   @@index([companyId])
   @@index([type])
@@ -2242,6 +2243,18 @@ model CrmContact {
   lastAccessAt   DateTime?
   tassoComp      Int            @default(0) // 0-100
 
+  // Chiavi normalizzate per il match (fonte: lib/crm/match/norm-fields.ts).
+  telNorm   String?
+  waNorm    String?
+  emailNorm String?
+  pivaNorm  String?
+
+  // Sede specifica che ha fatto match (null = azienda madre).
+  sedeId    String?   @db.Uuid
+  sede      Sede?     @relation("CrmContactSede", fields: [sedeId], references: [id], onDelete: SetNull)
+  matchVia  String? // campi che hanno prodotto l'aggancio, es. "tel+indirizzo"
+  matchedAt DateTime?
+
   // Email di partenza CRM (onboarding post-telefonata)
   invitoToken        String?    @unique // token opaco del link /i/<token>, riscritto a ogni reinvio
   emailUnsubToken    String?    @unique // token STABILE per l'unsubscribe del lead (mai riscritto)
@@ -2256,6 +2269,17 @@ model CrmContact {
   campaignAssegnazioni CrmCampaignAssegnazione[]
   calls                CrmCall[]
 
+  // ⚠️ DRIFT VOLUTO rispetto al DB reale: la migration
+  // 20260727160000_crm_contacts_company_sede_unique aggiunge un indice
+  // UNIQUE PARZIALE (companyId, sedeId) NULLS NOT DISTINCT WHERE
+  // companyId IS NOT NULL AND deletedAt IS NULL — "un'identità prende un
+  // solo contatto", l'altra metà dell'invariante di apply.ts (Task 8,
+  // review C-1). Prisma 5.22 non supporta indici parziali (clausola WHERE)
+  // né NULLS NOT DISTINCT nel DSL di @@unique/@@index, quindi l'indice
+  // esiste SOLO nella migration, non qui sotto. Il progetto scrive le
+  // migration a mano e applica con `prisma migrate deploy` (mai
+  // `migrate dev`, che è distruttivo su questo schema): non introspettare
+  // né "correggere" questo drift, è intenzionale.
   @@index([cat])
   @@index([status])
   @@index([regione])
@@ -2263,6 +2287,11 @@ model CrmContact {
   @@index([companyId])
   @@index([linkAperto])
   @@index([promoCodeInviatoId])
+  @@index([telNorm])
+  @@index([waNorm])
+  @@index([emailNorm])
+  @@index([pivaNorm])
+  @@index([sedeId])
   @@map("crm_contacts")
 }
 

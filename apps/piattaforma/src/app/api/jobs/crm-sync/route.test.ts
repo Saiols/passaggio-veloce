@@ -66,4 +66,20 @@ describe('GET/POST /api/jobs/crm-sync', () => {
       updated: 9,
     });
   });
+
+  it('logga un riepilogo strutturato a fine job (run troncato → si vede dove si era arrivati)', async () => {
+    requireAdminOrCron.mockResolvedValue(null);
+    riconciliaTutto.mockResolvedValue({ proposte: 5, agganciati: 4, errori: 1 });
+    syncCrmFromPlatform.mockResolvedValue({ scanned: 10, updated: 9 });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await GET(req());
+    expect(logSpy).toHaveBeenCalledWith('[crm-sync]', {
+      proposte: 5,
+      agganciati: 4,
+      errori: 1,
+      scanned: 10,
+      updated: 9,
+    });
+    logSpy.mockRestore();
+  });
 });

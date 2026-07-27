@@ -994,6 +994,13 @@ model BrokerDichiarazione {
   userAgent    String?
   popupVersion String // "v1.0", "v1.1" — audit se il testo cambia
 
+  /// Copia del testo effettivamente reso a schermo: [{ id, testo }].
+  /// Null nei record <= v3.1, leggibili dal registro tramite popupVersion.
+  testoAttestazioni Json?
+
+  /// Numero della clausola dei Termini sui dati dei terzi al momento della spunta.
+  clausolaTerzi Int?
+
   createdAt DateTime @default(now())
 
   @@index([praticaId])

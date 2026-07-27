@@ -1,15 +1,15 @@
 import 'server-only';
-import { prisma, CrmFonteAcquisizione, type Prisma } from '@pv/db';
-import { isPreIscrizione } from './util';
-import { normalizeTel } from './match/normalize';
+import { prisma } from '@pv/db';
+import { calcolaProposte } from './match/engine';
+import { applicaProposte } from './match/apply';
 
 /**
  * Sync engine CRM ↔ piattaforma. Tre punti d'aggancio:
  *
  * 1. `tryMatchCrmContact(companyId)` — chiamato dopo Company.create
- *    (registrazione wizard). Cerca un CrmContact lead con match cascade
- *    email → tel → P.IVA, lo aggancia alla Company e auto-promuove a S7
- *    (Iscritto inattivo). Decisione D-12 spec §7.
+ *    (registrazione wizard). Delega al motore unico di match
+ *    (lib/crm/match/), limitato all'azienda appena creata, e applica le
+ *    proposte trovate. Decisione D-12 spec §7.
  *
  * 2. `onPraticaFirmata(praticaId)` — chiamato dopo prima `Pratica.update
  *    {stato: FIRMATA}`. Se il broker ha un CrmContact agganciato:
@@ -21,101 +21,32 @@ import { normalizeTel } from './match/normalize';
  *    `tassoComp` per tutti i contatti già linkati a una Company.
  */
 
-const STATUS_S7 = 'S7' as const;
 const STATUS_S8 = 'S8' as const;
 const STATUS_S9 = 'S9' as const;
 
 export type MatchResult =
-  | { matched: true; contactId: string; via: 'email' | 'tel' | 'piva' }
+  | { matched: true; contactId: string; via: string }
   | { matched: false };
 
 /**
- * Cerca un CrmContact (non agganciato a Company) che matchi la Company
- * appena creata. Cascade: email → tel → P.IVA. Se trovato, aggancia il
- * contact alla Company e promuove status a S7.
+ * Match alla registrazione: stesse regole della riconciliazione retroattiva,
+ * limitate all'azienda appena creata (e alle sue sedi).
  *
- * Best-effort: in caso di errore non rilancia (chiamato post-tx
- * registrazione, non deve far fallire la registrazione stessa).
+ * Best-effort: chiamata dopo la tx di registrazione, non deve mai farla
+ * fallire. Prima qui viveva una cascade email → tel → P.IVA che confrontava il
+ * telefono normalizzato con `CrmContact.tel` grezzo e quindi non trovava mai
+ * nulla; ora la logica è una sola, in lib/crm/match/.
  */
 export async function tryMatchCrmContact(
   companyId: string,
 ): Promise<MatchResult> {
   try {
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: {
-        id: true,
-        email: true,
-        telefono: true,
-        partitaIva: true,
-        referenteId: true,
-      },
-    });
-    if (!company) return { matched: false };
-
-    const cascade: Array<{
-      via: 'email' | 'tel' | 'piva';
-      where: { deletedAt: null; companyId: null; email?: string; tel?: string; piva?: string };
-    }> = [];
-    if (company.email) {
-      cascade.push({
-        via: 'email',
-        where: {
-          deletedAt: null,
-          companyId: null,
-          email: company.email.toLowerCase(),
-        },
-      });
-    }
-    if (company.telefono) {
-      cascade.push({
-        via: 'tel',
-        where: {
-          deletedAt: null,
-          companyId: null,
-          tel: normalizeTel(company.telefono),
-        },
-      });
-    }
-    cascade.push({
-      via: 'piva',
-      where: {
-        deletedAt: null,
-        companyId: null,
-        piva: company.partitaIva,
-      },
-    });
-
-    for (const step of cascade) {
-      const found = await prisma.crmContact.findFirst({
-        where: step.where,
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true, status: true },
-      });
-      if (found) {
-        const data: Prisma.CrmContactUncheckedUpdateInput = {
-          companyId,
-          // Auto-promote a S7 solo se il contatto era pre-iscrizione
-          // (S0..S6). Se era già più avanti (es. ri-iscrizione), preserva.
-          status: isPreIscrizione(found.status) ? STATUS_S7 : found.status,
-          iscrizioneComp: true,
-          iscrizioneAt: new Date(),
-          platStatus: 'INATTIVO',
-        };
-        // Arricchimento conservativo: se la company è arrivata via referral,
-        // marca la fonte come REFERRAL. Altrimenti NON tocchiamo `fonte` per
-        // preservare lo storico del lead (es. CSV_INIZIALE).
-        if (company.referenteId) {
-          data.fonte = CrmFonteAcquisizione.REFERRAL;
-        }
-        await prisma.crmContact.update({
-          where: { id: found.id },
-          data,
-        });
-        return { matched: true, contactId: found.id, via: step.via };
-      }
-    }
-    return { matched: false };
+    const proposte = await calcolaProposte({ companyId });
+    if (proposte.length === 0) return { matched: false };
+    const esito = await applicaProposte(proposte);
+    if (esito.agganciati === 0) return { matched: false };
+    const prima = proposte[0]!;
+    return { matched: true, contactId: prima.contactId, via: prima.campi.join('+') };
   } catch {
     return { matched: false };
   }

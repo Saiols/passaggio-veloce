@@ -1,8 +1,7 @@
 import 'server-only';
 import { prisma, CrmFonteAcquisizione, type Prisma } from '@pv/db';
-import { isPreIscrizione, normalizePhone } from './util';
-
-export { normalizePhone };
+import { isPreIscrizione } from './util';
+import { normalizeTel } from './match/normalize';
 
 /**
  * Sync engine CRM ↔ piattaforma. Tre punti d'aggancio:
@@ -74,7 +73,7 @@ export async function tryMatchCrmContact(
         where: {
           deletedAt: null,
           companyId: null,
-          tel: normalizePhone(company.telefono),
+          tel: normalizeTel(company.telefono),
         },
       });
     }

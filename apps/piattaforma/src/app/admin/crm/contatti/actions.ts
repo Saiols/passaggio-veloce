@@ -13,7 +13,7 @@ import {
   canBulkImportCrm,
 } from '@/lib/auth/permissions';
 import { parseContactsCsv } from '@/lib/crm/csv-import';
-import { normalizePhone } from '@/lib/crm/phone';
+import { normalizeTel } from '@/lib/crm/match/normalize';
 import { sendNotification } from '@/lib/notifiche';
 import { nextStatoInvio } from '@/lib/crm/email-partenza';
 import { evaluatePromoCode } from '@/lib/promo/evaluate';
@@ -212,7 +212,7 @@ export async function createCrmContactAction(
   // l'esistente dalla scheda. Il telefono normalizzato si confronta in memoria
   // (nessuna colonna dedicata).
   const emailNorm = parsed.data.email ? parsed.data.email.trim().toLowerCase() : '';
-  const telNorm = normalizePhone(parsed.data.tel);
+  const telNorm = normalizeTel(parsed.data.tel);
   const candidates = await prisma.crmContact.findMany({
     where: { deletedAt: null },
     select: { email: true, tel: true },
@@ -220,7 +220,7 @@ export async function createCrmContactAction(
   const isDup = candidates.some(
     (c) =>
       (emailNorm !== '' && c.email === emailNorm) ||
-      (telNorm !== '' && normalizePhone(c.tel) === telNorm),
+      (telNorm !== '' && normalizeTel(c.tel) === telNorm),
   );
   if (isDup) {
     return {
@@ -377,7 +377,7 @@ export async function bulkImportCrmContactsAction(
     existing.map((c) => c.email).filter((e): e is string => !!e),
   );
   const telSet = new Set(
-    existing.map((c) => normalizePhone(c.tel)).filter((t) => t !== ''),
+    existing.map((c) => normalizeTel(c.tel)).filter((t) => t !== ''),
   );
 
   for (const row of parsed.rows) {
@@ -387,7 +387,7 @@ export async function bulkImportCrmContactsAction(
       errors.push(`Riga ${row.line}: email "${row.email}" già presente — salto`);
       continue;
     }
-    const telNorm = normalizePhone(row.tel);
+    const telNorm = normalizeTel(row.tel);
     if (telNorm !== '' && telSet.has(telNorm)) {
       skipped++;
       errors.push(`Riga ${row.line}: telefono "${row.tel}" già presente — salto`);

@@ -741,7 +741,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [x] `onPraticaFirmata(praticaId)` hook in `app/pratiche/actions.ts`: S7→S8 prima volta, S8→S9 ricorrente, set `primaPratica`
 - [x] Cron `syncCrmFromPlatform()` aggrega `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`, `tassoComp` per i contatti agganciati
 - [x] Endpoint `POST /api/jobs/crm-sync` admin-only, con bottone in `/admin/demo-control` per trigger manuale
-- [x] Util puri (`normalizePhone`, `isPreIscrizione`) testabili senza prisma — 7 unit test
+- [x] Util puri (`isPreIscrizione`) testabili senza prisma; normalizzazione telefono unificata in `lib/crm/match/normalize.ts` (`normalizeTel`, fonte unica dal 2026-07-27) — unit test dedicati
 - L'outbox HMAC + retry è applicabile solo per CRM esterno e resta nella vecchia FASE 10 (non più attiva)
 
 ### 14.8 CRM-H — Vapi.ai integration (deferito post account esterno)

@@ -1,23 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizePhone, isPreIscrizione } from './util';
-
-describe('normalizePhone', () => {
-  it('strips spaces', () => {
-    expect(normalizePhone('345 12 34 567')).toBe('3451234567');
-  });
-
-  it('strips +39 country code', () => {
-    expect(normalizePhone('+39 345 1234567')).toBe('3451234567');
-  });
-
-  it('preserves number without prefix', () => {
-    expect(normalizePhone('3451234567')).toBe('3451234567');
-  });
-
-  it('strips multiple spaces and prefix together', () => {
-    expect(normalizePhone('+39    345 1234 567')).toBe('3451234567');
-  });
-});
+import { isPreIscrizione } from './util';
 
 describe('isPreIscrizione', () => {
   it('returns true for S0..S6', () => {

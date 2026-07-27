@@ -226,7 +226,7 @@ describe('attestazioni pre-invio', () => {
     expect(data.popupVersion).toBe('v4.0');
     expect(data.clausolaTerzi).toBe(23);
     expect(data.testoAttestazioni).toEqual(
-      attestazioniPerVersione('v4.0')!.map((a) => ({ id: a.id, testo: a.testo })),
+      attestazioniPerVersione('v4.0')!.attestazioni.map((a) => ({ id: a.id, testo: a.testo })),
     );
   });
 
@@ -234,18 +234,27 @@ describe('attestazioni pre-invio', () => {
   // è quello che rende accettabile fidarsi della versione mandata dal client
   // (il browser può avere ancora il bundle di un deploy precedente). Una
   // versione storica nota va accettata e deve persistere IL SUO testo, non
-  // quello — diverso — della versione corrente.
-  it('una versione storica nota viene accettata con il suo testo, non quello corrente', async () => {
-    const url = await submit(buildValidFormData({ dichiarazionePopupVersion: 'v3.1' }));
+  // quello — diverso — della versione corrente. `attestazioneTerziAccettata`
+  // è OMESSO (non 'false'): un client v3.1 reale non poteva mandarlo, il
+  // campo non esisteva ancora in quel bundle — è esattamente il payload che
+  // quel browser produce davvero (Finding 3, review whole-branch 2026-07-27).
+  it('una versione storica nota viene accettata con il payload che un client v3.1 poteva davvero mandare', async () => {
+    const url = await submit(
+      buildValidFormData({
+        dichiarazionePopupVersion: 'v3.1',
+        attestazioneTerziAccettata: undefined,
+      }),
+    );
     expect(url).toBeNull();
 
     const { data } = txMock.brokerDichiarazione.create.mock.calls[0]![0];
     expect(data.popupVersion).toBe('v3.1');
+    expect(data.clausolaTerzi).toBe(23);
     expect(data.testoAttestazioni).toEqual(
-      attestazioniPerVersione('v3.1')!.map((a) => ({ id: a.id, testo: a.testo })),
+      attestazioniPerVersione('v3.1')!.attestazioni.map((a) => ({ id: a.id, testo: a.testo })),
     );
     expect(data.testoAttestazioni).not.toEqual(
-      attestazioniPerVersione('v4.0')!.map((a) => ({ id: a.id, testo: a.testo })),
+      attestazioniPerVersione('v4.0')!.attestazioni.map((a) => ({ id: a.id, testo: a.testo })),
     );
   });
 

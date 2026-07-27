@@ -43,8 +43,7 @@ import { extractCf } from '@/lib/kyc/extract-cf';
 import type { AllowedAteco } from '@/lib/kyc/ateco';
 import { computeFees } from '@/lib/pricing';
 import { getTariffarioCorrente } from '@/lib/tariffario';
-import { attestazioniPerVersione } from '@/lib/legal/attestazioni';
-import { ART_DATI_TERZI } from '@/lib/legal/clausole-vessatorie';
+import { attestazioniPerVersione, tutteLeAttestazioniAccettate } from '@/lib/legal/attestazioni';
 import {
   ERRORE_RIACCETTAZIONE_PENDENTE,
   getRiaccettazionePendente,
@@ -756,21 +755,36 @@ export async function submitNuovaPraticaAction(
     veicoloDocRefs.push({ tipo: 'LIBRETTO', fronte: rFronte!, retro: rRetro! });
   }
 
-  // Attestazioni pre-invio: entrambe obbligatorie. Il wizard scrive i flag di
-  // suo (il gate sul gesto e' il bottone disabilitato), quindi qui non stiamo
-  // verificando il click: stiamo rifiutando una richiesta malformata.
-  if (!d.dichiarazioneAccettata || !d.attestazioneTerziAccettata) {
-    redirect(
-      '/pratiche/nuova?error=Devi%20accettare%20entrambe%20le%20dichiarazioni%20prima%20di%20inviare',
-    );
-  }
-
   // Versione fuori registro: rifiutiamo l'invio invece di registrare
-  // un'attestazione di cui non conosciamo il testo.
-  const attestazioniRese = attestazioniPerVersione(d.dichiarazionePopupVersion);
-  if (!attestazioniRese) {
+  // un'attestazione di cui non conosciamo il testo. Va verificata PRIMA del
+  // controllo sui flag qui sotto: sapere quale versione e' stata dichiarata
+  // e' cio' che dice quali flag quella versione poteva davvero mandare.
+  const versione = attestazioniPerVersione(d.dichiarazionePopupVersion);
+  if (!versione) {
     redirect(
       '/pratiche/nuova?error=La%20pagina%20non%20e%20aggiornata%3A%20ricarica%20e%20riprova',
+    );
+  }
+  const attestazioniRese = versione.attestazioni;
+
+  // Attestazioni pre-invio: obbligatorie tutte quelle che LA VERSIONE
+  // dichiarata porta — derivato dal registro, non scritto a mano qui (Finding
+  // 3, review whole-branch 2026-07-27). Un browser che tiene ancora un
+  // bundle precedente (es. v3.1, una sola spunta cumulativa) non puo'
+  // fisicamente mandare un campo che non esisteva ancora in quel form:
+  // richiedere sempre ENTRAMBI i flag lo respingerebbe a torto, con un
+  // messaggio "entrambe le dichiarazioni" rivolto a un utente che ne ha
+  // vista una sola. Il wizard scrive i flag di suo (il gate sul gesto e' il
+  // bottone disabilitato), quindi qui non stiamo verificando il click: stiamo
+  // rifiutando una richiesta malformata.
+  if (
+    !tutteLeAttestazioniAccettate(attestazioniRese, {
+      dichiarazioneAccettata: d.dichiarazioneAccettata,
+      attestazioneTerziAccettata: d.attestazioneTerziAccettata,
+    })
+  ) {
+    redirect(
+      '/pratiche/nuova?error=Devi%20accettare%20le%20dichiarazioni%20prima%20di%20inviare',
     );
   }
 
@@ -1699,7 +1713,7 @@ export async function submitNuovaPraticaAction(
         userAgent: metaRichiesta.userAgent || null,
         popupVersion: d.dichiarazionePopupVersion,
         testoAttestazioni: attestazioniRese.map((a) => ({ id: a.id, testo: a.testo })),
-        clausolaTerzi: ART_DATI_TERZI,
+        clausolaTerzi: versione.clausolaTerzi,
       },
     });
 

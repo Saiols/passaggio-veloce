@@ -30,9 +30,13 @@ export function AttestazioneCard({ dichiarazione }: { dichiarazione: Dichiarazio
   const nome = [dichiarazione.user.nome, dichiarazione.user.cognome].filter(Boolean).join(' ');
 
   // Testo dal record; per i record <= v3.1 (scritti prima che venisse
-  // persistito) si ricade sul registro tramite la versione.
+  // persistito) si ricade sul registro tramite la versione. `attestazioniPerVersione`
+  // ritorna la versione intera (testi + clausolaTerzi), non piu' l'array nudo.
   const dalRegistro = attestazioniPerVersione(dichiarazione.popupVersion);
-  const testiDalRegistro = dalRegistro && dalRegistro.length > 0 ? dalRegistro.map((a) => a.testo) : null;
+  const testiDalRegistro =
+    dalRegistro && dalRegistro.attestazioni.length > 0
+      ? dalRegistro.attestazioni.map((a) => a.testo)
+      : null;
   const testi = testiPersistiti(dichiarazione.testoAttestazioni) ?? testiDalRegistro;
 
   // `clausolaTerzi` e' null per ogni record <= v3.1 (v3.0 citava la clausola

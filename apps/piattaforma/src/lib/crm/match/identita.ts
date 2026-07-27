@@ -62,7 +62,12 @@ export type Identita = {
   registrataAt: Date;
 };
 
-const catDaType = (t: 'DEALER' | 'AGENZIA'): CatIdentita =>
+/**
+ * DEALER → BROKER, AGENZIA → AGENZIA. Esportata perché è anche la regola che
+ * decide su quale colonna contare le pratiche di un'azienda (`brokerId` vs
+ * `agenziaAssegnataId`): deve esistere in un posto solo.
+ */
+export const catDaType = (t: 'DEALER' | 'AGENZIA'): CatIdentita =>
   t === 'AGENZIA' ? 'AGENZIA' : 'BROKER';
 
 /** Toglie i vuoti e i duplicati: una chiave vuota non deve mai fare match. */

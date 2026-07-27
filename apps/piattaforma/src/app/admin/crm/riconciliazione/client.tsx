@@ -38,9 +38,15 @@ export function RiconciliazioneClient({
   const applica = () =>
     run(async () => {
       const res = await applicaRiconciliazioneAction();
+      // `saltati` va detto sempre, anche a zero: l'aggancio è irreversibile e
+      // questo è l'unico riscontro che l'admin riceve. Senza, «0 righe
+      // agganciate» non distingue "l'ha già fatto il cron stanotte" da
+      // "qualcosa è andato storto".
       setEsito(
         res.ok
-          ? `${res.agganciati} righe agganciate${res.errori > 0 ? `, ${res.errori} errori` : ''}.`
+          ? `${res.agganciati} righe agganciate, ${res.saltati} saltate` +
+              ` (già agganciate o cambiate nel frattempo)` +
+              `${res.errori > 0 ? `, ${res.errori} errori` : ''}.`
           : res.error,
       );
       router.refresh();

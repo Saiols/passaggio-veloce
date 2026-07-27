@@ -720,9 +720,14 @@ export async function registerAction(
       }
     }
 
-    // CRM-G: match best-effort post-iscrizione (Caso A: contatto lead
-    // pre-esistente → aggancia + auto-promote a S7). Non deve bloccare
-    // il flusso registrazione in caso di errore.
+    // CRM-G: match best-effort post-iscrizione. Delega al motore unico
+    // (lib/crm/match/) limitato a questa company: se una riga della lista è
+    // la stessa azienda, la aggancia e ne allinea lo stato allo storico reale
+    // (S7 se non ha ancora firmato, S8/S9 se sì; mai all'indietro, S10 mai
+    // toccato) — non è più un auto-promote fisso a S7. Le proposte ambigue
+    // (ex aequo di punteggio) non si applicano qui: restano alla pagina admin
+    // /admin/crm/riconciliazione. Non deve bloccare il flusso registrazione
+    // in caso di errore.
     if (createdCompanyId) {
       void tryMatchCrmContact(createdCompanyId);
       // AF-N: se il nuovo iscritto ha un referenteId, notifica al referente

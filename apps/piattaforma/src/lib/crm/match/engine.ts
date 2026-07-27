@@ -24,6 +24,13 @@ export type Proposta = {
   cat: 'BROKER' | 'AGENZIA';
   punteggio: number;
   campi: string[];
+  /**
+   * Data reale di registrazione dell'identità agganciata: `createdAt` della
+   * sede per un match su sede, della madre per un match sulla madre. Finisce
+   * in `iscrizioneAt` (apply.ts): usare il createdAt della madre anche per le
+   * sedi faceva dire al campo una data che non è quella di quel punto vendita.
+   */
+  registrataAt: Date;
 };
 
 const SELECT_COMPANY = {
@@ -127,5 +134,6 @@ export async function calcolaProposte(
     cat: co.identita.cat,
     punteggio: co.punteggio,
     campi: co.campi,
+    registrataAt: co.identita.registrataAt,
   }));
 }

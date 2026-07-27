@@ -1,82 +1,30 @@
 import 'server-only';
 import { prisma, CrmFonteAcquisizione, type Prisma } from '@pv/db';
 import { calcolaProposte, type Proposta } from './engine';
+import { datiFunnel } from './stato';
+import { storicoAzienda } from './storico';
 
 /**
  * Scrittura degli agganci proposti dal motore.
  *
  * Lo stato non viene messo a S7 e basta: un'azienda che opera da mesi verrebbe
  * mostrata come "iscritto inattivo" (spec D4). Si guarda lo storico reale —
- * quante pratiche ha firmato — e si allinea il funnel, solo in salita.
+ * quante pratiche ha firmato — e si allinea il funnel, solo in salita
+ * (`datiFunnel` in `stato.ts`, fonte unica condivisa con `onPraticaFirmata`).
  */
 
-const ORDINE = [
-  'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9',
-] as const;
-
-/**
- * Stato del contatto dato lo stato attuale e le pratiche firmate dall'azienda.
- * Mai indietro; S10 (churn, decisione umana) non si tocca.
- */
-export function statoAllineato(attuale: string, firmate: number): string {
-  if (attuale === 'S10') return 'S10';
-  const target = firmate === 0 ? 'S7' : firmate === 1 ? 'S8' : 'S9';
-  const iAttuale = ORDINE.indexOf(attuale as (typeof ORDINE)[number]);
-  const iTarget = ORDINE.indexOf(target as (typeof ORDINE)[number]);
-  if (iAttuale === -1) return target;
-  return iAttuale > iTarget ? attuale : target;
-}
-
-type Storico = {
-  registrataAt: Date;
-  firmate: number;
-  primaPraticaAt: Date | null;
-  sospesa: boolean;
-  referral: boolean;
+export type EsitoApply = {
+  agganciati: number;
+  /** Proposte non scritte perché il compare-and-set non è passato. */
+  saltati: number;
+  errori: number;
 };
-
-async function storicoAzienda(
-  companyId: string,
-  cat: 'BROKER' | 'AGENZIA',
-): Promise<Storico | null> {
-  // Le pratiche di un'agenzia stanno su agenziaAssegnataId, non su brokerId.
-  const wherePratica =
-    cat === 'AGENZIA' ? { agenziaAssegnataId: companyId } : { brokerId: companyId };
-
-  const [company, firmate, prima] = await Promise.all([
-    prisma.company.findUnique({
-      where: { id: companyId },
-      select: {
-        createdAt: true,
-        suspendedAt: true,
-        deletedAt: true,
-        referenteId: true,
-      },
-    }),
-    prisma.pratica.count({
-      where: { ...wherePratica, deletedAt: null, stato: 'FIRMATA' },
-    }),
-    prisma.pratica.findFirst({
-      where: { ...wherePratica, deletedAt: null, stato: 'FIRMATA' },
-      orderBy: { firmaAvvenutaAt: 'asc' },
-      select: { firmaAvvenutaAt: true },
-    }),
-  ]);
-  if (!company) return null;
-
-  return {
-    registrataAt: company.createdAt,
-    firmate,
-    primaPraticaAt: prima?.firmaAvvenutaAt ?? null,
-    sospesa: !!company.suspendedAt || !!company.deletedAt,
-    referral: !!company.referenteId,
-  };
-}
 
 export async function applicaProposte(
   proposte: Proposta[],
-): Promise<{ agganciati: number; errori: number }> {
+): Promise<EsitoApply> {
   let agganciati = 0;
+  let saltati = 0;
   let errori = 0;
 
   for (const p of proposte) {
@@ -93,29 +41,32 @@ export async function applicaProposte(
         where: { id: p.contactId },
         select: { status: true },
       });
-      if (!attuale) continue;
+      if (!attuale) {
+        saltati++;
+        continue;
+      }
 
       const storico = await storicoAzienda(p.companyId, p.cat);
-      if (!storico) continue;
+      if (!storico) {
+        saltati++;
+        continue;
+      }
 
+      const funnel = datiFunnel(attuale.status, storico);
       const data: Prisma.CrmContactUncheckedUpdateManyInput = {
         companyId: p.companyId,
         sedeId: p.sedeId,
         matchVia: p.campi.join('+'),
         matchedAt: new Date(),
         iscrizioneComp: true,
-        iscrizioneAt: storico.registrataAt,
-        status: statoAllineato(
-          attuale.status,
-          storico.firmate,
-        ) as Prisma.CrmContactUncheckedUpdateManyInput['status'],
-        platStatus: storico.sospesa
-          ? 'SOSPESO'
-          : storico.firmate > 0
-            ? 'ATTIVO'
-            : 'INATTIVO',
-        primaPratica: storico.firmate > 0,
-        primaPraticaAt: storico.primaPraticaAt,
+        // Data REALE di registrazione dell'identità agganciata: per un match
+        // su una sede è il createdAt della sede, non quello della madre
+        // (spec §apply.ts). Arriva dal motore insieme alla proposta.
+        iscrizioneAt: p.registrataAt,
+        status: funnel.status as Prisma.CrmContactUncheckedUpdateManyInput['status'],
+        platStatus: funnel.platStatus,
+        primaPratica: funnel.primaPratica,
+        primaPraticaAt: funnel.primaPraticaAt,
       };
       // Arricchimento già vivo prima di questo lavoro: se la Company è arrivata
       // da un referral la fonte diventa REFERRAL. Altrimenti `fonte` non si
@@ -123,30 +74,38 @@ export async function applicaProposte(
       if (storico.referral) data.fonte = CrmFonteAcquisizione.REFERRAL;
 
       // Compare-and-set: si scrive solo se nessun altro giro l'ha già preso
-      // (companyId ancora null) E se lo stato è ancora quello appena letto
-      // (nessuno l'ha spostato nel frattempo, es. a S10). Se una delle due
-      // condizioni è cambiata, `count` torna 0: niente sovrascrittura silenziosa,
-      // la proposta semplicemente non si applica in questo giro.
+      // (companyId ancora null), se lo stato è ancora quello appena letto
+      // (nessuno l'ha spostato nel frattempo, es. a S10) e se la riga non è
+      // stata cancellata fra il calcolo e la scrittura. `deletedAt: null` è lo
+      // stesso predicato dei candidati in engine.ts e dell'indice unico
+      // parziale: i tre devono coincidere, altrimenti si scrive su una riga
+      // cancellata e la si conta come agganciata. Se una delle condizioni è
+      // cambiata, `count` torna 0: niente sovrascrittura silenziosa, la
+      // proposta semplicemente non si applica in questo giro.
       const res = await prisma.crmContact.updateMany({
-        where: { id: p.contactId, companyId: null, status: attuale.status },
+        where: {
+          id: p.contactId,
+          companyId: null,
+          deletedAt: null,
+          status: attuale.status,
+        },
         data,
       });
       if (res.count > 0) agganciati++;
+      else saltati++;
     } catch (err) {
       console.error(`[applicaProposte] errore su contatto ${p.contactId}:`, err);
       errori++;
     }
   }
 
-  return { agganciati, errori };
+  return { agganciati, saltati, errori };
 }
 
+export type EsitoRiconciliazione = EsitoApply & { proposte: number };
+
 /** Passata completa: calcola e applica. Usata dal cron e dall'azione admin. */
-export async function riconciliaTutto(): Promise<{
-  proposte: number;
-  agganciati: number;
-  errori: number;
-}> {
+export async function riconciliaTutto(): Promise<EsitoRiconciliazione> {
   const proposte = await calcolaProposte();
   const esito = await applicaProposte(proposte);
   return { proposte: proposte.length, ...esito };

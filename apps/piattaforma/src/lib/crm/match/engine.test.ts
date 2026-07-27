@@ -112,6 +112,8 @@ describe('calcolaProposte', () => {
       companyNome: 'AGENZIA CORSICO DI CIAVARELLA ANTONIO',
       cat: 'AGENZIA',
       punteggio: 80,
+      // madre: data di registrazione dell'azienda
+      registrataAt: new Date('2026-01-10T00:00:00Z'),
     });
     expect(proposte[0]!.campi).toContain('tel');
   });
@@ -184,6 +186,11 @@ describe('calcolaProposte', () => {
       contactCitta: 'Milano',
       sedeId: 's1',
       sedeNome: 'Agenzia Corsico Sede Milano',
+      // Data REALE di registrazione dell'identità agganciata: quella della
+      // SEDE (2026-02-01), non quella della madre (2026-01-10). Finisce in
+      // `iscrizioneAt`: leggerla dalla madre farebbe dire al campo una data
+      // che non è quella di quel punto vendita.
+      registrataAt: new Date('2026-02-01T00:00:00Z'),
     });
   });
 

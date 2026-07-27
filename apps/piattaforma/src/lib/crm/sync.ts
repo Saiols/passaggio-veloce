@@ -1,7 +1,10 @@
 import 'server-only';
-import { prisma } from '@pv/db';
+import { prisma, type Prisma } from '@pv/db';
 import { calcolaProposte } from './match/engine';
 import { applicaProposte } from './match/apply';
+import { catDaType } from './match/identita';
+import { datiFunnel } from './match/stato';
+import { storicoAzienda } from './match/storico';
 
 /**
  * Sync engine CRM ↔ piattaforma. Tre punti d'aggancio:
@@ -11,18 +14,15 @@ import { applicaProposte } from './match/apply';
  *    (lib/crm/match/), limitato all'azienda appena creata, e applica le
  *    proposte trovate. Decisione D-12 spec §7.
  *
- * 2. `onPraticaFirmata(praticaId)` — chiamato dopo prima `Pratica.update
- *    {stato: FIRMATA}`. Se il broker ha un CrmContact agganciato:
- *    - Prima pratica: S7 → S8, primaPratica=true, primaPraticaAt=now
- *    - Pratica ricorrente: S8 → S9
+ * 2. `onPraticaFirmata(praticaId)` — chiamato dopo `Pratica.update
+ *    {stato: FIRMATA}`. Riallinea TUTTI i contatti CRM agganciati alle due
+ *    aziende che hanno lavorato la pratica (broker e agenzia assegnata) con
+ *    le stesse regole dell'aggancio: `datiFunnel` in match/stato.ts.
  *
  * 3. `syncCrmFromPlatform()` — cron job che aggiorna gli aggregati
  *    `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`,
  *    `tassoComp` per tutti i contatti già linkati a una Company.
  */
-
-const STATUS_S8 = 'S8' as const;
-const STATUS_S9 = 'S9' as const;
 
 export type MatchResult =
   | { matched: true; contactId: string; via: string }
@@ -53,10 +53,61 @@ export async function tryMatchCrmContact(
 }
 
 /**
- * Hook post-firma. Promuove lo stato del CrmContact agganciato al broker
- * della pratica:
- * - Mai firmato prima (primaPratica=false): → S8 + primaPratica=true
- * - Già firmato (primaPratica=true): → S9 (ricorrente)
+ * Riallinea al funnel tutti i contatti CRM agganciati a una company.
+ *
+ * "Tutti", non uno: per decisione di progetto (spec D3) una company può avere
+ * più contatti agganciati — la madre e una riga per ciascuna sede. Un
+ * `findFirst` senza `orderBy` ne sceglieva uno a caso e lasciava indietro gli
+ * altri.
+ */
+async function allineaContattiAgganciati(companyId: string): Promise<void> {
+  const contatti = await prisma.crmContact.findMany({
+    where: { companyId, deletedAt: null },
+    select: { id: true, status: true },
+  });
+  if (contatti.length === 0) return;
+
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { type: true },
+  });
+  if (!company) return;
+
+  const storico = await storicoAzienda(companyId, catDaType(company.type));
+  if (!storico) return;
+
+  for (const c of contatti) {
+    const funnel = datiFunnel(c.status, storico);
+    // Compare-and-set sullo stato appena letto, come in apply.ts: fra la
+    // lettura e la scrittura un admin può portare il contatto a S10 da
+    // un'altra richiesta, e quella decisione umana deve vincere.
+    await prisma.crmContact.updateMany({
+      where: { id: c.id, deletedAt: null, status: c.status },
+      data: {
+        status: funnel.status as Prisma.CrmContactUncheckedUpdateManyInput['status'],
+        platStatus: funnel.platStatus,
+        primaPratica: funnel.primaPratica,
+        primaPraticaAt: funnel.primaPraticaAt,
+      },
+    });
+  }
+}
+
+/**
+ * Hook post-firma. Riallinea i contatti CRM agganciati alle aziende che hanno
+ * lavorato la pratica.
+ *
+ * Fino a questo branch i contatti agganciati erano ZERO, quindi questa
+ * funzione era codice morto e le sue scorciatoie non si vedevano. Da ora è il
+ * modulo che muove lo stato dei contatti agganciati, e deve rispettare le
+ * stesse quattro regole di `apply.ts`:
+ * - S10 non si tocca mai (churn: decisione umana);
+ * - lo stato non retrocede (un contatto portato a S9 a mano non torna a S8);
+ * - le pratiche di un'agenzia si contano su `agenziaAssegnataId`, non su
+ *   `brokerId` — guardare solo il broker lasciava a S7 per sempre le 7.880
+ *   righe agenzia della lista, perché `syncCrmFromPlatform` aggiorna gli
+ *   aggregati ma non lo `status` e il motore salta le identità già agganciate;
+ * - si aggiornano TUTTI i contatti agganciati, non uno scelto a caso.
  *
  * Best-effort, non rilancia errori.
  */
@@ -64,31 +115,21 @@ export async function onPraticaFirmata(praticaId: string): Promise<void> {
   try {
     const pratica = await prisma.pratica.findUnique({
       where: { id: praticaId },
-      select: { brokerId: true, stato: true },
+      select: { brokerId: true, agenziaAssegnataId: true, stato: true },
     });
     if (!pratica || pratica.stato !== 'FIRMATA') return;
 
-    const contact = await prisma.crmContact.findFirst({
-      where: { companyId: pratica.brokerId, deletedAt: null },
-      select: { id: true, status: true, primaPratica: true },
-    });
-    if (!contact) return;
+    // Le due aziende che hanno lavorato la pratica. Il broker la crea, l'
+    // agenzia la evade: entrambe sono in lista CRM e per entrambe questa
+    // firma è un avanzamento del funnel.
+    const aziende = [...new Set(
+      [pratica.brokerId, pratica.agenziaAssegnataId].filter(
+        (id): id is string => !!id,
+      ),
+    )];
 
-    if (!contact.primaPratica) {
-      await prisma.crmContact.update({
-        where: { id: contact.id },
-        data: {
-          status: STATUS_S8,
-          primaPratica: true,
-          primaPraticaAt: new Date(),
-          platStatus: 'ATTIVO',
-        },
-      });
-    } else if (contact.status !== STATUS_S9) {
-      await prisma.crmContact.update({
-        where: { id: contact.id },
-        data: { status: STATUS_S9, platStatus: 'ATTIVO' },
-      });
+    for (const companyId of aziende) {
+      await allineaContattiAgganciati(companyId);
     }
   } catch {
     // best-effort, ignora

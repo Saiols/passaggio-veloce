@@ -22,8 +22,14 @@ vi.mock('@pv/db', () => ({
 vi.mock('./engine', () => ({ calcolaProposte: vi.fn() }));
 
 import { calcolaProposte } from './engine';
-import { applicaProposte, riconciliaTutto, statoAllineato } from './apply';
+import { applicaProposte, riconciliaTutto } from './apply';
 
+/**
+ * `registrataAt` è deliberatamente DIVERSA dal `createdAt` della company
+ * mockata (2026-01-10): è la data dell'identità agganciata — per un match su
+ * una sede, il createdAt della SEDE. Se `apply.ts` tornasse a leggere
+ * `company.createdAt`, il test su `iscrizioneAt` diventerebbe rosso.
+ */
 const PROPOSTA = {
   contactId: 'x1',
   contactNome: 'Agenzia Corsico Pratiche Auto',
@@ -36,24 +42,8 @@ const PROPOSTA = {
   cat: 'AGENZIA' as const,
   punteggio: 80,
   campi: ['tel', 'indirizzo'],
+  registrataAt: new Date('2026-03-15T00:00:00Z'),
 };
-
-describe('statoAllineato', () => {
-  it('mappa il numero di firmate sul funnel', () => {
-    expect(statoAllineato('S0', 0)).toBe('S7');
-    expect(statoAllineato('S0', 1)).toBe('S8');
-    expect(statoAllineato('S0', 5)).toBe('S9');
-  });
-
-  it('non retrocede mai', () => {
-    expect(statoAllineato('S9', 0)).toBe('S9');
-    expect(statoAllineato('S8', 1)).toBe('S8');
-  });
-
-  it('non tocca il churn', () => {
-    expect(statoAllineato('S10', 3)).toBe('S10');
-  });
-});
 
 describe('applicaProposte', () => {
   beforeEach(() => {
@@ -76,11 +66,18 @@ describe('applicaProposte', () => {
 
   it('scrive aggancio, stato e provenienza del match', async () => {
     const esito = await applicaProposte([PROPOSTA]);
-    expect(esito).toEqual({ agganciati: 1, errori: 0 });
+    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 0 });
     const args = contactUpdateMany.mock.calls[0]![0];
-    // compare-and-set: si scrive solo se il contatto è ancora libero E lo
-    // stato è ancora quello appena letto (protegge da lost update, I-1)
-    expect(args.where).toEqual({ id: 'x1', companyId: null, status: 'S0' });
+    // compare-and-set: si scrive solo se il contatto è ancora libero, se lo
+    // stato è ancora quello appena letto (protegge da lost update, I-1) e se
+    // la riga non è stata cancellata nel frattempo (stesso predicato dei
+    // candidati in engine.ts e dell'indice unico parziale)
+    expect(args.where).toEqual({
+      id: 'x1',
+      companyId: null,
+      deletedAt: null,
+      status: 'S0',
+    });
     expect(args.data).toMatchObject({
       companyId: 'c1',
       sedeId: null,
@@ -89,8 +86,29 @@ describe('applicaProposte', () => {
       platStatus: 'INATTIVO',
       matchVia: 'tel+indirizzo',
     });
-    expect(args.data.iscrizioneAt).toEqual(new Date('2026-01-10T00:00:00Z'));
+    expect(args.data.iscrizioneAt).toEqual(new Date('2026-03-15T00:00:00Z'));
     expect(args.data.fonte).toBeUndefined(); // storico del lead preservato
+  });
+
+  // Il compare-and-set deve escludere le righe cancellate: senza
+  // `deletedAt: null` una riga soft-deleted fra il calcolo delle proposte e
+  // la scrittura verrebbe aggiornata comunque e contata come agganciata,
+  // mentre l'indice unico parziale e i candidati del motore la ignorano.
+  it('il CAS esclude le righe soft-deleted', async () => {
+    await applicaProposte([PROPOSTA]);
+    expect(contactUpdateMany.mock.calls[0]![0].where).toHaveProperty(
+      'deletedAt',
+      null,
+    );
+  });
+
+  it("iscrizioneAt è la data dell'identità agganciata, non della madre", async () => {
+    await applicaProposte([
+      { ...PROPOSTA, sedeId: 's1', registrataAt: new Date('2026-05-20T00:00:00Z') },
+    ]);
+    expect(contactUpdateMany.mock.calls[0]![0].data.iscrizioneAt).toEqual(
+      new Date('2026-05-20T00:00:00Z'),
+    );
   });
 
   it('conta le pratiche di un AGENZIA su agenziaAssegnataId', async () => {
@@ -171,9 +189,25 @@ describe('applicaProposte', () => {
     expect(contactUpdateMany.mock.calls[0]![0].data.status).toBe('S9');
   });
 
-  it('contatto già preso da un altro giro: non conta come agganciato', async () => {
+  // La scrittura non passata NON è un successo silenzioso: è l'unico feedback
+  // di un'operazione irreversibile e va contata a parte dagli errori.
+  it('contatto già preso da un altro giro: conta fra i saltati, non fra gli agganciati', async () => {
     contactUpdateMany.mockResolvedValue({ count: 0 });
-    expect(await applicaProposte([PROPOSTA])).toEqual({ agganciati: 0, errori: 0 });
+    expect(await applicaProposte([PROPOSTA])).toEqual({
+      agganciati: 0,
+      saltati: 1,
+      errori: 0,
+    });
+  });
+
+  it('contatto sparito fra calcolo e scrittura: conta fra i saltati', async () => {
+    contactFindUnique.mockResolvedValue(null);
+    expect(await applicaProposte([PROPOSTA])).toEqual({
+      agganciati: 0,
+      saltati: 1,
+      errori: 0,
+    });
+    expect(contactUpdateMany).not.toHaveBeenCalled();
   });
 
   it('un errore su una proposta non ferma le altre, e viene loggato con l\'id coinvolto', async () => {
@@ -182,7 +216,7 @@ describe('applicaProposte', () => {
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce({ count: 1 });
     const esito = await applicaProposte([PROPOSTA, { ...PROPOSTA, contactId: 'x2' }]);
-    expect(esito).toEqual({ agganciati: 1, errori: 1 });
+    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 1 });
     // I-4 (review giro 1/5): l'errore non va inghiottito in silenzio, va
     // loggato con l'id della proposta per poterlo diagnosticare dal cron.
     expect(consoleError).toHaveBeenCalledWith(
@@ -204,6 +238,7 @@ describe('applicaProposte', () => {
     expect(contactUpdateMany.mock.calls[0]![0].where).toEqual({
       id: 'x1',
       companyId: null,
+      deletedAt: null,
       status: 'S3',
     });
   });
@@ -271,20 +306,31 @@ describe('riconciliaTutto', () => {
     contactUpdateMany.mockResolvedValue({ count: 1 });
   });
 
-  it('calcola le proposte dal motore, le applica e riporta i tre conteggi', async () => {
+  it('calcola le proposte dal motore, le applica e riporta i conteggi', async () => {
     vi.mocked(calcolaProposte).mockResolvedValue([
       PROPOSTA,
       { ...PROPOSTA, contactId: 'x2' },
     ]);
     const esito = await riconciliaTutto();
     expect(calcolaProposte).toHaveBeenCalledTimes(1);
-    expect(esito).toEqual({ proposte: 2, agganciati: 2, errori: 0 });
+    expect(esito).toEqual({
+      proposte: 2,
+      agganciati: 2,
+      saltati: 0,
+      errori: 0,
+    });
   });
 
   it('nessuna proposta dal motore: nessuna scrittura e conteggi a zero', async () => {
     vi.mocked(calcolaProposte).mockResolvedValue([]);
     const esito = await riconciliaTutto();
     expect(contactUpdateMany).not.toHaveBeenCalled();
-    expect(esito).toEqual({ proposte: 0, agganciati: 0, errori: 0 });
+    expect(esito).toEqual({
+      proposte: 0,
+      agganciati: 0,
+      saltati: 0,
+      errori: 0,
+    });
   });
+
 });

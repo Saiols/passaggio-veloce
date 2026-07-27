@@ -21,14 +21,20 @@ describe('applicaRiconciliazioneAction', () => {
     auth.mockReset();
     riconciliaTutto.mockReset();
     revalidatePath.mockReset();
-    riconciliaTutto.mockResolvedValue({ proposte: 3, agganciati: 3, errori: 0 });
+    riconciliaTutto.mockResolvedValue({
+      proposte: 3,
+      agganciati: 2,
+      saltati: 1,
+      errori: 0,
+    });
   });
 
-  it('applica per ADMIN_PIATTAFORMA', async () => {
+  it('applica per ADMIN_PIATTAFORMA e riporta anche le saltate', async () => {
     auth.mockResolvedValue({ user: { id: 'u1', role: 'ADMIN_PIATTAFORMA' } });
     expect(await applicaRiconciliazioneAction()).toEqual({
       ok: true,
-      agganciati: 3,
+      agganciati: 2,
+      saltati: 1,
       errori: 0,
     });
   });

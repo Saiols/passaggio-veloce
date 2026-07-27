@@ -20,6 +20,7 @@ const PROPOSTA = {
   cat: 'AGENZIA',
   punteggio: 80,
   campi: ['tel', 'indirizzo'],
+  registrataAt: new Date('2026-01-10T00:00:00Z'),
 };
 
 describe('tryMatchCrmContact', () => {
@@ -52,4 +53,5 @@ describe('tryMatchCrmContact', () => {
     calcolaProposte.mockRejectedValue(new Error('db giù'));
     expect(await tryMatchCrmContact('c1')).toEqual({ matched: false });
   });
+
 });

@@ -21,6 +21,7 @@ import { validateRegistrationDocuments } from '@/lib/auth/document-validation';
 import {
   registerAction,
   checkPromoCodeAction,
+  checkEmailDisponibileAction,
   verifyRegistrationDocumentsAction,
   type RoutableRegisterField,
 } from '../actions';
@@ -587,8 +588,35 @@ function AccountStep({
     }
   }, [emailError, setError]);
 
+  const [isChecking, startCheck] = useTransition();
+
+  /**
+   * "Avanti" non passa se l'email è già registrata: il submit vero è quattro
+   * step più avanti (Sedi), e scoprirlo lì significa aver compilato azienda,
+   * documenti, pagamento e sedi per niente.
+   *
+   * Resta un anticipo, non una garanzia: l'unicità la decidono il check dentro
+   * `registerAction` e il vincolo unique sul DB. Per questo, se la chiamata
+   * fallisce (rete, server), si prosegue invece di sbarrare la strada — a
+   * fermare chi deve fermarsi ci pensa comunque il submit finale.
+   */
+  const submit = (values: AccountData) => {
+    startCheck(async () => {
+      try {
+        const res = await checkEmailDisponibileAction(values.email);
+        if (!res.disponibile) {
+          setError('email', { type: 'server', message: res.error }, { shouldFocus: true });
+          return;
+        }
+      } catch (e) {
+        console.warn('[registrazione] controllo email non riuscito, si prosegue', e);
+      }
+      onNext(values);
+    });
+  };
+
   return (
-    <form onSubmit={handleSubmit(onNext)} noValidate className="space-y-4">
+    <form onSubmit={handleSubmit(submit)} noValidate className="space-y-4">
       <Field label="Email" required error={errors.email?.message}>
         <Input type="email" autoComplete="email" invalid={!!errors.email} {...register('email')} />
       </Field>
@@ -638,7 +666,13 @@ function AccountStep({
         </Field>
       </div>
 
-      <Button type="submit" fullWidth>
+      <Button
+        type="submit"
+        fullWidth
+        disabled={isChecking}
+        loading={isChecking}
+        loadingLabel="Verifica email in corso…"
+      >
         Avanti
       </Button>
     </form>

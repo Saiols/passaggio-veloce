@@ -847,6 +847,51 @@ export async function registerAction(
 }
 
 // ============================================================
+// CHECK EMAIL (gate anticipato allo step Account)
+// ============================================================
+
+export type CheckEmailResult =
+  | { disponibile: true }
+  | { disponibile: false; error: string };
+
+/**
+ * Dice se un'email è già presa, per bloccare l'utente allo step Account invece
+ * di fargli compilare azienda, documenti, pagamento e sedi e rimbalzarlo
+ * indietro solo al submit finale.
+ *
+ * NON sostituisce il check dentro `registerAction` (né il vincolo unique sul
+ * DB): è la STESSA regola — `emailGiaInUso`, fonte unica — letta prima, per
+ * pura UX. Fra questa risposta e il submit l'email può essere presa da
+ * qualcun altro: decide sempre il submit.
+ *
+ * È un oracolo di esistenza account, interrogabile da anonimi: il rate limit
+ * per IP rende scomoda l'enumerazione di massa (il singolo fatto "questa email
+ * è registrata" lo rivela già oggi il submit di registrazione). In throttle
+ * risponde `disponibile: true` — meglio far proseguire un utente legittimo
+ * dietro un NAT condiviso, con la parola al submit, che sbarrarlo qui.
+ */
+export async function checkEmailDisponibileAction(
+  email: string,
+): Promise<CheckEmailResult> {
+  // Input malformato: niente da dire. Lo schema Zod dello step 1 ha già
+  // bocciato il campo, questa action non deve aggiungere un secondo messaggio.
+  if (!email || typeof email !== 'string') return { disponibile: true };
+
+  // Rate limit (durevole, DB-backed): 30 controlli / 10 min per IP. Generoso
+  // come quello dei codici promozionali — uno step del wizard non ne richiede
+  // più di qualche unità — ma sufficiente a rendere costosa l'enumerazione.
+  const ip = getClientIp(await headers());
+  const rl = await rateLimit(`checkemail:${ip}`, 30, 10 * 60);
+  if (!rl.allowed) return { disponibile: true };
+
+  const emailLower = normalizzaEmail(email);
+  if (await emailGiaInUso(emailLower)) {
+    return { disponibile: false, error: EMAIL_GIA_REGISTRATA };
+  }
+  return { disponibile: true };
+}
+
+// ============================================================
 // VERIFY DOCUMENTI (gate KYC anticipato allo step Documenti)
 // ============================================================
 

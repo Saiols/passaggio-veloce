@@ -58,6 +58,7 @@ import {
   loginAction,
   registerAction,
   checkPromoCodeAction,
+  checkEmailDisponibileAction,
   requestPasswordResetAction,
 } from './actions';
 
@@ -379,6 +380,59 @@ describe('checkPromoCodeAction', () => {
     const r = await checkPromoCodeAction('BENV10');
     expect(r).toEqual({ stato: 'inesistente' });
     expect(prisma.promoCode.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Gate anticipato dello step Account: la stessa regola di `registerAction`
+ * (`emailGiaInUso`) letta prima, per non far compilare quattro step a chi ha
+ * un'email già registrata. Non è autoritativo: i due casi di fail-open
+ * (throttle e input vuoto) sono deliberati e testati come tali.
+ */
+describe('checkEmailDisponibileAction', () => {
+  beforeEach(() => {
+    vi.mocked(prisma.user.findFirst).mockReset();
+  });
+
+  it('email libera → disponibile, interrogando il DB con l’email normalizzata', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue(null as never);
+
+    const r = await checkEmailDisponibileAction('  Mario@Example.IT ');
+
+    expect(r).toEqual({ disponibile: true });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ email: 'mario@example.it' }) }),
+    );
+  });
+
+  it('email già registrata → non disponibile, con il messaggio della registrazione pubblica', async () => {
+    vi.mocked(prisma.user.findFirst).mockResolvedValue({ id: 'u1' } as never);
+
+    const r = await checkEmailDisponibileAction('mario@example.com');
+
+    expect(r).toEqual({
+      disponibile: false,
+      error: "Questa email è già registrata. Accedi con l'account esistente o usa un'altra email.",
+    });
+  });
+
+  it('throttle: se rateLimit blocca, risponde "disponibile" senza interrogare il DB (fail-open, decide il submit)', async () => {
+    rateLimitMock.mockResolvedValueOnce({ allowed: false });
+
+    const r = await checkEmailDisponibileAction('vittima@example.com');
+
+    expect(r).toEqual({ disponibile: true });
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('email vuota → "disponibile" senza consumare il rate limit (il messaggio lo dà già lo schema Zod)', async () => {
+    rateLimitMock.mockClear();
+
+    const r = await checkEmailDisponibileAction('');
+
+    expect(r).toEqual({ disponibile: true });
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
   });
 });
 

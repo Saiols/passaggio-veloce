@@ -43,12 +43,12 @@ export function DichiarazionePopup({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-pv-navy-900/40 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-pv-navy-900/40 px-4 py-8"
       role="dialog"
       aria-modal="true"
       aria-labelledby="dichiarazione-title"
     >
-      <div className="w-full max-w-lg rounded-[20px] bg-white p-6 shadow-[var(--pv-shadow-card-lg)] sm:p-7">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-[20px] bg-white p-6 shadow-[var(--pv-shadow-card-lg)] sm:p-7">
         <div className="mb-4 flex items-start gap-3">
           <span
             aria-hidden
@@ -141,6 +141,7 @@ export function DichiarazionePopup({
                 <Link
                   href={a.link.href}
                   target="_blank"
+                  rel="noreferrer noopener"
                   className="mt-1 ml-11 inline-block text-[12px] font-semibold text-pv-navy-700 hover:underline"
                 >
                   {a.link.label} ↗

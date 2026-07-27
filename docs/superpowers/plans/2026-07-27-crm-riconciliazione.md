@@ -14,7 +14,7 @@
 
 - Branch di lavoro: `feat/crm-riconciliazione`. Un'altra sessione lavora su `main`: non fare rebase/merge senza chiedere.
 - Node: `nvm use 22.15.0` prima di qualsiasi `pnpm` (post-riavvio la shell torna a Node 16).
-- Test: `pnpm --filter @pv/piattaforma test` (vitest, `run` non watch). Typecheck: `pnpm typecheck`.
+- Test: `pnpm --filter piattaforma test` (vitest, `run` non watch). Typecheck: `pnpm typecheck`.
 - **Mai** `pnpm db:migrate` (`prisma migrate dev` propone DROP distruttivi su questo schema): migration scritta a mano + `pnpm --filter @pv/db db:deploy`.
 - Ogni modulo puro (niente `server-only`, niente Prisma) sta in file separati da quelli server: i test dei puri non devono mockare nulla.
 - Testi UI in italiano. Nessun colore hardcoded: usare le classi `pv-*` del design system.
@@ -129,7 +129,7 @@ describe('normalizeCitta / normalizeCap', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/normalize.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/normalize.test.ts`
 Expected: FAIL — `Failed to resolve import "./normalize"`.
 
 - [ ] **Step 3: Implementa i normalizzatori**
@@ -235,7 +235,7 @@ export function normalizeCap(raw: string | null | undefined): string {
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/normalize.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/normalize.test.ts`
 Expected: PASS, tutti i casi.
 
 - [ ] **Step 5: Commit**
@@ -280,7 +280,7 @@ Cancella `apps/piattaforma/src/lib/crm/phone.test.ts`.
 
 - [ ] **Step 3: Esegui la suite e verifica il fallimento atteso**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm`
+Run: `pnpm --filter piattaforma test src/lib/crm`
 Expected: FAIL — `phone.ts` è ancora importato da `actions.ts`, oppure `util.ts` esporta ancora `normalizePhone` (a seconda dell'ordine). Serve a dimostrare che i consumer sono davvero agganciati.
 
 - [ ] **Step 4: Rimuovi le implementazioni doppie e aggiorna i consumer**
@@ -327,7 +327,7 @@ Expected: nessun risultato.
 
 - [ ] **Step 6: Esegui test e typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm && pnpm typecheck`
+Run: `pnpm --filter piattaforma test src/lib/crm && pnpm typecheck`
 Expected: PASS entrambi.
 
 - [ ] **Step 7: Commit**
@@ -390,7 +390,7 @@ describe('crmNormFields', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/norm-fields.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/norm-fields.test.ts`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Implementa l'helper**
@@ -434,7 +434,7 @@ export function crmNormFields(input: {
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/norm-fields.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/norm-fields.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Aggiorna lo schema Prisma**
@@ -651,7 +651,7 @@ describe('write path CRM', () => {
 
 - [ ] **Step 12: Esegui test e typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm && pnpm typecheck`
+Run: `pnpm --filter piattaforma test src/lib/crm && pnpm typecheck`
 Expected: PASS.
 
 - [ ] **Step 13: Commit**
@@ -761,7 +761,7 @@ describe('identitaDaCompany', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/identita.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/identita.test.ts`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Implementa il modulo**
@@ -881,7 +881,7 @@ export function identitaDaCompany(c: CompanyGrezza): Identita[] {
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/identita.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/identita.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1027,7 +1027,7 @@ describe('valuta', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/score.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/score.test.ts`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Implementa il modulo**
@@ -1194,7 +1194,7 @@ export function valuta(id: Identita, c: ContattoPerMatch): Valutazione {
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/score.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/score.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1320,7 +1320,7 @@ describe('assegna', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/assign.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/assign.test.ts`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Implementa il modulo**
@@ -1423,7 +1423,7 @@ export function assegna(
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/assign.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/assign.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1550,7 +1550,7 @@ describe('calcolaProposte', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/engine.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/engine.test.ts`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Implementa il motore**
@@ -1695,7 +1695,7 @@ export async function calcolaProposte(
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/engine.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/engine.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Prova sul DB reale (script temporaneo, non committato)**
@@ -1916,7 +1916,7 @@ describe('applicaProposte', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/apply.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/apply.test.ts`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Implementa l'applicazione**
@@ -2069,7 +2069,7 @@ export async function riconciliaTutto(): Promise<{
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/match/apply.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/match/apply.test.ts`
 Expected: PASS, incluso il caso "non retrocede".
 
 - [ ] **Step 5: Commit**
@@ -2155,7 +2155,7 @@ describe('tryMatchCrmContact', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/sync-match.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/sync-match.test.ts`
 Expected: FAIL — `tryMatchCrmContact` fa ancora la cascade e non chiama `calcolaProposte`.
 
 - [ ] **Step 3: Riscrivi tryMatchCrmContact**
@@ -2203,7 +2203,7 @@ Mantieni l'export di compatibilità solo se ancora usato altrove: `grep -rn "fro
 
 - [ ] **Step 4: Esegui i test e verifica che passino**
 
-Run: `pnpm --filter @pv/piattaforma test`
+Run: `pnpm --filter piattaforma test`
 Expected: suite intera verde. `(auth)/actions.test.ts` mocka già `tryMatchCrmContact`, quindi non risente della riscrittura (le parentesi nel path rompono il filtro da shell: qui si esegue tutto).
 
 - [ ] **Step 5: Typecheck**
@@ -2315,7 +2315,7 @@ describe('syncCrmFromPlatform', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/sync-aggregati.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/sync-aggregati.test.ts`
 Expected: FAIL sul caso agenzia — oggi tutte le count usano `brokerId`.
 
 - [ ] **Step 3: Correggi gli aggregati**
@@ -2356,7 +2356,7 @@ Il resto della funzione (calcolo `tassoComp`, `platStatus`, update) resta identi
 
 - [ ] **Step 4: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm/sync-aggregati.test.ts`
+Run: `pnpm --filter piattaforma test src/lib/crm/sync-aggregati.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Aggiungi la passata di riconciliazione al cron**
@@ -2393,7 +2393,7 @@ export const POST = run;
 
 - [ ] **Step 6: Esegui suite CRM e typecheck**
 
-Run: `pnpm --filter @pv/piattaforma test src/lib/crm && pnpm typecheck`
+Run: `pnpm --filter piattaforma test src/lib/crm && pnpm typecheck`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -2474,7 +2474,7 @@ describe('applicaRiconciliazioneAction', () => {
 
 - [ ] **Step 2: Esegui il test e verifica che fallisca**
 
-Run: `pnpm --filter @pv/piattaforma test src/app/admin/crm/riconciliazione`
+Run: `pnpm --filter piattaforma test src/app/admin/crm/riconciliazione`
 Expected: FAIL — modulo inesistente.
 
 - [ ] **Step 3: Aggiungi il permesso**
@@ -2531,7 +2531,7 @@ export async function applicaRiconciliazioneAction(): Promise<EsitoRiconciliazio
 
 - [ ] **Step 5: Esegui il test e verifica che passi**
 
-Run: `pnpm --filter @pv/piattaforma test src/app/admin/crm/riconciliazione`
+Run: `pnpm --filter piattaforma test src/app/admin/crm/riconciliazione`
 Expected: PASS.
 
 - [ ] **Step 6: Scrivi la pagina**
@@ -2751,7 +2751,7 @@ In `apps/piattaforma/src/components/admin/admin-shell.tsx`, nel gruppo `CRM` di 
 
 - [ ] **Step 9: Test, typecheck e lint**
 
-Run: `pnpm --filter @pv/piattaforma test && pnpm typecheck && pnpm lint`
+Run: `pnpm --filter piattaforma test && pnpm typecheck && pnpm lint`
 Expected: PASS, 0 errori.
 
 - [ ] **Step 10: Commit**
@@ -2870,7 +2870,7 @@ Expected: `agganciati` 0, `iscritti` 0. Annota i valori.
 
 - [ ] **Step 2: Avvia il dev server**
 
-Run: `nvm use 22.15.0 && pnpm --filter @pv/piattaforma dev`
+Run: `nvm use 22.15.0 && pnpm --filter piattaforma dev`
 Expected: server su :3000. Se la porta è occupata da un processo zombie, uccidilo prima (`netstat -ano | findstr :3000`), altrimenti servirai codice vecchio.
 
 - [ ] **Step 3: Apri la pagina e leggi l'anteprima**
@@ -2908,7 +2908,7 @@ Expected: identico al passo 4.
 
 - [ ] **Step 7: Suite completa**
 
-Run: `pnpm --filter @pv/piattaforma test && pnpm typecheck && pnpm lint`
+Run: `pnpm --filter piattaforma test && pnpm typecheck && pnpm lint`
 Expected: suite verde, 0 errori tsc, 0 warning eslint.
 
 - [ ] **Step 8: Riepilogo per il rilascio**

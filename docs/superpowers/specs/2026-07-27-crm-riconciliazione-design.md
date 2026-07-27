@@ -161,7 +161,9 @@ Per ogni proposta accettata:
 - `primaPratica` / `primaPraticaAt` dalla prima pratica firmata
 - `platStatus` calcolato come nel cron (SOSPESO se sospesa/cancellata, ATTIVO se ha
   firmato, altrimenti INATTIVO)
-- `fonte` **non** si tocca: lo storico del lead (`CSV_INIZIALE`) resta
+- `fonte` resta com'è (lo storico del lead, `CSV_INIZIALE`, non si perde) con la
+  sola eccezione già viva oggi: se la Company è arrivata da un referral
+  (`referenteId` valorizzato) la fonte diventa `REFERRAL`
 
 Il conteggio pratiche segue il tipo di azienda: `brokerId` per i DEALER,
 `agenziaAssegnataId` per le AGENZIA (vedi difetti collaterali).

@@ -826,8 +826,8 @@ function WizardBody({
   const toast = useToast();
 
   // Sistema Penali Broker — SP-A: popup di responsabilità mostrato come step
-  // finale prima del submit. Il broker deve spuntare il checkbox prima di
-  // poter cliccare "Conferma e invia". Il backend logga IP+UA+versione popup.
+  // finale prima del submit. Il broker deve spuntare entrambe le attestazioni
+  // prima di poter cliccare "Conferma e invia". Il backend logga IP+UA+versione.
   const [showDichiarazione, setShowDichiarazione] = useState(false);
   const [attestazioni, setAttestazioni] = useState<Partial<Record<IdAttestazione, boolean>>>({});
 

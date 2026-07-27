@@ -113,6 +113,9 @@ export default async function PraticaDetailPage({
           citta: true,
           cap: true,
           provincia: true,
+          // Telefono della SEDE, non della madre: chi deve andare lì chiama
+          // quel punto. Nullable → fallback sul telefono aziendale.
+          telefono: true,
         },
       },
       assegnazioni: {
@@ -213,18 +216,38 @@ export default async function PraticaDetailPage({
     ),
   );
 
-  // Indirizzo fisico dell'agenzia assegnata (sede operativa), mostrato in chiaro
-  // nelle "Parti commerciali".
+  // Indirizzo fisico dell'agenzia assegnata (sede operativa). Non è una riga
+  // come le altre: è il "dove andare" della pratica, quindi apre la card
+  // "Parti commerciali" in un blocco a sé (vedi DoveAndareBox).
+  //
+  // Tenuto in due righe (via / CAP città (prov)) perché si legge come un
+  // indirizzo su una busta, non come un campo. La versione su una riga serve
+  // solo alla query per le mappe.
   const as = pratica.agenziaSede;
-  const agenziaIndirizzo = as
-    ? [
-        [as.indirizzo, as.civico].filter(Boolean).join(' '),
-        [as.cap, as.citta].filter(Boolean).join(' '),
-        as.provincia ? `(${as.provincia})` : '',
-      ]
+  const agenziaVia = as ? [as.indirizzo, as.civico].filter(Boolean).join(' ') : '';
+  const agenziaLocalita = as
+    ? [[as.cap, as.citta].filter(Boolean).join(' '), as.provincia ? `(${as.provincia})` : '']
+        .filter(Boolean)
+        .join(' ')
+    : '';
+  // Query per le mappe: stesso indirizzo ma con la provincia senza parentesi,
+  // che è la forma in cui la scriverebbe una persona nella barra di ricerca.
+  const agenziaQueryMappe = as
+    ? [agenziaVia, [as.cap, as.citta].filter(Boolean).join(' '), as.provincia]
         .filter(Boolean)
         .join(', ')
-    : undefined;
+    : '';
+  // Intestazione del blocco: ragione sociale della madre + nome della sede,
+  // ma solo se dicono cose diverse. Alla registrazione la prima sede eredita
+  // il nome dell'azienda, quindi molto spesso coincidono e ripeterli due volte
+  // sembrerebbe che siano due posti.
+  const agenziaRagioneSociale = pratica.agenziaAssegnata?.ragioneSociale ?? null;
+  const sedeNomeDistinto =
+    as && as.nome.trim().toLowerCase() !== (agenziaRagioneSociale ?? '').trim().toLowerCase()
+      ? as.nome
+      : null;
+  // Telefono di quella sede; se non c'è, quello della madre.
+  const agenziaTelefono = as?.telefono || pratica.agenziaAssegnata?.telefono || null;
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
@@ -711,6 +734,24 @@ export default async function PraticaDetailPage({
           <aside className="space-y-5">
             <Card>
               <h2 className="text-[15px] font-bold text-pv-navy-800">Parti commerciali</h2>
+
+              {/* L'indirizzo dell'agenzia apre la card, staccato dall'elenco:
+                  è il dato che manda una persona fisica in un posto fisico, e
+                  in una riga da 13px identica a "Comune" e "Codice interno" si
+                  perdeva. Senza agenzia assegnata non c'è nessun posto dove
+                  andare e il blocco non compare (l'elenco qui sotto continua a
+                  dire "Agenzia assegnata: —"). */}
+              {as && (
+                <DoveAndareBox
+                  intestazione={agenziaRagioneSociale}
+                  sede={sedeNomeDistinto}
+                  via={agenziaVia}
+                  localita={agenziaLocalita}
+                  queryMappe={agenziaQueryMappe}
+                  telefono={agenziaTelefono}
+                />
+              )}
+
               <dl className="mt-4 space-y-3 text-[13px]">
                 <InfoRow label="Broker" value={pratica.broker.ragioneSociale} />
                 <InfoRow label="Telefono broker" value={pratica.broker.telefono} />
@@ -718,14 +759,12 @@ export default async function PraticaDetailPage({
                   label="Agenzia assegnata"
                   value={pratica.agenziaAssegnata?.ragioneSociale ?? '—'}
                 />
-                <InfoRow
-                  label="Telefono agenzia"
-                  value={pratica.agenziaAssegnata?.telefono ?? null}
-                />
-                {as && (
+                {/* Telefono e indirizzo dell'agenzia NON si ripetono qui: sono
+                    nel blocco sopra. Ripeterli suggerirebbe due recapiti. */}
+                {!as && (
                   <InfoRow
-                    label="Indirizzo agenzia"
-                    value={agenziaIndirizzo || as.nome}
+                    label="Telefono agenzia"
+                    value={pratica.agenziaAssegnata?.telefono ?? null}
                   />
                 )}
                 <InfoRow label="Comune" value={pratica.comune} />
@@ -880,6 +919,93 @@ export default async function PraticaDetailPage({
         </div>
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * Indirizzo della sede agenzia in evidenza, in cima alle "Parti commerciali".
+ *
+ * È l'unico dato della card che si traduce in uno spostamento fisico: chi lo
+ * legge deve poter capire dove andare senza rileggere. Da qui le scelte —
+ * indirizzo su due righe come su una busta, corpo più grande del resto della
+ * card, recapito e mappa a portata di pollice sul telefono.
+ *
+ * Il link mappe passa l'indirizzo in chiaro a Google al clic: è una
+ * navigazione voluta dall'utente, non una chiamata che parte da sola.
+ */
+function DoveAndareBox({
+  intestazione,
+  sede,
+  via,
+  localita,
+  queryMappe,
+  telefono,
+}: {
+  /** Ragione sociale dell'agenzia assegnata. */
+  intestazione: string | null;
+  /** Nome della sede, solo se diverso dalla ragione sociale (vedi chiamante). */
+  sede: string | null;
+  via: string;
+  localita: string;
+  /** Indirizzo su una riga, da dare alle mappe come termine di ricerca. */
+  queryMappe: string;
+  telefono: string | null;
+}) {
+  const mapsHref = queryMappe
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(queryMappe)}`
+    : null;
+  const titolo = [intestazione, sede].filter(Boolean).join(' — ');
+
+  return (
+    <div className="mt-4 rounded-[12px] border border-pv-navy-100 bg-pv-navy-50/60 p-4">
+      <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-pv-navy-700">
+        <PinIcon />
+        Dove andare
+      </p>
+      {titolo && <p className="mt-2 text-[13px] font-semibold text-pv-slate-700">{titolo}</p>}
+      <p className="mt-0.5 text-[16px] font-extrabold leading-snug tracking-tight text-pv-navy-900">
+        {via || '—'}
+      </p>
+      {localita && (
+        <p className="text-[15px] font-semibold leading-snug text-pv-navy-900">{localita}</p>
+      )}
+      {(telefono || mapsHref) && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] font-semibold">
+          {telefono && (
+            <a
+              href={`tel:${telefono.replace(/\s/g, '')}`}
+              className="text-pv-navy-700 underline hover:text-pv-navy-800"
+            >
+              {telefono}
+            </a>
+          )}
+          {mapsHref && (
+            <a
+              href={mapsHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-pv-navy-700 underline hover:text-pv-navy-800"
+            >
+              Apri in mappe ↗
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path
+        d="M12 21s7-5.4 7-11a7 7 0 10-14 0c0 5.6 7 11 7 11z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="10" r="2.5" stroke="currentColor" strokeWidth="2" />
+    </svg>
   );
 }
 

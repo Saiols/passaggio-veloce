@@ -9,6 +9,9 @@
  * Eccezione categoria: se la riga è BROKER e l'azienda è AGENZIA (o viceversa)
  * la prova forte da sola non basta — serve un secondo campo in comune. È la
  * protezione contro i centralini di gruppo condivisi da attività diverse.
+ * IMPORTANTE: il match parziale sul nome (nome~) NON conta come secondo indizio
+ * perché due parole generiche ("agenzia milano", "auto usate") lo scatterebbero
+ * fra aziende scorrelate. Solo il nome esatto, indirizzo, città e CAP valgono.
  *
  * Il punteggio serve solo a ordinare le proposte: "più campi uguali vince".
  */
@@ -149,7 +152,9 @@ export function valuta(id: Identita, c: ContattoPerMatch): Valutazione {
 
   const forte = campi.some((k) => k === 'piva' || k === 'email' || k === 'tel');
   const catCoerente = id.cat === c.cat;
-  const ammesso = forte && (catCoerente || campi.length >= 2);
+  // Conta solo i campi che valgono come "secondo indizio" (esclude nome~)
+  const campiPerSecondoIndizio = campi.filter((k) => k !== 'nome~').length;
+  const ammesso = forte && (catCoerente || campiPerSecondoIndizio >= 2);
 
   return { ammesso, punteggio, campi };
 }

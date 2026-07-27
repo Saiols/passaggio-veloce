@@ -107,4 +107,53 @@ describe('valuta', () => {
     );
     expect(senzaDeboli.campi).toEqual(['tel']);
   });
+
+  it('categoria discorde + telefono + solo nome~: NON ammesso (nome~ non vale come secondo indizio)', () => {
+    // Categoria discorde: BROKER vs AGENZIA
+    // Prova forte: telefono (50 pt)
+    // Secondo indizio: solo nome parziale (parole generiche, non conta per ammissione)
+    const v = valuta(
+      identita(),
+      contatto({
+        cat: 'BROKER',
+        nome: 'Agenzia Corsico', // parziale: contiene due parole del nome vero
+        indirizzo: 'Via Diversa', // no match
+        citta: 'Milano', // no match
+        cap: '20100', // no match
+      }),
+    );
+    expect(v.ammesso).toBe(false); // telefono + nome~ non basta
+    expect(v.campi).toContain('tel');
+    expect(v.campi).toContain('nome~');
+  });
+
+  it('categoria discorde + telefono + nome~ + indirizzo: ammesso (indirizzo vale come secondo indizio)', () => {
+    const v = valuta(
+      identita(),
+      contatto({
+        cat: 'BROKER',
+        nome: 'Agenzia Corsico', // parziale, non conta
+        indirizzo: 'Via Fiume', // match esatto
+        citta: 'Milano', // no match
+        cap: '20100', // no match
+      }),
+    );
+    expect(v.ammesso).toBe(true); // telefono + indirizzo basta
+    expect(v.campi).toEqual(expect.arrayContaining(['tel', 'indirizzo', 'nome~']));
+  });
+
+  it('categoria discorde + telefono + nome~ + cap: ammesso (cap vale come secondo indizio)', () => {
+    const v = valuta(
+      identita(),
+      contatto({
+        cat: 'BROKER',
+        nome: 'Agenzia Corsico', // parziale, non conta
+        indirizzo: 'Via Diversa', // no match
+        citta: 'Milano', // no match
+        cap: '20094', // match esatto
+      }),
+    );
+    expect(v.ammesso).toBe(true); // telefono + cap basta
+    expect(v.campi).toEqual(expect.arrayContaining(['tel', 'cap', 'nome~']));
+  });
 });

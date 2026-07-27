@@ -117,4 +117,49 @@ describe('AttestazioneCard', () => {
     expect(document.body.textContent).toContain('assenza di fermi amministrativi');
     expect(document.body.textContent).toContain("Dichiaro di aver informato il venditore");
   });
+
+  // Finding 5 (review whole-branch 2026-07-27): un array PARZIALMENTE
+  // malformato (una voce valida, una senza `testo`) non deve far rendere solo
+  // la voce valida — sotto-riporterebbe la prova legale (un solo ✓ invece di
+  // due, senza alcun segnale). Deve ricadere per intero sul registro, come il
+  // caso "tutte malformate" sopra.
+  it('testoAttestazioni con una voce valida e una malformata: non sotto-riporta, ricade sul registro', () => {
+    render(
+      <AttestazioneCard
+        dichiarazione={dichiarazione({
+          popupVersion: 'v4.0',
+          clausolaTerzi: 23,
+          testoAttestazioni: [
+            { id: 'RESPONSABILITA', testo: 'Testo persistito di responsabilita.' },
+            { id: 'TERZI' }, // manca `testo`
+          ],
+        })}
+      />,
+    );
+    // Entrambe le attestazioni devono comparire (dal registro)...
+    expect(document.body.textContent).toContain('assenza di fermi amministrativi');
+    expect(document.body.textContent).toContain('Dichiaro di aver informato il venditore');
+    // ...non un mix parziale col testo persistito della sola voce valida.
+    expect(document.body.textContent).not.toContain('Testo persistito di responsabilita.');
+  });
+
+  // Stessa famiglia di bug: `testo` presente ma non stringa (es. null). Senza
+  // guardia, `String(x.testo)` renderizzerebbe la stringa letterale "null".
+  it('voce con testo non stringa (null): non renderizza "null", ricade sul registro', () => {
+    render(
+      <AttestazioneCard
+        dichiarazione={dichiarazione({
+          popupVersion: 'v4.0',
+          clausolaTerzi: 23,
+          testoAttestazioni: [
+            { id: 'RESPONSABILITA', testo: null },
+            { id: 'TERZI', testo: 'Testo persistito sui terzi.' },
+          ],
+        })}
+      />,
+    );
+    expect(document.body.textContent).toContain('assenza di fermi amministrativi');
+    expect(document.body.textContent).toContain('Dichiaro di aver informato il venditore');
+    expect(document.body.textContent).not.toContain('null');
+  });
 });

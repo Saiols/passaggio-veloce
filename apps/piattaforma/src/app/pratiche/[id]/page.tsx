@@ -861,7 +861,21 @@ export default async function PraticaDetailPage({
                 di più ("perché nessuna agenzia l'ha ricevuta"). */}
             {copertura && <CoperturaCard copertura={copertura} />}
 
-            {attestazione && <AttestazioneCard dichiarazione={attestazione} />}
+            {attestazione ? (
+              <AttestazioneCard dichiarazione={attestazione} />
+            ) : (
+              // Finding 6 (review whole-branch 2026-07-27): la scrittura di
+              // BrokerDichiarazione e' best-effort per le pratiche inviate
+              // prima di questa release (e resta dentro una transazione che
+              // PUO' fallire). Senza questa riga l'assenza del record e'
+              // indistinguibile da "la feature non esisteva ancora" — solo
+              // l'admin la vede, e' diagnostica, non un allarme.
+              isAdminPiattaforma(session.user.role) && (
+                <p className="px-1 text-[11px] text-pv-slate-400">
+                  Nessuna attestazione registrata per questa pratica.
+                </p>
+              )
+            )}
           </aside>
         </div>
       </div>

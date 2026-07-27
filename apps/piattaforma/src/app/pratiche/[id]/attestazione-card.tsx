@@ -12,13 +12,26 @@ type Dichiarazione = {
   user: { nome: string | null; cognome: string | null; email: string };
 };
 
-/** `testoAttestazioni` e' Json: stringente in lettura, il DB non lo tipizza. */
+/**
+ * `testoAttestazioni` e' Json: stringente in lettura, il DB non lo tipizza.
+ *
+ * Se ANCHE UNA SOLA voce e' malformata (manca `testo`, o non e' una stringa
+ * non vuota) l'intero array e' scartato invece di filtrare solo le voci
+ * valide (Finding 5, review whole-branch 2026-07-27): filtrare
+ * sotto-riporterebbe una prova legale in silenzio (un ✓ invece di due, senza
+ * alcun segnale che qualcosa manca) — lo stesso rischio che il ramo "Testo
+ * non ricostruibile" piu' sotto esiste gia' per prevenire, qui applicato al
+ * caso parziale. Scartare tutto fa ricadere il chiamante sul registro, che
+ * sappiamo corretto.
+ */
 function testiPersistiti(v: unknown): string[] | null {
-  if (!Array.isArray(v)) return null;
-  const testi = v
-    .map((x) => (x && typeof x === 'object' && 'testo' in x ? String(x.testo) : null))
-    .filter((t): t is string => t !== null);
-  return testi.length > 0 ? testi : null;
+  if (!Array.isArray(v) || v.length === 0) return null;
+  const testi = v.map((x) =>
+    x && typeof x === 'object' && 'testo' in x && typeof x.testo === 'string' && x.testo.length > 0
+      ? x.testo
+      : null,
+  );
+  return testi.every((t): t is string => t !== null) ? testi : null;
 }
 
 /**

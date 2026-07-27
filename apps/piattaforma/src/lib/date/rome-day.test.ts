@@ -9,6 +9,7 @@ import {
   romeAnnoCivile,
   romeIsoDate,
   romeDataLeggibile,
+  romeDataOraLeggibile,
 } from './rome-day';
 
 describe('parseYmd', () => {
@@ -136,5 +137,21 @@ describe('romeWallClockToUtc', () => {
     expect(romeWallClockToUtc(2026, 10, 26, 19, 0, 0, 0).toISOString()).toBe(
       '2026-10-26T18:00:00.000Z',
     );
+  });
+});
+
+describe('romeDataOraLeggibile', () => {
+  // Il timestamp di un'attestazione e' una prova: mostrarlo in UTC su un server
+  // Vercel significa dichiarare un'ora che l'utente non ha mai visto.
+  it("rende l'ora italiana, non quella del server", () => {
+    // 2026-07-15T12:00:00Z = 14:00 a Roma (CEST, UTC+2)
+    const s = romeDataOraLeggibile(new Date('2026-07-15T12:00:00Z'));
+    expect(s).toContain('14:00');
+  });
+
+  it('rende l ora italiana anche in ora solare', () => {
+    // 2026-01-15T12:00:00Z = 13:00 a Roma (CET, UTC+1)
+    const s = romeDataOraLeggibile(new Date('2026-01-15T12:00:00Z'));
+    expect(s).toContain('13:00');
   });
 });

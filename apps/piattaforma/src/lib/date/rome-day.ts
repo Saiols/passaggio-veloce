@@ -125,6 +125,23 @@ export function romeDataLeggibile(instant: Date): string {
   return new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeZone: ROME_TZ }).format(instant);
 }
 
+/**
+ * Data e ora leggibili in fuso italiano: "15 lug 2026, 14:32".
+ *
+ * `formatDateTime` di `lib/format.ts` non fissa il timeZone e su Vercel (server
+ * UTC) rende l'ora sbagliata. Per le 32 UI che lo usano e' un dettaglio; per un
+ * timestamp che deve fare da prova legale e' un difetto proprio nella cosa che
+ * si sta dimostrando. Quello resta com'e': questa e' la variante da usare dove
+ * l'ora conta.
+ */
+export function romeDataOraLeggibile(instant: Date): string {
+  return new Intl.DateTimeFormat('it-IT', {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+    timeZone: ROME_TZ,
+  }).format(instant);
+}
+
 export type DayRange = { gte?: Date; lte?: Date; da: string; a: string; active: boolean };
 
 /**

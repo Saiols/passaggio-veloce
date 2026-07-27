@@ -32,6 +32,7 @@ import { GuidaStepCard } from './guida-step-card';
 import { formatKm } from '@/lib/distribuzione/format';
 import { getCoperturaPratica } from '@/lib/distribuzione/copertura';
 import { CoperturaCard } from './copertura-card';
+import { AttestazioneCard } from './attestazione-card';
 import { labelTipoDocumento } from '@/lib/fatturazione/format';
 import { canViewDocumentoFiscale } from '@/lib/fatturazione/access';
 import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
@@ -162,6 +163,26 @@ export default async function PraticaDetailPage({
           select: { nome: true, cognome: true, email: true },
         })
       : null;
+
+  // Prova dell'attestazione pre-invio (Termini 23.2). Query separata e
+  // admin-only: contiene l'IP del broker, e non serve a broker e agenzia.
+  // Una pratica ha una sola dichiarazione, ma la relazione e' una lista:
+  // si prende la piu' recente.
+  const attestazione = isAdminPiattaforma(session.user.role)
+    ? await prisma.brokerDichiarazione.findFirst({
+        where: { praticaId: pratica.id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          createdAt: true,
+          ip: true,
+          userAgent: true,
+          popupVersion: true,
+          testoAttestazioni: true,
+          clausolaTerzi: true,
+          user: { select: { nome: true, cognome: true, email: true } },
+        },
+      })
+    : null;
 
   // Mostra solo le fatture che il viewer può effettivamente aprire (admin / sua
   // emittente / sua destinataria / sua sede): un broker non deve vedere/cliccare
@@ -839,6 +860,8 @@ export default async function PraticaDetailPage({
                 pratica non è arrivata a nessuno che questa diagnostica serve
                 di più ("perché nessuna agenzia l'ha ricevuta"). */}
             {copertura && <CoperturaCard copertura={copertura} />}
+
+            {attestazione && <AttestazioneCard dichiarazione={attestazione} />}
           </aside>
         </div>
       </div>

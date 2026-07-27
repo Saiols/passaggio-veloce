@@ -127,13 +127,13 @@ describe('valuta', () => {
     expect(v.campi).toContain('nome~');
   });
 
-  it('categoria discorde + telefono + nome~ + indirizzo: ammesso (indirizzo vale come secondo indizio)', () => {
+  it('categoria discorde + telefono + nome~ + indirizzo: ammesso (indirizzo è identificante)', () => {
     const v = valuta(
       identita(),
       contatto({
         cat: 'BROKER',
         nome: 'Agenzia Corsico', // parziale, non conta
-        indirizzo: 'Via Fiume', // match esatto
+        indirizzo: 'Via Fiume', // match esatto, conta
         citta: 'Milano', // no match
         cap: '20100', // no match
       }),
@@ -142,7 +142,9 @@ describe('valuta', () => {
     expect(v.campi).toEqual(expect.arrayContaining(['tel', 'indirizzo', 'nome~']));
   });
 
-  it('categoria discorde + telefono + nome~ + cap: ammesso (cap vale come secondo indizio)', () => {
+  it('categoria discorde + telefono + nome~ + cap: NON ammesso (cap non è identificante)', () => {
+    // CAP da solo non discrimina nel caso che l'eccezione deve proteggere:
+    // due attività diverse nella stessa città condividono il CAP.
     const v = valuta(
       identita(),
       contatto({
@@ -150,10 +152,51 @@ describe('valuta', () => {
         nome: 'Agenzia Corsico', // parziale, non conta
         indirizzo: 'Via Diversa', // no match
         citta: 'Milano', // no match
-        cap: '20094', // match esatto
+        cap: '20094', // match esatto, ma non basta da solo
       }),
     );
-    expect(v.ammesso).toBe(true); // telefono + cap basta
+    expect(v.ammesso).toBe(false); // telefono + cap non basta
     expect(v.campi).toEqual(expect.arrayContaining(['tel', 'cap', 'nome~']));
+  });
+
+  it('categoria discorde + telefono + città + CAP uguali: NON ammesso (controesempio reale)', () => {
+    // Caso reale pericoloso: due attività diverse (Ristorante Da Mario vs Agenzia)
+    // dietro lo stesso centralino di gruppo, nello stesso comune.
+    const v = valuta(
+      identita(),
+      contatto({
+        cat: 'BROKER',
+        nome: 'Ristorante Da Mario', // totalmente scorrelato
+        tel: '+39 02 447 8712', // stesso telefono
+        indirizzo: 'Corso Milano 15', // indirizzo diverso
+        citta: 'Corsico', // stessa città
+        cap: '20094', // stesso CAP
+        telNorm: '024478712', // normalizzato
+        waNorm: null,
+        emailNorm: null,
+        pivaNorm: null,
+        createdAt: new Date('2026-03-01T00:00:00Z'),
+      }),
+    );
+    expect(v.ammesso).toBe(false); // telefono + città + cap non basta
+    expect(v.campi).toContain('tel');
+    expect(v.campi).toContain('citta');
+    expect(v.campi).toContain('cap');
+  });
+
+  it('categoria discorde + telefono + nome esatto: ammesso (nome esatto è identificante)', () => {
+    const v = valuta(
+      identita(),
+      contatto({
+        cat: 'BROKER',
+        nome: 'Agenzia Corsico di Ciavarella Antonio', // nome esatto, conta
+        indirizzo: 'Via Diversa', // no match
+        citta: 'Milano', // no match
+        cap: '20100', // no match
+      }),
+    );
+    expect(v.ammesso).toBe(true); // telefono + nome esatto basta
+    expect(v.campi).toContain('tel');
+    expect(v.campi).toContain('nome');
   });
 });

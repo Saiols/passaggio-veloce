@@ -7,11 +7,14 @@
  * mezza Trento condivide città e CAP.
  *
  * Eccezione categoria: se la riga è BROKER e l'azienda è AGENZIA (o viceversa)
- * la prova forte da sola non basta — serve un secondo campo in comune. È la
- * protezione contro i centralini di gruppo condivisi da attività diverse.
- * IMPORTANTE: il match parziale sul nome (nome~) NON conta come secondo indizio
- * perché due parole generiche ("agenzia milano", "auto usate") lo scatterebbero
- * fra aziende scorrelate. Solo il nome esatto, indirizzo, città e CAP valgono.
+ * la prova forte da sola non basta — serve un secondo campo IDENTIFICANTE.
+ * È la protezione contro i centralini di gruppo condivisi da attività diverse
+ * nella stessa zona geografica.
+ * IMPORTANTE per il secondo indizio:
+ * - Nome~ (parziale) NON vale: due parole generiche scatterebbero fra aziende scorrelate.
+ * - Città e CAP NON valgono: sono i campi che non discriminano proprio nel caso
+ *   che l'eccezione deve proteggere (due attività diverse nella stessa città).
+ * Vale solo: PROVA FORTE (piva/email), nome esatto, indirizzo.
  *
  * Il punteggio serve solo a ordinare le proposte: "più campi uguali vince".
  */
@@ -152,8 +155,11 @@ export function valuta(id: Identita, c: ContattoPerMatch): Valutazione {
 
   const forte = campi.some((k) => k === 'piva' || k === 'email' || k === 'tel');
   const catCoerente = id.cat === c.cat;
-  // Conta solo i campi che valgono come "secondo indizio" (esclude nome~)
-  const campiPerSecondoIndizio = campi.filter((k) => k !== 'nome~').length;
+  // Conta solo i campi IDENTIFICANTI come "secondo indizio":
+  // Esclude nome~ (troppo generico), città e CAP (non discriminano in zona).
+  const campiPerSecondoIndizio = campi.filter(
+    (k) => k !== 'nome~' && k !== 'citta' && k !== 'cap',
+  ).length;
   const ammesso = forte && (catCoerente || campiPerSecondoIndizio >= 2);
 
   return { ammesso, punteggio, campi };

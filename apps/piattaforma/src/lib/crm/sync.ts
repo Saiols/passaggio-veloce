@@ -33,9 +33,20 @@ export type MatchResult =
  * limitate all'azienda appena creata (e alle sue sedi).
  *
  * Anche questo è un canale AUTOMATICO (nessuno guarda un'anteprima prima che
- * scriva), quindi vale la stessa regola del cron: le proposte ambigue —
- * ex aequo di punteggio, spareggio arbitrario nel merito e nessun percorso di
- * sgancio — non si applicano qui e restano alla pagina admin.
+ * scriva), quindi come il cron scarta le proposte ambigue — ex aequo di
+ * punteggio, spareggio arbitrario nel merito e nessun percorso di sgancio:
+ * restano alla pagina admin.
+ *
+ * ⚠️ La copertura qui è però più STRETTA che nel cron, perché il calcolo è
+ * limitato a una sola azienda. Delle due clausole di ambiguità di `assign.ts`
+ * scatta solo la prima ("più contatti a pari punteggio per la stessa
+ * identità"); la seconda ("più AZIENDE diverse si contendono lo stesso
+ * contatto") non può scattare, visto che in questo insieme di aziende ce n'è
+ * una sola. Conseguenza reale: se una riga della lista è contesa a pari
+ * punteggio fra l'azienda che si sta registrando e un'altra già registrata ma
+ * non ancora agganciata, qui viene assegnata alla prima senza essere marcata
+ * ambigua. Il caso è raro (serve un pareggio esatto su una riga ancora libera)
+ * e il cron successivo non lo ripara, perché la riga non è più libera.
  *
  * Best-effort: chiamata dopo la tx di registrazione, non deve mai farla
  * fallire. Prima qui viveva una cascade email → tel → P.IVA che confrontava il

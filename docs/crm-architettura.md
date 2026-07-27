@@ -4,6 +4,13 @@
 > Questo documento descrive il **CRM vendite/marketing** (esterno alla piattaforma),
 > non l'Admin Panel interno (vedi Fase 9 del `piano-implementazione.md`).
 
+> ⚠️ **Documento di pianificazione, non descrizione del sistema attuale.**
+> Ipotizzava un CRM **esterno** (HubSpot/Airtable) orchestrato da Make. La scelta
+> è poi caduta sul **CRM nativo** dentro la piattaforma: entità `CrmContact` in
+> Prisma, pagine sotto `/admin/crm`, nessun Make, nessun webhook verso l'esterno.
+> Resta prezioso per il **perché** delle decisioni; per il **cosa fa oggi il
+> codice** la fonte è `crm-spec-implementativa.md`.
+
 ---
 
 ## 1. Scopo
@@ -123,6 +130,15 @@ Due profili con logiche parzialmente diverse:
 
 In caso di conflitto → alert manuale al sales.
 
+> ⚠️ **Questa cascata non è mai stata realizzabile e non è ciò che gira.**
+> Sulla lista reale importata (19.103 righe) il telefono c'è nel 100% dei casi,
+> l'email nell'**1,3%** e la P.IVA nello **0%**: mettere l'email in cima
+> significa non agganciare quasi nulla, e la prima implementazione infatti
+> agganciò **zero** contatti. Dal 2026-07-27 il match richiede una **prova
+> forte** (P.IVA, email/PEC, telefono/WhatsApp) e ordina per punteggio —
+> "più campi uguali vince" — trattando **ogni sede come un'identità a sé**.
+> Descrizione autoritativa: `crm-spec-implementativa.md` §12.
+
 ---
 
 ## 5. Integrazione bot AI
@@ -182,7 +198,7 @@ un copione diverso da uno che ha già aperto il link 3 volte senza iscriversi.
 |---|---|---|
 | 1 | Evento iscrizione | Piattaforma → webhook POST → endpoint CRM (o Make) |
 | 2 | Payload | `{email, telefono, nome, tipo, piva, provincia, platformUserId}` |
-| 3 | Match lookup | Make cerca record per email → telefono → P.IVA |
+| 3 | Match lookup | ~~Make cerca record per email → telefono → P.IVA~~ — oggi: motore interno `lib/crm/match/`, prova forte + punteggio (vedi §4) |
 | 4a | Match | Aggiorna record: stato → S7 + platformUserId + data iscrizione |
 | 4b | No match | Crea nuovo record, fonte = Iscrizione diretta, stato = S7 |
 | 5 | Trigger | Sequenza onboarding: mail + chiamata AI a 7gg |
@@ -214,7 +230,7 @@ un copione diverso da uno che ha già aperto il link 3 volte senza iscriversi.
 
 ### Fase CRM-2 — Integrazione piattaforma (settimana 1-2)
 - Webhook piattaforma → Make per ogni evento chiave
-- Logica di matching email → telefono → P.IVA
+- ~~Logica di matching email → telefono → P.IVA~~ → realizzata diversamente: vedi §4
 - Test Caso A e Caso B su utenti di test
 
 ### Fase CRM-3 — Bot AI + tracking (settimana 2-3)

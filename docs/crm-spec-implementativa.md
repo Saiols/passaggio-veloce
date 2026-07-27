@@ -90,11 +90,21 @@ model CrmContact {
   iscrizioneComp   Boolean                 @default(false)
   iscrizioneAt     DateTime?
 
-  // Match con Company piattaforma (post-iscrizione)
-  // Si popola via webhook quando la Company viene creata
-  // (match per email → tel → P.IVA, in cascata).
+  // Aggancio all'azienda registrata — motore `lib/crm/match/`, vedi §12.
+  // Si popola alla registrazione, dal cron e dalla pagina admin di
+  // riconciliazione. NON è una cascata su un campo solo: serve una prova
+  // forte e vince il punteggio più alto.
   companyId        String?                 @db.Uuid
   company          Company?                @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  sedeId           String?                 @db.Uuid   // sede che ha fatto match (null = azienda madre)
+  sede             Sede?                   @relation(fields: [sedeId], references: [id], onDelete: SetNull)
+  matchVia         String?                 // campi che hanno prodotto l'aggancio, es. "tel+indirizzo+cap"
+  matchedAt        DateTime?
+  // Chiavi normalizzate per il match: le scrive SOLO `match/norm-fields.ts`.
+  telNorm          String?
+  waNorm           String?
+  emailNorm        String?
+  pivaNorm         String?
   platStatus       CrmPlatStatus?          // ATTIVO | INATTIVO | SOSPESO
   primaPratica     Boolean                 @default(false)
   primaPraticaAt   DateTime?
@@ -115,6 +125,13 @@ model CrmContact {
   @@index([assignedToId])
   @@index([companyId])
   @@index([linkAperto])
+  @@index([telNorm])
+  @@index([waNorm])
+  @@index([emailNorm])
+  @@index([pivaNorm])
+  @@index([sedeId])
+  // + indice UNIQUE PARZIALE (companyId, sedeId) NULLS NOT DISTINCT, che
+  // vive solo nella migration: Prisma 5 non sa esprimerlo nel DSL. Vedi §12.
   @@map("crm_contacts")
 }
 
@@ -589,8 +606,8 @@ Tabella readonly con tutti i ruoli e tutte le funzioni — vedi §3.
 
 1. Cron `syncCrmFromPlatform`:
    - Per ogni `CrmContact` con `companyId != null`: aggiorna `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`, `tassoComp` da `Company` + `Pratica` + `User.lastLoginAt`
-   - Quando una nuova `Company` viene creata via registrazione, esegue match con CrmContact (email → tel → P.IVA in cascata) e popola `companyId` + auto-promuove `status` a S7 (`Iscritto inattivo`)
-2. Webhook su `Company.create` chiama `tryMatchCrmContact(companyId)`
+   - Poi passa il motore di riconciliazione su tutta la lista, per agganciare chi si è registrato nel frattempo — **vedi §12**, che è la descrizione autoritativa del match
+2. Alla registrazione, `tryMatchCrmContact(companyId)` cerca il lead di quella sola azienda
 3. Webhook su `Pratica.create` con stato `FIRMATA` aggiorna stato CRM:
    - Se prima pratica del broker referente: `S7 → S8` + set `primaPratica=true`
    - Se ricorrente: `S8 → S9`
@@ -623,7 +640,7 @@ Per non bloccarmi su tutto, ho applicato i miei default. Correggimi solo dove se
 | 9 | "Catalogo contatti" (rinominato CRM nella release post-demo) | **Diventa tab "Contatti operativi"** — non si tocca la logica catalogo, solo embedding. |
 | 10 | `RendimentoChart` riuso | **Riusabile** — già parametrico. Nessuna modifica. |
 | 11 | Stati S0-S10 di Pratica vs CRM | Sono **due dimensioni diverse**: `PraticaStato` resta su Pratica, `CrmStatoContatto` è su CrmContact. Non confondibili. |
-| 12 | Match webhook iscrizione | **Cascata email → tel → P.IVA**. Se nessun match: nessun aggiornamento (resta lead non agganciato). |
+| 12 | Match webhook iscrizione | ~~Cascata email → tel → P.IVA~~ — **superato il 2026-07-27**: la cascata non agganciava mai nulla (vedi §12). Oggi: prova forte + punteggio, sedi comprese. Se nessun match: nessun aggiornamento (resta lead non agganciato). |
 
 ---
 
@@ -785,3 +802,102 @@ H separato dopo apertura account.
 - Migrazioni applicate prima a dev locale, poi a Neon prod come da pattern
 - Demo a soci dopo CRM-G (intero CRM senza Vapi reale)
 - CRM-H è una fase a sé con account esterno e budget separato
+
+---
+
+## 12. Riconciliazione CRM ↔ aziende registrate (2026-07-27)
+
+> **Questa sezione è autoritativa sul match.** Dove il resto del documento (o
+> `crm-architettura.md`, o `ecosistema-crm-ai.md`) parla di "cascata
+> email → telefono → P.IVA", parla di un meccanismo **sostituito**.
+
+### 12.1 Perché la cascata è stata rimossa
+
+Il vecchio `tryMatchCrmContact` non ha mai agganciato **nemmeno un contatto**.
+Due difetti indipendenti:
+
+1. confrontava il telefono **normalizzato** della `Company` con `CrmContact.tel`
+   **grezzo** (`+39 02 447 8712`) — non poteva coincidere mai;
+2. la cascata era tarata su campi che la lista importata non ha. Su 19.103
+   righe reali: telefono **100%**, email **1,3%**, P.IVA **0%**.
+
+Risultato prima dell'intervento: **0 contatti agganciati**, quindi la dashboard
+CRM mostrava 0 iscritti anche con 19 aziende registrate.
+
+### 12.2 Come funziona oggi
+
+Motore in `apps/piattaforma/src/lib/crm/match/`, a stadi, tutto puro tranne
+l'ultimo:
+
+| Modulo | Ruolo |
+|---|---|
+| `normalize.ts` | **Fonte unica** delle chiavi. Telefono → sole cifre, via `0039`/`39` di prefisso, scarta sotto le 8 cifre. Nome senza forme societarie, indirizzo senza civico finale. |
+| `identita.ts` | Da una `Company` ricava **più identità**: la madre + **una per sede**. La lista CRM è fatta di punti vendita, non di ragioni sociali. |
+| `score.ts` | Ammissione + punteggio della coppia (identità, contatto). |
+| `assign.ts` | Assegnazione greedy con indice sulle chiavi forti, ordinamento deterministico. |
+| `engine.ts` | Solo lettura: calcola le proposte (dry-run per l'anteprima). |
+| `apply.ts` | Scrive, con compare-and-set. |
+| `stato.ts` / `storico.ts` | Fonte unica dell'ordine del funnel e del conteggio pratiche. |
+
+**Ammissione** — serve almeno una **prova forte**: P.IVA, email/PEC,
+telefono/WhatsApp. Nome, indirizzo, città e CAP non bastano mai da soli.
+
+**Eccezione categoria** — se la riga è `BROKER` e l'azienda è `AGENZIA` (o
+viceversa), la prova forte da sola non basta: serve un **secondo indizio
+identificante**. `nome~` (parziale), città e CAP **non** contano: sono proprio i
+campi che non discriminano nel caso che la regola deve proteggere — due attività
+diverse con lo stesso centralino nella stessa città.
+
+**Punteggio** (`PESI`, serve solo a ordinare: "più campi uguali vince"):
+P.IVA 100 · email 60 · telefono 50 · nome 25 · indirizzo 20 · nome parziale 15 ·
+CAP 5 · città 5.
+
+**Pari merito** — se due identità diverse si contendono lo stesso contatto la
+proposta è marcata **ambigua**. Un'eccezione: madre e sua sede non sono
+ambigue (è la stessa azienda) e a parità **vince la sede**.
+
+**Stato del funnel** — allineato allo storico reale, mai a indovinare:
+`S7` registrata, `S8` almeno una pratica firmata, `S9` ricorrente. Solo in
+salita; **`S10` non viene mai assegnato dal motore**.
+
+### 12.3 I tre canali
+
+| Canale | Quando | Ambigue |
+|---|---|---|
+| Registrazione (`tryMatchCrmContact`) | alla creazione della `Company` | **non** applicate (ma vedi il limite qui sotto) |
+| Cron `crm-sync` | notturno, su tutta la lista | **non** applicate |
+| `/admin/crm/riconciliazione` | a mano, anteprima + Applica (permesso CRM full) | **applicate** — c'è una persona che ha appena visto l'anteprima |
+
+⚠️ **Limite noto del canale di registrazione**: il calcolo è ristretto
+all'azienda appena creata, quindi delle due clausole di ambiguità scatta solo
+"più contatti per la stessa identità". La clausola "più aziende diverse si
+contendono lo stesso contatto" non può scattare — in quell'insieme c'è una sola
+azienda. Se una riga ancora libera è contesa a pari punteggio fra chi si sta
+registrando e un'altra azienda già registrata, viene assegnata alla prima senza
+essere marcata ambigua, e il cron non lo ripara (la riga non è più libera).
+Caso raro, richiede un pareggio esatto; documentato invece che nascosto.
+
+**Non esiste uno sgancio.** Cancellare il contatto sbagliato non ferma il
+ciclo: torna libero e la notte dopo aggancia il secondo migliore. Se un aggancio
+è sbagliato va corretto il dato che l'ha prodotto.
+
+### 12.4 Invarianti a livello DB
+
+- Colonne `telNorm/waNorm/emailNorm/pivaNorm` indicizzate, scritte **solo** da
+  `match/norm-fields.ts`: ogni nuovo write path su `CrmContact` deve passare
+  di lì, altrimenti il contatto diventa invisibile al match.
+- Indice **unique parziale** `(companyId, sedeId) NULLS NOT DISTINCT WHERE
+  companyId IS NOT NULL AND deletedAt IS NULL`: impedisce a due passate
+  concorrenti di agganciare due righe alla stessa identità. Il compare-and-set
+  applicativo protegge il *contatto*; questo indice protegge l'*identità*.
+
+### 12.5 Conseguenza sulle campagne del sales agent
+
+Da quando il match aggancia davvero, una campagna lanciata senza filtro di stato
+includerebbe anche i contatti a `S7/S8/S9`: il bot vocale telefonerebbe a
+clienti **già a bordo** per proporgli di iscriversi.
+
+`createCampaignAction` quindi **esclude sempre dal target i contatti con
+`companyId` valorizzato**, qualunque filtro sia stato scelto. L'esclusione non è
+silenziosa: il modale di lancio riporta quanti contatti sono stati esclusi
+perché già registrati. Vedi anche `ecosistema-crm-ai.md` §10.

@@ -438,6 +438,12 @@
 
 ## FASE 10 - CRM Vendite + Growth Stack
 
+> ⚠️ **FASE SUPERATA** dalla **FASE 14 — CRM interno team PV** (decisione 2026-05-06):
+> il CRM è stato costruito **nativo** nella piattaforma, senza HubSpot e senza Make.
+> Quanto segue resta come storia della decisione; per il sistema reale vai alla FASE 14
+> e a `docs/crm-spec-implementativa.md`. In particolare, il matching descritto qui non è
+> quello che gira (vedi §12 della spec).
+
 > **Architettura tecnica:** `docs/crm-architettura.md` (integrazione webhook, schema, matching)
 > **Paper operativo:** `docs/ecosistema-crm-ai.md` (function calling, multi-canale, 3 pagine, chatbot)
 > Il CRM è un **sistema esterno** (HubSpot/Airtable + Make + Vapi.ai + Lemlist +
@@ -481,7 +487,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 ### 10.4 CRM esterno — Integrazione piattaforma (settimana 1-2)
 
 - [ ] Endpoint Make riceve webhook piattaforma
-- [ ] Logica matching email → telefono → P.IVA
+- [~] ~~Logica matching email → telefono → P.IVA~~ — realizzata in FASE 14 con altre regole (prova forte + punteggio, sedi comprese): vedi A16
 - [ ] Scenario Make per Caso A (contatto esistente)
 - [ ] Scenario Make per Caso B (nuovo iscritto)
 - [ ] Alert manuale sales su conflitti matching
@@ -710,7 +716,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [x] `/admin/crm/sales` 2 colonne (agent / campagne)
 - [x] CRUD Sales Agent (10 campi: nome, lingua/voce/accento, prompt, script primo+followup, Q&A, post-call) — delete bloccato se ha campagne attive/pausate
 - [x] CRUD Campagna (12 campi) con filtri target (regione/cat/statoTarget) e parametri call (maxTry, intervallo, finestra oraria, giorni attivi)
-- [x] Lancio campagna in transazione: bulk-create `CrmCampaignAssegnazione` per i contatti che matchano i filtri
+- [x] Lancio campagna: bulk-create `CrmCampaignAssegnazione` a batch da 5000 **fuori** da una transazione interattiva (con decine di migliaia di contatti una tx da 5s è fragile; le insert sono additive e idempotenti). Target = i contatti che matchano i filtri **meno** quelli già agganciati a un'azienda registrata (dal 2026-07-27, vedi A16): il bot vocale propone l'iscrizione, chiamare un cliente attivo è il danno peggiore. Il modale di lancio riporta quanti sono stati esclusi
 - [x] Status transitions ATTIVA / PAUSATA / CHIUSA
 - [x] RBAC owner-based: SALES_MANAGER edita solo le proprie campagne, ADMIN/AD/CTO edita tutte
 
@@ -984,6 +990,8 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
   Poi il deploy del codice e, **subito dopo**, il re-run del backfill `packages/db/prisma/migrations/20260727153000_crm_match_prefisso_390/backfill-post-deploy.sql`: nella finestra fra migration e deploy il codice vecchio scrive righe con le colonne normalizzate vuote, e il nuovo anti-duplicato dell'import CSV legge quelle colonne dal DB invece di ricalcolarle — una riga con `telNorm` nullo è un duplicato che entra senza rumore. **Query di chiusura, deve tornare 0**: è in fondo a `backfill-post-deploy.sql` (conta le righe con telefono utilizzabile e `telNorm` vuoto). ⚠️ La soglia delle 8 cifre va misurata sul telefono **normalizzato**: la variante grezza `length(regexp_replace(tel,'[^0-9]','','g')) >= 8` torna 6 anche a backfill perfetto (numeri come `+39 041 8890`, che dopo il taglio del prefisso `390` scendono a 6 cifre e restano `NULL` per costruzione)
 - ⚠️ **Cautela operativa**: su Neon risultano pendenti migration arrivate da `main`. Un `prisma migrate deploy` a valanga le applicherebbe tutte insieme. Lanciare **prima** `prisma migrate status` su Neon, poi applicare **solo** le tre migration di questa feature (e registrarle con `prisma migrate resolve --applied`)
 - Nessuna variabile d'ambiente nuova. Il primo run del cron dopo il deploy è il più lungo (smaltisce tutto il pregresso, `maxDuration` a 300s) ma è idempotente e ritentabile
+- **Conseguenza sui bot, chiusa nello stesso push**: da quando l'aggancio scatta davvero, una campagna lanciata senza filtro di stato includerebbe i contatti S7/S8/S9 — il sales agent vocale telefonerebbe a **clienti già attivi** per proporgli di iscriversi. `createCampaignAction` ora esclude sempre dal target i contatti con `companyId` valorizzato, qualunque filtro sia stato scelto, e il modale di lancio riporta quanti sono stati esclusi (il numero non cala in silenzio). Le assegnazioni delle campagne **già lanciate** non vengono ripulite: sono storiche, e cambiarle a posteriori falserebbe i conteggi di chi sta chiamando adesso
+- **Documentazione riallineata** nello stesso push: la cascata «email → telefono → P.IVA» era descritta come viva in quattro documenti. `crm-spec-implementativa.md` ha una nuova **§12** (descrizione autoritativa del match) ed è l'unico riscritto sul comportamento reale; `crm-architettura.md` ed `ecosistema-crm-ai.md` sono paper di aprile sul CRM esterno HubSpot/Make e restano **storia**, con una nota puntuale dove il matching è descritto. Il paper dei bot ha una nuova **§10** con la conoscenza operativa per gli agenti (cosa significano S7/S8/S9 oggi, cosa dire a chi è già iscritto, checklist dei testi da aggiornare a mano in `/admin/crm/sales`). I testi degli agenti vivono nel DB: **non** sono stati toccati
 - Spec: `docs/superpowers/specs/2026-07-27-crm-riconciliazione-design.md` · Plan: `docs/superpowers/plans/2026-07-27-crm-riconciliazione.md`
 
 ### B · Bloccato da account/decisione esterna
@@ -992,7 +1000,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 |---|---|---|
 | **B1 Stripe Connect + commercialista fatturazione** | Validazione modello fatturazione delegata (split forfettario 55+20, TD01/TD06/IVA, ritenuta privato, somme di terzi) + onboarding Stripe | FASE 5 intera (addebiti SEPA, payout broker/affiliazione, fattura elettronica). Spec: `sistema-fatturazione.md` §9 |
 | **B6 Vapi.ai account** | Budget approvato + sottoscrizione | CRM-H (chiamate vocali AI, function calling, blacklist) |
-| **B7 Testi vocali** | Script S0-S10 da Sales + Q&A obiezioni | CRM-H (configurazione agent base) |
+| **B7 Testi vocali** | Script S0-S10 da Sales + Q&A obiezioni — checklist di cosa devono contenere in `ecosistema-crm-ai.md` §10.5 | CRM-H (configurazione agent base) |
 | **B8 Validazione AF1-AF5** | Commercialista + legale + CTO review | Sblocca produzione FASE 13 (oggi è in prod ma in attesa di sign-off legale) |
 | **B10 Legale popup penali** | Review clausole `sistema-penali-broker.md` | Sblocca enforcement reale del wallet negativo |
 | **B11 Legale procura/successione** | Notaio + legale review | Sblocca SD-D (revisione manuale + AI documenti speciali) |

@@ -7,6 +7,12 @@
 > `crm-architettura.md` descrive l'**integrazione tecnica** (webhook, schema, matching).
 > **Collocazione roadmap:** estensioni alla FASE 10 del `piano-implementazione.md`
 
+> ⚠️ **Le §1-§7 sono il paper di aprile**, scritto quando il CRM era previsto
+> esterno (HubSpot + Make) e nessuna riga era ancora agganciata a un'azienda
+> registrata. Il CRM è poi stato costruito **nativo** nella piattaforma. Per
+> quello che i bot devono sapere **oggi** vai alla **§10**, aggiunta il
+> 2026-07-27: è l'unica parte di questo documento che descrive il sistema reale.
+
 ---
 
 ## 1. Visione
@@ -183,7 +189,7 @@ Tecnicamente sono sistemi distinti ma si coordinano tramite CRM.
 - Connettere Vapi.ai al CRM tramite function calling (R pre-chiamata + W post)
 - Configurare invio multi-canale SMS/WhatsApp/Mail post-chiamata via Make
 - Configurare webhook piattaforma → Make per ogni nuova iscrizione
-- Logica matching CRM ↔ Piattaforma (email → tel → P.IVA)
+- ~~Logica matching CRM ↔ Piattaforma (email → tel → P.IVA)~~ → fatta, ma con altre regole: vedi §10.1
 - Pixel tracking su link iscrizione + webhook Wistia
 
 **Fase 3 — Test e go-live**
@@ -311,3 +317,111 @@ nella stessa tabella `TrackingVisit` con source distintivo.
 - `docs/crm-architettura.md` — integrazione tecnica CRM ↔ piattaforma (schema, webhook, matching)
 - `docs/sistema-affiliazione.md` — programma affiliazione (paternità lead §8.8)
 - `docs/piano-implementazione.md` — FASE 10 estesa con sotto-sezioni di questo paper
+- `docs/crm-spec-implementativa.md` — **il CRM come è stato costruito davvero** (§12: riconciliazione)
+
+---
+
+## 10. Cosa devono sapere i bot oggi (2026-07-27)
+
+> Aggiunta dopo il rilascio della riconciliazione CRM ↔ aziende registrate.
+> **Questa sezione descrive il sistema reale**, a differenza delle §1-§7.
+> Serve a chi scrive i prompt e gli script degli agenti da `/admin/crm/sales` e
+> `/admin/crm/chatbot`: i testi degli agenti vivono nel **DB**, non qui, quindi
+> vanno aggiornati a mano dall'interfaccia admin usando quanto segue.
+
+### 10.1 Il fatto nuovo: una riga della lista può essere un cliente
+
+Fino a ieri nessuna riga del CRM era collegata a un'azienda registrata: la lista
+era **tutta** composta da prospect freddi, e ogni script poteva assumerlo.
+Da oggi non è più vero. Il motore di riconciliazione (`lib/crm/match/`,
+descritto in `crm-spec-implementativa.md` §12) collega le righe della lista alle
+aziende **e alle singole sedi** già registrate sulla piattaforma.
+
+Conseguenze dirette per chi scrive gli script:
+
+- Un contatto può essere **già cliente**. Proporgli l'iscrizione è l'errore
+  peggiore che il bot possa fare: comunica che non sappiamo chi è.
+- Il collegamento è alla **sede**, non solo all'azienda. Un gruppo con più punti
+  vendita può avere una sede iscritta e le altre no: "siete già con noi" è
+  giusto per quel punto vendita, non necessariamente per l'insegna intera.
+- Il campo `matchVia` dice **su quali dati** è avvenuto l'aggancio (es.
+  `tel+indirizzo+cap`). Se un operatore contesta l'aggancio, è lì che si guarda.
+
+### 10.2 Gli stati S7/S8/S9 ora significano qualcosa
+
+Non sono più impostati a mano né dedotti da una chiamata: il motore li allinea
+allo **storico reale delle pratiche**, e solo in salita.
+
+| Stato | Significato reale | Cosa NON dire |
+|---|---|---|
+| **S7** — Iscritto, non attivo | Azienda registrata, **zero** pratiche firmate | Mai "si iscriva". Semmai: perché non ha ancora iniziato |
+| **S8** — Prima pratica | Almeno **una** pratica firmata | Mai trattarlo come lead |
+| **S9** — Attivo ricorrente | Cliente operativo | Mai proporre l'iscrizione né lo sconto di benvenuto |
+| **S10** — Churned | **Il motore non lo assegna mai**: se c'è, l'ha messo una persona | — |
+
+Per un contatto agganciato è disponibile anche `platStatus`
+(`ATTIVO` / `INATTIVO` / `SOSPESO`): un'azienda **sospesa** non va lavorata come
+opportunità commerciale, va passata all'assistenza.
+
+### 10.3 Le campagne escludono da sole chi è già a bordo
+
+`createCampaignAction` **esclude sempre** dal target i contatti agganciati a
+un'azienda registrata, **qualunque filtro** sia stato scelto (categoria,
+regione, stato). Non è un filtro che si può disattivare dall'interfaccia.
+
+Il conteggio non cala in silenzio: al lancio il modale dice quanti contatti sono
+stati esclusi perché già registrati. Se il numero assegnato è più basso del
+previsto, la spiegazione è lì.
+
+**Quindi**: una campagna outbound non dovrebbe mai raggiungere un cliente
+attivo. Se succede, è un sintomo — la riga era già in campagna **prima**
+dell'aggancio (le assegnazioni storiche non vengono ripulite a posteriori,
+apposta: falserebbero i conteggi delle campagne in corso). Chi lancia una
+campagna vecchia rimasta attiva se ne deve ricordare.
+
+### 10.4 Script: cosa fa il bot se emerge che sono già iscritti
+
+Vale sia per il sales agent vocale sia per il chatbot. Tre casi:
+
+1. **Il CRM lo dice prima della chiamata** (contatto agganciato): non parte
+   nessuna campagna di acquisizione — vedi §10.3. Se serve contattarli, è una
+   chiamata di **attivazione/assistenza**, con obiettivo diverso: capire perché
+   non caricano pratiche, non convincerli a iscriversi.
+2. **Emerge durante la chiamata** ("siamo già registrati"): il bot **non
+   insiste** e non prova a verificare l'identità al telefono. Riconosce,
+   ringrazia, e passa a qualificare l'uso — da quanto tempo, quante pratiche,
+   cosa non funziona — oppure passa a un umano. Non promette nulla sull'account
+   (saldi, fatture, pratiche in corso): quei dati non sono nel CRM lead.
+3. **Il contatto dice di essere iscritto ma il CRM non lo sa**: possibile — si
+   sono iscritti con recapiti diversi da quelli della lista. Il bot **non
+   contesta**: prende nota, chiude gentilmente, e la riga va segnalata a un
+   sales, che dalla pagina `/admin/crm/riconciliazione` può verificare se
+   esiste una proposta di aggancio in attesa.
+
+**Regola trasversale:** il bot non annuncia mai all'interlocutore che "risulta
+agganciato nel nostro CRM". È un dettaglio interno, e detto ad alta voce suona
+come profilazione.
+
+### 10.5 Cosa aggiornare nei record degli agenti (lavoro manuale in admin)
+
+I prompt, gli script e le Q&A degli agenti stanno nel DB (`CrmSalesAgent`,
+`CrmChatbot`) e si modificano da `/admin/crm/sales` e `/admin/crm/chatbot`.
+Checklist di ciò che va riportato nei testi:
+
+- [ ] **Prompt base**: aggiungere che la lista può contenere clienti già
+      registrati e che l'obiettivo cambia di conseguenza (§10.4).
+- [ ] **Script primo contatto**: aggiungere il ramo "siamo già registrati" con
+      l'uscita descritta al caso 2.
+- [ ] **Q&A obiezioni**: nuova voce "Siamo già vostri clienti" (broker e agenzia
+      separate, come le altre).
+- [ ] **Comportamento post-chiamata**: non inviare il link di iscrizione né il
+      codice welcome a chi si è dichiarato già iscritto.
+- [ ] **Chatbot**: stessa voce Q&A, con l'aggiunta che per domande su account,
+      fatture o pratiche esistenti si rimanda all'area riservata o
+      all'assistenza — il chatbot pubblico non ha quei dati.
+
+Il chatbot LLM legge la sua knowledge base dai `docs/*.md` secondo il
+front-matter `chatbot_visibility`: questo documento è **internal**, quindi nulla
+di quanto sta qui finisce nelle risposte a clienti o visitatori. Se una di
+queste informazioni deve arrivare all'utente finale, va scritta a mano in
+`kb-clienti.md` o `kb-pubblico.md`.

@@ -134,6 +134,26 @@ describe('applicaProposte', () => {
     expect(contactUpdateMany.mock.calls[0]![0].data.platStatus).toBe('SOSPESO');
   });
 
+  // review giro 2/5: coperto solo suspendedAt, non deletedAt — un'azienda
+  // soft-deleted risulterebbe ATTIVO/INATTIVO invece che SOSPESO.
+  it('azienda soft-deleted (deletedAt) → platStatus SOSPESO anche senza suspendedAt', async () => {
+    companyFindUnique.mockResolvedValue({
+      createdAt: new Date('2026-01-10T00:00:00Z'),
+      suspendedAt: null,
+      deletedAt: new Date('2026-06-01T00:00:00Z'),
+      referenteId: null,
+    });
+    await applicaProposte([PROPOSTA]);
+    expect(contactUpdateMany.mock.calls[0]![0].data.platStatus).toBe('SOSPESO');
+  });
+
+  // review giro 2/5: matchedAt è il timbro d'audit dell'aggancio, consumato
+  // dalle viste admin dei Task 11-12 — nessun test lo verificava.
+  it('valorizza matchedAt come timbro d\'audit dell\'aggancio', async () => {
+    await applicaProposte([PROPOSTA]);
+    expect(contactUpdateMany.mock.calls[0]![0].data.matchedAt).toBeInstanceOf(Date);
+  });
+
   it('company arrivata da referral → fonte REFERRAL (comportamento già vivo)', async () => {
     companyFindUnique.mockResolvedValue({
       createdAt: new Date('2026-01-10T00:00:00Z'),

@@ -2922,3 +2922,20 @@ Scrivi nel messaggio finale: numero di righe agganciate sul DB locale, distribuz
 - Ordine obbligato: **migration su Neon prima del push**. Le colonne sono nullable e il codice vecchio le ignora, quindi la finestra intermedia è sicura per lo schema — ma NON per i dati: il codice vecchio, in quella finestra, continua a creare/modificare CrmContact scrivendo tel/wa/email/piva grezzi senza popolare le colonne normalizzate (non le conosce). Quelle righe restano con telNorm/waNorm/emailNorm/pivaNorm a NULL finché qualcuno non le tocca di nuovo. **Subito dopo il deploy del codice nuovo, rieseguire il backfill** (idempotente, query intere o filtrate con `WHERE "telNorm" IS NULL` ecc. per toccare solo le righe mancanti) per chiudere il buco — usare SEMPRE `packages/db/prisma/migrations/20260727153000_crm_match_prefisso_390/backfill-post-deploy.sql`, **non** gli UPDATE della migration `20260727150000_crm_match_normalizzato`: quella SQL è superata, non ha la correzione del prefisso `390` (vedi migration `20260727153000_crm_match_prefisso_390`) e ripopolerebbe righe nuove con la formula vecchia.
 - Dopo il deploy, la prima passata del cron `crm-sync` riconcilia da sola; l'anteprima admin serve a controllare prima, non a far partire il processo.
 - Nessuna variabile d'ambiente nuova.
+- Terza migration del piano (Task 8, review C-1, giro 1/5):
+  `packages/db/prisma/migrations/20260727160000_crm_contacts_company_sede_unique/migration.sql`
+  — indice UNIQUE parziale su `crm_contacts` (companyId, sedeId) con `NULLS NOT
+  DISTINCT`, l'altra metà dell'invariante di `applicaProposte` ("un'identità
+  prende un solo contatto") che il compare-and-set applicativo da solo non
+  copriva. Va applicata **dopo** le prime due (`20260727150000`,
+  `20260727153000`) e comunque prima che la riconciliazione (Task 11+) inizi a
+  scrivere su Neon. **Prima di applicarla su Neon**, rilanciare la stessa
+  verifica di assenza duplicati fatta sul locale:
+  ```sql
+  SELECT "companyId", "sedeId", count(*) FROM crm_contacts
+  WHERE "companyId" IS NOT NULL AND "deletedAt" IS NULL
+  GROUP BY 1, 2 HAVING count(*) > 1;
+  ```
+  Se restituisce righe, la `CREATE UNIQUE INDEX` fallisce — voluto: significa
+  che due contatti CRM sono già agganciati alla stessa identità e vanno
+  risolti a mano prima di poter chiudere il vincolo.

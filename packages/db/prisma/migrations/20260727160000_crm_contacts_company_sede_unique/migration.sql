@@ -14,13 +14,15 @@
 -- identità, in silenzio, e lo stato (solo in salita) non si auto-corregge.
 --
 -- Si sposta quindi l'invariante nel DB con un indice unico parziale.
--- NULLS NOT DISTINCT è indispensabile (Postgres 15+, qui 17): senza, due
--- righe (companyId=C1, sedeId=NULL) — il caso "azienda madre, nessuna sede
--- specifica", che è la maggioranza dei match — non verrebbero bloccate,
--- perché in un indice UNIQUE ordinario NULL non è mai distinto da un altro
--- NULL... anzi, PostgreSQL considera NULL <> NULL, quindi righe con NULL
--- passerebbero SEMPRE l'unicità di un indice ordinario. È esattamente il
--- caso dello scenario sopra.
+-- NULLS NOT DISTINCT è indispensabile (Postgres 15+, qui 17): in un indice
+-- UNIQUE ordinario due NULL sono considerati DISTINTI fra loro (è lo stesso
+-- motivo per cui `NULL <> NULL` vale NULL, non true — Postgres non li
+-- confronta come uguali), quindi due righe (companyId=C1, sedeId=NULL) — il
+-- caso "azienda madre, nessuna sede specifica", che è la maggioranza dei
+-- match — passerebbero ENTRAMBE l'unicità di un indice ordinario, senza
+-- essere bloccate. NULLS NOT DISTINCT ribalta questa regola: rende i NULL
+-- uguali fra loro ai fini dell'indice, quindi la seconda riga con lo stesso
+-- (C1, NULL) viene rifiutata. È esattamente il caso dello scenario sopra.
 --
 -- Verificato PRIMA di scrivere questa migration, sul DB locale (copia di
 -- prod), che non esistano già duplicati:

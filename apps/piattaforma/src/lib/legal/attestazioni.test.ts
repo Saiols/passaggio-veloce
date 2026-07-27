@@ -55,4 +55,16 @@ describe('registro delle attestazioni', () => {
     expect(attestazioniPerVersione('v9.9')).toBeNull();
     expect(attestazioniPerVersione('')).toBeNull();
   });
+
+  // La versione arriva dal client (FormData field, max 20 char). Una versione
+  // ignota deve produrre un rifiuto pulito, non un TypeError piu' a valle.
+  // Protezione contro prototype pollution: Object.prototype members come
+  // 'constructor', 'toString', 'hasOwnProperty', '__proto__' vanno trattate
+  // come versioni sconosciute, non come funzioni ereditate.
+  it('versioni ereditate da Object.prototype restituiscono null', () => {
+    expect(attestazioniPerVersione('constructor')).toBeNull();
+    expect(attestazioniPerVersione('toString')).toBeNull();
+    expect(attestazioniPerVersione('hasOwnProperty')).toBeNull();
+    expect(attestazioniPerVersione('__proto__')).toBeNull();
+  });
 });

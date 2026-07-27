@@ -81,9 +81,12 @@ export const REGISTRO_ATTESTAZIONI: Record<string, readonly Attestazione[]> = {
  * Testi di una versione, o `null` se sconosciuta. Il chiamante server DEVE
  * trattare `null` come richiesta da rifiutare: registrare un'attestazione di
  * cui non conosciamo il contenuto non e' una prova.
+ *
+ * Usa Object.hasOwn per evitare prototype pollution: una stringa come
+ * 'constructor' proveniente dal client non deve accedere a Object.prototype.
  */
 export function attestazioniPerVersione(versione: string): readonly Attestazione[] | null {
-  return REGISTRO_ATTESTAZIONI[versione] ?? null;
+  return Object.hasOwn(REGISTRO_ATTESTAZIONI, versione) ? REGISTRO_ATTESTAZIONI[versione] : null;
 }
 
 /** Le attestazioni da rendere adesso nella modale. */

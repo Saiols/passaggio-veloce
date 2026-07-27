@@ -37,14 +37,14 @@ const cont = (over: Partial<ContattoGrezzo> = {}) =>
 
 describe('assegna', () => {
   it('una identità prende solo il contatto col punteggio più alto', () => {
-    // Usa id 'z' (scarso) e 'a' (ricco) per contraddire l'ordine alfabetico:
-    // se il punteggio non fosse il criterio dominante, vincerebbe 'a',
-    // ma è il punteggio che conta, quindi vince 'a' per score, non per id.
-    const scarso = cont({ id: 'z', nome: 'Altro', indirizzo: null, citta: null, cap: null });
-    const ricco = cont({ id: 'a' });
+    // Id scarso='a' (minore alfabeticamente), ricco='z' (maggiore).
+    // Se il punteggio non fosse il criterio dominante, il tie-break su id
+    // farebbe vincere 'a' (scarso). Ma deve vincere 'z' (ricco) per punteggio.
+    const scarso = cont({ id: 'a', nome: 'Altro', indirizzo: null, citta: null, cap: null });
+    const ricco = cont({ id: 'z' });
     const out = assegna([ident()], [scarso, ricco]);
     expect(out).toHaveLength(1);
-    expect(out[0]!.contatto.id).toBe('a');
+    expect(out[0]!.contatto.id).toBe('z');
   });
 
   it('a parità di punteggio vince il contatto più vecchio', () => {

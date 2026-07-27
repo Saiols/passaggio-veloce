@@ -703,6 +703,7 @@ model Sede {
   commissioniAttribuite CommissioneAffiliazione[] @relation("SedeAffiliante")
   companiesAffiliate    Company[]                 @relation("SedeReferral")
   segnalazioniCreazione SegnalazioneCreazione[]   @relation("SegnalazioniCreazioneSede")
+  crmContactMatches     CrmContact[]              @relation("CrmContactSede")
 
   @@index([companyId])
   @@index([type])
@@ -2242,6 +2243,18 @@ model CrmContact {
   lastAccessAt   DateTime?
   tassoComp      Int            @default(0) // 0-100
 
+  // Chiavi normalizzate per il match (fonte: lib/crm/match/norm-fields.ts).
+  telNorm   String?
+  waNorm    String?
+  emailNorm String?
+  pivaNorm  String?
+
+  // Sede specifica che ha fatto match (null = azienda madre).
+  sedeId    String?   @db.Uuid
+  sede      Sede?     @relation("CrmContactSede", fields: [sedeId], references: [id], onDelete: SetNull)
+  matchVia  String? // campi che hanno prodotto l'aggancio, es. "tel+indirizzo"
+  matchedAt DateTime?
+
   // Email di partenza CRM (onboarding post-telefonata)
   invitoToken        String?    @unique // token opaco del link /i/<token>, riscritto a ogni reinvio
   emailUnsubToken    String?    @unique // token STABILE per l'unsubscribe del lead (mai riscritto)
@@ -2263,6 +2276,11 @@ model CrmContact {
   @@index([companyId])
   @@index([linkAperto])
   @@index([promoCodeInviatoId])
+  @@index([telNorm])
+  @@index([waNorm])
+  @@index([emailNorm])
+  @@index([pivaNorm])
+  @@index([sedeId])
   @@map("crm_contacts")
 }
 

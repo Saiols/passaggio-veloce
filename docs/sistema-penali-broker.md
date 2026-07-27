@@ -133,10 +133,24 @@ per ciascun veicolo segnalato (i veicoli regolari non vengono addebitati). La
 penale non è soggetta a IVA. Perderai inoltre il compenso previsto per la
 pratica annullata.
 
-[ ] Confermo di aver verificato quanto sopra e mi assumo piena responsabilità
+[ ] Confermo di aver verificato quanto sopra (assenza di fermi amministrativi,
+    ipoteche o vincoli iscritti al PRA, autenticità dei documenti caricati) e
+    mi assumo piena responsabilità.
 
-[Conferma e invia]   ← disabled finché checkbox non spuntato
+[ ] Dichiaro di aver informato il venditore e l'acquirente che i loro
+    documenti e dati personali saranno trattati da Passaggio Veloce S.r.l.
+    per la gestione della presente pratica, ai sensi dell'Informativa
+    Privacy per venditori e acquirenti (passaggioveloce.it/privacy/clienti)
+    e della clausola 23 dei Termini.
+
+[Conferma e invia]   ← disabled finché ENTRAMBE le checkbox non sono spuntate
 ```
+
+> **Aggiornamento 2026-07-27:** dalla v4.0 la spunta è doppia (responsabilità
+> sul veicolo + attestazione sull'informativa ai terzi), non più una singola
+> checkbox cumulativa. Fonte unica dei testi: `lib/legal/attestazioni.ts`
+> (questo blocco descrive la versione corrente solo a scopo illustrativo per
+> la KB del chatbot — non rigenerarlo a mano da qui).
 
 **Log accettazione (modello nuovo `BrokerDichiarazione`):**
 ```prisma
@@ -159,8 +173,8 @@ model BrokerDichiarazione {
 IP anonimizzato GDPR (es. `192.168.1.x`).
 
 **Acceptance:**
-- Bottone "Conferma e invia" visivamente disabled finché checkbox non spuntato
-- Click "Conferma e invia" → server action accetta solo se nello stesso form `dichiarazioneAccettata=true`
+- Bottone "Conferma e invia" visivamente disabled finché entrambe le checkbox non sono spuntate
+- Click "Conferma e invia" → server action accetta solo se nello stesso form `dichiarazioneAccettata=true` E `attestazioneTerziAccettata=true` (il requisito è derivato dal registro versionato, vedi `lib/legal/attestazioni.ts`)
 - Log creato in transazione con la `Pratica.create()`/submit
 
 ### 2. Bottone "Segnala problema" (lato agenzia)

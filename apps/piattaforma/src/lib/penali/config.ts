@@ -29,25 +29,10 @@ export const PENALI = {
   MAX_PENALI_BEFORE_ALERT: 2,
 
   /**
-   * Versione corrente del testo del popup di responsabilità. Cambiarla
-   * quando si modifica il copy del popup, in modo che il log
-   * BrokerDichiarazione preservi la traccia esatta del testo accettato.
-   *
-   * v2.0 (2026-07-11): la penale è €25 per ciascun VEICOLO SEGNALATO (non per
-   * pratica) e non è soggetta a IVA — rimosso «lordi», che non corrispondeva
-   * ad alcun calcolo. Vedi docs/superpowers/specs/2026-07-11-termini-penali-sospensione-design.md
-   *
-   * v3.0 (2026-07-14): aggiunta la conferma che il broker ha informato
-   * venditore e acquirente del trattamento dei loro dati (clausola 17 dei
-   * Termini) — rende azionabile la manleva della 17.5 registrando la
-   * garanzia ad ogni invio pratica, non solo una volta in registrazione.
-   * Vedi docs/superpowers/plans/2026-07-14-gdpr-dati-terzi.md
-   *
-   * v3.1 (2026-07-26): stesso testo, ma il rimando alla clausola sui dati di
-   * venditori e acquirenti è passato da 17 a 23 con la rinumerazione dei
-   * Termini (merge del documento v8). Il record persiste solo questa versione,
-   * non il copy: senza il bump, due testi che citano clausole diverse
-   * finirebbero indistinguibili sotto "v3.0".
+   * @deprecated Sostituita da `ATTESTAZIONI_VERSION` in `lib/legal/attestazioni.ts`,
+   * dove la versione vive accanto al testo che descrive (qui era lontana da esso,
+   * ed e' per questo che il testo poteva cambiare senza che la versione seguisse).
+   * Lasciata per i record storici: NON usarla in codice nuovo.
    */
   POPUP_VERSION: 'v3.1',
 } as const;

@@ -24,8 +24,8 @@ export const ART_APPROVAZIONE_SPECIFICA = 25;
  * 18→24 e approvazione 19→25 col merge del documento v8 del 2026-07-26), le
  * dichiarazioni pregresse citerebbero per sempre la clausola sbagliata se non
  * leggessero questa costante. Il record persiste `popupVersion`
- * (`PENALI.POPUP_VERSION`) e, dalla v4.0, anche il testo integrale (vedi
- * `lib/legal/attestazioni.ts`): **bumpare quella versione a ogni
+ * (`ATTESTAZIONI_VERSION` in `lib/legal/attestazioni.ts`, che dalla v4.0 porta
+ * con se' anche il testo integrale): **bumpare quella versione a ogni
  * rinumerazione**, altrimenti due testi diversi finiscono sotto la stessa
  * versione e l'audit non sa quale numero di clausola l'utente ha letto.
  */

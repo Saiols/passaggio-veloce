@@ -126,7 +126,9 @@ export function romeDataLeggibile(instant: Date): string {
 }
 
 /**
- * Data e ora leggibili in fuso italiano: "15 lug 2026, 14:32".
+ * Data e ora leggibili in fuso italiano: "15 lug 2026, 14:32:07" (`timeStyle:
+ * 'medium'` include i secondi — voluto: e' una prova, la precisione non e' un
+ * dettaglio).
  *
  * `formatDateTime` di `lib/format.ts` non fissa il timeZone e su Vercel (server
  * UTC) rende l'ora sbagliata. Per le 32 UI che lo usano e' un dettaglio; per un

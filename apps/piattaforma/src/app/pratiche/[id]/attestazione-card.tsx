@@ -32,14 +32,24 @@ export function AttestazioneCard({ dichiarazione }: { dichiarazione: Dichiarazio
   // Testo dal record; per i record <= v3.1 (scritti prima che venisse
   // persistito) si ricade sul registro tramite la versione.
   const dalRegistro = attestazioniPerVersione(dichiarazione.popupVersion);
-  const testi = testiPersistiti(dichiarazione.testoAttestazioni) ?? dalRegistro?.map((a) => a.testo) ?? null;
+  const testiDalRegistro = dalRegistro && dalRegistro.length > 0 ? dalRegistro.map((a) => a.testo) : null;
+  const testi = testiPersistiti(dichiarazione.testoAttestazioni) ?? testiDalRegistro;
+
+  // `clausolaTerzi` e' null per ogni record <= v3.1 (v3.0 citava la clausola
+  // 17, v3.1 la 23 — non c'e' un unico numero valido per "sconosciuto"). Un
+  // fallback indovinato contraddirebbe il testo reso subito sotto, che per
+  // quei record e' gia' risolto correttamente dal registro: meglio omettere
+  // il numero che mostrarne uno sbagliato. Quando e' valorizzato e' il dato
+  // storico persistito al momento della spunta: non va sostituito con la
+  // clausola *attuale* dei Termini.
+  const clausolaFrag =
+    dichiarazione.clausolaTerzi != null ? `, clausola ${dichiarazione.clausolaTerzi}` : '';
 
   return (
     <Card>
       <h2 className="text-[15px] font-bold text-pv-navy-800">Attestazione del broker</h2>
       <p className="mt-1 text-[12px] text-pv-slate-500">
-        Dichiarazione resa prima dell&apos;invio (Termini, clausola{' '}
-        {dichiarazione.clausolaTerzi ?? 23}). Versione testo {dichiarazione.popupVersion}.
+        {`Dichiarazione resa prima dell'invio (Termini${clausolaFrag}). Versione testo ${dichiarazione.popupVersion}.`}
       </p>
 
       <dl className="mt-3 space-y-1 text-[13px]">

@@ -9,7 +9,7 @@ import { StatusChip, SubmitButton, TipoPraticaChip, type PraticaStato } from '@/
 import { formatRelative } from '@/lib/format';
 import { acceptAndRedirect, rejectAndRedirect } from './actions';
 import { redirectSeAgenziaBloccata } from '@/lib/fee/gate';
-import { STORICO_ESITI, storicoCutoff, labelEsito } from './storico';
+import { STORICO_ESITI, storicoCutoff, labelEsito, vintaDaAltri } from './storico';
 import { VisuraBanner } from '@/components/visura-banner';
 
 export default async function InboxPage() {
@@ -65,6 +65,11 @@ export default async function InboxPage() {
           include: {
             broker: { select: { ragioneSociale: true } },
             veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
+            // Esiti delle assegnazioni sorelle: servono a distinguere "persa"
+            // (un'altra agenzia ha accettato nel nostro stesso ciclo) da
+            // "annullata" — vedi `vintaDaAltri`. Solo ciclo ed esito: nessun
+            // dato delle altre agenzie esce da qui.
+            assegnazioni: { select: { ciclo: true, esito: true } },
           },
         },
       },
@@ -193,7 +198,9 @@ export default async function InboxPage() {
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
-                      {labelEsito(a.esito)}
+                      {labelEsito(a.esito, {
+                        vintaDaAltri: vintaDaAltri(a.ciclo, a.pratica.assegnazioni),
+                      })}
                     </span>
                     <span className="text-[11px] text-pv-slate-500">
                       {formatRelative(a.esitoAt)}

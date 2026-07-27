@@ -117,6 +117,15 @@ export function canViewCrmPermissions(role: string | undefined): boolean {
 }
 
 /**
+ * Riconciliazione CRM ↔ aziende registrate: vista e applicazione. Operazione
+ * di massa sull'intera lista → solo CRM full (ADMIN/AD/CTO), fuori portata di
+ * SALES_MANAGER e SALES.
+ */
+export function canRunCrmReconciliation(role: string | undefined): boolean {
+  return inSet(CRM_FULL, role);
+}
+
+/**
  * Lista ruoli che il currentUser può creare/assegnare a nuovi utenti team.
  * Vedi spec §3 "Regole di management utenti".
  */

@@ -81,7 +81,14 @@ export async function applicaProposte(
 
   for (const p of proposte) {
     try {
-      // Lo stato attuale serve per non retrocedere: `updateMany` non lo legge.
+      // Lo stato attuale serve per non retrocedere. Viene anche rimesso nel
+      // `where` della updateMany qui sotto (CAS piena su companyId+status):
+      // fra questa lettura e la scrittura ci sono altri round-trip (storico
+      // azienda), ed è la stessa finestra in cui un admin può portare il
+      // contatto a S10 da un'altra richiesta. Senza ririleggere lo stato nel
+      // `where`, quella scrittura vincerebbe sull'admin (lost update) — la
+      // regola "S10 mai toccato" cadrebbe proprio nel modo che il
+      // compare-and-set doveva prevenire.
       const attuale = await prisma.crmContact.findUnique({
         where: { id: p.contactId },
         select: { status: true },
@@ -115,13 +122,18 @@ export async function applicaProposte(
       // tocca, per non perdere lo storico del lead (es. CSV_INIZIALE).
       if (storico.referral) data.fonte = CrmFonteAcquisizione.REFERRAL;
 
-      // Compare-and-set: si scrive solo se nessun altro giro l'ha già preso.
+      // Compare-and-set: si scrive solo se nessun altro giro l'ha già preso
+      // (companyId ancora null) E se lo stato è ancora quello appena letto
+      // (nessuno l'ha spostato nel frattempo, es. a S10). Se una delle due
+      // condizioni è cambiata, `count` torna 0: niente sovrascrittura silenziosa,
+      // la proposta semplicemente non si applica in questo giro.
       const res = await prisma.crmContact.updateMany({
-        where: { id: p.contactId, companyId: null },
+        where: { id: p.contactId, companyId: null, status: attuale.status },
         data,
       });
       if (res.count > 0) agganciati++;
-    } catch {
+    } catch (err) {
+      console.error(`[applicaProposte] errore su contatto ${p.contactId}:`, err);
       errori++;
     }
   }

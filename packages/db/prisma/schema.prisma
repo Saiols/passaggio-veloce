@@ -2269,6 +2269,17 @@ model CrmContact {
   campaignAssegnazioni CrmCampaignAssegnazione[]
   calls                CrmCall[]
 
+  // ⚠️ DRIFT VOLUTO rispetto al DB reale: la migration
+  // 20260727160000_crm_contacts_company_sede_unique aggiunge un indice
+  // UNIQUE PARZIALE (companyId, sedeId) NULLS NOT DISTINCT WHERE
+  // companyId IS NOT NULL AND deletedAt IS NULL — "un'identità prende un
+  // solo contatto", l'altra metà dell'invariante di apply.ts (Task 8,
+  // review C-1). Prisma 5.22 non supporta indici parziali (clausola WHERE)
+  // né NULLS NOT DISTINCT nel DSL di @@unique/@@index, quindi l'indice
+  // esiste SOLO nella migration, non qui sotto. Il progetto scrive le
+  // migration a mano e applica con `prisma migrate deploy` (mai
+  // `migrate dev`, che è distruttivo su questo schema): non introspettare
+  // né "correggere" questo drift, è intenzionale.
   @@index([cat])
   @@index([status])
   @@index([regione])

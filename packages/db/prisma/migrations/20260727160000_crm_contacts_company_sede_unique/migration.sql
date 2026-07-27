@@ -1,0 +1,51 @@
+-- Task 8, review C-1 (giro di correzioni 1/5, 2026-07-27): il compare-and-set
+-- applicativo in apply.ts protegge solo metà dell'invariante — "un contatto
+-- va a una sola azienda" (`where: { companyId: null }`). L'altra metà —
+-- "un'identità (azienda, sede) prende un solo contatto" — viveva solo nello
+-- snapshot in memoria del motore (`identitaPrese` in assign.ts, `coperte` in
+-- engine.ts) e non veniva mai ricontrollata al momento della scrittura.
+--
+-- Scenario raggiungibile in esercizio ordinario: la passata A fotografa il
+-- DB e assegna il contatto X all'identità (C1, madre); nel frattempo si
+-- registra C2 che su X fa punteggio più alto; la passata B fotografa di
+-- nuovo (X ora "preso" solo nella memoria di A, non nel DB) e assegna a C1
+-- il secondo migliore, il contatto Y. Entrambe le CAS applicative passano,
+-- perché X e Y sono liberi nel DB. Risultato: due righe CRM sulla stessa
+-- identità, in silenzio, e lo stato (solo in salita) non si auto-corregge.
+--
+-- Si sposta quindi l'invariante nel DB con un indice unico parziale.
+-- NULLS NOT DISTINCT è indispensabile (Postgres 15+, qui 17): senza, due
+-- righe (companyId=C1, sedeId=NULL) — il caso "azienda madre, nessuna sede
+-- specifica", che è la maggioranza dei match — non verrebbero bloccate,
+-- perché in un indice UNIQUE ordinario NULL non è mai distinto da un altro
+-- NULL... anzi, PostgreSQL considera NULL <> NULL, quindi righe con NULL
+-- passerebbero SEMPRE l'unicità di un indice ordinario. È esattamente il
+-- caso dello scenario sopra.
+--
+-- Verificato PRIMA di scrivere questa migration, sul DB locale (copia di
+-- prod), che non esistano già duplicati:
+--   SELECT "companyId", "sedeId", count(*) FROM crm_contacts
+--   WHERE "companyId" IS NOT NULL AND "deletedAt" IS NULL
+--   GROUP BY 1, 2 HAVING count(*) > 1;
+-- → 0 righe (il motore di aggancio, Task 8, non ha ancora scritto nulla:
+--   "riconciliaTutto" non è mai stato invocato su dati reali).
+--
+-- ⚠️ PRIMA DI APPLICARE QUESTA MIGRATION SU NEON (prod): rilanciare la
+-- stessa query su prod. Se restituisce righe, la CREATE UNIQUE INDEX qui
+-- sotto fallisce — ed è corretto che fallisca rumorosamente piuttosto che
+-- essere aggirata (indice più permissivo, WHERE aggiuntivo, ecc.): un
+-- duplicato reale in prod significa che due contatti CRM sono già stati
+-- agganciati alla stessa identità e va deciso a mano quale dei due tenere
+-- prima di poter chiudere l'invariante.
+--
+-- Questo indice NON è rappresentabile nel DSL di schema.prisma (Prisma
+-- 5.22 non supporta indici parziali — clausola WHERE — né NULLS NOT
+-- DISTINCT nello schema): vedi il commento nel model CrmContact. Il
+-- progetto scrive le migration a mano e usa `prisma migrate deploy` (mai
+-- `migrate dev`, vedi nota interna sulla distruttività), quindi questo
+-- drift fra schema.prisma e DB reale non rischia di essere "corretto"
+-- automaticamente da un diff-tool.
+CREATE UNIQUE INDEX "crm_contacts_company_sede_unique"
+  ON "crm_contacts" ("companyId", "sedeId")
+  NULLS NOT DISTINCT
+  WHERE "companyId" IS NOT NULL AND "deletedAt" IS NULL;

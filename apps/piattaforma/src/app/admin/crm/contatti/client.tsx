@@ -64,6 +64,9 @@ type ContactRow = {
   praticheMonth: number;
   lastAccessAt: string | null;
   tassoComp: number;
+  companyId: string | null;
+  aziendaNome: string | null;
+  sedeNome: string | null;
 };
 
 type SalesUser = { id: string; name: string };
@@ -329,7 +332,22 @@ export function CrmContactsClient({
                   key={c.id}
                   className="border-b border-pv-slate-100 last:border-0 hover:bg-pv-slate-50"
                 >
-                  <td className="px-4 py-2.5 font-semibold text-pv-navy-900">{c.nome}</td>
+                  <td className="px-4 py-2.5 font-semibold text-pv-navy-900">
+                    {c.nome}
+                    {c.aziendaNome ? (
+                      <span
+                        className="mt-1 block text-[11.5px] font-semibold text-pv-green-500"
+                        title={
+                          c.sedeNome
+                            ? `Registrata: ${c.aziendaNome} — ${c.sedeNome}`
+                            : `Registrata: ${c.aziendaNome}`
+                        }
+                      >
+                        ● Registrata · {c.aziendaNome}
+                        {c.sedeNome ? ` (${c.sedeNome})` : ''}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-2.5">
                     <CatBadge cat={c.cat} />
                   </td>

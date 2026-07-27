@@ -93,6 +93,23 @@ describe('assegna', () => {
     expect(out).toEqual([]);
   });
 
+  it('madre e sede "gemelle" (stessi recapiti) contendono lo stesso contatto: vince sempre la sede', () => {
+    // Caso reale (Corsico): la sede ha lo stesso nome/telefono/indirizzo
+    // della madre → stesso punteggio per lo stesso contatto. Deve vincere
+    // sempre la sede (aggancio più preciso), per regola esplicita — non per
+    // effetto collaterale dell'ordine alfabetico delle chiavi identità.
+    // sedeId='s1' è scelto apposta: 's1' > 'madre' lessicograficamente
+    // (s > m), quindi se il codice tornasse a delegare il tie-break alla
+    // sola chiaveIdentita (senza la preferenza esplicita), vincerebbe la
+    // MADRE — l'opposto di quanto deve succedere. Con un id come nel caso
+    // reale ('b4...' < 'madre') l'esito sarebbe "giusto per caso": qui no.
+    const madre = ident({ sedeId: null });
+    const sede = ident({ sedeId: 's1' });
+    const out = assegna([madre, sede], [cont()]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.identita.sedeId).toBe('s1');
+  });
+
   it('chiaveIdentita distingue madre e sede', () => {
     expect(chiaveIdentita(ident())).toBe('c1:madre');
     expect(chiaveIdentita(ident({ sedeId: 's1' }))).toBe('c1:s1');

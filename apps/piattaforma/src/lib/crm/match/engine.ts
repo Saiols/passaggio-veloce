@@ -2,7 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { identitaDaCompany, type CompanyGrezza } from './identita';
 import { preparaContatto } from './score';
-import { assegna, chiaveIdentita } from './assign';
+import { assegna, chiaveDaCoppia, chiaveIdentita } from './assign';
 
 /**
  * Calcolo delle proposte di aggancio (DRY-RUN: non scrive nulla).
@@ -72,9 +72,7 @@ export async function calcolaProposte(
     where: { deletedAt: null, companyId: { not: null } },
     select: { companyId: true, sedeId: true },
   });
-  const coperte = new Set(
-    agganciati.map((a) => `${a.companyId}:${a.sedeId ?? 'madre'}`),
-  );
+  const coperte = new Set(agganciati.map((a) => chiaveDaCoppia(a)));
 
   const identita = companies
     .flatMap(identitaDaCompany)

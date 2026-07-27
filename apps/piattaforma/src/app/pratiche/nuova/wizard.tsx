@@ -6,7 +6,7 @@ import { Alert, Button, Checkbox, Field, Input, NumberInput, Select, useToast } 
 import { WizardProgress } from '@/components/wizard-progress';
 import { DichiarazionePopup } from '@/components/dichiarazione-popup';
 import { SegnalaProblemaPopup } from '@/components/segnala-problema-popup';
-import { PENALI } from '@/lib/penali/config';
+import { ATTESTAZIONI_VERSION, type IdAttestazione } from '@/lib/legal/attestazioni';
 import { docKey } from '@/lib/documenti/richiesti';
 import { AddressAutocomplete } from '@/components/address-autocomplete';
 import {
@@ -829,7 +829,7 @@ function WizardBody({
   // finale prima del submit. Il broker deve spuntare il checkbox prima di
   // poter cliccare "Conferma e invia". Il backend logga IP+UA+versione popup.
   const [showDichiarazione, setShowDichiarazione] = useState(false);
-  const [dichiarazioneAccettata, setDichiarazioneAccettata] = useState(false);
+  const [attestazioni, setAttestazioni] = useState<Partial<Record<IdAttestazione, boolean>>>({});
 
   // Segnalazioni FASE creazione pratica (task 5/8): CTA/popup "Hai
   // riscontrato un problema?" presente in ogni step (SegnalaProblemaPopup).
@@ -1625,9 +1625,12 @@ function WizardBody({
     // sede operativa se vuota). Inviata solo se selezionabile.
     if (brokerSedeId) fd.append('brokerSedeId', brokerSedeId);
 
-    // Sistema Penali Broker: payload di accettazione popup (versione + flag)
+    // Attestazioni pre-invio: due spunte distinte + la versione del testo che
+    // l'utente ha effettivamente letto (il bundle in pagina puo' essere di una
+    // release precedente: e' quel testo che va registrato, non l'ultimo).
     fd.append('dichiarazioneAccettata', 'true');
-    fd.append('dichiarazionePopupVersion', PENALI.POPUP_VERSION);
+    fd.append('attestazioneTerziAccettata', 'true');
+    fd.append('dichiarazionePopupVersion', ATTESTAZIONI_VERSION);
 
     startSubmit(async () => {
       const res = await submitNuovaPraticaAction(fd);
@@ -2893,7 +2896,7 @@ function WizardBody({
                 className={!canSubmit && !submitting ? 'opacity-50' : undefined}
                 onClick={() => {
                   if (!canSubmit) { fe.reveal(); return avvisaMancanze(mancanzeStep4()); }
-                  setDichiarazioneAccettata(false);
+                  setAttestazioni({});
                   setShowDichiarazione(true);
                 }}
                 disabled={submitting}
@@ -2922,9 +2925,9 @@ function WizardBody({
 
       <DichiarazionePopup
         open={showDichiarazione}
-        accepted={dichiarazioneAccettata}
+        accettate={attestazioni}
         pending={submitting}
-        onAcceptedChange={setDichiarazioneAccettata}
+        onToggle={(id, valore) => setAttestazioni((prev) => ({ ...prev, [id]: valore }))}
         onConfirm={() => {
           setShowDichiarazione(false);
           handleFinalSubmit();

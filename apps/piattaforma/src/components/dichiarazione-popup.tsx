@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { Button } from '@/components/ui';
 import { PENALI } from '@/lib/penali/config';
-import { ART_DATI_TERZI } from '@/lib/legal/clausole-vessatorie';
+import { attestazioniCorrenti, type IdAttestazione } from '@/lib/legal/attestazioni';
 
 /**
  * Popup di responsabilità broker (Sistema Penali Broker — SP-A release 2026-05).
@@ -10,30 +11,35 @@ import { ART_DATI_TERZI } from '@/lib/legal/clausole-vessatorie';
  *
  * Componente isolato e riusabile: viene chiamato dal wizard pratica come
  * modale prima del submit finale. Il bottone "Conferma e invia" rimane
- * disabilitato finché il broker non spunta il checkbox di accettazione.
+ * disabilitato finché il broker non spunta TUTTE le attestazioni correnti
+ * (dalla v4.0 sono due, non più una cumulativa).
  *
  * IL CALLER è responsabile di:
- *  - Mantenere lo stato `accepted` (checkbox)
+ *  - Mantenere lo stato `accettate` (una spunta per ogni attestazione)
  *  - Chiamare `onConfirm()` quando l'utente clicca "Conferma e invia"
- *  - Passare la versione del popup (`POPUP_VERSION` da lib/penali/config) al
- *    submit, perché il backend deve registrarla nel BrokerDichiarazione.
+ *  - Passare la versione delle attestazioni (`ATTESTAZIONI_VERSION` da
+ *    lib/legal/attestazioni) al submit, perché il backend deve registrarla
+ *    nel BrokerDichiarazione.
  */
 export function DichiarazionePopup({
   open,
-  accepted,
+  accettate,
   pending,
-  onAcceptedChange,
+  onToggle,
   onConfirm,
   onClose,
 }: {
   open: boolean;
-  accepted: boolean;
+  accettate: Partial<Record<IdAttestazione, boolean>>;
   pending: boolean;
-  onAcceptedChange: (v: boolean) => void;
+  onToggle: (id: IdAttestazione, valore: boolean) => void;
   onConfirm: () => void;
   onClose: () => void;
 }) {
   if (!open) return null;
+
+  const attestazioni = attestazioniCorrenti();
+  const tutteAccettate = attestazioni.every((a) => accettate[a.id] === true);
 
   return (
     <div
@@ -83,14 +89,6 @@ export function DichiarazionePopup({
               veicolo
             </span>
           </li>
-          <li className="flex items-start gap-2">
-            <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-pv-slate-400" />
-            <span>
-              Hai <strong>informato venditore e acquirente</strong> che i loro
-              dati e documenti sono trasmessi a Passaggio Veloce per la gestione
-              della pratica
-            </span>
-          </li>
         </ul>
 
         <p className="mb-4 text-[12.5px] leading-relaxed text-pv-slate-700">
@@ -127,19 +125,30 @@ export function DichiarazionePopup({
           </span>
         </div>
 
-        <label className="mb-5 flex cursor-pointer items-start gap-3 rounded-[12px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-4 py-3 transition-colors hover:bg-pv-slate-100">
-          <input
-            type="checkbox"
-            checked={accepted}
-            onChange={(e) => onAcceptedChange(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-pv-navy-700"
-          />
-          <span className="text-[13px] font-semibold text-pv-navy-800">
-            Confermo di aver verificato quanto sopra, di aver informato venditore
-            e acquirente sul trattamento dei loro dati (clausola {ART_DATI_TERZI} dei
-            Termini) e mi assumo piena responsabilità
-          </span>
-        </label>
+        <div className="mb-5 space-y-2.5">
+          {attestazioni.map((a) => (
+            <div key={a.id}>
+              <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-4 py-3 transition-colors hover:bg-pv-slate-100">
+                <input
+                  type="checkbox"
+                  checked={accettate[a.id] === true}
+                  onChange={(e) => onToggle(a.id, e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-pv-navy-700"
+                />
+                <span className="text-[13px] font-semibold text-pv-navy-800">{a.testo}</span>
+              </label>
+              {a.link && (
+                <Link
+                  href={a.link.href}
+                  target="_blank"
+                  className="mt-1 ml-11 inline-block text-[12px] font-semibold text-pv-navy-700 hover:underline"
+                >
+                  {a.link.label} ↗
+                </Link>
+              )}
+            </div>
+          ))}
+        </div>
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onClose} disabled={pending}>
@@ -147,7 +156,7 @@ export function DichiarazionePopup({
           </Button>
           <Button
             onClick={onConfirm}
-            disabled={!accepted || pending}
+            disabled={!tutteAccettate || pending}
             loading={pending}
             loadingLabel="Invio…"
           >

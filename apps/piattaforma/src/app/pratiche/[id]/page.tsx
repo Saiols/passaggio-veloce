@@ -30,6 +30,7 @@ import { ValutazioneForm } from './valutazione-form';
 import { guidaStep, type GuidaRuolo } from '@/lib/pratiche/guida-step';
 import { GuidaStepCard } from './guida-step-card';
 import { formatKm } from '@/lib/distribuzione/format';
+import { getDistribuzioneConfig } from '@/lib/distribuzione/config';
 import { getCoperturaPratica } from '@/lib/distribuzione/copertura';
 import { CoperturaCard } from './copertura-card';
 import { AttestazioneCard } from './attestazione-card';
@@ -248,6 +249,23 @@ export default async function PraticaDetailPage({
       : null;
   // Telefono di quella sede; se non c'è, quello della madre.
   const agenziaTelefono = as?.telefono || pratica.agenziaAssegnata?.telefono || null;
+
+  // Nessuna agenzia ancora: al posto del "dove andare" si mostra DOVE STIAMO
+  // CERCANDO.
+  //
+  // Il gate è `IN_DISTRIBUZIONE` e NON `STATI_IN_ATTESA`, che pure sarebbe la
+  // fonte unica del gruppo "in attesa": quel set include anche i round legacy
+  // pre-v2 e l'escalation, stati che il tick non guida più (`tickPratica` esce
+  // subito con "stato non gestito"). Raccontare lì un raggio che si allarga
+  // sarebbe una promessa che nessun motore mantiene. Restano com'è oggi:
+  // nessun blocco, con la guida in cima alla pagina a dire "in attesa che
+  // un'agenzia accetti".
+  //
+  // Qui vive SOLO ciò che riguarda la pratica del broker: centro e ampiezza
+  // della ricerca. Quali agenzie siano state contattate, e perché una sia stata
+  // saltata, resta `getCoperturaPratica` — diagnostica admin-only.
+  const cfgDistribuzione =
+    !as && pratica.stato === 'IN_DISTRIBUZIONE' ? await getDistribuzioneConfig() : null;
 
   const backHref = companyType === 'AGENZIA' ? '/pratiche' : '/pratiche';
 
@@ -741,7 +759,7 @@ export default async function PraticaDetailPage({
                   perdeva. Senza agenzia assegnata non c'è nessun posto dove
                   andare e il blocco non compare (l'elenco qui sotto continua a
                   dire "Agenzia assegnata: —"). */}
-              {as && (
+              {as ? (
                 <DoveAndareBox
                   intestazione={agenziaRagioneSociale}
                   sede={sedeNomeDistinto}
@@ -750,6 +768,16 @@ export default async function PraticaDetailPage({
                   queryMappe={agenziaQueryMappe}
                   telefono={agenziaTelefono}
                 />
+              ) : (
+                cfgDistribuzione && (
+                  <RicercaZonaBox
+                    comune={pratica.comune}
+                    raggioCorrenteM={pratica.raggioCorrenteM}
+                    raggioMaxM={cfgDistribuzione.raggioMaxM}
+                    zonaNonCoperta={pratica.zonaNonCopertaAt != null}
+                    coordinateMancanti={pratica.lat == null || pratica.lng == null}
+                  />
+                )
               )}
 
               <dl className="mt-4 space-y-3 text-[13px]">
@@ -992,6 +1020,93 @@ function DoveAndareBox({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Il "dove andare" quando ancora non c'è un dove: la zona in cui la
+ * distribuzione sta cercando un'agenzia.
+ *
+ * Racconta la ricerca solo per centro e ampiezza. L'elenco delle agenzie
+ * contattate e i motivi di esclusione sono un'altra cosa — diagnostica
+ * admin-only, `CoperturaCard` — e non devono finire qui.
+ *
+ * Tre messaggi, perché tre sono le situazioni reali del motore:
+ * ricerca in corso, raggio massimo esaurito senza agenzie (da cui si può
+ * ripartire se una diventa disponibile), pratica non localizzabile (da cui
+ * non si riparte da sola: lo dice il tick, che su lat/lng nulli non ha
+ * nessuna ripresa possibile).
+ */
+function RicercaZonaBox({
+  comune,
+  raggioCorrenteM,
+  raggioMaxM,
+  zonaNonCoperta,
+  coordinateMancanti,
+}: {
+  comune: string | null;
+  /** Raggio già raggiunto. null = la distribuzione non ha ancora fatto un giro. */
+  raggioCorrenteM: number | null;
+  raggioMaxM: number;
+  zonaNonCoperta: boolean;
+  coordinateMancanti: boolean;
+}) {
+  const attorno = comune ? ` da ${comune}` : '';
+
+  const { tono, etichetta, titolo, dettaglio } = coordinateMancanti
+    ? {
+        tono: 'avviso' as const,
+        etichetta: 'Ricerca ferma',
+        titolo: 'Non riusciamo a localizzare l’indirizzo della pratica',
+        dettaglio:
+          'Senza posizione la distribuzione automatica non può scegliere le agenzie. Scrivici e la sistemiamo.',
+      }
+    : zonaNonCoperta
+      ? {
+          tono: 'avviso' as const,
+          etichetta: 'Nessuna agenzia in zona',
+          titolo: `Nessuna agenzia disponibile entro ${formatKm(raggioMaxM)}${attorno}`,
+          dettaglio:
+            'La richiesta resta attiva: appena un’agenzia della zona diventa disponibile, la ricerca riparte. Nel frattempo puoi rivolgerti a un’agenzia di fiducia.',
+        }
+      : {
+          tono: 'attesa' as const,
+          etichetta: 'Ricerca in corso',
+          titolo: comune
+            ? `Stiamo cercando un’agenzia intorno a ${comune}`
+            : 'Stiamo cercando un’agenzia in zona',
+          dettaglio:
+            raggioCorrenteM != null
+              ? `Raggio attuale ${formatKm(raggioCorrenteM)}, si allarga fino a ${formatKm(raggioMaxM)}.`
+              : `Partiamo dalle agenzie più vicine e allarghiamo fino a ${formatKm(raggioMaxM)}.`,
+        };
+
+  const stile =
+    tono === 'avviso'
+      ? 'border-pv-amber-500 bg-pv-amber-50'
+      : 'border-pv-slate-200 bg-pv-slate-50';
+  const stileEtichetta = tono === 'avviso' ? 'text-pv-navy-800' : 'text-pv-slate-500';
+
+  return (
+    <div className={`mt-4 rounded-[12px] border p-4 ${stile}`}>
+      <p
+        className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${stileEtichetta}`}
+      >
+        <TargetIcon />
+        {etichetta}
+      </p>
+      <p className="mt-2 text-[14px] font-bold leading-snug text-pv-navy-900">{titolo}</p>
+      <p className="mt-1 text-[12.5px] leading-relaxed text-pv-slate-700">{dettaglio}</p>
+    </div>
+  );
+}
+
+function TargetIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
   );
 }
 

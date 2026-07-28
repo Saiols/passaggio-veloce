@@ -528,6 +528,7 @@ export async function sendEmailPartenzaAction(input: {
     select: {
       id: true, cat: true, status: true, email: true, nome: true,
       emailOptOutAt: true, emailUnsubToken: true, assignedToId: true,
+      companyId: true,
     },
   });
   if (!contact) return { ok: false, error: 'Contatto non trovato.' };
@@ -537,6 +538,18 @@ export async function sendEmailPartenzaAction(input: {
     return { ok: false, error: 'Non autorizzato su questo contatto.' };
   }
 
+  // Chi è già agganciato a un'azienda registrata resta fuori, come per le
+  // campagne del sales agent (`createCampaignAction`): questa email propone
+  // l'iscrizione e regala un codice welcome, e mandarla a un cliente già a
+  // bordo è il danno peggiore che il CRM possa fare.
+  //
+  // Il percorso singolo finora era protetto solo per caso, dal controllo
+  // sull'email qui sotto: le righe agganciate arrivavano dalla lista CSV senza
+  // indirizzo. Da quando l'aggancio arricchisce il contatto quell'indirizzo
+  // c'è, e la protezione va scritta invece che sperata.
+  if (contact.companyId) {
+    return { ok: false, error: 'Il contatto è già registrato sulla piattaforma.' };
+  }
   if (!contact.email) return { ok: false, error: 'Il contatto non ha un’email.' };
   if (contact.emailOptOutAt) return { ok: false, error: 'Il contatto si è disiscritto dalle email.' };
 

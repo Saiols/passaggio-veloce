@@ -37,6 +37,23 @@ describe('sendEmailPartenzaAction', () => {
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
+  // L'email di partenza propone l'iscrizione e regala un codice welcome:
+  // mandarla a chi è già a bordo è lo stesso danno che le campagne del sales
+  // agent evitano da sempre escludendo `companyId` valorizzato. Fino
+  // all'arricchimento il percorso singolo era protetto per caso — quelle righe
+  // non avevano un'email — e adesso ce l'hanno.
+  it('errore se il lead è già registrato sulla piattaforma', async () => {
+    findUnique.mockResolvedValue({
+      id: 'c1', cat: 'BROKER', status: 'S7', email: 'a@b.it',
+      emailOptOutAt: null, nome: 'X', emailUnsubToken: null,
+      companyId: 'company-1',
+    });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('già registrat') });
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('errore se il lead è disiscritto', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it', emailOptOutAt: new Date() });
     const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });

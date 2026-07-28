@@ -389,13 +389,15 @@ export function CrmContactsClient({
                     <button
                       type="button"
                       onClick={() => setSending(c)}
-                      disabled={!c.email || !!c.emailOptOutAt}
+                      disabled={!c.email || !!c.emailOptOutAt || !!c.companyId}
                       title={
-                        !c.email
-                          ? 'Manca l’email'
-                          : c.emailOptOutAt
-                            ? 'Contatto disiscritto'
-                            : undefined
+                        c.companyId
+                          ? 'Già registrato sulla piattaforma'
+                          : !c.email
+                            ? 'Manca l’email'
+                            : c.emailOptOutAt
+                              ? 'Contatto disiscritto'
+                              : undefined
                       }
                       className="ml-2 rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-pv-navy-700 hover:bg-pv-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                     >

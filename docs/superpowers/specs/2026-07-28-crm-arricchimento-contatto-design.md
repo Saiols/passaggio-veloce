@@ -132,7 +132,7 @@ In ordine di applicazione.
 7. **`indirizzo` = `indirizzo` + `civico`** in una stringa sola (`'Via Roma 12'`),
    come già fa l'import CSV: `CrmContact` non ha la colonna `civico`.
 8. **`regione` derivata da `provincia`** tramite una mappa nuova
-   `lib/geo/province.ts` (110 sigle → le forme canoniche già in
+   `lib/geo/province.ts` (107 sigle → le forme canoniche già in
    `lib/crm/regione.ts`, che resta la fonte unica dei nomi). Sigla non
    riconosciuta → campo non scritto, mai un valore inventato.
 9. **Valore sorgente vuoto → campo non scritto.** Riempire un buco con un altro
@@ -282,7 +282,7 @@ query dei contatti: senza colonna, la pagina CRM contatti va giù in prod.
 - contatto completo → `null`;
 - `arricchitoDa` unito al precedente, senza duplicati.
 
-**Sulla mappa province** (`province.test.ts`): tutte le 110 sigle mappano a una
+**Sulla mappa province** (`province.test.ts`): tutte le 107 sigle mappano a una
 regione presente in `REGIONI_ITALIANE`, e le 20 regioni sono tutte coperte.
 
 **Su `apply.ts` e `sync.ts`** col mock Prisma: la CAS scarta la scrittura se il

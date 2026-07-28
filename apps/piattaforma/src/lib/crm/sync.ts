@@ -241,12 +241,25 @@ export async function syncCrmFromPlatform(): Promise<{
 
     // Arricchimento dei contatti già agganciati: riempie i campi che la lista
     // non aveva. Il pre-controllo sui buchi evita di leggere la sede per i
-    // contatti già completi, che dopo la prima passata sono la norma.
+    // contatti già completi — "nessuna query in più" vale per loro; i
+    // contatti il cui `wa` non è riempibile (azienda con solo un fisso)
+    // restano con un buco per sempre e ci passano ogni notte, ma il costo
+    // resta una query in più a notte per contatto, non una spirale.
+    //
+    // `company.deletedAt` esclude SOLO l'arricchimento, non l'aggiornamento
+    // aggregati sopra (che usa proprio `deletedAt` per calcolare
+    // `platStatus` = SOSPESO, e deve restare lì). `engine.ts` non aggancia
+    // mai un'identità cancellata: company e sedi vi sono filtrate
+    // `deletedAt: null` (~riga 82 e nel select ~riga 61). I due percorsi
+    // devono concordare — se il motore non aggancerebbe da quell'identità,
+    // il cron non deve arricchirci sopra: altrimenti scrive dati stantii di
+    // un'azienda o una sede chiusa, e la regola solo-vuoti + CAS li rende
+    // permanenti.
     try {
-      if (campiVuoti(c).length > 0) {
+      if (!company.deletedAt && campiVuoti(c).length > 0) {
         const sede = c.sedeId
           ? await prisma.sede.findUnique({
-              where: { id: c.sedeId },
+              where: { id: c.sedeId, deletedAt: null },
               select: {
                 email: true, telefono: true, indirizzo: true,
                 civico: true, citta: true, cap: true, provincia: true,

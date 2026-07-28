@@ -101,10 +101,26 @@ describe('GET/POST /api/jobs/crm-sync', () => {
       '[crm-sync] riconciliazione',
       { proposte: 5, agganciati: 4, errori: 1 },
     ]);
+    // `riconciliazione` e `result` hanno ENTRAMBI una chiave `arricchiti`
+    // (aggancio vs. già agganciati): il log finale li tiene annidati invece
+    // di spargerli in un unico spread, altrimenti il secondo sovrascrive il
+    // primo in silenzio.
     expect(logSpy.mock.calls[1]).toEqual([
       '[crm-sync] completato',
-      { proposte: 5, agganciati: 4, errori: 1, scanned: 10, updated: 9 },
+      { riconciliazione: { proposte: 5, agganciati: 4, errori: 1 }, scanned: 10, updated: 9 },
     ]);
+  });
+
+  it('il log finale non fa collidere gli "arricchiti" di riconciliazione e sync', async () => {
+    requireAdminOrCron.mockResolvedValue(null);
+    riconciliaTutto.mockResolvedValue({ proposte: 800, agganciati: 800, errori: 0, arricchiti: 800 });
+    syncCrmFromPlatform.mockResolvedValue({ scanned: 19000, updated: 19000, arricchiti: 0 });
+    await GET(req());
+    const [, loggato] = logSpy.mock.calls[1]!;
+    expect(loggato).toMatchObject({
+      riconciliazione: expect.objectContaining({ arricchiti: 800 }),
+      arricchiti: 0,
+    });
   });
 
   it('il log della prima passata sopravvive anche se syncCrmFromPlatform fallisce (run troncato)', async () => {

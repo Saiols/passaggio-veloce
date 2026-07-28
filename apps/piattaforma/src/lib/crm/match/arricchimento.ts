@@ -93,7 +93,12 @@ export function calcolaArricchimento(
 
   const candidati: Record<CampoArricchibile, string> = {
     // Sede prima, madre dopo: la riga della lista è un punto vendita.
-    email: primo(s?.email, c.email),
+    // Minuscolo come ogni altro write path del CRM (vedi
+    // crm/contatti/actions.ts): `Company.email` può arrivare mista, e senza
+    // questo allineamento la colonna cambierebbe da sola al primo salvataggio
+    // manuale del contatto, con `arricchitoDa` che continuerebbe a dire che
+    // l'ha messa l'iscrizione.
+    email: primo(s?.email, c.email).toLowerCase(),
     // Il primo numero MOBILE fra sede e madre: `wa` è la casella WhatsApp,
     // metterci il fisso dell'azienda crea un canale che non esiste.
     wa: [s?.telefono, c.telefono].find((t) => isCellulare(t))?.trim() ?? '',

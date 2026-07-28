@@ -56,6 +56,14 @@ describe('calcolaArricchimento', () => {
     expect(patch.dati.email).toBe('info@agenziacorsico.it');
   });
 
+  it('email arricchita viene abbassata di case, come ogni altro write path del CRM', () => {
+    const patch = calcolaArricchimento(VUOTO, {
+      ...SORGENTE,
+      company: { ...SORGENTE.company, email: 'Info@AgenziaCorsico.IT' },
+    })!;
+    expect(patch.dati.email).toBe('info@agenziacorsico.it');
+  });
+
   it('match su sede: vincono i dati della sede', () => {
     const patch = calcolaArricchimento(VUOTO, {
       ...SORGENTE,

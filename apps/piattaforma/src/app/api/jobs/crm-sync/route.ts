@@ -39,7 +39,11 @@ async function run(req: NextRequest): Promise<NextResponse> {
   console.log('[crm-sync] riconciliazione', riconciliazione);
   const result = await syncCrmFromPlatform();
   // Log finale: solo per il caso completo, ricapitola anche gli aggregati.
-  console.log('[crm-sync] completato', { ...riconciliazione, ...result });
+  // `riconciliazione` e `result` hanno ENTRAMBI una chiave `arricchiti`
+  // (contatti arricchiti in fase di aggancio vs. già agganciati): uno spread
+  // piatto fa vincere silenziosamente il secondo sul primo. Qui restano
+  // annidati per non perdere nessuno dei due numeri.
+  console.log('[crm-sync] completato', { riconciliazione, ...result });
   return NextResponse.json({ ok: true, riconciliazione, ...result });
 }
 

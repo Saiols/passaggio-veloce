@@ -131,6 +131,68 @@ describe('syncCrmFromPlatform', () => {
     expect(contactUpdateMany.mock.calls[0]![0].data.citta).toBe('Corsico');
   });
 
+  it('contatto con buchi e sedeId valorizzato → la sede viene letta (con deletedAt: null) e i suoi dati vincono su quelli della madre', async () => {
+    contactFindMany.mockResolvedValue([
+      {
+        id: 'x1', companyId: 'c1', sedeId: 'sede-1',
+        email: null, wa: null, piva: null,
+        indirizzo: null, citta: null, cap: null, regione: null,
+        arricchitoDa: null,
+      },
+    ]);
+    companyFindUnique.mockResolvedValue({
+      type: 'AGENZIA', suspendedAt: null, deletedAt: null,
+      email: 'madre@agenziacorsico.it', telefono: '02 4478712',
+      partitaIva: '01234567890', indirizzo: 'Via Madre', civico: '1',
+      citta: 'Milano', cap: '20100', provincia: 'MI',
+    });
+    sedeFindUnique.mockResolvedValue({
+      email: 'buccinasco@agenziacorsico.it', telefono: null,
+      indirizzo: 'Viale Lombardia', civico: '12',
+      citta: 'Buccinasco', cap: '20090', provincia: 'MI',
+    });
+    const res = await syncCrmFromPlatform();
+    expect(sedeFindUnique).toHaveBeenCalledTimes(1);
+    expect(sedeFindUnique.mock.calls[0]![0].where).toEqual({
+      id: 'sede-1', deletedAt: null,
+    });
+    expect(res.arricchiti).toBe(1);
+    const scritto = contactUpdateMany.mock.calls[0]![0].data;
+    expect(scritto.email).toBe('buccinasco@agenziacorsico.it');
+    expect(scritto.citta).toBe('Buccinasco');
+    // la P.IVA è solo della madre: la sede non ne ha una
+    expect(scritto.piva).toBe('01234567890');
+  });
+
+  it('company soft-deleted → nessun arricchimento (né lettura della sede), ma gli aggregati sono comunque aggiornati', async () => {
+    contactFindMany.mockResolvedValue([
+      {
+        id: 'x1', companyId: 'c1', sedeId: 'sede-1',
+        email: null, wa: null, piva: null,
+        indirizzo: null, citta: null, cap: null, regione: null,
+        arricchitoDa: null,
+      },
+    ]);
+    // Company cancellata: gli aggregati devono comunque leggerla e calcolare
+    // SOSPESO da questo stesso `deletedAt` (non spostare né condizionare
+    // quella lettura), ma l'arricchimento sotto deve saltare del tutto —
+    // altrimenti scrive in modo permanente (solo-vuoti + CAS) dati di
+    // un'identità che il motore di match non avrebbe mai agganciato.
+    companyFindUnique.mockResolvedValue({
+      type: 'AGENZIA', suspendedAt: null,
+      deletedAt: new Date('2026-06-01T00:00:00.000Z'),
+      email: 'info@agenziacorsico.it', telefono: '02 4478712',
+      partitaIva: '01234567890', indirizzo: 'Via Fiume', civico: '6',
+      citta: 'Corsico', cap: '20094', provincia: 'MI',
+    });
+    const res = await syncCrmFromPlatform();
+    expect(res.updated).toBe(1);
+    expect(res.arricchiti).toBe(0);
+    expect(contactUpdate.mock.calls[0]![0].data.platStatus).toBe('SOSPESO');
+    expect(sedeFindUnique).not.toHaveBeenCalled();
+    expect(contactUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('contatto senza buchi → nessuna lettura della sede, nessuna scrittura', async () => {
     contactFindMany.mockResolvedValue([
       {
@@ -153,6 +215,11 @@ describe('syncCrmFromPlatform', () => {
   });
 
   it('un arricchimento che esplode non ferma il giro degli aggregati', async () => {
+    // Allineato al gemello in apply.test.ts (~riga 338, review giro 1/5
+    // Finding 2): spia console.error e verifica che scatti davvero, non solo
+    // che il giro sopravviva. Senza, un arricchimento fallito su questo
+    // percorso non lascerebbe traccia da nessuna parte.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     contactFindMany.mockResolvedValue([
       {
         id: 'x1', companyId: 'c1', sedeId: null,
@@ -173,5 +240,10 @@ describe('syncCrmFromPlatform', () => {
     const res = await syncCrmFromPlatform();
     expect(res.updated).toBe(1);
     expect(res.arricchiti).toBe(0);
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('x1'),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 });

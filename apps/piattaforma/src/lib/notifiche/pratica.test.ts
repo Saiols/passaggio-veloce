@@ -42,8 +42,56 @@ describe('destinatariBroker', () => {
     ]);
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
-      { email: 'op@dealer.it', userId: 'u1', nome: 'Luca' },
-      { email: 'collega@dealer.it', userId: 'u2', nome: 'Anna' },
+      { email: 'op@dealer.it', userId: 'u1', nome: 'Luca', isOwner: false },
+      { email: 'collega@dealer.it', userId: 'u2', nome: 'Anna', isOwner: false },
+    ]);
+  });
+
+  it('pratica di un operatore: il titolare membro della sede NON riceve', async () => {
+    // In prod ogni ADMIN_AZIENDA ha una membership di sede: senza il filtro sul
+    // ruolo si ritroverebbe in casella tutta la posta dei suoi operatori.
+    prismaMock.pratica.findUnique.mockResolvedValue({
+      creatoDaUserId: 'u1',
+      brokerSedeId: 's1',
+      brokerId: 'c1',
+    });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'u1',
+      email: 'op@dealer.it',
+      nome: 'Luca',
+      role: 'UTENTE_AZIENDA',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'u4', email: 'titolare@dealer.it', nome: 'Titolare', role: 'ADMIN_AZIENDA' } },
+      { user: { id: 'u2', email: 'anna@dealer.it', nome: 'Anna', role: 'UTENTE_AZIENDA' } },
+    ]);
+
+    await expect(destinatariBroker('p1')).resolves.toEqual([
+      { email: 'op@dealer.it', userId: 'u1', nome: 'Luca', isOwner: false },
+      { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna', isOwner: false },
+    ]);
+  });
+
+  it('sede del solo titolare: riceve lui, la notifica non si perde', async () => {
+    // Il titolare esce dai livelli di sede ma resta l'ultimo livello della
+    // catena: il dealer che lavora da solo continua a ricevere tutto.
+    prismaMock.pratica.findUnique.mockResolvedValue({
+      creatoDaUserId: null,
+      brokerSedeId: 's1',
+      brokerId: 'c1',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'u4', email: 'titolare@dealer.it', nome: 'Titolare', role: 'ADMIN_AZIENDA' } },
+    ]);
+    prismaMock.user.findFirst.mockResolvedValue({
+      id: 'u4',
+      email: 'titolare@dealer.it',
+      nome: 'Titolare',
+      role: 'ADMIN_AZIENDA',
+    });
+
+    await expect(destinatariBroker('p1')).resolves.toEqual([
+      { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare', isOwner: true },
     ]);
   });
 
@@ -71,7 +119,7 @@ describe('destinatariBroker', () => {
     );
   });
 
-  it('super admin che ha creato la pratica: lui e tutta la sede da cui ha operato', async () => {
+  it('titolare che ha creato la pratica: lui e gli operatori della sede da cui ha operato', async () => {
     prismaMock.pratica.findUnique.mockResolvedValue({
       creatoDaUserId: 'u4',
       brokerSedeId: 's1',
@@ -88,10 +136,10 @@ describe('destinatariBroker', () => {
       { user: { id: 'u2', email: 'anna@dealer.it', nome: 'Anna', role: 'UTENTE_AZIENDA' } },
     ]);
 
-    // il titolare compare una volta sola: la dedup lo riconosce fra i membri
+    // il titolare compare una volta sola: entra come creatore, non come membro
     await expect(destinatariBroker('p1')).resolves.toEqual([
-      { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare' },
-      { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna' },
+      { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare', isOwner: true },
+      { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna', isOwner: false },
     ]);
   });
 
@@ -108,7 +156,7 @@ describe('destinatariBroker', () => {
     ]);
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
-      { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna' },
+      { email: 'anna@dealer.it', userId: 'u2', nome: 'Anna', isOwner: false },
     ]);
     // il filtro ACTIVE/deletedAt sul creatore deve restare: senza, un utente
     // sospeso o cancellato tornerebbe raggiungibile da questa query.
@@ -137,7 +185,7 @@ describe('destinatariBroker', () => {
     });
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
-      { email: 'admin@dealer.it', userId: 'u4', nome: 'Titolare' },
+      { email: 'admin@dealer.it', userId: 'u4', nome: 'Titolare', isOwner: true },
     ]);
     // senza sede non si interroga user_sedi
     expect(prismaMock.userSede.findMany).not.toHaveBeenCalled();
@@ -176,7 +224,7 @@ describe('destinatariAgenzia', () => {
     ]);
 
     await expect(destinatariAgenzia('p1')).resolves.toEqual([
-      { email: 'acc@ag.it', userId: 'a1', nome: 'Sara' },
+      { email: 'acc@ag.it', userId: 'a1', nome: 'Sara', isOwner: false },
     ]);
   });
 
@@ -197,8 +245,8 @@ describe('destinatariAgenzia', () => {
     ]);
 
     await expect(destinatariAgenzia('p1')).resolves.toEqual([
-      { email: 'titolare@ag.it', userId: 'a0', nome: 'Titolare' },
-      { email: 'gino@ag.it', userId: 'a2', nome: 'Gino' },
+      { email: 'titolare@ag.it', userId: 'a0', nome: 'Titolare', isOwner: true },
+      { email: 'gino@ag.it', userId: 'a2', nome: 'Gino', isOwner: false },
     ]);
   });
 
@@ -213,7 +261,7 @@ describe('destinatariAgenzia', () => {
     ]);
 
     await expect(destinatariAgenzia('p1')).resolves.toEqual([
-      { email: 'sede@ag.it', userId: 'a2', nome: 'Gino' },
+      { email: 'sede@ag.it', userId: 'a2', nome: 'Gino', isOwner: false },
     ]);
   });
 
@@ -235,10 +283,25 @@ describe('destinatariSedeAgenzia', () => {
     ]);
 
     await expect(destinatariSedeAgenzia('s9')).resolves.toEqual([
-      { email: 'sede@ag.it', userId: 'a2', nome: 'Gino' },
+      { email: 'sede@ag.it', userId: 'a2', nome: 'Gino', isOwner: false },
     ]);
     // Nessun "preferito" da cercare: l'unica findFirst è quella dell'admin azienda.
     expect(prismaMock.user.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('N6: il titolare dell\'agenzia resta fra i destinatari — è chi accetta', async () => {
+    // Il filtro sul titolare vale SOLO lato broker: qui la notifica serve a
+    // prendere in carico la pratica, e nell'agenzia piccola accetta il titolare.
+    prismaMock.sede.findUnique.mockResolvedValue({ companyId: 'c9' });
+    prismaMock.userSede.findMany.mockResolvedValue([
+      { user: { id: 'a0', email: 'titolare@ag.it', nome: 'Titolare', role: 'ADMIN_AZIENDA' } },
+      { user: { id: 'a2', email: 'sede@ag.it', nome: 'Gino', role: 'UTENTE_AZIENDA' } },
+    ]);
+
+    await expect(destinatariSedeAgenzia('s9')).resolves.toEqual([
+      { email: 'titolare@ag.it', userId: 'a0', nome: 'Titolare', isOwner: true },
+      { email: 'sede@ag.it', userId: 'a2', nome: 'Gino', isOwner: false },
+    ]);
   });
 
   it('sede senza membri → admin azienda, poi email azienda', async () => {
@@ -247,7 +310,7 @@ describe('destinatariSedeAgenzia', () => {
     prismaMock.company.findUnique.mockResolvedValue({ email: 'info@ag.it', ragioneSociale: 'AG SRL' });
 
     await expect(destinatariSedeAgenzia('s9')).resolves.toEqual([
-      { email: 'info@ag.it', userId: null, nome: 'AG SRL' },
+      { email: 'info@ag.it', userId: null, nome: 'AG SRL', isOwner: true },
     ]);
   });
 

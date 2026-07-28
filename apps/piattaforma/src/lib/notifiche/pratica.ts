@@ -1,11 +1,6 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import {
-  destinatariPratica,
-  type Ampiezza,
-  type Destinatario,
-  type Preferito,
-} from './pratica-recipients';
+import { destinatariPratica, type Ampiezza, type Destinatario } from './pratica-recipients';
 
 /**
  * Chi riceve le email del ciclo di vita di una pratica: carica i candidati dal
@@ -20,17 +15,19 @@ const SELECT_UTENTE = { id: true, email: true, nome: true, role: true } as const
 
 type UtenteDb = { id: string; email: string; nome: string | null; role: string };
 
-function toDestinatario(u: UtenteDb, fallbackNome: string): Destinatario {
-  return { email: u.email, userId: u.id, nome: u.nome?.trim() || fallbackNome };
-}
-
 /**
  * `isOwner` è il ruolo di PIATTAFORMA, non `UserSede.ruolo`: un `ADMIN_SEDE` è
  * admin della filiale, non dell'azienda. Stessa definizione di
- * `lib/auth/permissions.ts#isOwner`.
+ * `lib/auth/permissions.ts#isOwner`. Lo porta OGNI candidato, non solo il
+ * preferito: lato broker è il ruolo dei membri di sede a decidere chi entra.
  */
-function toPreferito(u: UtenteDb, fallbackNome: string): Preferito {
-  return { ...toDestinatario(u, fallbackNome), isOwner: u.role === 'ADMIN_AZIENDA' };
+function toDestinatario(u: UtenteDb, fallbackNome: string): Destinatario {
+  return {
+    email: u.email,
+    userId: u.id,
+    nome: u.nome?.trim() || fallbackNome,
+    isOwner: u.role === 'ADMIN_AZIENDA',
+  };
 }
 
 /**
@@ -87,7 +84,7 @@ async function risolvi(args: {
   ]);
 
   return destinatariPratica({
-    preferito: preferito ? toPreferito(preferito, azienda.ragioneSociale) : null,
+    preferito: preferito ? toDestinatario(preferito, azienda.ragioneSociale) : null,
     membriSede: membri.map((m) => toDestinatario(m, azienda.ragioneSociale)),
     adminAzienda: admin ? toDestinatario(admin, azienda.ragioneSociale) : null,
     emailAzienda: azienda.email,
@@ -97,11 +94,15 @@ async function risolvi(args: {
 }
 
 /**
- * Destinatari lato broker: chi ha creato la pratica **e tutta la sede da cui
- * l'ha creata**. Vale sia per l'operatore sia per l'admin azienda: la sede è
- * `brokerSedeId`, cioè quella scelta nel selettore "Sede di partenza" del
- * wizard, quindi l'admin allarga alla filiale con cui ha davvero operato e non
- * a tutta l'azienda.
+ * Destinatari lato broker: chi ha creato la pratica **e gli operatori della
+ * sede da cui l'ha creata**. La sede è `brokerSedeId`, cioè quella scelta nel
+ * selettore "Sede di partenza" del wizard, quindi il giro resta la filiale con
+ * cui si è davvero operato e non tutta l'azienda.
+ *
+ * Il titolare (`ADMIN_AZIENDA`) riceve **solo se ha lavorato lui la pratica**:
+ * la posta di un operatore non finisce nella casella del capo. Se la sede non
+ * ha operatori raggiungibili la catena scende e il titolare la riprende come
+ * ultimo livello, così nessuna notifica va persa.
  */
 export async function destinatariBroker(praticaId: string): Promise<Destinatario[]> {
   const p = await prisma.pratica.findUnique({
@@ -113,7 +114,7 @@ export async function destinatariBroker(praticaId: string): Promise<Destinatario
     preferitoUserId: p.creatoDaUserId,
     sedeId: p.brokerSedeId,
     companyId: p.brokerId,
-    ampiezza: 'tutta-la-sede',
+    ampiezza: 'operatori-della-sede',
   });
 }
 

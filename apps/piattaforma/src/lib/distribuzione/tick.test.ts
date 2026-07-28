@@ -128,7 +128,9 @@ beforeEach(() => {
   let n = 0;
   tx.praticaAssegnazione.create.mockImplementation(() => Promise.resolve({ id: `a${++n}` }));
   prismaMock.praticaAssegnazione.findMany.mockResolvedValue([]);
-  vi.mocked(destinatariBroker).mockResolvedValue([{ email: 'br@x.it', userId: 'u1', nome: 'Rossi' }]);
+  vi.mocked(destinatariBroker).mockResolvedValue([
+    { email: 'br@x.it', userId: 'u1', nome: 'Rossi', isOwner: false },
+  ]);
   // prisma.pratica.findUnique (fuori tx) ha due usi distinti, discriminati dagli args:
   //  - Step 1 di tick/ring1: usa `include` (assegnazioni) → delega al mock della tx,
   //    così ogni test imposta solo `tx.pratica.findUnique` (Step 1 e re-read coincidono).
@@ -438,14 +440,14 @@ describe('N6_AGENZIA_NUOVA_PRATICA: fan-out ai membri della sede assegnataria', 
     vi.mocked(destinatariSedeAgenzia).mockImplementation((sedeId: string) => {
       if (sedeId === 'sA') {
         return Promise.resolve([
-          { email: 'mario@agenziaA.it', userId: 'u1', nome: 'Mario' },
-          { email: 'luigi@agenziaA.it', userId: 'u2', nome: 'Luigi' },
+          { email: 'mario@agenziaA.it', userId: 'u1', nome: 'Mario', isOwner: false },
+          { email: 'luigi@agenziaA.it', userId: 'u2', nome: 'Luigi', isOwner: false },
         ]);
       }
       if (sedeId === 'sB') {
         return Promise.resolve([
-          { email: 'anna@agenziaB.it', userId: 'u3', nome: 'Anna' },
-          { email: 'elsa@agenziaB.it', userId: 'u4', nome: 'Elsa' },
+          { email: 'anna@agenziaB.it', userId: 'u3', nome: 'Anna', isOwner: false },
+          { email: 'elsa@agenziaB.it', userId: 'u4', nome: 'Elsa', isOwner: false },
         ]);
       }
       return Promise.resolve([]);

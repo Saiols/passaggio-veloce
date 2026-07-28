@@ -29,6 +29,7 @@ export type SedeGrezza = {
   civico: string | null;
   citta: string;
   cap: string;
+  provincia: string;
   createdAt: Date;
 };
 
@@ -44,6 +45,7 @@ export type CompanyGrezza = {
   civico: string | null;
   citta: string;
   cap: string;
+  provincia: string;
   createdAt: Date;
   sedi: SedeGrezza[];
 };

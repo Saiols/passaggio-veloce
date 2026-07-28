@@ -3,6 +3,7 @@ import { prisma } from '@pv/db';
 import { identitaDaCompany, type CompanyGrezza } from './identita';
 import { preparaContatto } from './score';
 import { assegna, chiaveDaCoppia, chiaveIdentita } from './assign';
+import type { SorgenteArricchimento } from './arricchimento';
 
 /**
  * Calcolo delle proposte di aggancio (DRY-RUN: non scrive nulla).
@@ -31,6 +32,13 @@ export type Proposta = {
    * sedi faceva dire al campo una data che non è quella di quel punto vendita.
    */
   registrataAt: Date;
+  /**
+   * Anagrafica dell'identità agganciata, per l'arricchimento del contatto
+   * (lib/crm/match/arricchimento.ts). Viaggia con la proposta perché qui
+   * company e sedi sono già in memoria: farla rileggere ad `apply.ts`
+   * significherebbe una query in più per ogni aggancio.
+   */
+  sorgente: SorgenteArricchimento;
   /** Ex aequo: vedi `Coppia.ambigua` in assign.ts. */
   ambigua: boolean;
 };
@@ -47,6 +55,7 @@ const SELECT_COMPANY = {
   civico: true,
   citta: true,
   cap: true,
+  provincia: true,
   createdAt: true,
   sedi: {
     where: { deletedAt: null },
@@ -60,6 +69,7 @@ const SELECT_COMPANY = {
       civico: true,
       citta: true,
       cap: true,
+      provincia: true,
       createdAt: true,
     },
   },
@@ -123,6 +133,10 @@ export async function calcolaProposte(
   const nomeSede = new Map(
     companies.flatMap((c) => c.sedi.map((s) => [s.id, s.nome] as const)),
   );
+  const perCompany = new Map(companies.map((c) => [c.id, c]));
+  const perSede = new Map(
+    companies.flatMap((c) => c.sedi.map((s) => [s.id, s] as const)),
+  );
 
   return coppie.map((co) => ({
     contactId: co.contatto.id,
@@ -137,6 +151,10 @@ export async function calcolaProposte(
     punteggio: co.punteggio,
     campi: co.campi,
     registrataAt: co.identita.registrataAt,
+    sorgente: {
+      company: perCompany.get(co.identita.companyId)!,
+      sede: co.identita.sedeId ? (perSede.get(co.identita.sedeId) ?? null) : null,
+    },
     ambigua: co.ambigua,
   }));
 }

@@ -44,6 +44,19 @@ const PROPOSTA = {
   campi: ['tel', 'indirizzo'],
   registrataAt: new Date('2026-03-15T00:00:00Z'),
   ambigua: false,
+  sorgente: {
+    company: {
+      email: 'info@agenziacorsico.it',
+      telefono: '02 4478712',
+      partitaIva: '01234567890',
+      indirizzo: 'Via Fiume',
+      civico: '6',
+      citta: 'Corsico',
+      cap: '20094',
+      provincia: 'MI',
+    },
+    sede: null,
+  },
 };
 
 describe('applicaProposte', () => {
@@ -53,7 +66,15 @@ describe('applicaProposte', () => {
     praticaFindFirst.mockReset();
     contactFindUnique.mockReset();
     contactUpdateMany.mockReset();
-    contactFindUnique.mockResolvedValue({ status: 'S0' });
+    // Il contatto arriva già completo: senza buchi da riempire l'arricchimento
+    // non scatta e i test esistenti (conteggi, `where`/`data` dell'aggancio)
+    // restano validi senza dover distinguere aggancio da arricchimento.
+    contactFindUnique.mockResolvedValue({
+      status: 'S0',
+      email: 'a@b.it', wa: '3331234567', piva: '01234567890',
+      indirizzo: 'Via Fiume 6', citta: 'Corsico', cap: '20094',
+      regione: 'Lombardia', arricchitoDa: null,
+    });
     companyFindUnique.mockResolvedValue({
       createdAt: new Date('2026-01-10T00:00:00Z'),
       suspendedAt: null,
@@ -67,7 +88,7 @@ describe('applicaProposte', () => {
 
   it('scrive aggancio, stato e provenienza del match', async () => {
     const esito = await applicaProposte([PROPOSTA]);
-    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 0 });
+    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 0, arricchiti: 0 });
     const args = contactUpdateMany.mock.calls[0]![0];
     // compare-and-set: si scrive solo se il contatto è ancora libero, se lo
     // stato è ancora quello appena letto (protegge da lost update, I-1) e se
@@ -198,6 +219,7 @@ describe('applicaProposte', () => {
       agganciati: 0,
       saltati: 1,
       errori: 0,
+      arricchiti: 0,
     });
   });
 
@@ -207,6 +229,7 @@ describe('applicaProposte', () => {
       agganciati: 0,
       saltati: 1,
       errori: 0,
+      arricchiti: 0,
     });
     expect(contactUpdateMany).not.toHaveBeenCalled();
   });
@@ -217,7 +240,7 @@ describe('applicaProposte', () => {
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce({ count: 1 });
     const esito = await applicaProposte([PROPOSTA, { ...PROPOSTA, contactId: 'x2' }]);
-    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 1 });
+    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 1, arricchiti: 0 });
     // I-4 (review giro 1/5): l'errore non va inghiottito in silenzio, va
     // loggato con l'id della proposta per poterlo diagnosticare dal cron.
     expect(consoleError).toHaveBeenCalledWith(
@@ -282,6 +305,47 @@ describe('applicaProposte', () => {
     await applicaProposte([PROPOSTA]);
     expect(contactUpdateMany.mock.calls[0]![0].data.primaPratica).toBe(false);
   });
+
+  it('dopo l\'aggancio riempie i campi vuoti del contatto', async () => {
+    contactFindUnique.mockResolvedValue({
+      status: 'S0',
+      email: null, wa: null, piva: null,
+      indirizzo: null, citta: null, cap: null, regione: null,
+      arricchitoDa: null,
+    });
+    const esito = await applicaProposte([PROPOSTA]);
+    expect(esito.arricchiti).toBe(1);
+    // prima updateMany = aggancio, seconda = arricchimento
+    const arricchimento = contactUpdateMany.mock.calls[1]![0];
+    expect(arricchimento.data.email).toBe('info@agenziacorsico.it');
+    expect(arricchimento.data.regione).toBe('Lombardia');
+    expect(arricchimento.data.arricchitoDa).toBe('email,piva,indirizzo,citta,cap,regione');
+  });
+
+  it('contatto già completo → nessuna seconda scrittura', async () => {
+    contactFindUnique.mockResolvedValue({
+      status: 'S0',
+      email: 'a@b.it', wa: '3331234567', piva: '01234567890',
+      indirizzo: 'Via Fiume 6', citta: 'Corsico', cap: '20094',
+      regione: 'Lombardia', arricchitoDa: null,
+    });
+    const esito = await applicaProposte([PROPOSTA]);
+    expect(esito.agganciati).toBe(1);
+    expect(esito.arricchiti).toBe(0);
+    expect(contactUpdateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('un arricchimento fallito non declassa un aggancio riuscito', async () => {
+    contactFindUnique.mockResolvedValue({
+      status: 'S0', email: null, wa: null, piva: null,
+      indirizzo: null, citta: null, cap: null, regione: null, arricchitoDa: null,
+    });
+    contactUpdateMany
+      .mockResolvedValueOnce({ count: 1 })            // aggancio: ok
+      .mockRejectedValueOnce(new Error('db giù'));    // arricchimento: esplode
+    const esito = await applicaProposte([PROPOSTA]);
+    expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 0, arricchiti: 0 });
+  });
 });
 
 // I-3 (review giro 1/5): `riconciliaTutto` è la funzione che i Task 10 (cron)
@@ -295,7 +359,15 @@ describe('riconciliaTutto', () => {
     contactFindUnique.mockReset();
     contactUpdateMany.mockReset();
     vi.mocked(calcolaProposte).mockReset();
-    contactFindUnique.mockResolvedValue({ status: 'S0' });
+    // Vedi il beforeEach di `applicaProposte`: contatto già completo, così
+    // l'arricchimento non scatta e i conteggi di questi test (pensati per
+    // l'aggancio) restano validi.
+    contactFindUnique.mockResolvedValue({
+      status: 'S0',
+      email: 'a@b.it', wa: '3331234567', piva: '01234567890',
+      indirizzo: 'Via Fiume 6', citta: 'Corsico', cap: '20094',
+      regione: 'Lombardia', arricchitoDa: null,
+    });
     companyFindUnique.mockResolvedValue({
       createdAt: new Date('2026-01-10T00:00:00Z'),
       suspendedAt: null,
@@ -320,6 +392,7 @@ describe('riconciliaTutto', () => {
       agganciati: 2,
       saltati: 0,
       errori: 0,
+      arricchiti: 0,
     });
   });
 
@@ -333,6 +406,7 @@ describe('riconciliaTutto', () => {
       agganciati: 0,
       saltati: 0,
       errori: 0,
+      arricchiti: 0,
     });
   });
 

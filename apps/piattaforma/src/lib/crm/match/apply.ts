@@ -3,6 +3,8 @@ import { prisma, CrmFonteAcquisizione, type Prisma } from '@pv/db';
 import { calcolaProposte, type Proposta } from './engine';
 import { datiFunnel } from './stato';
 import { storicoAzienda } from './storico';
+import { calcolaArricchimento, SELECT_ARRICCHIMENTO } from './arricchimento';
+import { applicaArricchimento } from './arricchimento-scrittura';
 
 /**
  * Scrittura degli agganci proposti dal motore.
@@ -18,6 +20,8 @@ export type EsitoApply = {
   /** Proposte non scritte perché il compare-and-set non è passato. */
   saltati: number;
   errori: number;
+  /** Contatti su cui l'aggancio ha anche riempito almeno un campo vuoto. */
+  arricchiti: number;
 };
 
 export async function applicaProposte(
@@ -26,6 +30,7 @@ export async function applicaProposte(
   let agganciati = 0;
   let saltati = 0;
   let errori = 0;
+  let arricchiti = 0;
 
   for (const p of proposte) {
     try {
@@ -39,7 +44,9 @@ export async function applicaProposte(
       // compare-and-set doveva prevenire.
       const attuale = await prisma.crmContact.findUnique({
         where: { id: p.contactId },
-        select: { status: true },
+        // L'anagrafica arriva nella STESSA lettura che serviva per lo stato:
+        // l'arricchimento non aggiunge nessun round-trip.
+        select: { status: true, ...SELECT_ARRICCHIMENTO },
       });
       if (!attuale) {
         saltati++;
@@ -91,15 +98,29 @@ export async function applicaProposte(
         },
         data,
       });
-      if (res.count > 0) agganciati++;
-      else saltati++;
+      if (res.count > 0) {
+        agganciati++;
+        // Best-effort e in un try/catch PROPRIO: l'aggancio è già scritto,
+        // un errore qui non deve trasformarlo in un errore né in un salto.
+        try {
+          const patch = calcolaArricchimento(attuale, p.sorgente);
+          if (patch && (await applicaArricchimento(p.contactId, patch, attuale))) {
+            arricchiti++;
+          }
+        } catch (err) {
+          console.error(
+            `[applicaProposte] arricchimento fallito su ${p.contactId}:`,
+            err,
+          );
+        }
+      } else saltati++;
     } catch (err) {
       console.error(`[applicaProposte] errore su contatto ${p.contactId}:`, err);
       errori++;
     }
   }
 
-  return { agganciati, saltati, errori };
+  return { agganciati, saltati, errori, arricchiti };
 }
 
 export type EsitoRiconciliazione = EsitoApply & {

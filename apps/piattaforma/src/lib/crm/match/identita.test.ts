@@ -13,6 +13,7 @@ const MADRE: CompanyGrezza = {
   civico: '6',
   citta: 'Corsico',
   cap: '20094',
+  provincia: 'MI',
   createdAt: new Date('2026-01-10T10:00:00Z'),
   sedi: [],
 };
@@ -54,6 +55,7 @@ describe('identitaDaCompany', () => {
           civico: '5',
           citta: 'Buccinasco',
           cap: '20090',
+          provincia: 'MI',
           createdAt: new Date('2026-02-01T10:00:00Z'),
         },
       ],

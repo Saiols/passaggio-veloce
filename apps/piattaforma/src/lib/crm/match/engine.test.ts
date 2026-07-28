@@ -23,6 +23,7 @@ const COMPANY = {
   civico: '6',
   citta: 'Corsico',
   cap: '20094',
+  provincia: 'MI',
   createdAt: new Date('2026-01-10T00:00:00Z'),
   sedi: [],
 };
@@ -59,6 +60,7 @@ const SEDE = {
   civico: '1',
   citta: 'Milano',
   cap: '20100',
+  provincia: 'MI',
   createdAt: new Date('2026-02-01T00:00:00Z'),
 };
 
@@ -214,5 +216,25 @@ describe('calcolaProposte', () => {
     companyFindMany.mockResolvedValue([]);
     expect(await calcolaProposte()).toEqual([]);
     expect(contactFindMany).not.toHaveBeenCalled();
+  });
+
+  it("la proposta porta l'anagrafica dell'identità agganciata", async () => {
+    mockDb({ companies: [COMPANY_CON_SEDE], contatti: [CONTATTO_SEDE] });
+    const proposte = await calcolaProposte();
+    expect(proposte).toHaveLength(1);
+    const { sorgente } = proposte[0]!;
+    expect(sorgente.company.partitaIva).toBe('06199680155');
+    expect(sorgente.company.provincia).toBe('MI');
+    // Match sulla sede: viaggia la SEDE, non solo la madre. Senza,
+    // l'arricchimento scriverebbe l'indirizzo della madre su una riga che
+    // è un altro punto vendita.
+    expect(sorgente.sede?.citta).toBe('Milano');
+    expect(sorgente.sede?.provincia).toBe('MI');
+  });
+
+  it('match sulla madre → sorgente.sede è null', async () => {
+    mockDb({ companies: [COMPANY], contatti: [CONTATTO] });
+    const proposte = await calcolaProposte();
+    expect(proposte[0]!.sorgente.sede).toBeNull();
   });
 });

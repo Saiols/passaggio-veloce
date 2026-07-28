@@ -14,6 +14,7 @@ const AGENZIA: CompanyGrezza = {
   civico: '6',
   citta: 'Corsico',
   cap: '20094',
+  provincia: 'MI',
   createdAt: new Date('2026-01-10T10:00:00Z'),
   sedi: [],
 };

@@ -48,6 +48,7 @@ export function RiconciliazioneClient({
         res.ok
           ? `${res.agganciati} righe agganciate, ${res.saltati} saltate` +
               ` (già agganciate o cambiate nel frattempo)` +
+              `${res.arricchiti > 0 ? `, ${res.arricchiti} completate coi dati dell'iscrizione` : ''}` +
               `${res.errori > 0 ? `, ${res.errori} errori` : ''}.`
           : res.error,
       );

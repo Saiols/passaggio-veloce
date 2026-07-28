@@ -7,7 +7,7 @@ import { canRunCrmReconciliation } from '@/lib/auth/permissions';
 import { riconciliaTutto } from '@/lib/crm/match/apply';
 
 export type EsitoRiconciliazione =
-  | { ok: true; agganciati: number; saltati: number; errori: number }
+  | { ok: true; agganciati: number; saltati: number; errori: number; arricchiti: number }
   | { ok: false; error: string };
 
 /**
@@ -35,5 +35,6 @@ export async function applicaRiconciliazioneAction(): Promise<EsitoRiconciliazio
     agganciati: esito.agganciati,
     saltati: esito.saltati,
     errori: esito.errori,
+    arricchiti: esito.arricchiti,
   };
 }

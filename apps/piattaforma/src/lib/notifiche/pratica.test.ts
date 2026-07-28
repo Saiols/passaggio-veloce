@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 describe('destinatariBroker', () => {
-  it('operatore che ha creato la pratica: riceve solo lui', async () => {
+  it('operatore che ha creato la pratica: lui e i colleghi della sua sede', async () => {
     prismaMock.pratica.findUnique.mockResolvedValue({
       creatoDaUserId: 'u1',
       brokerSedeId: 's1',
@@ -43,7 +43,32 @@ describe('destinatariBroker', () => {
 
     await expect(destinatariBroker('p1')).resolves.toEqual([
       { email: 'op@dealer.it', userId: 'u1', nome: 'Luca' },
+      { email: 'collega@dealer.it', userId: 'u2', nome: 'Anna' },
     ]);
+  });
+
+  it('la sede è quella della pratica, non tutta l\'azienda', async () => {
+    // `brokerSedeId` è la sede scelta nel wizard: l'allargamento si ferma lì,
+    // le altre filiali del dealer non ricevono nulla.
+    prismaMock.pratica.findUnique.mockResolvedValue({
+      creatoDaUserId: 'u1',
+      brokerSedeId: 's1',
+      brokerId: 'c1',
+    });
+    prismaMock.user.findFirst.mockResolvedValueOnce({
+      id: 'u1',
+      email: 'op@dealer.it',
+      nome: 'Luca',
+      role: 'UTENTE_AZIENDA',
+    });
+    prismaMock.userSede.findMany.mockResolvedValue([]);
+
+    await destinatariBroker('p1');
+    expect(prismaMock.userSede.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { sedeId: 's1', user: { status: 'ACTIVE', deletedAt: null } },
+      }),
+    );
   });
 
   it('super admin che ha creato la pratica: lui e tutta la sede da cui ha operato', async () => {

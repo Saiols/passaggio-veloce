@@ -17,7 +17,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * anche quando risolveva (o creava) il wallet sbagliato.
  */
 
-const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, sendNotificationMock } = vi.hoisted(() => {
+const {
+  prismaMock,
+  txMock,
+  authMock,
+  redirectMock,
+  destinatariAgenziaMock,
+  destinatariBrokerMock,
+  sendNotificationMock,
+} = vi.hoisted(() => {
   const txMock = {
     pratica: { findUnique: vi.fn(), update: vi.fn() },
     veicolo: { updateMany: vi.fn() },
@@ -40,6 +48,10 @@ const { prismaMock, txMock, authMock, redirectMock, destinatariAgenziaMock, send
       (): Promise<{ email: string; userId: string | null; nome: string }[]> =>
         Promise.resolve([]),
     ),
+    destinatariBrokerMock: vi.fn(
+      (): Promise<{ email: string; userId: string | null; nome: string }[]> =>
+        Promise.resolve([]),
+    ),
     sendNotificationMock: vi.fn(
       (
         _input: { tipo: string; target?: unknown; payload?: Record<string, unknown> },
@@ -58,7 +70,10 @@ vi.mock('@/lib/notifiche', () => ({
   getAdminEmails: vi.fn(() => Promise.resolve([])),
   notifyClientiAvanzamento: vi.fn(() => Promise.resolve()),
 }));
-vi.mock('@/lib/notifiche/pratica', () => ({ destinatariAgenzia: destinatariAgenziaMock }));
+vi.mock('@/lib/notifiche/pratica', () => ({
+  destinatariAgenzia: destinatariAgenziaMock,
+  destinatariBroker: destinatariBrokerMock,
+}));
 vi.mock('@/lib/eventi/emit', () => ({ emitEventiPratica: vi.fn(() => Promise.resolve()) }));
 vi.mock('@/lib/eventi/pratica-eventi', () => ({ eventoPraticaPenale: vi.fn(() => ({})) }));
 
@@ -104,6 +119,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   authMock.mockResolvedValue({ user: { id: 'admin-1', role: 'ADMIN_PIATTAFORMA' } });
   destinatariAgenziaMock.mockResolvedValue([]);
+  destinatariBrokerMock.mockResolvedValue([]);
   sendNotificationMock.mockResolvedValue(undefined);
   txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
   txMock.pratica.update.mockResolvedValue({});
@@ -371,29 +387,37 @@ describe('respingiSegnalazioneAction — notifica N43 all\'agenzia (clausola 10.
 });
 
 describe('respingiSegnalazioneAction — notifica N44 al broker (clausola 10.3: l\'esito è comunicato a entrambe le parti)', () => {
-  it('invia N44_BROKER_SEGNALAZIONE_RESPINTA al broker della pratica, con esito rassicurante e SENZA il motivo del respingimento', async () => {
+  it('invia N44_BROKER_SEGNALAZIONE_RESPINTA a chi lavora la pratica, con esito rassicurante e SENZA il motivo del respingimento', async () => {
     txMock.pratica.findUnique.mockResolvedValue(praticaFixture());
     destinatariAgenziaMock.mockResolvedValue([]);
+    // Non porta dati economici: va alla sede che lavora la pratica, non
+    // all'admin dell'azienda madre come la N17.
+    destinatariBrokerMock.mockResolvedValue([
+      { email: 'operatore@broker.it', userId: 'u-op', nome: 'Luca' },
+      { email: 'collega@broker.it', userId: 'u-col', nome: 'Anna' },
+    ]);
 
     const res = await respingiSegnalazioneAction(PID, 'Fermo non riscontrato in PRA — nota interna riservata');
 
     expect(res).toEqual({ ok: true });
-    expect(sendNotificationMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tipo: 'N44_BROKER_SEGNALAZIONE_RESPINTA',
-        target: expect.objectContaining({
-          email: 'admin@broker.it',
-          userId: 'u-broker',
-          companyId: BROKER_ID,
+    expect(destinatariBrokerMock).toHaveBeenCalledWith(PID);
+    for (const [email, userId, nome] of [
+      ['operatore@broker.it', 'u-op', 'Luca'],
+      ['collega@broker.it', 'u-col', 'Anna'],
+    ]) {
+      expect(sendNotificationMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'N44_BROKER_SEGNALAZIONE_RESPINTA',
+          target: expect.objectContaining({ email, userId, companyId: BROKER_ID }),
+          payload: expect.objectContaining({
+            nomeBroker: nome,
+            codicePratica: 'PV-42',
+            tipoSegnalazione: 'FERMO_AMMINISTRATIVO',
+          }),
         }),
-        payload: expect.objectContaining({
-          nomeBroker: 'Mario',
-          codicePratica: 'PV-42',
-          tipoSegnalazione: 'FERMO_AMMINISTRATIVO',
-        }),
-      }),
-      { praticaId: PID },
-    );
+        { praticaId: PID },
+      );
+    }
 
     // Il broker riceve solo l'esito e le sue conseguenze: MAI il motivo del
     // respingimento né la nota dell'agenzia, che contengono valutazioni

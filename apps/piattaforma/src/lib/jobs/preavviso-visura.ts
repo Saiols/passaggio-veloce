@@ -2,6 +2,7 @@ import 'server-only';
 import { prisma } from '@pv/db';
 import { env } from '@/env';
 import { sendNotification } from '@/lib/notifiche';
+import { destinatariBroker } from '@/lib/notifiche/pratica';
 import {
   giorniRimanenti,
   giorniTrascorsi,
@@ -174,7 +175,7 @@ async function avvisaBrokerPraticheCongelate(
           ragioneSociale: true,
           users: {
             where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
-            select: { id: true, email: true },
+            select: { id: true, email: true, nome: true },
             take: 1,
           },
         },
@@ -184,8 +185,6 @@ async function avvisaBrokerPraticheCongelate(
 
   let n = 0;
   for (const p of pratiche) {
-    const admin = p.broker.users[0];
-    if (!admin) continue; // nessun destinatario: niente da mandare
     // Doppia condizione su `payload` (visuraData + praticaId): non si possono
     // scrivere come due chiavi `payload` nello stesso oggetto `where` (la
     // seconda sovrascriverebbe la prima in JS) — da qui l'`AND` esplicito.
@@ -198,17 +197,46 @@ async function avvisaBrokerPraticheCongelate(
       select: { id: true },
     });
     if (gia) continue;
-    await sendNotification({
-      tipo: 'N48_BROKER_PRATICA_CONGELATA',
-      target: { email: admin.email, userId: admin.id, companyId: p.broker.id },
-      payload: {
-        nomeBroker: p.broker.ragioneSociale,
-        nomeAgenzia,
-        praticaId: p.id,
-        praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${p.id}`,
-        visuraData: visuraKeyStr,
-      },
-    }).catch(() => undefined);
+
+    // Due destinatari diversi per due motivi diversi: l'admin dell'azienda
+    // perché la visura la rinnova lui, e chi lavora la pratica (creatore +
+    // sede) perché altrimenti la vedrebbe ferma senza sapere perché. Dedup per
+    // email: nelle aziende senza sedi la catena ricade sull'admin stesso.
+    const admin = p.broker.users[0];
+    const candidati = [
+      ...(admin
+        ? [
+            {
+              email: admin.email,
+              userId: admin.id,
+              nome: admin.nome?.trim() || p.broker.ragioneSociale,
+            },
+          ]
+        : []),
+      ...(await destinatariBroker(p.id).catch(() => [])),
+    ];
+    const visti = new Set<string>();
+    const destinatari = candidati.filter((d) => {
+      const chiave = d.email.trim().toLowerCase();
+      if (!chiave || visti.has(chiave)) return false;
+      visti.add(chiave);
+      return true;
+    });
+    if (destinatari.length === 0) continue; // nessun destinatario: niente da mandare
+
+    for (const d of destinatari) {
+      await sendNotification({
+        tipo: 'N48_BROKER_PRATICA_CONGELATA',
+        target: { email: d.email, userId: d.userId, companyId: p.broker.id },
+        payload: {
+          nomeBroker: d.nome,
+          nomeAgenzia,
+          praticaId: p.id,
+          praticaUrl: `${env.NEXT_PUBLIC_APP_URL}/pratiche/${p.id}`,
+          visuraData: visuraKeyStr,
+        },
+      }).catch(() => undefined);
+    }
     n++;
   }
   return n;

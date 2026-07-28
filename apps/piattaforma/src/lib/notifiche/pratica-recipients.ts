@@ -13,6 +13,20 @@ export type Destinatario = { email: string; userId: string | null; nome: string 
 /** Il preferito porta con sé il ruolo: decide quanto si allarga il primo livello. */
 export type Preferito = Destinatario & { isOwner: boolean };
 
+/**
+ * Quanto si allarga il primo livello, deciso dal LATO della pratica — non dal
+ * ruolo di chi ha operato:
+ *
+ * - `tutta-la-sede` (broker): la pratica è del punto vendita, non della persona.
+ *   Chi l'ha creata e i colleghi della sua sede seguono tutti la stessa
+ *   pratica, quindi ricevono tutti. Se il cliente richiama e chi l'ha inserita
+ *   è in ferie, chiunque in sede sa a che punto è.
+ * - `chi-opera` (agenzia): la prende in carico una persona e la porta avanti
+ *   lei; solo il super admin, che opera *da* una filiale, porta con sé la sede
+ *   per non lasciarla all'oscuro.
+ */
+export type Ampiezza = 'tutta-la-sede' | 'chi-opera';
+
 /** Un indirizzo è utilizzabile solo se, ripulito, non è vuoto. */
 function emailValida(email: string): boolean {
   return email.trim().length > 0;
@@ -45,12 +59,11 @@ function dedup(candidati: Destinatario[]): Destinatario[] {
  * già filtrato ACTIVE e non cancellato dal chiamante: se è uscito dall'azienda
  * o è sospeso semplicemente non arriva qui, e la catena scende da sola.
  *
- * Chi ha operato decide l'ampiezza del primo livello. Un membro del team di
- * sede — admin di sede o operatore — segue lui quella pratica e la riceve da
- * solo. Il super admin, invece, opera *da* una filiale: se ricevesse solo lui,
- * quella filiale resterebbe all'oscuro di una pratica che dovrà proseguire.
- * Quindi con lui ricevono anche tutti i membri della sede su cui ha operato.
- * `isOwner` è il ruolo di piattaforma `ADMIN_AZIENDA`, non `UserSede.ruolo`.
+ * L'`ampiezza` del primo livello dipende dal lato (vedi il tipo): lato broker
+ * ricevono sempre anche i colleghi di sede, lato agenzia solo chi ha preso in
+ * carico — a meno che sia il super admin, che porta con sé la filiale da cui ha
+ * operato. `isOwner` è il ruolo di piattaforma `ADMIN_AZIENDA`, non
+ * `UserSede.ruolo`: un `ADMIN_SEDE` è admin della filiale, non dell'azienda.
  *
  * La N6 "nuova pratica assegnata" parte prima che qualcuno prenda in carico la
  * pratica: passa `preferito: null` e ricade sui membri della sede. Non serve un
@@ -62,10 +75,11 @@ export function destinatariPratica(args: {
   adminAzienda: Destinatario | null;
   emailAzienda: string | null;
   ragioneSociale: string;
+  ampiezza: Ampiezza;
 }): Destinatario[] {
   if (args.preferito) {
-    // Il super admin porta con sé la sua filiale; chi è di sede resta solo.
-    const primoLivello = args.preferito.isOwner
+    const allarga = args.ampiezza === 'tutta-la-sede' || args.preferito.isOwner;
+    const primoLivello = allarga
       ? [args.preferito as Destinatario, ...args.membriSede]
       : [args.preferito as Destinatario];
     const p = dedup(primoLivello);

@@ -10,7 +10,7 @@ import { toSedeScope, NO_SEDE_SCOPE } from '@/lib/sedi/scope-filters';
 import { canAccessPratica } from '@/lib/pratiche/access';
 import { requirePermesso } from '@/lib/auth/permessi/guard';
 import { sendNotification, getAdminEmails, notifyClientiAvanzamento } from '@/lib/notifiche';
-import { destinatariAgenzia } from '@/lib/notifiche/pratica';
+import { destinatariAgenzia, destinatariBroker } from '@/lib/notifiche/pratica';
 import { emitEventiPratica } from '@/lib/eventi/emit';
 import { eventoPraticaPenale } from '@/lib/eventi/pratica-eventi';
 import { motivoPenaleSegnalazione } from '@/lib/pratiche/stato-extra';
@@ -489,10 +489,7 @@ export async function respingiSegnalazioneAction(
     tipoSegnalazione: SegnalazioneTipo;
     agenziaCompanyId: string | null;
     agenziaNome: string;
-    brokerEmail: string | null;
-    brokerUserId: string | null;
     brokerCompanyId: string;
-    brokerNome: string;
   } | null = null;
 
   // Transazione: reset di `flagSegnalata` e reset dei veicoli segnalati devono
@@ -518,17 +515,6 @@ export async function respingiSegnalazioneAction(
           brokerId: true,
           veicoli: { orderBy: { ordine: 'asc' }, select: { targa: true } },
           agenziaAssegnata: { select: { ragioneSociale: true } },
-          broker: {
-            select: {
-              ragioneSociale: true,
-              email: true,
-              users: {
-                where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
-                select: { id: true, email: true, nome: true },
-                take: 1,
-              },
-            },
-          },
         },
       });
       if (!pratica) throw new Error('Pratica non trovata');
@@ -557,8 +543,6 @@ export async function respingiSegnalazioneAction(
         data: { segnalato: false },
       });
 
-      const brokerUser = pratica.broker.users[0];
-
       return {
         codicePratica: pratica.codicePratica ?? '—',
         targa:
@@ -570,10 +554,7 @@ export async function respingiSegnalazioneAction(
         tipoSegnalazione: (pratica.tipoSegnalazione ?? 'ALTRO') as SegnalazioneTipo,
         agenziaCompanyId: pratica.agenziaAssegnataId,
         agenziaNome: pratica.agenziaAssegnata?.ragioneSociale ?? '—',
-        brokerEmail: brokerUser?.email ?? pratica.broker.email,
-        brokerUserId: brokerUser?.id ?? null,
         brokerCompanyId: pratica.brokerId,
-        brokerNome: brokerUser?.nome ?? pratica.broker.ragioneSociale,
       };
     });
   } catch (err) {
@@ -613,17 +594,22 @@ export async function respingiSegnalazioneAction(
   // Volutamente NESSUN motivo/nota agenzia nel payload: solo l'esito rassicurante
   // (nessuna penale, pratica prosegue) — il motivo contiene valutazioni
   // sull'operato dell'agenzia, non destinate al broker.
+  //
+  // Recapito: chi lavora la pratica, cioè il creatore e la sua sede. Non porta
+  // dati economici (nessuna penale, nessun saldo), quindi non c'è motivo di
+  // tenerla all'admin dell'azienda madre come N17.
   try {
-    if (payload.brokerEmail) {
+    const destinatariBr = await destinatariBroker(praticaId);
+    for (const d of destinatariBr) {
       await sendNotification({
         tipo: 'N44_BROKER_SEGNALAZIONE_RESPINTA',
         target: {
-          email: payload.brokerEmail,
-          userId: payload.brokerUserId,
+          email: d.email,
+          userId: d.userId,
           companyId: payload.brokerCompanyId,
         },
         payload: {
-          nomeBroker: payload.brokerNome,
+          nomeBroker: d.nome,
           codicePratica: payload.codicePratica,
           targa: payload.targa,
           tipoSegnalazione: payload.tipoSegnalazione,

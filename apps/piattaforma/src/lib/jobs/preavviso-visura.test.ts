@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { companyFindMany, notificaFindFirst, sendMock, praticaFindMany } = vi.hoisted(() => ({
-  companyFindMany: vi.fn(),
-  notificaFindFirst: vi.fn(),
-  sendMock: vi.fn(),
-  praticaFindMany: vi.fn(),
-}));
+const { companyFindMany, notificaFindFirst, sendMock, praticaFindMany, destinatariBrokerMock } =
+  vi.hoisted(() => ({
+    companyFindMany: vi.fn(),
+    notificaFindFirst: vi.fn(),
+    sendMock: vi.fn(),
+    praticaFindMany: vi.fn(),
+    destinatariBrokerMock: vi.fn(
+      (): Promise<{ email: string; userId: string | null; nome: string }[]> => Promise.resolve([]),
+    ),
+  }));
 vi.mock('@pv/db', () => ({
   prisma: {
     company: { findMany: companyFindMany },
@@ -14,6 +18,7 @@ vi.mock('@pv/db', () => ({
   },
 }));
 vi.mock('@/lib/notifiche', () => ({ sendNotification: sendMock }));
+vi.mock('@/lib/notifiche/pratica', () => ({ destinatariBroker: destinatariBrokerMock }));
 vi.mock('@/env', () => ({ env: { NEXT_PUBLIC_APP_URL: 'https://app.test' } }));
 
 import { preavvisoVisura } from './preavviso-visura';
@@ -33,6 +38,7 @@ beforeEach(() => {
   notificaFindFirst.mockResolvedValue(null);
   praticaFindMany.mockResolvedValue([]);
   companyFindMany.mockResolvedValue([]);
+  destinatariBrokerMock.mockResolvedValue([]);
   // Il brief omette questo: sendMock è un vi.fn() nudo, senza .mockResolvedValue()
   // torna `undefined`, e `sendNotification(...).catch(...)` esplode con
   // "Cannot read properties of undefined (reading 'catch')" — non un fallimento
@@ -110,6 +116,72 @@ describe('preavvisoVisura', () => {
     const r = await preavvisoVisura(NOW);
     expect(r.congelate).toBe(1);
     expect(sendMock.mock.calls.some((c) => c[0].tipo === 'N48_BROKER_PRATICA_CONGELATA')).toBe(true);
+  });
+
+  it('N48 va anche alla sede che lavora la pratica, non solo al titolare', async () => {
+    // La visura la rinnova il titolare, ma chi ha in mano la pratica deve
+    // sapere perché si è fermata invece di vederla bloccata senza spiegazione.
+    companyFindMany.mockResolvedValue([
+      azienda({ type: 'AGENZIA', visuraCameraleData: new Date('2026-01-01T00:00:00Z') }),
+    ]);
+    praticaFindMany.mockResolvedValue([
+      {
+        id: 'p1',
+        broker: {
+          id: 'brk1',
+          ragioneSociale: 'Broker X',
+          users: [{ id: 'b1', email: 'titolare@x.it', nome: 'Titolare' }],
+        },
+      },
+    ]);
+    destinatariBrokerMock.mockResolvedValue([
+      { email: 'operatore@x.it', userId: 'op1', nome: 'Luca' },
+      { email: 'collega@x.it', userId: 'op2', nome: 'Anna' },
+    ]);
+
+    const r = await preavvisoVisura(NOW);
+
+    expect(r.congelate).toBe(1); // conta le pratiche, non le email
+    expect(destinatariBrokerMock).toHaveBeenCalledWith('p1');
+    const n48 = sendMock.mock.calls
+      .map((c) => c[0])
+      .filter((c) => c.tipo === 'N48_BROKER_PRATICA_CONGELATA');
+    expect(n48.map((c) => c.target.email)).toEqual([
+      'titolare@x.it',
+      'operatore@x.it',
+      'collega@x.it',
+    ]);
+    // Il nome nel testo segue il destinatario, non l'azienda.
+    expect(n48.map((c) => c.payload.nomeBroker)).toEqual(['Titolare', 'Luca', 'Anna']);
+  });
+
+  it('titolare già fra i destinatari della sede: una sola N48, non due', async () => {
+    // Dealer senza sedi popolate: la catena di `destinatariBroker` ricade
+    // sull'admin azienda, che è lo stesso indirizzo del titolare.
+    companyFindMany.mockResolvedValue([
+      azienda({ type: 'AGENZIA', visuraCameraleData: new Date('2026-01-01T00:00:00Z') }),
+    ]);
+    praticaFindMany.mockResolvedValue([
+      {
+        id: 'p1',
+        broker: {
+          id: 'brk1',
+          ragioneSociale: 'Broker X',
+          users: [{ id: 'b1', email: 'titolare@x.it', nome: 'Titolare' }],
+        },
+      },
+    ]);
+    destinatariBrokerMock.mockResolvedValue([
+      { email: ' TITOLARE@X.it ', userId: 'b1', nome: 'Titolare' },
+    ]);
+
+    await preavvisoVisura(NOW);
+
+    const n48 = sendMock.mock.calls
+      .map((c) => c[0])
+      .filter((c) => c.tipo === 'N48_BROKER_PRATICA_CONGELATA');
+    expect(n48).toHaveLength(1);
+    expect(n48[0]!.target.email).toBe('titolare@x.it');
   });
 
   it("broker (DEALER) scaduto -> nessuna N48 (non e' lui a bloccare le pratiche)", async () => {

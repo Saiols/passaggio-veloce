@@ -15,9 +15,49 @@ const vuoto = {
   adminAzienda: null,
   emailAzienda: null,
   ragioneSociale: 'ROSSI SRL',
+  ampiezza: 'chi-opera' as const,
 };
 
-describe('destinatariPratica — chi opera decide l\'ampiezza', () => {
+/** Lato broker: la pratica è del punto vendita, il ruolo di chi opera non conta. */
+const sede = { ...vuoto, ampiezza: 'tutta-la-sede' as const };
+
+describe('destinatariPratica — ampiezza `tutta-la-sede` (lato broker)', () => {
+  it('operatore: ricevono lui E i colleghi della sua sede', () => {
+    expect(
+      destinatariPratica({ ...sede, preferito: creatore, membriSede: [membro1, membro2] }),
+    ).toEqual([soloDestinatario(creatore), membro1, membro2]);
+  });
+
+  it('admin di sede: stesso trattamento dell\'operatore', () => {
+    const adminSede: Preferito = { email: 'as@dealer.it', userId: 'u7', nome: 'Elena', isOwner: false };
+    expect(destinatariPratica({ ...sede, preferito: adminSede, membriSede: [membro1] })).toEqual([
+      soloDestinatario(adminSede),
+      membro1,
+    ]);
+  });
+
+  it('admin azienda: lui e i membri della sede da cui ha operato', () => {
+    const owner: Preferito = { email: 'titolare@dealer.it', userId: 'u4', nome: 'Titolare', isOwner: true };
+    expect(
+      destinatariPratica({ ...sede, preferito: owner, membriSede: [membro1, membro2] }),
+    ).toEqual([soloDestinatario(owner), membro1, membro2]);
+  });
+
+  it('il creatore già membro della sede compare una volta sola', () => {
+    const stesso: Destinatario = { email: 'OPERATORE@Dealer.it ', userId: 'u1', nome: 'Luca' };
+    expect(
+      destinatariPratica({ ...sede, preferito: creatore, membriSede: [stesso, membro1] }),
+    ).toEqual([soloDestinatario(creatore), membro1]);
+  });
+
+  it('creatore senza sede (pratica legacy): riceve solo lui', () => {
+    expect(destinatariPratica({ ...sede, preferito: creatore })).toEqual([
+      soloDestinatario(creatore),
+    ]);
+  });
+});
+
+describe('destinatariPratica — ampiezza `chi-opera` (lato agenzia)', () => {
   it('operatore di sede: riceve solo lui, non i colleghi', () => {
     expect(
       destinatariPratica({ ...vuoto, preferito: creatore, membriSede: [membro1, membro2] }),

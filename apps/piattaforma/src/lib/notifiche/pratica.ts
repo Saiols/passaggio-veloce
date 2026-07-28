@@ -1,6 +1,11 @@
 import 'server-only';
 import { prisma } from '@pv/db';
-import { destinatariPratica, type Destinatario, type Preferito } from './pratica-recipients';
+import {
+  destinatariPratica,
+  type Ampiezza,
+  type Destinatario,
+  type Preferito,
+} from './pratica-recipients';
 
 /**
  * Chi riceve le email del ciclo di vita di una pratica: carica i candidati dal
@@ -58,11 +63,16 @@ async function adminDellAzienda(companyId: string): Promise<UtenteDb | null> {
   });
 }
 
-/** Risolve la catena completa per una company, con o senza utente preferito. */
+/**
+ * Risolve la catena completa per una company, con o senza utente preferito.
+ * `ampiezza` è obbligatoria: ogni lato deve dichiarare se la pratica è della
+ * persona o della sede, invece di ereditare un default silenzioso.
+ */
 async function risolvi(args: {
   preferitoUserId: string | null;
   sedeId: string | null;
   companyId: string;
+  ampiezza: Ampiezza;
 }): Promise<Destinatario[]> {
   const azienda = await prisma.company.findUnique({
     where: { id: args.companyId },
@@ -82,10 +92,17 @@ async function risolvi(args: {
     adminAzienda: admin ? toDestinatario(admin, azienda.ragioneSociale) : null,
     emailAzienda: azienda.email,
     ragioneSociale: azienda.ragioneSociale,
+    ampiezza: args.ampiezza,
   });
 }
 
-/** Destinatari lato broker: chi ha creato la pratica, poi la sua sede. */
+/**
+ * Destinatari lato broker: chi ha creato la pratica **e tutta la sede da cui
+ * l'ha creata**. Vale sia per l'operatore sia per l'admin azienda: la sede è
+ * `brokerSedeId`, cioè quella scelta nel selettore "Sede di partenza" del
+ * wizard, quindi l'admin allarga alla filiale con cui ha davvero operato e non
+ * a tutta l'azienda.
+ */
 export async function destinatariBroker(praticaId: string): Promise<Destinatario[]> {
   const p = await prisma.pratica.findUnique({
     where: { id: praticaId },
@@ -96,6 +113,7 @@ export async function destinatariBroker(praticaId: string): Promise<Destinatario
     preferitoUserId: p.creatoDaUserId,
     sedeId: p.brokerSedeId,
     companyId: p.brokerId,
+    ampiezza: 'tutta-la-sede',
   });
 }
 
@@ -115,6 +133,7 @@ export async function destinatariAgenzia(praticaId: string): Promise<Destinatari
     preferitoUserId: p.accettataDaUserId,
     sedeId: p.agenziaSedeId,
     companyId: p.agenziaAssegnataId,
+    ampiezza: 'chi-opera',
   });
 }
 
@@ -128,5 +147,11 @@ export async function destinatariSedeAgenzia(sedeId: string): Promise<Destinatar
     select: { companyId: true },
   });
   if (!sede) return [];
-  return risolvi({ preferitoUserId: null, sedeId, companyId: sede.companyId });
+  // Senza preferito l'ampiezza non è in gioco: si parte già dai membri della sede.
+  return risolvi({
+    preferitoUserId: null,
+    sedeId,
+    companyId: sede.companyId,
+    ampiezza: 'chi-opera',
+  });
 }

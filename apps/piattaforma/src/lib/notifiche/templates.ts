@@ -38,7 +38,12 @@ export type N4BrokerFirmaPayload = {
   targa: string | null;
   agenziaNome: string;
   creditoCent: number;
-  saldoCent: number;
+  /**
+   * Saldo del wallet aziendale, `null` per chi non è il titolare: la cassa
+   * dell'azienda non si mostra ai suoi operatori, che vedono solo il credito
+   * della pratica che hanno portato. Riga omessa quando è `null`.
+   */
+  saldoCent: number | null;
   nomeBroker: string;
   /** Firma attestata dal Gestore (Termini art. 11), non segnalata dall'agenzia. */
   attestataDaPv?: boolean;
@@ -424,8 +429,8 @@ export function tplN4BrokerFirma(p: N4BrokerFirmaPayload): NotificaContent {
   const text =
     `Ciao ${p.nomeBroker},\n` +
     `${chiHaConfermatoText} ` +
-    `Abbiamo accreditato ${formatCurrencyCent(p.creditoCent)} al tuo wallet. ` +
-    `Saldo: ${formatCurrencyCent(p.saldoCent)}.`;
+    `Abbiamo accreditato ${formatCurrencyCent(p.creditoCent)} sul wallet aziendale.` +
+    (p.saldoCent === null ? '' : ` Saldo attuale: ${formatCurrencyCent(p.saldoCent)}.`);
   const dataAttestazioneHtml = p.attestataDaPvAt
     ? ` in data <strong>${formatDate(p.attestataDaPvAt)}</strong>`
     : '';
@@ -437,8 +442,12 @@ export function tplN4BrokerFirma(p: N4BrokerFirmaPayload): NotificaContent {
     <p style="margin:0 0 14px;color:#334155;font-size:14px">Ciao <strong>${escapeHtml(p.nomeBroker)}</strong>,</p>
     <p style="margin:0 0 16px;color:#334155;font-size:14px">${chiHaConfermatoHtml}</p>
     <div style="background:#ecfdf5;border:1px solid #16a34a33;border-radius:10px;padding:14px;font-size:14px;color:#0a2540">
-      <strong style="color:#16a34a">+${formatCurrencyCent(p.creditoCent)}</strong> accreditati sul tuo wallet.<br>
-      Saldo attuale: <strong>${formatCurrencyCent(p.saldoCent)}</strong>
+      <strong style="color:#16a34a">+${formatCurrencyCent(p.creditoCent)}</strong> accreditati sul wallet aziendale.${
+        p.saldoCent === null
+          ? ''
+          : `<br>
+      Saldo attuale: <strong>${formatCurrencyCent(p.saldoCent)}</strong>`
+      }
     </div>
   `);
   return { subject, html, text };

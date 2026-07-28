@@ -425,16 +425,9 @@ export async function firmaPraticaCore(
     const full = await prisma.pratica.findUnique({
       where: { id: praticaId },
       include: {
-        broker: {
-          include: {
-            wallet: true,
-            users: {
-              where: { role: 'ADMIN_AZIENDA', status: 'ACTIVE', deletedAt: null },
-              select: { email: true, nome: true, id: true },
-              take: 1,
-            },
-          },
-        },
+        // Niente `users` del broker: da quando la N4 passa dal risolutore,
+        // l'admin azienda lo carica `destinatariBroker` quando serve.
+        broker: { include: { wallet: true } },
         agenziaAssegnata: {
           include: {
             users: {
@@ -454,19 +447,19 @@ export async function firmaPraticaCore(
             ? `${full.veicoli[0].targa} +${full.veicoli.length - 1}`
             : full.veicoli[0].targa
           : null;
-      const brokerUser = full.broker.users[0];
-      // Ripiega sull'email azienda se manca l'admin attivo: N4 non deve
-      // sparire in silenzio (coerente con N3). N4 resta all'admin azienda,
-      // non passa dal risolutore: espone credito e saldo wallet, dati
-      // dell'entità legale.
-      const brokerEmail = brokerUser?.email ?? full.broker.email;
-      const nomeBroker = brokerUser?.nome ?? full.broker.ragioneSociale;
-      if (brokerEmail) {
+      // N4 e N31 escono insieme alla firma e hanno lo STESSO recapito: chi ha
+      // lavorato la pratica e gli operatori della sua sede. Il titolare entra
+      // solo se l'ha lavorata lui — non riceve la posta dei suoi operatori
+      // (v. lib/notifiche/pratica-recipients.ts). La catena ripiega da sola
+      // sull'admin e poi sull'email azienda: la N4 non sparisce in silenzio.
+      const destinatari = await destinatariBroker(praticaId);
+      const saldoWalletCent = full.broker.wallet?.saldoCent ?? 0;
+      for (const d of destinatari) {
         await sendNotification({
           tipo: 'N4_BROKER_FIRMA_E_CREDITO',
           target: {
-            email: brokerEmail,
-            userId: brokerUser?.id ?? null,
+            email: d.email,
+            userId: d.userId,
             companyId: full.broker.id,
           },
           payload: {
@@ -474,8 +467,11 @@ export async function firmaPraticaCore(
             targa: fullTarga,
             agenziaNome: full.agenziaAssegnata?.ragioneSociale ?? '—',
             creditoCent: full.creditoBrokerCent,
-            saldoCent: full.broker.wallet?.saldoCent ?? 0,
-            nomeBroker,
+            // Il saldo è la cassa dell'azienda, non l'economia della pratica:
+            // lo vede solo il titolare. All'operatore resta il credito che ha
+            // portato lui. `null` = riga omessa dal template.
+            saldoCent: d.isOwner ? saldoWalletCent : null,
+            nomeBroker: d.nome,
             // `Boolean`, non `!== null`: se un domani questa findUnique passasse a
             // `select` senza includere il campo, `undefined !== null` sarebbe TRUE e
             // la N4 affermerebbe un'attestazione mai avvenuta — su una firma normale
@@ -486,9 +482,8 @@ export async function firmaPraticaCore(
         }, { praticaId }).catch(() => undefined);
       }
 
-      // N31: recapito diverso da N4 -- chi lavora la pratica (creatore, sede,
-      // admin azienda a scendere), non l'admin azienda soltanto.
-      const destinatari = await destinatariBroker(praticaId);
+      // N31 "valuta l'agenzia": stessi destinatari della N4, ciclo separato
+      // perché è un'altra email (e un'altra preferenza di invio).
       for (const d of destinatari) {
         await sendNotification({
           tipo: 'N31_VALUTA_AGENZIA',

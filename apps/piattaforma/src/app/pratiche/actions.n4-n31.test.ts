@@ -1,18 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /**
- * Separazione N4/N31 in `firmaPraticaCore` (blocco post-firma di
- * `actions.ts`, righe ~435-473).
+ * Recapiti N4/N31 nel blocco post-firma di `firmaPraticaCore`.
  *
- * N4_BROKER_FIRMA_E_CREDITO è amministrativa (espone `creditoCent` e
- * `saldoCent` del wallet): deve restare all'admin dell'azienda madre, MAI
- * passare dal risolutore `destinatariBroker`. N31_VALUTA_AGENZIA invece passa
- * dal risolutore (chi lavora la pratica: creatore/sede/admin a scendere).
+ * Dal 2026-07-28 la N4 "pratica terminata" NON è più cablata sull'admin
+ * dell'azienda madre: la firma chiude il lavoro di chi ha fatto la pratica, e
+ * la notifica deve arrivare a lui e ai suoi colleghi di sede come tutte le
+ * altre. Passa quindi dallo stesso risolutore della N31.
  *
- * Senza questo test una futura rifusione dei due invii in un unico ciclo
- * manderebbe il saldo wallet a tutti i membri della sede — una regressione di
- * privacy che nessun altro test coglie (`actions.authz.test.ts` si ferma
- * prima, sul controllo di stato).
+ * Resta il vincolo di privacy che ha tenuto la N4 all'admin fino a ieri: il
+ * `saldoCent` è la cassa dell'azienda e va SOLO al titolare (`isOwner`). Agli
+ * operatori arriva `null`, cioè la riga del saldo sparisce dall'email — vedono
+ * il `creditoCent` della pratica che hanno portato, non il conto dell'azienda.
+ *
+ * Senza questo test un domani basterebbe passare `saldoCent` fisso nel ciclo
+ * per mandare il saldo wallet a tutta la filiale, e nessun altro test se ne
+ * accorgerebbe (`actions.authz.test.ts` si ferma prima, sul controllo stato).
  */
 
 const {
@@ -152,16 +155,26 @@ beforeEach(() => {
   prismaMock.pratica.update.mockResolvedValue({});
   prismaMock.pratica.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.commissioneAffiliazione.findMany.mockResolvedValue([]);
-  // Due destinatari del risolutore, entrambi diversi dall'admin azienda: se la
-  // N4 li usasse invece dell'admin, il test lo scoprirebbe subito.
+  // Pratica lavorata da un operatore: il risolutore restituisce lui e il
+  // collega di sede, e NON il titolare (è il risolutore stesso a escluderlo).
   destinatariBrokerMock.mockResolvedValue([
-    { email: RISOLUTORE_EMAIL_1, userId: 'op-1', nome: 'Operatore Uno' },
-    { email: RISOLUTORE_EMAIL_2, userId: 'op-2', nome: 'Operatore Due' },
+    { email: RISOLUTORE_EMAIL_1, userId: 'op-1', nome: 'Operatore Uno', isOwner: false },
+    { email: RISOLUTORE_EMAIL_2, userId: 'op-2', nome: 'Operatore Due', isOwner: false },
   ]);
 });
 
-describe('firmaPraticaCore — separazione recapiti N4 vs N31', () => {
-  it('N4 resta all\'admin azienda; N31 passa dal risolutore (destinatari di sede)', async () => {
+type SendNotificationArg = {
+  tipo: string;
+  target: { email: string };
+  payload: { saldoCent: number | null; creditoCent: number };
+};
+
+function inviate(): SendNotificationArg[][] {
+  return sendNotificationMock.mock.calls as unknown as SendNotificationArg[][];
+}
+
+describe('firmaPraticaCore — recapiti N4 e N31', () => {
+  it('pratica di un operatore: N4 e N31 vanno agli operatori, mai al titolare', async () => {
     sessione();
     prismaMock.pratica.findUnique
       .mockResolvedValueOnce(praticaDaFirmare()) // letta dentro la $transaction
@@ -171,22 +184,53 @@ describe('firmaPraticaCore — separazione recapiti N4 vs N31', () => {
 
     expect(res).toEqual({ ok: true });
 
-    type SendNotificationArg = { tipo: string; target: { email: string } };
-    const calls = sendNotificationMock.mock.calls as unknown as SendNotificationArg[][];
+    const calls = inviate();
     const n4Calls = calls.filter((call) => call[0].tipo === 'N4_BROKER_FIRMA_E_CREDITO');
     const n31Calls = calls.filter((call) => call[0].tipo === 'N31_VALUTA_AGENZIA');
 
-    // N4: una sola email, quella dell'admin azienda — mai quelle del risolutore.
-    expect(n4Calls).toHaveLength(1);
-    const n4Target = n4Calls[0][0].target;
-    expect(n4Target.email).toBe(ADMIN_AZIENDA_EMAIL);
-    expect(n4Target.email).not.toBe(RISOLUTORE_EMAIL_1);
-    expect(n4Target.email).not.toBe(RISOLUTORE_EMAIL_2);
+    // N4: una per destinatario del risolutore. L'admin azienda non compare:
+    // non ha lavorato lui la pratica.
+    const n4Emails = n4Calls.map((call) => call[0].target.email).sort();
+    expect(n4Emails).toEqual([RISOLUTORE_EMAIL_1, RISOLUTORE_EMAIL_2].sort());
+    expect(n4Emails).not.toContain(ADMIN_AZIENDA_EMAIL);
 
-    // N31: una per destinatario del risolutore, mai l'admin azienda.
-    expect(n31Calls).toHaveLength(2);
+    // N31: stesso recapito della N4.
     const n31Emails = n31Calls.map((call) => call[0].target.email).sort();
     expect(n31Emails).toEqual([RISOLUTORE_EMAIL_1, RISOLUTORE_EMAIL_2].sort());
     expect(n31Emails).not.toContain(ADMIN_AZIENDA_EMAIL);
+  });
+
+  it('agli operatori la N4 non porta il saldo del wallet, solo il credito della pratica', async () => {
+    sessione();
+    prismaMock.pratica.findUnique
+      .mockResolvedValueOnce(praticaDaFirmare())
+      .mockResolvedValueOnce(praticaCompleta());
+
+    await firmaFromListaAction(PID);
+
+    const n4 = inviate().filter((call) => call[0].tipo === 'N4_BROKER_FIRMA_E_CREDITO');
+    expect(n4).toHaveLength(2);
+    for (const call of n4) {
+      expect(call[0].payload.saldoCent).toBeNull();
+      expect(call[0].payload.creditoCent).toBe(5000);
+    }
+  });
+
+  it('pratica del titolare: la sua N4 porta il saldo, quella dei colleghi no', async () => {
+    sessione();
+    destinatariBrokerMock.mockResolvedValue([
+      { email: ADMIN_AZIENDA_EMAIL, userId: 'admin-user-1', nome: 'Admin Azienda', isOwner: true },
+      { email: RISOLUTORE_EMAIL_1, userId: 'op-1', nome: 'Operatore Uno', isOwner: false },
+    ]);
+    prismaMock.pratica.findUnique
+      .mockResolvedValueOnce(praticaDaFirmare())
+      .mockResolvedValueOnce(praticaCompleta());
+
+    await firmaFromListaAction(PID);
+
+    const n4 = inviate().filter((call) => call[0].tipo === 'N4_BROKER_FIRMA_E_CREDITO');
+    const perEmail = new Map(n4.map((call) => [call[0].target.email, call[0].payload]));
+    expect(perEmail.get(ADMIN_AZIENDA_EMAIL)?.saldoCent).toBe(123456);
+    expect(perEmail.get(RISOLUTORE_EMAIL_1)?.saldoCent).toBeNull();
   });
 });

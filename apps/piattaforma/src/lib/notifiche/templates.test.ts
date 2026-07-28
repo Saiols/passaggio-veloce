@@ -265,6 +265,27 @@ describe('N4 — firma attestata dal Gestore (Termini art. 11)', () => {
     expect(out.text).toContain('avendone avuto conferma');
     expect(out.html).toContain('avendone avuto conferma');
   });
+
+  it('titolare (saldo valorizzato): riporta credito e saldo del wallet', () => {
+    const out = tplN4BrokerFirma(n4);
+    expect(out.text).toContain('50,00');
+    expect(out.text).toContain('120,00');
+    expect(out.text).toContain('Saldo attuale');
+    expect(out.html).toContain('120,00');
+    expect(out.html).toContain('Saldo attuale');
+  });
+
+  it('operatore (saldo null): il credito resta, la cassa dell\'azienda sparisce', () => {
+    const out = tplN4BrokerFirma({ ...n4, saldoCent: null });
+    // Il credito della pratica che ha portato lui resta visibile...
+    expect(out.text).toContain('50,00');
+    expect(out.html).toContain('50,00');
+    // ...il saldo del wallet aziendale no, né come etichetta né come importo.
+    expect(out.text).not.toContain('Saldo');
+    expect(out.html).not.toContain('Saldo');
+    expect(out.text).not.toContain('120,00');
+    expect(out.html).not.toContain('120,00');
+  });
 });
 
 describe('N8 — addebito agenzia con firma attestata dal Gestore (Termini art. 11)', () => {

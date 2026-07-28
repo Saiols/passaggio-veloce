@@ -336,6 +336,12 @@ describe('applicaProposte', () => {
   });
 
   it('un arricchimento fallito non declassa un aggancio riuscito', async () => {
+    // review giro 1/5 (Finding 2): allineato al test fratello sul catch
+    // esterno ("un errore su una proposta non ferma le altre") — spia
+    // console.error e verifica che scatti davvero. Senza, un arricchimento
+    // fallito non lascerebbe traccia da nessuna parte: è l'unica diagnostica
+    // possibile per un percorso che per il resto fallisce in silenzio.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     contactFindUnique.mockResolvedValue({
       status: 'S0', email: null, wa: null, piva: null,
       indirizzo: null, citta: null, cap: null, regione: null, arricchitoDa: null,
@@ -345,6 +351,11 @@ describe('applicaProposte', () => {
       .mockRejectedValueOnce(new Error('db giù'));    // arricchimento: esplode
     const esito = await applicaProposte([PROPOSTA]);
     expect(esito).toEqual({ agganciati: 1, saltati: 0, errori: 0, arricchiti: 0 });
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining('x1'),
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 });
 

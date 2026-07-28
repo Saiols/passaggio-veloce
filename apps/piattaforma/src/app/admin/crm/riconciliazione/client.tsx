@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Alert, Button } from '@/components/ui';
 import { useActionOverlay } from '@/components/ui/use-action-overlay';
-import type { Proposta } from '@/lib/crm/match/engine';
+import type { PropostaVista } from './vista';
 import { applicaRiconciliazioneAction } from './actions';
 
 const ETICHETTE: Record<string, string> = {
@@ -26,7 +26,9 @@ export function RiconciliazioneClient({
   ambigue,
   mostrate,
 }: {
-  proposte: Proposta[];
+  // `PropostaVista`, non `Proposta`: vedi vista.ts. Il campo `sorgente` non
+  // deve mai attraversare il confine Server → Client Component.
+  proposte: PropostaVista[];
   totale: number;
   broker: number;
   agenzia: number;

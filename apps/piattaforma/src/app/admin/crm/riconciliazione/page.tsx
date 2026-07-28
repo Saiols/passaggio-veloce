@@ -5,6 +5,7 @@ import { Alert } from '@/components/ui';
 import { canRunCrmReconciliation } from '@/lib/auth/permissions';
 import { calcolaProposte } from '@/lib/crm/match/engine';
 import { RiconciliazioneClient } from './client';
+import { propostaPerVista } from './vista';
 
 export const metadata = { title: 'Riconciliazione · CRM' };
 
@@ -55,7 +56,9 @@ export default async function AdminCrmRiconciliazionePage() {
         </header>
 
         <RiconciliazioneClient
-          proposte={inAnteprima.slice(0, ANTEPRIMA_MAX)}
+          // propostaPerVista toglie `sorgente` (vedi vista.ts): non deve mai
+          // attraversare il confine col Client Component.
+          proposte={inAnteprima.slice(0, ANTEPRIMA_MAX).map(propostaPerVista)}
           totale={proposte.length}
           broker={broker}
           agenzia={agenzia}

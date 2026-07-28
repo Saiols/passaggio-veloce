@@ -138,23 +138,40 @@ export async function calcolaProposte(
     companies.flatMap((c) => c.sedi.map((s) => [s.id, s] as const)),
   );
 
-  return coppie.map((co) => ({
-    contactId: co.contatto.id,
-    contactNome: co.contatto.nome,
-    contactTel: co.contatto.tel,
-    contactCitta: co.contatto.citta,
-    companyId: co.identita.companyId,
-    companyNome: nomeCompany.get(co.identita.companyId) ?? '—',
-    sedeId: co.identita.sedeId,
-    sedeNome: co.identita.sedeId ? (nomeSede.get(co.identita.sedeId) ?? null) : null,
-    cat: co.identita.cat,
-    punteggio: co.punteggio,
-    campi: co.campi,
-    registrataAt: co.identita.registrataAt,
-    sorgente: {
-      company: perCompany.get(co.identita.companyId)!,
-      sede: co.identita.sedeId ? (perSede.get(co.identita.sedeId) ?? null) : null,
-    },
-    ambigua: co.ambigua,
-  }));
+  return coppie.map((co) => {
+    // `co.identita.companyId` viene sempre da `identita`, che è costruita
+    // proprio da `companies` (identitaDaCompany) — la stessa lista da cui
+    // `perCompany` è indicizzata: la company DEVE esserci. Un `!` nudo qui
+    // farebbe passare `undefined` a `calcolaArricchimento` in apply.ts, che
+    // lo incontrerebbe DENTRO il try/catch proprio dell'arricchimento
+    // (review giro 1/5, Finding 3): l'errore finirebbe inghiottito in un
+    // solo log per-contatto invece che fermare la passata, e la causa reale
+    // — l'invariante rotta nel motore — resterebbe nascosta. Se dovesse mai
+    // succedere è un bug qui, non un dato mancante: deve esplodere a monte.
+    const company = perCompany.get(co.identita.companyId);
+    if (!company) {
+      throw new Error(
+        `[calcolaProposte] invariante rotta: company ${co.identita.companyId} assente da perCompany`,
+      );
+    }
+    return {
+      contactId: co.contatto.id,
+      contactNome: co.contatto.nome,
+      contactTel: co.contatto.tel,
+      contactCitta: co.contatto.citta,
+      companyId: co.identita.companyId,
+      companyNome: nomeCompany.get(co.identita.companyId) ?? '—',
+      sedeId: co.identita.sedeId,
+      sedeNome: co.identita.sedeId ? (nomeSede.get(co.identita.sedeId) ?? null) : null,
+      cat: co.identita.cat,
+      punteggio: co.punteggio,
+      campi: co.campi,
+      registrataAt: co.identita.registrataAt,
+      sorgente: {
+        company,
+        sede: co.identita.sedeId ? (perSede.get(co.identita.sedeId) ?? null) : null,
+      },
+      ambigua: co.ambigua,
+    };
+  });
 }

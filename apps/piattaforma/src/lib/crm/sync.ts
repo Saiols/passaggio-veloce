@@ -5,6 +5,8 @@ import { applicaProposte } from './match/apply';
 import { catDaType } from './match/identita';
 import { datiFunnel } from './match/stato';
 import { storicoAzienda } from './match/storico';
+import { campiVuoti, calcolaArricchimento, SELECT_ARRICCHIMENTO } from './match/arricchimento';
+import { applicaArricchimento } from './match/arricchimento-scrittura';
 
 /**
  * Sync engine CRM ↔ piattaforma. Tre punti d'aggancio:
@@ -21,7 +23,11 @@ import { storicoAzienda } from './match/storico';
  *
  * 3. `syncCrmFromPlatform()` — cron job che aggiorna gli aggregati
  *    `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`,
- *    `tassoComp` per tutti i contatti già linkati a una Company.
+ *    `tassoComp` per tutti i contatti già linkati a una Company. Nello stesso
+ *    giro arricchisce anche i contatti già agganciati che hanno buchi
+ *    anagrafici (email/wa/piva/indirizzo/citta/cap/regione): niente backfill
+ *    separato, la prima passata smaltisce il pregresso e le successive
+ *    raccolgono ciò che l'azienda aggiunge nel frattempo.
  */
 
 export type MatchResult =
@@ -161,23 +167,33 @@ export async function onPraticaFirmata(praticaId: string): Promise<void> {
 export async function syncCrmFromPlatform(): Promise<{
   scanned: number;
   updated: number;
+  arricchiti: number;
 }> {
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
+  // L'anagrafica viaggia insieme agli id: i buchi si calcolano dai campi già
+  // letti qui, senza query in più per contatto (vedi il commento sotto).
   const contacts = await prisma.crmContact.findMany({
     where: { deletedAt: null, companyId: { not: null } },
-    select: { id: true, companyId: true },
+    select: { id: true, companyId: true, sedeId: true, ...SELECT_ARRICCHIMENTO },
   });
 
   let updated = 0;
+  let arricchiti = 0;
   for (const c of contacts) {
     if (!c.companyId) continue;
 
     const company = await prisma.company.findUnique({
       where: { id: c.companyId },
-      select: { type: true, suspendedAt: true, deletedAt: true },
+      select: {
+        type: true, suspendedAt: true, deletedAt: true,
+        // Anagrafica per l'arricchimento: la lettura c'era già, il select
+        // costa zero query in più.
+        email: true, telefono: true, partitaIva: true,
+        indirizzo: true, civico: true, citta: true, cap: true, provincia: true,
+      },
     });
     if (!company) continue;
 
@@ -222,8 +238,31 @@ export async function syncCrmFromPlatform(): Promise<{
       },
     });
     updated++;
+
+    // Arricchimento dei contatti già agganciati: riempie i campi che la lista
+    // non aveva. Il pre-controllo sui buchi evita di leggere la sede per i
+    // contatti già completi, che dopo la prima passata sono la norma.
+    try {
+      if (campiVuoti(c).length > 0) {
+        const sede = c.sedeId
+          ? await prisma.sede.findUnique({
+              where: { id: c.sedeId },
+              select: {
+                email: true, telefono: true, indirizzo: true,
+                civico: true, citta: true, cap: true, provincia: true,
+              },
+            })
+          : null;
+        const patch = calcolaArricchimento(c, { company, sede });
+        if (patch && (await applicaArricchimento(c.id, patch, c))) arricchiti++;
+      }
+    } catch (err) {
+      // Best-effort: gli aggregati di questo contatto sono già scritti e
+      // quelli dei contatti successivi non devono saltare per questo.
+      console.error(`[syncCrmFromPlatform] arricchimento fallito su ${c.id}:`, err);
+    }
   }
 
-  return { scanned: contacts.length, updated };
+  return { scanned: contacts.length, updated, arricchiti };
 }
 

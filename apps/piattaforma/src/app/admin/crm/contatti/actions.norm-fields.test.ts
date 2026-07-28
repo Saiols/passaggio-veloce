@@ -127,6 +127,81 @@ describe('write path CRM: colonne normalizzate', () => {
     });
   });
 
+  it('una modifica a mano toglie dall audit il campo riscritto', async () => {
+    // Il contatto ha ereditato email e città dall'iscrizione; il venditore
+    // riscrive l'email a mano. Da quel momento l'email NON viene più
+    // dall'iscrizione, e il pannello non deve più dirlo.
+    crmContactMock.findUnique.mockResolvedValue({
+      assignedToId: null,
+      email: 'info@agenziacorsico.it', wa: null, piva: null,
+      indirizzo: null, citta: 'Corsico', cap: null, regione: null,
+      arricchitoDa: 'email,citta',
+    });
+    crmContactMock.update.mockResolvedValue({ id: 'existing-id' });
+
+    await updateCrmContactAction('existing-id', {
+      nome: 'Agenzia Corsico Pratiche Auto',
+      cat: 'AGENZIA',
+      tel: '+39 02 447 8712',
+      email: 'commerciale@agenziacorsico.it',
+      citta: 'Corsico',
+      status: 'S0',
+      fonte: 'CSV_INIZIALE',
+    });
+
+    const data = crmContactMock.update.mock.calls[0][0].data;
+    expect(data.arricchitoDa).toBe('citta');
+    // resta ancora qualcosa di ereditato: la data non si azzera
+    expect(data.arricchitoAt).toBeUndefined();
+  });
+
+  it('riscrivere l ultimo campo ereditato azzera audit e data', async () => {
+    crmContactMock.findUnique.mockResolvedValue({
+      assignedToId: null,
+      email: 'info@agenziacorsico.it', wa: null, piva: null,
+      indirizzo: null, citta: null, cap: null, regione: null,
+      arricchitoDa: 'email',
+    });
+    crmContactMock.update.mockResolvedValue({ id: 'existing-id' });
+
+    await updateCrmContactAction('existing-id', {
+      nome: 'Agenzia Corsico Pratiche Auto',
+      cat: 'AGENZIA',
+      tel: '+39 02 447 8712',
+      email: 'commerciale@agenziacorsico.it',
+      status: 'S0',
+      fonte: 'CSV_INIZIALE',
+    });
+
+    const data = crmContactMock.update.mock.calls[0][0].data;
+    expect(data.arricchitoDa).toBeNull();
+    expect(data.arricchitoAt).toBeNull();
+  });
+
+  it('salvare senza toccare i campi ereditati non tocca l audit', async () => {
+    crmContactMock.findUnique.mockResolvedValue({
+      assignedToId: null,
+      email: 'info@agenziacorsico.it', wa: null, piva: null,
+      indirizzo: null, citta: null, cap: null, regione: null,
+      arricchitoDa: 'email',
+    });
+    crmContactMock.update.mockResolvedValue({ id: 'existing-id' });
+
+    await updateCrmContactAction('existing-id', {
+      nome: 'Nome cambiato',
+      cat: 'AGENZIA',
+      tel: '+39 02 447 8712',
+      // stessa email, scritta con case diverso: il write path la abbassa,
+      // quindi il valore salvato non cambia e l'audit resta vero.
+      email: 'INFO@AgenziaCorsico.it',
+      status: 'S0',
+      fonte: 'CSV_INIZIALE',
+    });
+
+    const data = crmContactMock.update.mock.calls[0][0].data;
+    expect(data.arricchitoDa).toBe('email');
+  });
+
   it('bulkImportCrmContactsAction scrive le colonne normalizzate per ogni riga importata', async () => {
     crmContactMock.findMany.mockResolvedValue([]); // nessun contatto esistente
     crmContactMock.create.mockResolvedValue({ id: 'new-id' });

@@ -15,6 +15,10 @@ import {
 import { parseContactsCsv } from '@/lib/crm/csv-import';
 import { normalizeTel, normalizeEmail } from '@/lib/crm/match/normalize';
 import { crmNormFields } from '@/lib/crm/match/norm-fields';
+import {
+  SELECT_ARRICCHIMENTO,
+  scollegaCampiModificati,
+} from '@/lib/crm/match/arricchimento';
 import { sendNotification } from '@/lib/notifiche';
 import { nextStatoInvio } from '@/lib/crm/email-partenza';
 import { evaluatePromoCode } from '@/lib/promo/evaluate';
@@ -248,13 +252,16 @@ export async function updateCrmContactAction(
     return { ok: false, error: 'Non hai i permessi per modificare contatti CRM' };
   }
 
+  // Una lettura sola per due scopi: lo scoping SALES e i valori attuali dei
+  // campi che l'iscrizione può aver riempito (servono sotto, per l'audit).
+  const attuale = await prisma.crmContact.findUnique({
+    where: { id },
+    select: { assignedToId: true, ...SELECT_ARRICCHIMENTO },
+  });
+
   // SALES può modificare solo i propri assegnati (decisione 7)
   if (session.user.role === 'SALES') {
-    const target = await prisma.crmContact.findUnique({
-      where: { id },
-      select: { assignedToId: true },
-    });
-    if (!target || target.assignedToId !== session.user.id) {
+    if (!attuale || attuale.assignedToId !== session.user.id) {
       return { ok: false, error: 'Puoi modificare solo i contatti a te assegnati' };
     }
   }
@@ -268,10 +275,33 @@ export async function updateCrmContactAction(
     };
   }
 
-  await prisma.crmContact.update({
-    where: { id },
-    data: dataFromInputForUpdate(parsed.data),
-  });
+  const data = dataFromInputForUpdate(parsed.data);
+
+  // Un campo ereditato dall'iscrizione e poi riscritto a mano non viene più
+  // dall'iscrizione: esce dall'audit, altrimenti il pannello continuerebbe a
+  // dire «Dati completati dall'iscrizione — Email» su un'email che l'ha
+  // dettata un cliente al telefono. Il confronto è sui valori come finiscono
+  // sul DB — si legge `data`, cioè l'oggetto che sta per essere scritto, non
+  // l'input grezzo: `dataFromInput` abbassa l'email e mappa '' a null, e
+  // ricalcolare quelle regole qui vorrebbe dire duplicarle.
+  if (attuale?.arricchitoDa) {
+    const scritto = (v: unknown): string | null =>
+      typeof v === 'string' ? v : null;
+    const restano = scollegaCampiModificati(attuale.arricchitoDa, attuale, {
+      email: scritto(data.email),
+      wa: scritto(data.wa),
+      piva: scritto(data.piva),
+      indirizzo: scritto(data.indirizzo),
+      citta: scritto(data.citta),
+      cap: scritto(data.cap),
+      regione: scritto(data.regione),
+    });
+    data.arricchitoDa = restano;
+    // Niente più campi ereditati: anche la data perde significato.
+    if (!restano) data.arricchitoAt = null;
+  }
+
+  await prisma.crmContact.update({ where: { id }, data });
 
   revalidatePath('/admin/crm/contatti');
   return { ok: true, id };

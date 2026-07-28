@@ -4,6 +4,7 @@ import {
   campiVuoti,
   normDaPatch,
   unisciArricchitoDa,
+  scollegaCampiModificati,
   type ContattoDaArricchire,
   type SorgenteArricchimento,
 } from './arricchimento';
@@ -202,6 +203,52 @@ describe('normDaPatch', () => {
   it('un valore non normalizzabile dà null, non stringa vuota', () => {
     const norm = normDaPatch({ dati: { piva: 'N/D' }, campi: ['piva'] });
     expect(norm).toEqual({ pivaNorm: null });
+  });
+});
+
+describe('scollegaCampiModificati', () => {
+  const PIENO: ContattoDaArricchire = {
+    email: 'info@agenziacorsico.it', wa: null, piva: '01234567890',
+    indirizzo: 'Via Fiume 6', citta: 'Corsico', cap: '20094',
+    regione: 'Lombardia',
+  };
+
+  it('un campo riscritto a mano esce dall audit', () => {
+    expect(
+      scollegaCampiModificati('email,piva,citta', PIENO, {
+        ...PIENO,
+        email: 'commerciale@agenziacorsico.it',
+      }),
+    ).toBe('piva,citta');
+  });
+
+  it('svuotare un campo lo scollega comunque', () => {
+    expect(
+      scollegaCampiModificati('email,citta', PIENO, { ...PIENO, citta: null }),
+    ).toBe('email');
+  });
+
+  it('salvare senza cambiare nulla non tocca l audit', () => {
+    expect(scollegaCampiModificati('email,piva', PIENO, { ...PIENO })).toBe(
+      'email,piva',
+    );
+  });
+
+  it('modificare un campo che non era ereditato non cambia nulla', () => {
+    expect(
+      scollegaCampiModificati('email', PIENO, { ...PIENO, cap: '20090' }),
+    ).toBe('email');
+  });
+
+  it('scollegare l ultimo campo azzera l audit', () => {
+    expect(
+      scollegaCampiModificati('email', PIENO, { ...PIENO, email: 'x@y.it' }),
+    ).toBeNull();
+  });
+
+  it('audit gia vuoto resta vuoto', () => {
+    expect(scollegaCampiModificati(null, PIENO, { ...PIENO, email: 'x@y.it' })).toBeNull();
+    expect(scollegaCampiModificati('', PIENO, PIENO)).toBeNull();
   });
 });
 

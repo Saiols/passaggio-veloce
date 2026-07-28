@@ -159,3 +159,35 @@ export function unisciArricchitoDa(
   ]);
   return CAMPI_ARRICCHIBILI.filter((c) => visti.has(c)).join(',');
 }
+
+/**
+ * Toglie dall'audit i campi che una modifica a mano ha cambiato.
+ *
+ * `arricchitoDa` dice al venditore quali dati non gli ha dettati nessuno. Nel
+ * momento in cui qualcuno riscrive a mano l'email ereditata, quella riga
+ * comincia a mentire: il dato adesso viene dal telefono, non dall'iscrizione.
+ * Un audit che mente è peggio di nessun audit, perché lo si legge per decidere
+ * di chi fidarsi.
+ *
+ * Il confronto è sui valori come vengono scritti sul DB (già normalizzati dal
+ * write path), quindi un salvataggio che non cambia niente non tocca l'audit.
+ * Anche svuotare un campo lo scollega: il valore ereditato non c'è più.
+ *
+ * Ritorna `null` quando non resta niente, così la colonna torna vuota e il
+ * pannello smette di mostrare la riga.
+ */
+export function scollegaCampiModificati(
+  arricchitoDa: string | null,
+  prima: ContattoDaArricchire,
+  dopo: ContattoDaArricchire,
+): string | null {
+  const ereditati = new Set(
+    (arricchitoDa ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  );
+  if (ereditati.size === 0) return null;
+
+  const restano = CAMPI_ARRICCHIBILI.filter(
+    (c) => ereditati.has(c) && prima[c] === dopo[c],
+  );
+  return restano.length > 0 ? restano.join(',') : null;
+}

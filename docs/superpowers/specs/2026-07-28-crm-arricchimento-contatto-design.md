@@ -216,6 +216,17 @@ Due colonne nuove su `CrmContact`:
 `email,wa`. L'unione avviene sul valore letto insieme al contatto, ordinata in
 modo stabile per non produrre diff casuali.
 
+In direzione opposta, una **modifica a mano scollega** il campo: quando un
+salvataggio dal pannello cambia il valore di un campo ereditato, quel campo
+esce da `arricchitoDa` (`scollegaCampiModificati`), e se non ne resta nessuno
+la colonna e `arricchitoAt` tornano a `null`. Il motivo è lo stesso per cui la
+colonna esiste: dal momento in cui un venditore riscrive l'email, il dato
+arriva dal telefono e non dall'iscrizione, e un audit che dice il contrario è
+peggio di nessun audit — lo si legge proprio per decidere di chi fidarsi. Il
+confronto è sui valori come finiscono sul DB, quindi un salvataggio che non
+cambia nulla (o che riscrive la stessa email con un case diverso) lascia
+l'audit intatto.
+
 ## Punti di aggancio
 
 ### `apply.ts` — nuovi agganci

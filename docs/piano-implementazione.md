@@ -2,7 +2,7 @@
 
 > Documento operativo con checkbox per tracciare l'avanzamento lavori.
 > Basato su: `riassunto-progetto.md`, `analisi-progetto.md`, `stima-costi.md`, Mockup, Policy Prezzi, Visione Strategica, Organigramma, CRM.
-> Ultimo aggiornamento: 2026-07-27 (A16 riconciliazione CRM ↔ aziende registrate: motore unico di match, agganci ambigui solo da pagina admin, **tre migration Neon prima del codice** — vedi Mappa lavoro residuo)
+> Ultimo aggiornamento: 2026-07-28 (A17 arricchimento contatto CRM dall'iscrizione: campi vuoti riempiti dai dati di registrazione, colonne audit `arricchitoDa`/`arricchitoAt`, verifica end-to-end fatta su main locale — **migration Neon prod ancora da applicare, rilascio non eseguito** — vedi Mappa lavoro residuo)
 
 > **Release post-demo 2026-05:** vedi `docs/bugfix-feature-list.md` (19/19 item completati e in prod).
 
@@ -748,6 +748,7 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - [x] Cron `syncCrmFromPlatform()` aggrega `platStatus`, `praticheTotal`, `praticheMonth`, `lastAccessAt`, `tassoComp` per i contatti agganciati
 - [x] Endpoint `POST /api/jobs/crm-sync` admin-only, con bottone in `/admin/demo-control` per trigger manuale
 - [x] Normalizzazione telefono unificata in `lib/crm/match/normalize.ts` (`normalizeTel`, fonte unica dal 2026-07-27) e ordine del funnel in `lib/crm/match/stato.ts` — unit test dedicati. `lib/crm/util.ts#isPreIscrizione` **rimosso**: era la terza copia dell'ordine degli stati e non aveva più consumer
+- [x] **Arricchimento contatto dall'iscrizione** (dal 2026-07-28, vedi A17): quando un aggancio scatta (nuovo o già esistente), i campi anagrafici vuoti del contatto vengono riempiti coi dati della registrazione — stessa regola su entrambi i percorsi via `lib/crm/match/arricchimento.ts`
 - L'outbox HMAC + retry è applicabile solo per CRM esterno e resta nella vecchia FASE 10 (non più attiva)
 
 ### 14.8 CRM-H — Vapi.ai integration (deferito post account esterno)
@@ -993,6 +994,16 @@ di leggere lo stato corrente dell'utente prima di una chiamata.
 - **Conseguenza sui bot, chiusa nello stesso push**: da quando l'aggancio scatta davvero, una campagna lanciata senza filtro di stato includerebbe i contatti S7/S8/S9 — il sales agent vocale telefonerebbe a **clienti già attivi** per proporgli di iscriversi. `createCampaignAction` ora esclude sempre dal target i contatti con `companyId` valorizzato, qualunque filtro sia stato scelto, e il modale di lancio riporta quanti sono stati esclusi (il numero non cala in silenzio). Le assegnazioni delle campagne **già lanciate** non vengono ripulite: sono storiche, e cambiarle a posteriori falserebbe i conteggi di chi sta chiamando adesso
 - **Documentazione riallineata** nello stesso push: la cascata «email → telefono → P.IVA» era descritta come viva in quattro documenti. `crm-spec-implementativa.md` ha una nuova **§12** (descrizione autoritativa del match) ed è l'unico riscritto sul comportamento reale; `crm-architettura.md` ed `ecosistema-crm-ai.md` sono paper di aprile sul CRM esterno HubSpot/Make e restano **storia**, con una nota puntuale dove il matching è descritto. Il paper dei bot ha una nuova **§10** con la conoscenza operativa per gli agenti (cosa significano S7/S8/S9 oggi, cosa dire a chi è già iscritto, checklist dei testi da aggiornare a mano in `/admin/crm/sales`). I testi degli agenti vivono nel DB: **non** sono stati toccati
 - Spec: `docs/superpowers/specs/2026-07-27-crm-riconciliazione-design.md` · Plan: `docs/superpowers/plans/2026-07-27-crm-riconciliazione.md`
+
+**A17. ✅ DONE (verifica e2e) — [2026-07-28] Arricchimento contatto CRM dall'iscrizione**
+- Quando A16 aggancia una riga della lista all'azienda registrata (aggancio nuovo o già esistente), i campi anagrafici **vuoti** del contatto (`email`, `wa`, `piva`, `indirizzo`, `citta`, `cap`, `regione`) vengono riempiti coi dati della registrazione: sede prima, madre dopo. Regola unica e non negoziabile — **mai** sovrascrivere un campo già valorizzato: il dato raccolto al telefono da un venditore vale più di quello di registrazione, riconciliare due valori diversi è una decisione umana
+- Modulo puro `lib/crm/match/arricchimento.ts` (`calcolaArricchimento`, nessun Prisma dentro) condiviso dai **due** percorsi che possono far scattare un aggancio — `apply.ts` (nuovo aggancio) e `sync.ts`/cron (contatti già agganciati) — così cron e registrazione non possono divergere sulla regola
+- `wa` si riempie **solo** con un numero mobile (prefisso normalizzato `3`); il fisso dell'azienda non è una casella WhatsApp che esiste. `piva` viene **solo** dalla madre (la sede non ha una P.IVA propria). `email` **non è mai la PEC**: il tipo `AnagraficaSorgente` non la include, resta solo chiave di match
+- Due colonne audit su `crm_contacts`: `arricchitoDa` (CSV ordine canonico, si **accumula** fra passate: oggi email, fra sei mesi wa → diventa `'email,wa'`) e `arricchitoAt`. Scrittura con **compare-and-set** sui campi stessi (incluso `arricchitoDa` nel `where`): se un admin ha compilato l'email a mano fra la lettura e la scrittura del cron, l'intera riga fallisce silenziosamente e la riprende la passata successiva — nessun retry, nessuna sovrascrittura
+- Badge "Dati completati dall'iscrizione" nel pannello contatto (`/admin/crm/contatti`, tab Anagrafica), con l'elenco dei campi e la data in formato italiano; assente sui contatti non arricchiti
+- ⚠️ **Migration Neon prod non ancora applicata** (`20260728120000_crm_contacts_arricchimento`, additiva: due colonne nullable, nessun backfill richiesto) — **rilascio non eseguito in questa sessione**, resta al committente del progetto decidere quando applicarla e fare il push
+- **Verifica e2e fatta sul DB locale (copia di prod), non su un mock**: al momento della verifica il locale aveva **un solo** contatto agganciato su 19.103 (A16 è stato mergeato il giorno prima e il grosso del pregresso deve ancora passare dal cron in prod) — campione minimo, dimostra il meccanismo ma non la scala. Il cron (`/api/jobs/crm-sync`) ha arricchito quel contatto: `email` e `piva` riempiti dai dati dell'azienda registrata, `wa` rimasto vuoto (nessun numero mobile disponibile), `arricchitoDa = 'email,piva'`, email verificata **non** essere la PEC dell'azienda. Badge verificato nel browser su quel contatto (click sulla riga, non navigazione via URL) e assente su un contatto non agganciato nello stesso risultato di ricerca
+- Spec: `docs/superpowers/specs/2026-07-28-crm-arricchimento-contatto-design.md` · Plan: `docs/superpowers/plans/2026-07-28-crm-arricchimento-contatto.md`
 
 ### B · Bloccato da account/decisione esterna
 

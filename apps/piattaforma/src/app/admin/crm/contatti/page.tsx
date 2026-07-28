@@ -5,7 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { canViewCrm } from '@/lib/auth/permissions';
 import { regioneVarianti } from '@/lib/crm/regione';
-import { listPromoCodesValidiAction } from './actions';
+import { listPromoCodesEmailPartenzaAction } from './actions';
 import { CrmContactsClient } from './client';
 
 const STATI = [
@@ -117,7 +117,7 @@ export default async function AdminCrmPipelinePage({
       where: { deletedAt: null },
       _count: { _all: true },
     }),
-    listPromoCodesValidiAction(),
+    listPromoCodesEmailPartenzaAction(),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -198,7 +198,8 @@ export default async function AdminCrmPipelinePage({
             id: u.id,
             name: `${u.nome} ${u.cognome}`.trim(),
           }))}
-          promoCodes={promoCodes}
+          promoCodes={promoCodes.validi}
+          promoCodesScartati={promoCodes.scartati}
           currentUserRole={session.user.role ?? ''}
           currentUserId={session.user.id ?? ''}
           page={page}

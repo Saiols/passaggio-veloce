@@ -439,32 +439,64 @@ export async function bulkImportCrmContactsAction(
 // ════════════════════════════════════════════════════════
 
 /** Codici promo validi (attivi, non scaduti, non esauriti) per la select d'invio. */
-export async function listPromoCodesValidiAction(): Promise<
-  Array<{ id: string; code: string; importoEuro: number }>
-> {
+export type PromoCodesEmailPartenza = {
+  /** Codici che si possono davvero allegare all'email, oggi. */
+  validi: Array<{ id: string; code: string; importoEuro: number }>;
+  /**
+   * Quanti codici esistono in piattaforma ma non sono utilizzabili (scaduti,
+   * esauriti o disattivati).
+   *
+   * Non è una statistica: è ciò che permette alla modale di distinguere «non
+   * ne hai ancora creati» da «ce ne sono, ma nessuno serve». Senza questo
+   * numero la tendina vuota è indistinguibile da una funzione rotta — ed è
+   * esattamente così che è stata segnalata.
+   */
+  scartati: number;
+};
+
+export async function listPromoCodesEmailPartenzaAction(): Promise<PromoCodesEmailPartenza> {
   const session = await auth();
-  if (!session?.user || !canEditCrmContact(session.user.role)) return [];
+  if (!session?.user || !canEditCrmContact(session.user.role)) {
+    return { validi: [], scartati: 0 };
+  }
+  // Nessun `where: { active: true }`: i disattivati devono arrivare fin qui per
+  // essere contati. A decidere chi è utilizzabile è `evaluatePromoCode` — la
+  // stessa funzione del riscatto in registrazione — e non due filtri in due
+  // punti diversi che un domani divergono.
   const codes = await prisma.promoCode.findMany({
-    where: { active: true },
     select: {
       id: true,
       code: true,
       amountCent: true,
       expiresAt: true,
       maxRedemptions: true,
+      active: true,
       _count: { select: { redemptions: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
-  return codes
-    .filter((c) => {
-      const stato = evaluatePromoCode(
-        { amountCent: c.amountCent, expiresAt: c.expiresAt, active: true, maxRedemptions: c.maxRedemptions },
+
+  const validi = codes.filter(
+    (c) =>
+      evaluatePromoCode(
+        {
+          amountCent: c.amountCent,
+          expiresAt: c.expiresAt,
+          active: c.active,
+          maxRedemptions: c.maxRedemptions,
+        },
         c._count.redemptions,
-      ).stato;
-      return stato === 'valido';
-    })
-    .map((c) => ({ id: c.id, code: c.code, importoEuro: Math.round(c.amountCent / 100) }));
+      ).stato === 'valido',
+  );
+
+  return {
+    validi: validi.map((c) => ({
+      id: c.id,
+      code: c.code,
+      importoEuro: Math.round(c.amountCent / 100),
+    })),
+    scartati: codes.length - validi.length,
+  };
 }
 
 /** Invia l'email di partenza a un lead. Gate: permessi, email, opt-out, codice valido. */

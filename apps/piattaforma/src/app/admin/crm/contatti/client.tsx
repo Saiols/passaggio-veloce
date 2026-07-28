@@ -162,6 +162,7 @@ export function CrmContactsClient({
   contacts,
   salesUsers,
   promoCodes,
+  promoCodesScartati,
   currentUserRole,
   currentUserId,
   page,
@@ -173,6 +174,8 @@ export function CrmContactsClient({
   contacts: ContactRow[];
   salesUsers: SalesUser[];
   promoCodes: Array<{ id: string; code: string; importoEuro: number }>;
+  /** Codici esistenti ma non utilizzabili: serve a spiegare la tendina vuota. */
+  promoCodesScartati: number;
   currentUserRole: string;
   currentUserId: string;
   page: number;
@@ -445,6 +448,8 @@ export function CrmContactsClient({
         <EmailPartenzaModal
           contact={sending}
           promoCodes={promoCodes}
+          promoCodesScartati={promoCodesScartati}
+          puoGestireCodici={currentUserRole === 'ADMIN_PIATTAFORMA'}
           onClose={() => setSending(null)}
         />
       )}
@@ -706,10 +711,16 @@ function CsvImportDialog({
 function EmailPartenzaModal({
   contact,
   promoCodes,
+  promoCodesScartati,
+  puoGestireCodici,
   onClose,
 }: {
   contact: ContactRow;
   promoCodes: Array<{ id: string; code: string; importoEuro: number }>;
+  /** Codici esistenti ma scaduti/esauriti/disattivati. */
+  promoCodesScartati: number;
+  /** Solo l'admin di piattaforma può aprire la gestione codici. */
+  puoGestireCodici: boolean;
   onClose: () => void;
 }) {
   const [nomeReferente, setNomeReferente] = useState(contact.nome);
@@ -782,22 +793,52 @@ function EmailPartenzaModal({
           </span>
         </label>
 
-        <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
-          Codice di benvenuto (opzionale)
-          <select
-            value={promoCodeId}
-            onChange={(e) => setPromoCodeId(e.target.value)}
-            disabled={pending}
-            className="mt-1 block w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
-          >
-            <option value="">Nessun codice</option>
-            {promoCodes.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code} — {p.importoEuro} €
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Tendina vuota ≠ funzione rotta. Se in piattaforma i codici ci sono
+            ma nessuno è utilizzabile (scaduto, esaurito, disattivato), qui non
+            comparirebbe nulla e sembrerebbe un guasto: al posto della tendina
+            si dice cosa è successo e dove si sistema. */}
+        {promoCodes.length > 0 ? (
+          <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
+            Codice di benvenuto (opzionale)
+            <select
+              value={promoCodeId}
+              onChange={(e) => setPromoCodeId(e.target.value)}
+              disabled={pending}
+              className="mt-1 block w-full rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+            >
+              <option value="">Nessun codice</option>
+              {promoCodes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} — {p.importoEuro} €
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <div className="mt-3 rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 px-3 py-2.5">
+            <p className="text-[12.5px] font-semibold text-pv-slate-700">
+              Codice di benvenuto
+            </p>
+            <p className="mt-0.5 text-[12px] leading-relaxed text-pv-slate-500">
+              {promoCodesScartati > 0
+                ? `Nessun codice allegabile: ${promoCodesScartati === 1 ? "l'unico codice in piattaforma è scaduto, esaurito o disattivato" : `i ${promoCodesScartati} codici in piattaforma sono scaduti, esauriti o disattivati`}. L'email parte comunque, senza bonus.`
+                : 'Nessun codice promozionale in piattaforma. L’email parte comunque, senza bonus.'}
+              {puoGestireCodici && (
+                <>
+                  {' '}
+                  <a
+                    href="/admin/codici-promozionali"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-pv-navy-700 underline hover:text-pv-navy-800"
+                  >
+                    Gestisci i codici ↗
+                  </a>
+                </>
+              )}
+            </p>
+          </div>
+        )}
 
         {error && (
           <p className="mt-3 text-[12.5px] font-medium text-pv-red-500">{error}</p>

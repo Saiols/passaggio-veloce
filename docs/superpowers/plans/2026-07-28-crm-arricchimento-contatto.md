@@ -651,7 +651,7 @@ Expected: `1 migration applied`, poi `Generated Prisma Client`.
 
 Run:
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c "\d crm_contacts" | grep arricchito
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "\d crm_contacts" | grep arricchito
 ```
 Expected: due righe, `arricchitoDa | text` e `arricchitoAt | timestamp(3) without time zone`.
 
@@ -725,7 +725,11 @@ describe('applicaArricchimento', () => {
     // `citta` era '  ' (soli spazi): il where deve confrontare ESATTAMENTE
     // quel valore, altrimenti la riga non viene trovata e il campo resta
     // vuoto per sempre senza che nulla lo segnali.
-    expect(where).toEqual({ id: 'x1', deletedAt: null, email: null, citta: '  ' });
+    expect(where).toEqual({
+      id: 'x1', deletedAt: null, email: null, citta: '  ',
+      // anche l'audit è guardato: è accumulato da una lettura
+      arricchitoDa: null,
+    });
   });
 
   it('qualcuno ha compilato il campo nel frattempo → non scrive, torna false', async () => {
@@ -788,6 +792,10 @@ export async function applicaArricchimento(
     id: contactId,
     deletedAt: null,
     ...Object.fromEntries(patch.campi.map((c) => [c, letto[c]])),
+    // Anche l'audit è derivato da una lettura: se qualcun altro l'ha
+    // aggiornato nel frattempo, la nostra unione è calcolata su uno stato
+    // vecchio e cancellerebbe la sua voce.
+    arricchitoDa: letto.arricchitoDa,
   };
 
   const res = await prisma.crmContact.updateMany({
@@ -1386,7 +1394,7 @@ I test provano la regola, non che sui dati veri succeda qualcosa. Questo task ch
 - [ ] **Step 1: Conta i buchi sul DB locale (copia di prod), in sola lettura**
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c "
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "
 SELECT count(*) FILTER (WHERE \"companyId\" IS NOT NULL) AS agganciati,
        count(*) FILTER (WHERE \"companyId\" IS NOT NULL AND (email IS NULL OR btrim(email) = '')) AS senza_email,
        count(*) FILTER (WHERE \"companyId\" IS NOT NULL AND (regione IS NULL OR btrim(regione) = '')) AS senza_regione
@@ -1404,7 +1412,7 @@ Con il dev server attivo (`pnpm dev`), da loggato come ADMIN_PIATTAFORMA apri `h
 Rilancia la query dello Step 1. `senza_email` e `senza_regione` devono essere scesi. Poi guarda una riga davvero arricchita:
 
 ```bash
-docker compose exec -T postgres psql -U postgres -d passaggio_veloce -c "
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "
 SELECT nome, email, citta, regione, \"arricchitoDa\", \"arricchitoAt\"
 FROM crm_contacts WHERE \"arricchitoDa\" IS NOT NULL LIMIT 5;"
 ```

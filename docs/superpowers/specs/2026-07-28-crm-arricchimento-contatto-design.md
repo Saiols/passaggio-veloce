@@ -171,8 +171,23 @@ where: {
   deletedAt: null,
   // { email: null, citta: '' } — il valore esatto che aveva alla lettura.
   ...Object.fromEntries(patch.campi.map((c) => [c, letto[c]])),
+  // L'audit è derivato da una lettura, quindi va guardato come i campi.
+  arricchitoDa: letto.arricchitoDa,
 }
 ```
+
+`arricchitoDa` sta nella guardia perché è un valore **accumulato** da una
+lettura precedente, esattamente come `status` in `apply.ts`. Senza, due
+scritture concorrenti che riempiono campi diversi passano entrambe — la
+seconda calcola il CSV da uno stato ormai vecchio e cancella la voce della
+prima. I campi resterebbero giusti e l'audit mentirebbe, che è il modo
+peggiore di sbagliare per una colonna che esiste solo per dire la verità su
+com'è arrivato un dato.
+
+Conseguenza accettata: se `arricchitoDa` è cambiato fra lettura e scrittura
+fallisce l'intera patch, campi compresi. Quei campi sono ancora vuoti e li
+riempie la passata successiva — un giro di ritardo in un caso raro costa meno
+di un audit sbagliato. Nessun retry.
 
 Il confronto è sul valore letto e non su `null`/`''`: la regola 1 considera
 vuoto anche un campo di soli spazi, e una guardia scritta come

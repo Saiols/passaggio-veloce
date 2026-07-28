@@ -27,6 +27,8 @@ export type PropostaVista = Omit<Proposta, 'sorgente'> & { sorgente?: never };
  * `RiconciliazioneClient`.
  */
 export function propostaPerVista(p: Proposta): PropostaVista {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `sorgente` si
+  // estrae per lasciarla fuori dal rest: è il modo in cui viene scartata.
   const { sorgente: _sorgente, ...vista } = p;
   return vista;
 }

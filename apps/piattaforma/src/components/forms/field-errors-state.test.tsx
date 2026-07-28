@@ -1,15 +1,23 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, afterEach } from 'vitest';
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useFieldErrorsState } from './field-errors-state';
 
 // Sonda: espone il risultato dell'hook su un oggetto esterno per poterlo pilotare.
+//
+// La pubblicazione su `api` avviene in un effect e non durante il render:
+// scrivere su un oggetto esterno mentre si renderizza è una mutazione che il
+// React Compiler non ammette. `render()` passa da `act()`, che scarica gli
+// effect prima di restituire, quindi i test leggono `api.current` già pronto.
 function makeProbe(errors: Record<string, string | undefined>) {
   const api: { current: ReturnType<typeof useFieldErrorsState> | null } = { current: null };
   function Probe() {
-    api.current = useFieldErrorsState(errors);
-    const f = api.current.field('email');
+    const stato = useFieldErrorsState(errors);
+    useEffect(() => {
+      api.current = stato;
+    });
+    const f = stato.field('email');
     return <span data-invalid={f.invalid ? '1' : '0'} data-error={f.error ?? ''} />;
   }
   return { api, Probe };

@@ -2832,7 +2832,7 @@ function WizardBody({
                       raggio-km (Task 3, action) le richiede obbligatoriamente al
                       submit, quindi da qui la pratica non è inviabile. */}
                   <Alert variant="warning">
-                    Servizio mappe non disponibile: senza selezione del luogo dall'elenco non
+                    Servizio mappe non disponibile: senza selezione del luogo dall&apos;elenco non
                     possiamo calcolare le agenzie più vicine, quindi la pratica non può essere
                     inviata da questo dispositivo/ambiente.
                   </Alert>

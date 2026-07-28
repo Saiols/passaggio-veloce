@@ -43,7 +43,7 @@ describe('applicaArricchimento', () => {
     // `citta` era '  ' (soli spazi): il where deve confrontare ESATTAMENTE
     // quel valore, altrimenti la riga non viene trovata e il campo resta
     // vuoto per sempre senza che nulla lo segnali.
-    expect(where).toEqual({ id: 'x1', deletedAt: null, email: null, citta: '  ' });
+    expect(where).toEqual({ id: 'x1', deletedAt: null, email: null, citta: '  ', arricchitoDa: null });
   });
 
   it('qualcuno ha compilato il campo nel frattempo → non scrive, torna false', async () => {
@@ -58,5 +58,29 @@ describe('applicaArricchimento', () => {
       { ...LETTO, arricchitoDa: 'email' },
     );
     expect(contactUpdateMany.mock.calls[0]![0].data.arricchitoDa).toBe('email,wa');
+  });
+
+  it('la guardia include arricchitoDa letto, non solo i campi dati (evita il lost update sull\'audit)', async () => {
+    // Processo A ha già scritto `citta` (arricchitoDa: 'citta') fra la lettura
+    // di B e la sua scrittura. La patch di B tocca solo `wa`: se il `where`
+    // guardasse solo `patch.campi`, la CAS su `wa: null` passerebbe comunque e
+    // B sovrascriverebbe l'audit di A con 'wa', perdendo 'citta' in silenzio.
+    // Includere `arricchitoDa` nel `where` fa fallire la CAS in questo
+    // scenario: `count` torna 0, nessun campo viene scritto in questo giro
+    // (nemmeno quelli ancora vuoti), e li riprende la passata successiva.
+    await applicaArricchimento(
+      'x1',
+      { dati: { wa: '3331234567' }, campi: ['wa'] },
+      { ...LETTO, arricchitoDa: null },
+    );
+    expect(contactUpdateMany.mock.calls[0]![0].where).toHaveProperty('arricchitoDa', null);
+
+    contactUpdateMany.mockClear();
+    await applicaArricchimento(
+      'x1',
+      { dati: { wa: '3331234567' }, campi: ['wa'] },
+      { ...LETTO, arricchitoDa: 'email' },
+    );
+    expect(contactUpdateMany.mock.calls[0]![0].where).toHaveProperty('arricchitoDa', 'email');
   });
 });

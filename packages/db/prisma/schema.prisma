@@ -2255,6 +2255,11 @@ model CrmContact {
   matchVia  String? // campi che hanno prodotto l'aggancio, es. "tel+indirizzo"
   matchedAt DateTime?
 
+  // Campi riempiti dall'iscrizione perché il contatto li aveva vuoti
+  // (lib/crm/match/arricchimento.ts). CSV in ordine canonico, si accumula.
+  arricchitoDa String?
+  arricchitoAt DateTime?
+
   // Email di partenza CRM (onboarding post-telefonata)
   invitoToken        String?    @unique // token opaco del link /i/<token>, riscritto a ogni reinvio
   emailUnsubToken    String?    @unique // token STABILE per l'unsubscribe del lead (mai riscritto)

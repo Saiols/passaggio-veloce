@@ -18,6 +18,7 @@ import {
 } from './actions';
 import { buildContactsQuery } from './query';
 import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
+import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
 
 type ContactRow = {
   id: string;
@@ -67,6 +68,8 @@ type ContactRow = {
   companyId: string | null;
   aziendaNome: string | null;
   sedeNome: string | null;
+  arricchitoDa: string | null;
+  arricchitoAt: string | null;
 };
 
 type SalesUser = { id: string; name: string };
@@ -1011,6 +1014,11 @@ function ContactModal({
               salesUsers={salesUsers}
               readOnly={isReadOnlyForSales}
               field={field}
+              arricchimento={
+                contact
+                  ? { da: contact.arricchitoDa, at: contact.arricchitoAt }
+                  : null
+              }
             />
           )}
           {tab === 'stato' && (
@@ -1273,15 +1281,55 @@ function FieldTextarea({
   );
 }
 
+/**
+ * Etichette dei campi arricchiti, uguali a quelle del form. Il Record è
+ * tipato su `CampoArricchibile`: se domani il motore impara ad arricchire un
+ * campo nuovo, TypeScript chiede l'etichetta qui invece di mostrare all'admin
+ * il nome grezzo della colonna.
+ */
+const LABEL_CAMPO: Record<CampoArricchibile, string> = {
+  email: 'Email',
+  wa: 'WhatsApp',
+  piva: 'P.IVA',
+  indirizzo: 'Indirizzo',
+  citta: 'Città',
+  cap: 'CAP',
+  regione: 'Regione',
+};
+
+export function RigaArricchimento({ da, at }: { da: string; at: string | null }) {
+  const campi = da
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .map((c) => LABEL_CAMPO[c as CampoArricchibile] ?? c);
+  return (
+    <div className="sm:col-span-2 rounded-[10px] bg-pv-navy-100 px-3 py-2 text-[12px] text-pv-navy-800">
+      <span className="font-bold">Dati completati dall&apos;iscrizione</span>
+      {' — '}
+      {campi.join(', ')}
+      {at && ` · ${new Date(at).toLocaleDateString('it-IT')}`}
+    </div>
+  );
+}
+
 function TabAnagrafica({
   data,
   set,
   salesUsers,
   readOnly,
   field,
-}: TabProps & { salesUsers: SalesUser[]; field: (key: string) => FieldState }) {
+  arricchimento,
+}: TabProps & {
+  salesUsers: SalesUser[];
+  field: (key: string) => FieldState;
+  arricchimento: { da: string | null; at: string | null } | null;
+}) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {arricchimento?.da && (
+        <RigaArricchimento da={arricchimento.da} at={arricchimento.at} />
+      )}
       <div className="sm:col-span-2">
         <FieldText
           label="Nome azienda"

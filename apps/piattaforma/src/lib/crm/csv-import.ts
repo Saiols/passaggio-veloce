@@ -13,7 +13,7 @@
 
 export type CrmCat = 'BROKER' | 'AGENZIA';
 export type CrmStatus =
-  | 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9' | 'S10' | 'S11';
+  | 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9' | 'S10';
 export type CrmFonte = 'CSV_INIZIALE' | 'ISCRIZIONE_DIRETTA' | 'REFERRAL' | 'ALTRO';
 
 export type ParsedContactRow = {
@@ -128,8 +128,15 @@ const CAT_VALUES: Record<string, CrmCat> = {
   agency: 'AGENZIA',
 };
 
+// S11 (Richiamare) apposta fuori dall'elenco: quello stato porta con sé un
+// giorno di richiamo (`nextContactAt`) e il CSV non ha una colonna per
+// fornirlo. Importare S11 senza giorno creerebbe un contatto invisibile al
+// chip "Da richiamare" (filtro e conteggio richiedono `nextContactAt`) —
+// esattamente lo stato che il `superRefine` di `CRM_CONTACT_INPUT` dichiara
+// impossibile. Il parser degrada già gli stati sconosciuti a `S0`: va bene
+// così, non aggiungere S11 qui senza aggiungere anche una colonna giorno.
 const STATUS_SET = new Set<string>([
-  'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11',
+  'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10',
 ]);
 const FONTE_SET = new Set<string>([
   'CSV_INIZIALE', 'ISCRIZIONE_DIRETTA', 'REFERRAL', 'ALTRO',

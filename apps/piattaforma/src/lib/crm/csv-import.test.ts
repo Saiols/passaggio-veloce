@@ -134,6 +134,15 @@ describe('parseContactsCsv — robustezza', () => {
   });
 });
 
+describe('parseContactsCsv — S11 non importabile da CSV', () => {
+  it('una riga con Stato=S11 degrada a S0 (niente giorno di richiamo nel file)', () => {
+    const csv = 'Nome,Telefono,Stato\nMario Rossi,333123456,S11';
+    const r = parseContactsCsv(csv);
+    if (!r.ok) throw new Error('parse fallito');
+    expect(r.rows[0]!.status).toBe('S0');
+  });
+});
+
 describe('parseCsvLine', () => {
   it('gestisce virgole interne alle virgolette', () => {
     expect(parseCsvLine('"a, b","c"')).toEqual(['a, b', 'c']);

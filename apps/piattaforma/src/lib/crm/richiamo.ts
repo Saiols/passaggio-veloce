@@ -1,15 +1,24 @@
 /**
  * Richiamo programmato di un contatto CRM (stato S11). Modulo PURO.
  *
- * È la sola definizione di tre cose, e sta in un modulo proprio perché i write
- * path che possono chiudere un richiamo sono QUATTRO, non due: le due server
- * action della vista contatti, l'aggancio del motore di match
- * (`match/apply.ts`) e la firma di una pratica (`sync.ts`). Gli ultimi due
- * passano da `datiFunnel()`, che per uno stato fuori da `ORDINE` — e S11 lo è,
- * come S10 — restituisce direttamente S7/S8/S9: un contatto da richiamare che
- * si registra davvero esce da S11 senza che nessuna action se ne accorga. Se
- * la regola vivesse dentro le action, resterebbe un richiamo fantasma su un
- * cliente già a bordo, e continuerebbe a comparire nel chip "Da richiamare".
+ * I write path che scrivono `status` su un CrmContact sono SEI, non quattro.
+ * Passano da questo helper (`campiRichiamoDopoCambioStato`) i quattro che
+ * possono chiudere un richiamo: le due server action della vista contatti,
+ * l'aggancio del motore di match (`match/apply.ts`) e la firma di una pratica
+ * (`sync.ts`). Questi ultimi due passano da `datiFunnel()`, che per uno stato
+ * fuori da `ORDINE` — e S11 lo è, come S10 — restituisce direttamente
+ * S7/S8/S9: un contatto da richiamare che si registra davvero esce da S11
+ * senza che nessuna action se ne accorga. Se la regola vivesse dentro le
+ * action, resterebbe un richiamo fantasma su un cliente già a bordo, e
+ * continuerebbe a comparire nel chip "Da richiamare".
+ *
+ * Gli altri due — `sendEmailPartenzaAction` (in
+ * `app/admin/crm/contatti/actions.ts`) e `app/i/[token]/route.ts` — NON
+ * passano da questo helper e non possono far uscire un contatto da S11 solo
+ * perché `STATI_PRE_INVIO`/`STATI_PRE_APERTURA` in `lib/crm/email-partenza.ts`
+ * non contengono S11 (comportamento voluto, coperto da test). Se un domani
+ * S11 entrasse in uno di quei due set, quei due write path andrebbero fatti
+ * passare da qui.
  */
 import { romeYmd, romeEndOfDay } from '@/lib/date/rome-day';
 

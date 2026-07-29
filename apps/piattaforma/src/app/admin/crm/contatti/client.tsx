@@ -183,6 +183,7 @@ export function CrmContactsClient({
   salesUsers,
   promoCodes,
   promoCodesScartati,
+  richiamiDovuti,
   currentUserRole,
   currentUserId,
   page,
@@ -196,6 +197,8 @@ export function CrmContactsClient({
   promoCodes: Array<{ id: string; code: string; importoEuro: number }>;
   /** Codici esistenti ma non utilizzabili: serve a spiegare la tendina vuota. */
   promoCodesScartati: number;
+  /** Richiami dovuti oggi o già scaduti, nello scope dell'utente. */
+  richiamiDovuti: number;
   currentUserRole: string;
   currentUserId: string;
   page: number;
@@ -223,6 +226,10 @@ export function CrmContactsClient({
 
   const toggleUrgenti = (): void => {
     updateFilter('preset', filters.preset === 'urgenti' ? '' : 'urgenti');
+  };
+
+  const toggleRichiami = (): void => {
+    updateFilter('preset', filters.preset === 'richiamo' ? '' : 'richiamo');
   };
 
   const pageHref = (n: number): string => {
@@ -312,6 +319,21 @@ export function CrmContactsClient({
           }
         >
           🔴 Urgenti
+        </button>
+        <button
+          type="button"
+          onClick={toggleRichiami}
+          className={
+            'rounded-[10px] border-[1.5px] px-3 py-2 text-[13px] font-semibold transition ' +
+            (filters.preset === 'richiamo'
+              ? 'border-pv-navy-700 bg-pv-navy-100 text-pv-navy-800'
+              : 'border-pv-slate-300 bg-white text-pv-slate-700 hover:bg-pv-slate-50')
+          }
+        >
+          📞 Da richiamare
+          {richiamiDovuti > 0 && (
+            <span className="ml-1.5 text-pv-navy-700">· {richiamiDovuti}</span>
+          )}
         </button>
         <button
           type="button"

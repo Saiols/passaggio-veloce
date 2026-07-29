@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { canViewCrm } from '@/lib/auth/permissions';
 import { regioneVarianti } from '@/lib/crm/regione';
+import { sogliaRichiamoDovuto, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
 import { listPromoCodesEmailPartenzaAction } from './actions';
 import { CrmContactsClient } from './client';
 
@@ -20,6 +21,7 @@ const STATI = [
   'S8',
   'S9',
   'S10',
+  'S11',
 ] as const;
 
 type SearchParams = {
@@ -29,7 +31,7 @@ type SearchParams = {
   regione?: string;
   assigned?: string;
   sort?: 'recente' | 'nome';
-  preset?: 'urgenti' | '';
+  preset?: 'urgenti' | 'richiamo' | '';
   page?: string;
 };
 
@@ -66,8 +68,15 @@ export default async function AdminCrmPipelinePage({
     ];
   }
   if (sp.cat) where.cat = sp.cat;
+  const adesso = new Date();
   if (sp.preset === 'urgenti') {
     where.status = { in: ['S6', 'S5', 'S4', 'S3'] };
+  } else if (sp.preset === 'richiamo') {
+    // Dovuti = oggi o già passati. La soglia è la fine della giornata ROMANA:
+    // con l'ora UTC, dalle 22:00 in poi i richiami di oggi sparirebbero dal
+    // chip pur essendo ancora di oggi.
+    where.status = STATO_RICHIAMARE as (typeof STATI)[number];
+    where.nextContactAt = { lte: sogliaRichiamoDovuto(adesso) };
   } else if (sp.status && STATI.includes(sp.status as (typeof STATI)[number])) {
     where.status = sp.status as (typeof STATI)[number];
   }
@@ -84,14 +93,29 @@ export default async function AdminCrmPipelinePage({
   // Sort
   const sort = sp.sort ?? 'recente';
   const orderBy: Prisma.CrmContactOrderByWithRelationInput[] =
-    sort === 'nome'
-      ? [{ nome: 'asc' }]
-      : [{ lastContactAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }];
+    sp.preset === 'richiamo'
+      ? // Il più arretrato in cima, e a parità di giorno prima la mattina.
+        // L'enum ordina per posizione di dichiarazione (MATTINA, POMERIGGIO) e
+        // i null ("indifferente") finiscono in coda.
+        [{ nextContactAt: 'asc' }, { nextContactFascia: 'asc' }]
+      : sort === 'nome'
+        ? [{ nome: 'asc' }]
+        : [{ lastContactAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }];
 
   const PAGE_SIZE = 25;
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const [pageContacts, total, salesUsers, statsCounts, promoCodes] = await Promise.all([
+  // Lo scoping SALES vale anche per il badge: un venditore deve vedere il
+  // numero dei SUOI richiami, non di tutti. Non si riusa `where` perché il
+  // conteggio non deve dipendere dagli altri filtri attivi.
+  const whereRichiamiDovuti: Prisma.CrmContactWhereInput = {
+    deletedAt: null,
+    status: STATO_RICHIAMARE as (typeof STATI)[number],
+    nextContactAt: { lte: sogliaRichiamoDovuto(adesso) },
+    ...(session.user.role === 'SALES' ? { assignedToId: session.user.id } : {}),
+  };
+
+  const [pageContacts, total, salesUsers, statsCounts, promoCodes, richiamiDovuti] = await Promise.all([
     prisma.crmContact.findMany({
       where,
       orderBy,
@@ -118,6 +142,7 @@ export default async function AdminCrmPipelinePage({
       _count: { _all: true },
     }),
     listPromoCodesEmailPartenzaAction(),
+    prisma.crmContact.count({ where: whereRichiamiDovuti }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -201,6 +226,7 @@ export default async function AdminCrmPipelinePage({
           }))}
           promoCodes={promoCodes.validi}
           promoCodesScartati={promoCodes.scartati}
+          richiamiDovuti={richiamiDovuti}
           currentUserRole={session.user.role ?? ''}
           currentUserId={session.user.id ?? ''}
           page={page}

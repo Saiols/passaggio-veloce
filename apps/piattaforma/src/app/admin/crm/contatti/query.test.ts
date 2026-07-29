@@ -32,4 +32,8 @@ describe('buildContactsQuery', () => {
   it('omette valori vuoti', () => {
     expect(buildContactsQuery({ q: '', cat: '', status: '' })).toBe('');
   });
+
+  it('il preset dei richiami finisce in querystring come gli altri', () => {
+    expect(buildContactsQuery({ preset: 'richiamo' })).toBe('preset=richiamo');
+  });
 });

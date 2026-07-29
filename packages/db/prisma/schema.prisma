@@ -2114,6 +2114,15 @@ enum CrmStatoContatto {
   S8 // Prima pratica
   S9 // Attivo ricorrente
   S10 // Churned
+  S11 // Richiamare — giorno in nextContactAt, fascia in nextContactFascia
+}
+
+/// Fascia di un richiamo programmato. L'assenza di valore (null) significa
+/// "indifferente": non è un terzo membro dell'enum, perché "indifferente" non
+/// è una fascia della giornata ma il fatto che non ne sia stata chiesta una.
+enum CrmFasciaContatto {
+  MATTINA
+  POMERIGGIO
 }
 
 enum CrmFonteAcquisizione {
@@ -2208,6 +2217,10 @@ model CrmContact {
   assignedTo    User?                @relation("CrmContactAssigned", fields: [assignedToId], references: [id])
   lastContactAt DateTime?
   nextContactAt DateTime?
+  /// Fascia del richiamo programmato; null = indifferente. Ha senso solo con
+  /// status = S11, e `lib/crm/richiamo.ts` la azzera quando il contatto esce
+  /// da quello stato.
+  nextContactFascia CrmFasciaContatto?
 
   // Aggregati chiamate (denormalizzati da CrmCall via trigger applicativo)
   callCount    Int           @default(0)
@@ -2287,6 +2300,7 @@ model CrmContact {
   // né "correggere" questo drift, è intenzionale.
   @@index([cat])
   @@index([status])
+  @@index([status, nextContactAt])
   @@index([regione])
   @@index([assignedToId])
   @@index([companyId])

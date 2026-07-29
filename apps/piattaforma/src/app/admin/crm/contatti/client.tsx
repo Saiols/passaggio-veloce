@@ -157,7 +157,7 @@ const contactSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['nextContactAt'],
-        message: 'Con lo stato Richiamare serve il giorno',
+        message: 'Con lo stato Richiamare serve il giorno del richiamo',
       });
     }
   });
@@ -940,7 +940,7 @@ function EmailPartenzaModal({
 // ════════════════════════════════════════════════════════
 type Tab = 'anagrafica' | 'stato' | 'tracking' | 'piattaforma';
 
-function ContactModal({
+export function ContactModal({
   contact,
   salesUsers,
   canDelete,
@@ -994,7 +994,12 @@ function ContactModal({
     if (hasBlockingErrors(errors)) {
       // Il giorno del richiamo vive nel tab "Stato & Chiamate", gli altri
       // obbligatori in "Anagrafica": portare l'utente dove sta l'errore.
-      setTab(field('nextContactAt').invalid ? 'stato' : 'anagrafica');
+      // NB: leggere `errors` (ricalcolato ad ogni render da zodFieldErrors),
+      // non `field(...).invalid` — quest'ultimo dipende da `touched`/`revealed`,
+      // stato React aggiornato da `reveal()` in modo asincrono: al primo clic
+      // su Salva la closure di `field` qui sopra vedrebbe ancora `revealed`
+      // vecchio e manderebbe sul tab sbagliato proprio nel caso S11-senza-giorno.
+      setTab(errors.nextContactAt ? 'stato' : 'anagrafica');
       return;
     }
     setError(null);
@@ -1555,7 +1560,7 @@ function TabStato({
         label="Fascia del richiamo"
         value={(data.nextContactFascia as string) ?? ''}
         readOnly={readOnly}
-        onChange={(v) => set('nextContactFascia', v as never)}
+        onChange={(v) => set('nextContactFascia', v as CrmContactInput['nextContactFascia'])}
         options={OPZIONI_FASCIA}
       />
       <FieldText

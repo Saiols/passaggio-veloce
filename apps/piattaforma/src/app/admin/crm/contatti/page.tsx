@@ -202,7 +202,7 @@ export default async function AdminCrmPipelinePage({
             Contatti
           </h1>
           <p className="mt-1 text-[13px] text-pv-slate-500">
-            Lead pre-iscrizione lavorati dal team commerciale. Funnel S0 → S10.
+            Lead pre-iscrizione lavorati dal team commerciale. Funnel S0 → S11.
           </p>
         </header>
 

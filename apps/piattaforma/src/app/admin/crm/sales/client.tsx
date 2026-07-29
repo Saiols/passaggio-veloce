@@ -85,6 +85,7 @@ const STATI_TARGET: { v: string; l: string }[] = [
   { v: 'S3', l: 'S3 — Interessato' },
   { v: 'S4', l: 'S4 — Link non aperto' },
   { v: 'S5', l: 'S5 — Link aperto' },
+  { v: 'S11', l: 'S11 — Richiamare' },
 ];
 
 export function CrmSalesClient({

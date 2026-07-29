@@ -32,6 +32,13 @@ describe('nextStatoApertura — avanza-non-declassa', () => {
       expect(nextStatoApertura(s)).toBe(s);
     }
   });
+
+  it('mandare il link a un contatto da richiamare non chiude il richiamo', () => {
+    // Il cliente ha chiesto di essere risentito: ricevere il link non toglie
+    // quella promessa, quindi lo stato (e con lui il promemoria) resta.
+    expect(nextStatoInvio('S11')).toBe('S11');
+    expect(nextStatoApertura('S11')).toBe('S11');
+  });
 });
 
 describe('defaultMessaggioPartenza — testo predefinito editabile', () => {

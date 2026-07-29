@@ -13,7 +13,7 @@
 
 export type CrmCat = 'BROKER' | 'AGENZIA';
 export type CrmStatus =
-  | 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9' | 'S10';
+  | 'S0' | 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'S9' | 'S10' | 'S11';
 export type CrmFonte = 'CSV_INIZIALE' | 'ISCRIZIONE_DIRETTA' | 'REFERRAL' | 'ALTRO';
 
 export type ParsedContactRow = {
@@ -129,7 +129,7 @@ const CAT_VALUES: Record<string, CrmCat> = {
 };
 
 const STATUS_SET = new Set<string>([
-  'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10',
+  'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11',
 ]);
 const FONTE_SET = new Set<string>([
   'CSV_INIZIALE', 'ISCRIZIONE_DIRETTA', 'REFERRAL', 'ALTRO',

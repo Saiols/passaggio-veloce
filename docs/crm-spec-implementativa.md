@@ -15,7 +15,7 @@ Questo documento traduce il prototipo in **bundle implementativi** sequenziali p
 Strumento **interno platform** usato dal team Passaggio Veloce (Alberto + Andrea + sales) per:
 - Acquisire lead pre-iscrizione (broker e agenzie target)
 - Pianificare campagne di chiamate AI outbound
-- Tracciare il funnel S0→S10 di ogni contatto
+- Tracciare il funnel S0→S11 di ogni contatto
 - Gestire i bot vocali (Vapi) e testuali (sito/WhatsApp/mail)
 - Misurare conversione e revenue
 
@@ -66,6 +66,7 @@ model CrmContact {
   assignedTo       User?                   @relation(fields: [assignedToId], references: [id])
   lastContactAt    DateTime?
   nextContactAt    DateTime?
+  nextContactFascia  CrmFasciaContatto?  // null = indifferente
 
   // Chiamate
   callCount        Int                     @default(0)
@@ -152,6 +153,7 @@ enum CrmStatoContatto {
   S8  // Prima pratica
   S9  // Attivo ricorrente
   S10 // Churned
+  S11 // Richiamare — richiamo programmato (giorno + fascia)
 }
 
 enum CrmFonteAcquisizione {
@@ -380,10 +382,11 @@ L'esistente `/admin/utenti` (gestione utenti delle aziende dealer/agenzie) resta
 **Filtri:**
 - Search (nome, email, città)
 - Categoria: tutti | BROKER | AGENZIA
-- Stato: tutti | S0..S10
+- Stato: tutti | S0..S11
 - Regione: tutte | 20 regioni IT
 - Assegnato a: tutti | lista user con ruolo `SALES_MANAGER` o `SALES`
 - Sort: 🔴 Più urgenti (default) | Più recenti | Nome A→Z
+- Chip "📞 Da richiamare": status S11 con giorno ≤ oggi (fuso di Roma), ordinati dal più arretrato
 
 **Ordinamento "urgenti"** (priorità decrescente):
 ```
@@ -399,7 +402,7 @@ S6 → S5 → S4 → S3 → S1 → S0 → S7 → S2 → S8 → S9 → S10
   - ▶ {n}' video
   - ✅ iscritto / ⚡ iscrizione avviata
 - Tag obiezioni (chip)
-- Badge stato S0..S10 con colore
+- Badge stato S0..S11 con colore
 - Nome assegnatario
 - Data ultimo contatto
 - Azioni: Modifica, Elimina (se permesso)
@@ -422,7 +425,7 @@ S6 → S5 → S4 → S3 → S1 → S0 → S7 → S2 → S8 → S9 → S10
 - Fonte acquisizione (CSV_INIZIALE/ISCRIZIONE_DIRETTA/REFERRAL/ALTRO)
 
 **Tab 2 — Stato & Chiamate:**
-- Stato CRM * (S0..S10)
+- Stato CRM * (S0..S11)
 - Ultimo contatto (date)
 - Prossimo contatto pianificato (date)
 - N. chiamate totali
@@ -522,7 +525,7 @@ Lista bot configurati, ognuno con:
 
 **2 grafici affiancati:**
 - **Contatti per mese** — bar chart degli ultimi 6 mesi (riusa `RendimentoChart`)
-- **Distribuzione per stato** — progress bars S0..S10 con percentuale
+- **Distribuzione per stato** — progress bars S0..S11 con percentuale
 
 **Sezione Dati Economici** (visibile solo a `view_financials`):
 - Revenue mese (€)

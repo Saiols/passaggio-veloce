@@ -26,6 +26,7 @@ const STATI_ORDER = [
   'S8',
   'S9',
   'S10',
+  'S11',
 ] as const;
 
 const STATI_LABEL: Record<string, string> = {
@@ -40,6 +41,7 @@ const STATI_LABEL: Record<string, string> = {
   S8: 'Prima pratica',
   S9: 'Ricorrente',
   S10: 'Churned',
+  S11: 'Richiamare',
 };
 
 const MONTH_LABELS = [
@@ -133,7 +135,7 @@ export default async function AdminCrmDashboardPage() {
     cursor.setMonth(cursor.getMonth() + 1);
   }
 
-  // ─── Distribuzione per stato (ordinata S0..S10) ────────────────────
+  // ─── Distribuzione per stato (ordinata S0..S11) ────────────────────
   const distribuzione = STATI_ORDER.map((s) => {
     const item = contactsByStato.find((c) => c.status === s);
     const count = item?._count._all ?? 0;
@@ -342,7 +344,7 @@ export default async function AdminCrmDashboardPage() {
               Distribuzione per stato
             </h2>
             <p className="text-[11.5px] text-pv-slate-500">
-              Funnel S0 → S10 con percentuale sul totale
+              Funnel S0 → S11 con percentuale sul totale
             </p>
             <div className="mt-4 space-y-2">
               {distribuzione.map((d) => (

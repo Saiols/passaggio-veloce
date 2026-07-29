@@ -233,4 +233,21 @@ describe('onPraticaFirmata', () => {
     praticaFindUnique.mockRejectedValue(new Error('db giù'));
     await expect(onPraticaFirmata('p1')).resolves.toBeUndefined();
   });
+
+  it('la firma di una pratica chiude un richiamo ancora aperto', async () => {
+    soloAgenziaHaContatti([{ id: 'k1', status: 'S11' }]);
+    companyFindUnique.mockResolvedValue(COMPANY_AGENZIA);
+    praticaCount.mockResolvedValue(1);
+    praticaFindFirst.mockResolvedValue({ createdAt: new Date('2026-03-15T00:00:00Z') });
+    contactUpdateMany.mockResolvedValue({ count: 1 });
+
+    await onPraticaFirmata('p1');
+
+    const chiamata = contactUpdateMany.mock.calls.find(
+      (c) => c[0].where.id === 'k1',
+    );
+    expect(chiamata).toBeDefined();
+    expect(chiamata![0].data.nextContactAt).toBeNull();
+    expect(chiamata![0].data.nextContactFascia).toBeNull();
+  });
 });

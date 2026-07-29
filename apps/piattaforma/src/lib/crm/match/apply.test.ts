@@ -357,6 +357,24 @@ describe('applicaProposte', () => {
     );
     consoleError.mockRestore();
   });
+
+  it('agganciare un contatto da richiamare chiude il richiamo', async () => {
+    // Un contatto in S11 che si registra davvero esce da S11 senza passare
+    // dalle action: se il richiamo non venisse azzerato qui, resterebbe
+    // appeso a un cliente già a bordo e continuerebbe a comparire nel chip.
+    contactFindUnique.mockResolvedValue({
+      status: 'S11',
+      email: 'a@b.it', wa: '3331234567', piva: '01234567890',
+      indirizzo: 'Via Fiume 6', citta: 'Corsico', cap: '20094',
+      regione: 'Lombardia', arricchitoDa: null,
+    });
+
+    await applicaProposte([PROPOSTA]);
+
+    const data = contactUpdateMany.mock.calls[0]![0].data;
+    expect(data.nextContactAt).toBeNull();
+    expect(data.nextContactFascia).toBeNull();
+  });
 });
 
 // I-3 (review giro 1/5): `riconciliaTutto` è la funzione che i Task 10 (cron)

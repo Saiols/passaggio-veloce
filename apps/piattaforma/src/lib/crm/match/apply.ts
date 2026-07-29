@@ -5,6 +5,7 @@ import { datiFunnel } from './stato';
 import { storicoAzienda } from './storico';
 import { calcolaArricchimento, SELECT_ARRICCHIMENTO } from './arricchimento';
 import { applicaArricchimento } from './arricchimento-scrittura';
+import { campiRichiamoDopoCambioStato } from '@/lib/crm/richiamo';
 
 /**
  * Scrittura degli agganci proposti dal motore.
@@ -74,6 +75,9 @@ export async function applicaProposte(
         platStatus: funnel.platStatus,
         primaPratica: funnel.primaPratica,
         primaPraticaAt: funnel.primaPraticaAt,
+        // Il contatto era da richiamare e adesso è un cliente: il promemoria
+        // commerciale non ha più oggetto.
+        ...campiRichiamoDopoCambioStato(attuale.status, funnel.status),
       };
       // Arricchimento già vivo prima di questo lavoro: se la Company è arrivata
       // da un referral la fonte diventa REFERRAL. Altrimenti `fonte` non si

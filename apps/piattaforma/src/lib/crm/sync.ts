@@ -7,6 +7,7 @@ import { datiFunnel } from './match/stato';
 import { storicoAzienda } from './match/storico';
 import { campiVuoti, calcolaArricchimento, SELECT_ARRICCHIMENTO } from './match/arricchimento';
 import { applicaArricchimento } from './match/arricchimento-scrittura';
+import { campiRichiamoDopoCambioStato } from '@/lib/crm/richiamo';
 
 /**
  * Sync engine CRM ↔ piattaforma. Tre punti d'aggancio:
@@ -111,6 +112,7 @@ async function allineaContattiAgganciati(companyId: string): Promise<void> {
         platStatus: funnel.platStatus,
         primaPratica: funnel.primaPratica,
         primaPraticaAt: funnel.primaPraticaAt,
+        ...campiRichiamoDopoCambioStato(c.status, funnel.status),
       },
     });
   }

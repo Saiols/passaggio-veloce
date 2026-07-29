@@ -21,6 +21,7 @@ import {
 } from '@/lib/crm/match/arricchimento';
 import { sendNotification } from '@/lib/notifiche';
 import { nextStatoInvio } from '@/lib/crm/email-partenza';
+import { campiRichiamoDopoCambioStato, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
 import { evaluatePromoCode } from '@/lib/promo/evaluate';
 
 export type CrmContactResult =
@@ -65,22 +66,14 @@ const CRM_CONTACT_INPUT = z.object({
 
   // Stato
   status: z.enum([
-    'S0',
-    'S1',
-    'S2',
-    'S3',
-    'S4',
-    'S5',
-    'S6',
-    'S7',
-    'S8',
-    'S9',
-    'S10',
+    'S0', 'S1', 'S2', 'S3', 'S4', 'S5',
+    'S6', 'S7', 'S8', 'S9', 'S10', 'S11',
   ]),
   fonte: z.enum(['CSV_INIZIALE', 'ISCRIZIONE_DIRETTA', 'REFERRAL', 'ALTRO']),
   assignedToId: z.string().uuid().optional().or(z.literal('')),
   lastContactAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
   nextContactAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+  nextContactFascia: z.enum(['MATTINA', 'POMERIGGIO']).optional().or(z.literal('')),
 
   // Chiamate (aggregati editabili manualmente)
   callCount: z.coerce.number().int().min(0).default(0),
@@ -116,6 +109,16 @@ const CRM_CONTACT_INPUT = z.object({
   praticheMonth: z.coerce.number().int().min(0).default(0),
   lastAccessAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
   tassoComp: z.coerce.number().int().min(0).max(100).default(0),
+}).superRefine((d, ctx) => {
+  // Un richiamo senza giorno non è un promemoria: è una riga che nessun
+  // filtro può far riemergere.
+  if (d.status === 'S11' && !d.nextContactAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['nextContactAt'],
+      message: 'Con lo stato Richiamare serve il giorno del richiamo',
+    });
+  }
 });
 
 export type CrmContactInput = z.infer<typeof CRM_CONTACT_INPUT>;
@@ -152,6 +155,9 @@ function dataFromInput(d: CrmContactInput): Prisma.CrmContactCreateInput {
       : undefined,
     lastContactAt: parseDate(d.lastContactAt),
     nextContactAt: parseDate(d.nextContactAt),
+    nextContactFascia: emptyToNull(
+      d.nextContactFascia,
+    ) as Prisma.CrmContactCreateInput['nextContactFascia'],
     callCount: d.callCount,
     callEsito: emptyToNull(d.callEsito) as Prisma.CrmContactCreateInput['callEsito'],
     sentiment: emptyToNull(d.sentiment) as Prisma.CrmContactCreateInput['sentiment'],
@@ -256,7 +262,7 @@ export async function updateCrmContactAction(
   // campi che l'iscrizione può aver riempito (servono sotto, per l'audit).
   const attuale = await prisma.crmContact.findUnique({
     where: { id },
-    select: { assignedToId: true, ...SELECT_ARRICCHIMENTO },
+    select: { assignedToId: true, status: true, ...SELECT_ARRICCHIMENTO },
   });
 
   // SALES può modificare solo i propri assegnati (decisione 7)
@@ -276,6 +282,14 @@ export async function updateCrmContactAction(
   }
 
   const data = dataFromInputForUpdate(parsed.data);
+
+  // Va DOPO la costruzione di `data`: se il contatto esce da S11, il richiamo
+  // è chiuso e vince sui valori che il form ha comunque mandato (il campo data
+  // resta compilato nella scheda finché non si ricarica).
+  Object.assign(
+    data,
+    campiRichiamoDopoCambioStato(attuale?.status ?? '', parsed.data.status),
+  );
 
   // Un campo ereditato dall'iscrizione e poi riscritto a mano non viene più
   // dall'iscrizione: esce dall'audit, altrimenti il pannello continuerebbe a
@@ -329,6 +343,8 @@ export async function deleteCrmContactAction(
 export async function updateCrmContactStatusAction(
   id: string,
   status: string,
+  /** Presente solo quando `status` è S11: lo raccoglie il modale di riga. */
+  richiamo?: { giorno: string; fascia: string },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -337,27 +353,44 @@ export async function updateCrmContactStatusAction(
   }
 
   const STATI = [
-    'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10',
+    'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11',
   ] as const;
   if (!STATI.includes(status as (typeof STATI)[number])) {
     return { ok: false, error: 'Stato non valido' };
   }
 
+  // Lo stato attuale serve SEMPRE, non solo ai SALES: è quello che dice se
+  // questo cambio sta chiudendo un richiamo.
+  const target = await prisma.crmContact.findUnique({
+    where: { id },
+    select: { assignedToId: true, status: true },
+  });
+  if (!target) return { ok: false, error: 'Contatto non trovato' };
+
   // SALES può modificare solo i propri assegnati (decisione 7)
-  if (session.user.role === 'SALES') {
-    const target = await prisma.crmContact.findUnique({
-      where: { id },
-      select: { assignedToId: true },
-    });
-    if (!target || target.assignedToId !== session.user.id) {
-      return { ok: false, error: 'Puoi modificare solo i contatti a te assegnati' };
-    }
+  if (session.user.role === 'SALES' && target.assignedToId !== session.user.id) {
+    return { ok: false, error: 'Puoi modificare solo i contatti a te assegnati' };
   }
 
-  await prisma.crmContact.update({
-    where: { id },
-    data: { status: status as (typeof STATI)[number] },
-  });
+  const data: Prisma.CrmContactUpdateInput = {
+    status: status as (typeof STATI)[number],
+    ...campiRichiamoDopoCambioStato(target.status, status),
+  };
+
+  if (status === STATO_RICHIAMARE) {
+    const giorno = parseDate(richiamo?.giorno);
+    if (!giorno) {
+      return { ok: false, error: 'Serve il giorno del richiamo.' };
+    }
+    const fascia = richiamo?.fascia ?? '';
+    if (fascia !== '' && fascia !== 'MATTINA' && fascia !== 'POMERIGGIO') {
+      return { ok: false, error: 'Fascia non valida.' };
+    }
+    data.nextContactAt = giorno;
+    data.nextContactFascia = fascia === '' ? null : fascia;
+  }
+
+  await prisma.crmContact.update({ where: { id }, data });
 
   revalidatePath('/admin/crm/contatti');
   return { ok: true };

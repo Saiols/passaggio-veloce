@@ -33,7 +33,7 @@ describe('campiRichiamoDopoCambioStato', () => {
     expect(campiRichiamoDopoCambioStato('S0', 'S4')).toEqual({});
   });
 
-  it('anche l aggancio automatico a un azienda registrata azzera', () => {
+  it("anche l'aggancio automatico a un'azienda registrata azzera", () => {
     // È il caso di match/apply.ts e sync.ts: un contatto da richiamare che si
     // iscrive davvero passa a S7/S8/S9 senza toccare le action.
     expect(campiRichiamoDopoCambioStato('S11', 'S8')).toEqual({
@@ -118,5 +118,23 @@ describe('sogliaRichiamoDovuto', () => {
     const soglia = sogliaRichiamoDovuto(new Date('2026-08-04T21:30:00Z'));
     expect(new Date('2026-08-04T00:00:00Z').getTime()).toBeLessThanOrEqual(soglia.getTime());
     expect(new Date('2026-08-05T00:00:00Z').getTime()).toBeGreaterThan(soglia.getTime());
+  });
+
+  it('ora legale: a mezzanotte passata a Roma la soglia è già del giorno dopo', () => {
+    // 22:30Z del 4 agosto = 00:30 a Roma del 5: un'implementazione UTC-naive
+    // (che leggesse il giorno da adesso.getUTCDate() invece che da Roma)
+    // resterebbe ferma al 4 e questo test lo scoprirebbe: un richiamo
+    // memorizzato al 5 agosto risulterebbe escluso invece che incluso.
+    const soglia = sogliaRichiamoDovuto(new Date('2026-08-04T22:30:00Z'));
+    expect(new Date('2026-08-05T00:00:00Z').getTime()).toBeLessThanOrEqual(soglia.getTime());
+    expect(new Date('2026-08-06T00:00:00Z').getTime()).toBeGreaterThan(soglia.getTime());
+  });
+
+  it('ora solare: a mezzanotte passata a Roma la soglia è già del giorno dopo', () => {
+    // 23:30Z del 14 gennaio = 00:30 a Roma del 15 (UTC+1): stesso discriminante
+    // dell'ora legale, ma con l'offset invernale.
+    const soglia = sogliaRichiamoDovuto(new Date('2026-01-14T23:30:00Z'));
+    expect(new Date('2026-01-15T00:00:00Z').getTime()).toBeLessThanOrEqual(soglia.getTime());
+    expect(new Date('2026-01-16T00:00:00Z').getTime()).toBeGreaterThan(soglia.getTime());
   });
 });

@@ -122,6 +122,35 @@ describe('updateCrmContactStatusAction — tendina di riga', () => {
     expect(res.ok).toBe(false);
     expect(crmContactMock.update).not.toHaveBeenCalled();
   });
+
+  it('un SALES riceve lo stesso errore su un id inesistente e su un id di un altro (niente oracolo di enumerazione)', async () => {
+    authMock.mockResolvedValue({ user: { id: 'sales-1', role: 'SALES' } } as never);
+
+    crmContactMock.findUnique.mockResolvedValueOnce(null);
+    const resInesistente = await updateCrmContactStatusAction('non-esiste', 'S3');
+
+    crmContactMock.findUnique.mockResolvedValueOnce({ assignedToId: 'altro', status: 'S3' });
+    const resAltrui = await updateCrmContactStatusAction('x1', 'S3');
+
+    expect(resInesistente.ok).toBe(false);
+    expect(resAltrui.ok).toBe(false);
+    // Stesso oggetto, non solo stesso `ok`: se i due messaggi differissero un
+    // SALES potrebbe distinguere "non esiste" da "è di un altro" a colpi di id.
+    expect(resInesistente).toEqual(resAltrui);
+    expect(crmContactMock.update).not.toHaveBeenCalled();
+  });
+
+  it('un giorno in formato diverso da YYYY-MM-DD viene rifiutato come mancante', async () => {
+    crmContactMock.findUnique.mockResolvedValue({ assignedToId: null, status: 'S3' });
+
+    const res = await updateCrmContactStatusAction('x1', 'S11', {
+      giorno: '04/08/2026',
+      fascia: '',
+    });
+
+    expect(res.ok).toBe(false);
+    expect(crmContactMock.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('updateCrmContactAction — scheda contatto', () => {

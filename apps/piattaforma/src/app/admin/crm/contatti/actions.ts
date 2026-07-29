@@ -360,17 +360,25 @@ export async function updateCrmContactStatusAction(
   }
 
   // Lo stato attuale serve SEMPRE, non solo ai SALES: è quello che dice se
-  // questo cambio sta chiudendo un richiamo.
+  // questo cambio sta chiudendo un richiamo. La lettura resta incondizionata
+  // per tutti i ruoli — è la RISPOSTA sotto che deve restare indistinguibile.
   const target = await prisma.crmContact.findUnique({
     where: { id },
     select: { assignedToId: true, status: true },
   });
-  if (!target) return { ok: false, error: 'Contatto non trovato' };
 
-  // SALES può modificare solo i propri assegnati (decisione 7)
-  if (session.user.role === 'SALES' && target.assignedToId !== session.user.id) {
+  // SALES può modificare solo i propri assegnati (decisione 7). Id inesistente
+  // e id di un contatto altrui devono tornare lo STESSO messaggio: un SALES in
+  // lista vede solo i propri contatti, quindi non conosce gli id degli altri —
+  // se le due risposte differissero, la action diventerebbe un oracolo per
+  // scoprire quali id esistono (provando id a caso e leggendo l'errore).
+  const salesBloccato =
+    session.user.role === 'SALES' &&
+    (!target || target.assignedToId !== session.user.id);
+  if (salesBloccato) {
     return { ok: false, error: 'Puoi modificare solo i contatti a te assegnati' };
   }
+  if (!target) return { ok: false, error: 'Contatto non trovato' };
 
   const data: Prisma.CrmContactUpdateInput = {
     status: status as (typeof STATI)[number],
@@ -378,7 +386,15 @@ export async function updateCrmContactStatusAction(
   };
 
   if (status === STATO_RICHIAMARE) {
-    const giorno = parseDate(richiamo?.giorno);
+    // Stesso formato YYYY-MM-DD imposto dal regex di `CRM_CONTACT_INPUT`: la
+    // action è un endpoint pubblico, non può contare sul fatto che il modale
+    // (task successivo) manderà sempre un `<input type="date">`. Senza questo
+    // controllo `new Date('08/04/2026')` verrebbe letta come MM/DD/YYYY.
+    const giornoRaw = richiamo?.giorno ?? '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(giornoRaw)) {
+      return { ok: false, error: 'Serve il giorno del richiamo.' };
+    }
+    const giorno = parseDate(giornoRaw);
     if (!giorno) {
       return { ok: false, error: 'Serve il giorno del richiamo.' };
     }

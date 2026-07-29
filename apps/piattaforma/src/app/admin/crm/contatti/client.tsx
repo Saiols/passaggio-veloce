@@ -19,7 +19,7 @@ import {
 import { buildContactsQuery } from './query';
 import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
 import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
-import { etichettaRichiamo, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
+import { etichettaRichiamo, OPZIONI_FASCIA, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
 import { RichiamoDialog } from './richiamo-dialog';
 
 type ContactRow = {
@@ -145,10 +145,22 @@ const ROLE_CAN_BULK = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
 
 // Obbligatori compilabili a mano nel modale contatto (cat/status hanno sempre un
 // valore di default). Stesse regole del server (createCrmContactAction).
-const contactSchema = z.object({
-  nome: z.string().trim().min(1, 'Nome obbligatorio'),
-  tel: z.string().trim().min(1, 'Telefono obbligatorio'),
-});
+const contactSchema = z
+  .object({
+    nome: z.string().trim().min(1, 'Nome obbligatorio'),
+    tel: z.string().trim().min(1, 'Telefono obbligatorio'),
+    status: z.string(),
+    nextContactAt: z.string(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.status === 'S11' && !d.nextContactAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nextContactAt'],
+        message: 'Con lo stato Richiamare serve il giorno',
+      });
+    }
+  });
 
 /** Chip colorato per distinguere a colpo d'occhio broker e agenzie. */
 function CatBadge({ cat }: { cat: 'BROKER' | 'AGENZIA' }) {
@@ -954,7 +966,12 @@ function ContactModal({
   const [data, setData] = useState<CrmContactInput>(() => initialData(contact));
 
   // Validazione client: gli obbligatori compilabili a mano (nome e telefono).
-  const errors = zodFieldErrors(contactSchema, { nome: data.nome, tel: data.tel });
+  const errors = zodFieldErrors(contactSchema, {
+    nome: data.nome,
+    tel: data.tel,
+    status: data.status,
+    nextContactAt: data.nextContactAt ?? '',
+  });
   const { field, reveal } = useFieldErrorsState(errors);
 
   // Permessi specifici
@@ -975,7 +992,9 @@ function ContactModal({
   const handleSave = (): void => {
     reveal();
     if (hasBlockingErrors(errors)) {
-      setTab('anagrafica'); // gli obbligatori vivono lì: portaci l'utente
+      // Il giorno del richiamo vive nel tab "Stato & Chiamate", gli altri
+      // obbligatori in "Anagrafica": portare l'utente dove sta l'errore.
+      setTab(field('nextContactAt').invalid ? 'stato' : 'anagrafica');
       return;
     }
     setError(null);
@@ -1079,7 +1098,7 @@ function ContactModal({
             />
           )}
           {tab === 'stato' && (
-            <TabStato data={data} set={set} readOnly={isReadOnlyForSales} />
+            <TabStato data={data} set={set} readOnly={isReadOnlyForSales} field={field} />
           )}
           {tab === 'tracking' && (
             <TabTracking data={data} set={set} readOnly={isReadOnlyForSales} />
@@ -1495,7 +1514,12 @@ function TabAnagrafica({
   );
 }
 
-function TabStato({ data, set, readOnly }: TabProps) {
+function TabStato({
+  data,
+  set,
+  readOnly,
+  field,
+}: TabProps & { field: (key: string) => FieldState }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <FieldSelect
@@ -1520,8 +1544,19 @@ function TabStato({ data, set, readOnly }: TabProps) {
         label="Prossimo contatto pianificato"
         type="date"
         value={data.nextContactAt ?? ''}
+        required={data.status === 'S11'}
         readOnly={readOnly}
         onChange={(v) => set('nextContactAt', v)}
+        invalid={field('nextContactAt').invalid}
+        error={field('nextContactAt').error}
+        onBlur={field('nextContactAt').onBlur}
+      />
+      <FieldSelect
+        label="Fascia del richiamo"
+        value={(data.nextContactFascia as string) ?? ''}
+        readOnly={readOnly}
+        onChange={(v) => set('nextContactFascia', v as never)}
+        options={OPZIONI_FASCIA}
       />
       <FieldText
         label="N. chiamate totali"

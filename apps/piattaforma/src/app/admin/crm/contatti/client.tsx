@@ -19,6 +19,8 @@ import {
 import { buildContactsQuery } from './query';
 import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
 import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
+import { etichettaRichiamo, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
+import { RichiamoDialog } from './richiamo-dialog';
 
 type ContactRow = {
   id: string;
@@ -38,6 +40,7 @@ type ContactRow = {
   assignedToName: string | null;
   lastContactAt: string | null;
   nextContactAt: string | null;
+  nextContactFascia: string | null;
   callCount: number;
   callEsito: string | null;
   sentiment: string | null;
@@ -119,6 +122,7 @@ const STATI_LABEL: Record<string, string> = {
   S8: 'Prima pratica',
   S9: 'Attivo',
   S10: 'Churned',
+  S11: 'Richiamare',
 };
 
 const STATI_COLOR: Record<string, string> = {
@@ -133,6 +137,7 @@ const STATI_COLOR: Record<string, string> = {
   S8: 'bg-pv-green-50 text-pv-green-500',
   S9: 'bg-emerald-100 text-emerald-700',
   S10: 'bg-pv-slate-100 text-pv-slate-500',
+  S11: 'bg-pv-navy-100 text-pv-navy-800',
 };
 
 const ROLE_CAN_DELETE = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
@@ -534,24 +539,42 @@ function StatusSelect({
   currentUserId: string;
 }) {
   const [value, setValue] = useState(contact.status);
+  const [chiedeRichiamo, setChiedeRichiamo] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const disabled =
     currentUserRole === 'SALES' && contact.assignedToId !== currentUserId;
 
-  const onChange = (next: string): void => {
+  const salva = (next: string, richiamo?: { giorno: string; fascia: string }): void => {
     const prev = value;
     setValue(next); // ottimistico
     startTransition(async () => {
-      const res = await updateCrmContactStatusAction(contact.id, next);
+      const res = await updateCrmContactStatusAction(contact.id, next, richiamo);
       if (!res.ok) {
         setValue(prev); // revert
         alert(res.error);
         return;
       }
+      setChiedeRichiamo(false);
       router.refresh();
     });
   };
+
+  // Scegliere "Richiamare" NON salva: prima serve sapere quando. Lo stato
+  // ottimistico resta fermo finché il modale non conferma, così l'Annulla
+  // riporta la tendina dov'era senza rimettere le mani sul valore.
+  const onChange = (next: string): void => {
+    if (next === STATO_RICHIAMARE) {
+      setChiedeRichiamo(true);
+      return;
+    }
+    salva(next);
+  };
+
+  const richiamo =
+    value === STATO_RICHIAMARE && contact.nextContactAt
+      ? etichettaRichiamo(contact.nextContactAt, contact.nextContactFascia, new Date())
+      : null;
 
   return (
     <>
@@ -571,6 +594,38 @@ function StatusSelect({
           </option>
         ))}
       </select>
+
+      {richiamo && (
+        <button
+          type="button"
+          disabled={disabled || pending}
+          onClick={() => setChiedeRichiamo(true)}
+          title="Riprogramma il richiamo"
+          className={
+            'mt-1 block text-[11.5px] font-semibold hover:underline disabled:no-underline ' +
+            (richiamo.scaduto
+              ? 'text-pv-red-500'
+              : richiamo.oggi
+                ? 'text-pv-orange-500'
+                : 'text-pv-slate-500')
+          }
+        >
+          📞 {richiamo.testo}
+        </button>
+      )}
+
+      {chiedeRichiamo && (
+        <RichiamoDialog
+          giornoIniziale={contact.nextContactAt?.slice(0, 10) ?? ''}
+          fasciaIniziale={contact.nextContactFascia ?? ''}
+          pending={pending}
+          onConferma={(giorno, fascia) =>
+            salva(STATO_RICHIAMARE, { giorno, fascia })
+          }
+          onAnnulla={() => setChiedeRichiamo(false)}
+        />
+      )}
+
       <LoadingOverlay show={pending} label="Aggiornamento…" />
     </>
   );
@@ -1097,6 +1152,7 @@ function initialData(c: ContactRow | null): CrmContactInput {
     assignedToId: c?.assignedToId ?? '',
     lastContactAt: c?.lastContactAt?.slice(0, 10) ?? '',
     nextContactAt: c?.nextContactAt?.slice(0, 10) ?? '',
+    nextContactFascia: (c?.nextContactFascia ?? '') as CrmContactInput['nextContactFascia'],
     callCount: c?.callCount ?? 0,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     callEsito: (c?.callEsito ?? '') as any,

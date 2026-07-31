@@ -2125,6 +2125,13 @@ enum CrmFasciaContatto {
   POMERIGGIO
 }
 
+/// Giudizio soggettivo dell'operatore su un contatto. Asse ortogonale al funnel
+/// fattuale (`status`) e al richiamo (`nextContactAt`): null = nessun giudizio.
+enum CrmGiudizio {
+  INTERESSATO
+  NON_INTERESSATO
+}
+
 enum CrmFonteAcquisizione {
   CSV_INIZIALE
   ISCRIZIONE_DIRETTA
@@ -2216,11 +2223,15 @@ model CrmContact {
   assignedToId  String?              @db.Uuid
   assignedTo    User?                @relation("CrmContactAssigned", fields: [assignedToId], references: [id])
   lastContactAt DateTime?
+  /// Giorno del richiamo programmato. Asse RICHIAMO, indipendente da `status`:
+  /// un contatto può avere un richiamo e insieme qualunque stato fattuale o
+  /// giudizio. La lista "Da richiamare" filtra su questo campo (non più S11).
   nextContactAt DateTime?
-  /// Fascia del richiamo programmato; null = indifferente. Ha senso solo con
-  /// status = S11, e `lib/crm/richiamo.ts` la azzera quando il contatto esce
-  /// da quello stato.
+  /// Fascia del richiamo programmato; null = indifferente.
   nextContactFascia CrmFasciaContatto?
+  /// Giudizio soggettivo dell'operatore (Interessato/Non interessato); null =
+  /// nessun giudizio. Ortogonale a `status` (fatti) e a `nextContactAt` (richiamo).
+  giudizio CrmGiudizio?
 
   // Aggregati chiamate (denormalizzati da CrmCall via trigger applicativo)
   callCount    Int           @default(0)
@@ -2236,6 +2247,9 @@ model CrmContact {
   linkInviatoAt  DateTime?
   linkAperto     Boolean   @default(false)
   linkAperture   Int       @default(0)
+  /// Data della PRIMA apertura del link (per la timeline dei fatti); l'apertura
+  /// ripetuta incrementa `linkAperture` ma non sovrascrive questa data.
+  linkApertoAt   DateTime?
   videoInviato   Boolean   @default(false)
   videoMin       Int       @default(0)
   mailAperta     Boolean   @default(false)

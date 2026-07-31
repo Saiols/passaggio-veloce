@@ -43,6 +43,8 @@ e un promemoria di richiamo.
    nessun dato inviato a Google finché l'operatore non clicca).
 4. Split stati: **enum invariato** + campo `giudizio` ortogonale (variante "4b"). Vedi
    sotto per la realizzazione a **tre assi**.
+5. Invio email di partenza a **più destinatari** in una volta: nella modale un campo per
+   inserire indirizzi extra, un solo invio raggiunge tutti.
 
 ---
 
@@ -250,6 +252,46 @@ Nessuna delle 4 write path automatiche viene toccata nella sua logica di `status
 
 ---
 
+## Punto 5 — Invio email di partenza a più destinatari
+
+Oggi `sendEmailPartenzaAction` manda a `contact.email` soltanto; `sendNotification`
+invia a un singolo `target.email` (una `NotificaInviata` per invio). Vogliamo aggiungere
+indirizzi extra e raggiungerli tutti con la stessa email/link.
+
+### UI (`EmailPartenzaModal`, `client.tsx`)
+- Nuovo campo **"Altri destinatari (opzionale)"**: textarea dove incollare indirizzi
+  separati da virgola / punto-e-virgola / spazio / newline.
+- Helper puro `parseEmails(raw): { validi: string[]; scartati: string[] }` in
+  `lib/crm/emails.ts` (split multi-separatore, trim, lowercase, dedup, validazione regex).
+- La riga di riepilogo "A:" diventa **"A: {contact.email} + N altri"**; sotto il campo,
+  conteggio validi ed eventuali scartati. Cap a **20** destinatari totali.
+
+### Server (`sendEmailPartenzaAction`)
+- Nuovo parametro `emailAggiuntive?: string[]`.
+- `destinatari = dedup_case_insensitive([contact.email?, ...emailAggiuntive valide])`,
+  con cap. Se l'insieme è vuoto → errore. **Non** richiede più obbligatoriamente
+  `contact.email` se ci sono extra validi.
+- Restano i blocchi: `companyId` (già registrato) e `emailOptOutAt` (contatto disiscritto)
+  bloccano l'intero invio.
+- Invio: **loop** `sendNotification` per ciascun destinatario con lo **stesso** payload
+  (stesso `invitoToken`, `linkUrl`, `unsubUrl`, `codice`) → email individuali, nessuna
+  visibilità incrociata tra destinatari (privacy-safe), una `NotificaInviata` per invio.
+- L'update del contatto (`linkInviato`, `linkInviatoAt`, `invitoToken`, `emailUnsubToken`,
+  `promoCodeInviatoId`, `status`) resta **una sola volta**.
+
+### Note
+- L'`unsubUrl` porta il token del **contatto**: se un destinatario extra si disiscrive,
+  disiscrive il contatto. Accettabile per il caso d'uso (di norma gli extra sono altri
+  recapiti dello stesso contatto). Documentato, non bloccante.
+- Validazione server ridondante a quella client (mai fidarsi del client).
+
+### Test
+- `parseEmails`: separatori misti, dedup, indirizzi invalidi, vuoto.
+- Action (Prisma/notifiche mockati): dedup del primario, blocco optOut/companyId,
+  `sendNotification` chiamata N volte, update contatto una sola volta, cap rispettato.
+
+---
+
 ## File nuovi / toccati (indicativo)
 
 **Nuovi**
@@ -257,16 +299,19 @@ Nessuna delle 4 write path automatiche viene toccata nella sua logica di `status
 - `lib/crm/google-calendar.ts` (+ test) — `googleCalendarUrl`.
 - `lib/crm/fatti.ts` (+ test) — `statoFattuale`, `timelineFatti`.
 - `lib/crm/contatti-filtro.ts` (+ test) — `whereContatti`, `FiltroContatti`.
+- `lib/crm/emails.ts` (+ test) — `parseEmails` (Punto 5).
 - `app/admin/crm/richiami/page.tsx` + `client.tsx` — vista calendario richiami.
 
 **Toccati**
 - `packages/db/prisma/schema.prisma` + nuova migration a mano (enum + 2 campi + data).
 - `app/admin/crm/contatti/actions.ts` — `bulkHardDeleteCrmContactsAction`,
   `updateCrmContactGiudizioAction`, `updateCrmContactRichiamoAction`; restrizione opzioni
-  status; `giudizio` in update; consumo di `whereContatti`.
+  status; `giudizio` in update; consumo di `whereContatti`; `emailAggiuntive` in
+  `sendEmailPartenzaAction` (Punto 5).
 - `app/admin/crm/contatti/client.tsx` — selezione multipla + barra azioni + dialog
   conferma; `tel:` in lista; due colonne (Fatti + Stato/giudizio); `GiudizioSelect`;
-  chip richiamo su `nextContactAt`; timeline in `TabTracking`; "📞 Chiama" nel modale.
+  chip richiamo su `nextContactAt`; timeline in `TabTracking`; "📞 Chiama" nel modale;
+  campo "Altri destinatari" in `EmailPartenzaModal` (Punto 5).
 - `app/admin/crm/contatti/page.tsx` — `whereContatti`; preset/conteggio richiami su
   `nextContactAt`; passaggio nuovi campi al client.
 - `app/i/[token]/route.ts` — set `linkApertoAt` alla prima apertura.
@@ -278,10 +323,12 @@ Nessuna delle 4 write path automatiche viene toccata nella sua logica di `status
 1. Schema + migration (`giudizio`, `linkApertoAt`, enum, data migration) → base per tutto.
 2. Helper puri con test (`tel`, `google-calendar`, `fatti`, `contatti-filtro`).
 3. Punto 2 (tel:) — piccolo, sblocca abitudine.
-4. Punto 1 (bulk hard delete).
-5. Punto 4 (colonne Fatti/Giudizio + timeline + superfici richiamo) — chiude il bug.
-6. Punto 3 (pagina Richiami + Google Calendar) — dipende dal richiamo decoupled.
-7. Verifica e2e sul browser (selezione+delete, tel:, calendario, split stati, bug S11).
+4. Punto 5 (email a più destinatari) — isolato sull'action/modale email.
+5. Punto 1 (bulk hard delete).
+6. Punto 4 (colonne Fatti/Giudizio + timeline + superfici richiamo) — chiude il bug.
+7. Punto 3 (pagina Richiami + Google Calendar) — dipende dal richiamo decoupled.
+8. Verifica e2e sul browser (selezione+delete, tel:, email multi, calendario, split
+   stati, bug S11).
 
 ## Rischi / attenzioni
 

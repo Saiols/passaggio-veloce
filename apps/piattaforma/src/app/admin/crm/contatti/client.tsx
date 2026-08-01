@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef } from 'react';
+import { useState, useTransition, useRef, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { z } from 'zod';
@@ -22,7 +22,9 @@ import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
 import { etichettaRichiamo, OPZIONI_FASCIA, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
 import { telHref } from '@/lib/crm/tel';
 import { parseEmails } from '@/lib/crm/emails';
+import type { FiltroContatti } from '@/lib/crm/contatti-filtro';
 import { RichiamoDialog } from './richiamo-dialog';
+import { BulkDeleteBar } from './bulk-delete-bar';
 
 type ContactRow = {
   id: string;
@@ -217,6 +219,55 @@ export function CrmContactsClient({
   const canDelete = ROLE_CAN_DELETE.includes(currentUserRole);
   const canBulk = ROLE_CAN_BULK.includes(currentUserRole);
 
+  // ── Selezione multipla per l'eliminazione massiva ─────────────────────────
+  const [selezionati, setSelezionati] = useState<Set<string>>(new Set());
+  const [tuttiIFiltrati, setTuttiIFiltrati] = useState(false);
+  const idsPagina = contacts.map((c) => c.id);
+  const tuttaLaPagina = idsPagina.length > 0 && idsPagina.every((id) => selezionati.has(id));
+
+  // La selezione non deve sopravvivere a un cambio di pagina o di filtri: gli id
+  // fuori pagina non sono più visibili e "tutti i filtrati" cambierebbe insieme.
+  useEffect(() => {
+    setSelezionati(new Set());
+    setTuttiIFiltrati(false);
+  }, [filters, page]);
+
+  const toggleUno = (id: string): void => {
+    setTuttiIFiltrati(false);
+    setSelezionati((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const togglePagina = (): void => {
+    setTuttiIFiltrati(false);
+    setSelezionati((prev) => {
+      const next = new Set(prev);
+      if (tuttaLaPagina) idsPagina.forEach((id) => next.delete(id));
+      else idsPagina.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+  const resetSelezione = (): void => {
+    setSelezionati(new Set());
+    setTuttiIFiltrati(false);
+  };
+
+  // Stesso `FiltroContatti` che il server usa per la lista: serve al delete
+  // "per filtro" (tutti i contatti che corrispondono, non solo la pagina).
+  const filtroCorrente: FiltroContatti = {
+    q: filters.q,
+    cat: filters.cat as FiltroContatti['cat'],
+    status: filters.status,
+    regione: filters.regione,
+    assegnatoA: filters.assigned,
+    preset: filters.preset as FiltroContatti['preset'],
+    soloAssegnatoAId: currentUserRole === 'SALES' ? currentUserId : undefined,
+    adesso: new Date().toISOString(),
+  };
+
   const updateFilter = (key: keyof Filters, value: string): void => {
     const next = { ...filters, [key]: value };
     // Filtro status singolo e chip preset sono mutuamente esclusivi.
@@ -353,6 +404,41 @@ export function CrmContactsClient({
         </div>
       </div>
 
+      {canDelete && (selezionati.size > 0 || tuttiIFiltrati) && (
+        <>
+          {tuttiIFiltrati ? (
+            <div className="mb-2 rounded-[10px] border border-pv-navy-200 bg-pv-navy-50 px-3 py-2 text-[12.5px] text-pv-navy-800">
+              Tutti i {total} contatti che corrispondono ai filtri sono selezionati.{' '}
+              <button type="button" className="font-semibold underline" onClick={resetSelezione}>
+                Annulla
+              </button>
+            </div>
+          ) : tuttaLaPagina && total > contacts.length ? (
+            <div className="mb-2 rounded-[10px] border border-pv-navy-200 bg-pv-navy-50 px-3 py-2 text-[12.5px] text-pv-navy-800">
+              Selezionati {selezionati.size} in pagina.{' '}
+              <button
+                type="button"
+                className="font-semibold underline"
+                onClick={() => setTuttiIFiltrati(true)}
+              >
+                Seleziona tutti i {total} che corrispondono ai filtri
+              </button>
+            </div>
+          ) : null}
+          <BulkDeleteBar
+            conteggio={tuttiIFiltrati ? total : selezionati.size}
+            tuttiIFiltrati={tuttiIFiltrati}
+            ids={[...selezionati]}
+            filtro={filtroCorrente}
+            escludi={[]}
+            onDone={() => {
+              resetSelezione();
+              router.refresh();
+            }}
+          />
+        </>
+      )}
+
       {contacts.length === 0 ? (
         <div className="rounded-[16px] border border-pv-slate-200 bg-white px-5 py-12 text-center text-[13px] text-pv-slate-500 shadow-[var(--pv-shadow-card)]">
           Nessun contatto trovato.
@@ -362,6 +448,16 @@ export function CrmContactsClient({
           <table className="w-full min-w-[940px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-pv-slate-200 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+                {canDelete && (
+                  <th className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={tuttaLaPagina}
+                      onChange={togglePagina}
+                      aria-label="Seleziona tutta la pagina"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3">Azienda</th>
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Città</th>
@@ -379,6 +475,16 @@ export function CrmContactsClient({
                   key={c.id}
                   className="border-b border-pv-slate-100 last:border-0 hover:bg-pv-slate-50"
                 >
+                  {canDelete && (
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selezionati.has(c.id)}
+                        onChange={() => toggleUno(c.id)}
+                        aria-label={`Seleziona ${c.nome}`}
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-2.5 font-semibold text-pv-navy-900">
                     {c.nome}
                     {c.aziendaNome ? (

@@ -4,25 +4,11 @@ import { prisma, Prisma } from '@pv/db';
 import { AppShell } from '@/components/app-shell';
 import { Alert } from '@/components/ui';
 import { canViewCrm } from '@/lib/auth/permissions';
-import { regioneVarianti } from '@/lib/crm/regione';
-import { sogliaRichiamoDovuto, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
+import { whereContatti, type FiltroContatti } from '@/lib/crm/contatti-filtro';
 import { listPromoCodesEmailPartenzaAction } from './actions';
 import { CrmContactsClient } from './client';
 
-const STATI = [
-  'S0',
-  'S1',
-  'S2',
-  'S3',
-  'S4',
-  'S5',
-  'S6',
-  'S7',
-  'S8',
-  'S9',
-  'S10',
-  'S11',
-] as const;
+const STATI = ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11'] as const;
 
 type SearchParams = {
   q?: string;
@@ -56,39 +42,21 @@ export default async function AdminCrmPipelinePage({
 
   const sp = await searchParams;
 
-  // Filtri server-side
-  const where: Prisma.CrmContactWhereInput = { deletedAt: null };
-  if (sp.q) {
-    const q = sp.q.trim();
-    where.OR = [
-      { nome: { contains: q, mode: 'insensitive' } },
-      { email: { contains: q, mode: 'insensitive' } },
-      { citta: { contains: q, mode: 'insensitive' } },
-      { tel: { contains: q } },
-    ];
-  }
-  if (sp.cat) where.cat = sp.cat;
+  // Filtri server-side: fonte unica in lib/crm/contatti-filtro (stessa usata
+  // dall'eliminazione massiva "per filtro").
   const adesso = new Date();
-  if (sp.preset === 'urgenti') {
-    where.status = { in: ['S6', 'S5', 'S4', 'S3'] };
-  } else if (sp.preset === 'richiamo') {
-    // Dovuti = oggi o già passati. La soglia è la fine della giornata ROMANA:
-    // con l'ora UTC, dalle 22:00 in poi i richiami di oggi sparirebbero dal
-    // chip pur essendo ancora di oggi.
-    where.status = STATO_RICHIAMARE as (typeof STATI)[number];
-    where.nextContactAt = { lte: sogliaRichiamoDovuto(adesso) };
-  } else if (sp.status && STATI.includes(sp.status as (typeof STATI)[number])) {
-    where.status = sp.status as (typeof STATI)[number];
-  }
-  // Match tollerante: i dati import hanno regioni in forme diverse (case,
-  // trattino/spazio) — vedi lib/crm/regione.
-  if (sp.regione) where.regione = { in: regioneVarianti(sp.regione) };
-  if (sp.assigned) where.assignedToId = sp.assigned;
-
-  // SALES vede solo i contatti a lui assegnati (decisione 7)
-  if (session.user.role === 'SALES') {
-    where.assignedToId = session.user.id;
-  }
+  const soloAssegnatoAId = session.user.role === 'SALES' ? session.user.id : undefined;
+  const filtro: FiltroContatti = {
+    q: sp.q,
+    cat: sp.cat,
+    status: sp.status,
+    regione: sp.regione,
+    assegnatoA: sp.assigned,
+    preset: sp.preset,
+    soloAssegnatoAId,
+    adesso: adesso.toISOString(),
+  };
+  const where = whereContatti(filtro);
 
   // Sort
   const sort = sp.sort ?? 'recente';
@@ -108,42 +76,47 @@ export default async function AdminCrmPipelinePage({
   // Lo scoping SALES vale anche per il badge: un venditore deve vedere il
   // numero dei SUOI richiami, non di tutti. Non si riusa `where` perché il
   // conteggio non deve dipendere dagli altri filtri attivi.
-  const whereRichiamiDovuti: Prisma.CrmContactWhereInput = {
-    deletedAt: null,
-    status: STATO_RICHIAMARE as (typeof STATI)[number],
-    nextContactAt: { lte: sogliaRichiamoDovuto(adesso) },
-    ...(session.user.role === 'SALES' ? { assignedToId: session.user.id } : {}),
-  };
+  const whereRichiamiDovuti = whereContatti({
+    preset: 'richiamo',
+    adesso: adesso.toISOString(),
+    soloAssegnatoAId,
+  });
 
-  const [pageContacts, total, salesUsers, statsCounts, promoCodes, richiamiDovuti] = await Promise.all([
-    prisma.crmContact.findMany({
-      where,
-      orderBy,
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      include: {
-        assignedTo: { select: { id: true, nome: true, cognome: true } },
-        company: { select: { ragioneSociale: true } },
-        sede: { select: { nome: true } },
-      },
-    }),
-    prisma.crmContact.count({ where }),
-    prisma.user.findMany({
-      where: {
-        role: { in: ['SALES_MANAGER', 'SALES'] },
-        deletedAt: null,
-      },
-      select: { id: true, nome: true, cognome: true },
-      orderBy: [{ nome: 'asc' }, { cognome: 'asc' }],
-    }),
-    prisma.crmContact.groupBy({
-      by: ['status', 'cat'],
-      where: { deletedAt: null },
-      _count: { _all: true },
-    }),
-    listPromoCodesEmailPartenzaAction(),
-    prisma.crmContact.count({ where: whereRichiamiDovuti }),
-  ]);
+  const [pageContacts, total, salesUsers, statsCounts, giudizioCounts, promoCodes, richiamiDovuti] =
+    await Promise.all([
+      prisma.crmContact.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        include: {
+          assignedTo: { select: { id: true, nome: true, cognome: true } },
+          company: { select: { ragioneSociale: true } },
+          sede: { select: { nome: true } },
+        },
+      }),
+      prisma.crmContact.count({ where }),
+      prisma.user.findMany({
+        where: {
+          role: { in: ['SALES_MANAGER', 'SALES'] },
+          deletedAt: null,
+        },
+        select: { id: true, nome: true, cognome: true },
+        orderBy: [{ nome: 'asc' }, { cognome: 'asc' }],
+      }),
+      prisma.crmContact.groupBy({
+        by: ['status', 'cat'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
+      prisma.crmContact.groupBy({
+        by: ['giudizio', 'cat'],
+        where: { deletedAt: null, giudizio: { not: null } },
+        _count: { _all: true },
+      }),
+      listPromoCodesEmailPartenzaAction(),
+      prisma.crmContact.count({ where: whereRichiamiDovuti }),
+    ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -158,10 +131,20 @@ export default async function AdminCrmPipelinePage({
     broker: sumFor(statuses, 'BROKER'),
     agenzia: sumFor(statuses, 'AGENZIA'),
   });
+  // Interessati ora è un giudizio soggettivo (asse a sé), non uno status.
+  const sumGiudizio = (cat?: 'BROKER' | 'AGENZIA'): number =>
+    giudizioCounts
+      .filter((r) => r.giudizio === 'INTERESSATO' && (!cat || r.cat === cat))
+      .reduce((acc, r) => acc + r._count._all, 0);
   const stats = [
     metric('Totale', STATI),
     metric('Da contattare', ['S0', 'S1']),
-    metric('Interessati', ['S3', 'S5']),
+    {
+      label: 'Interessati',
+      total: sumGiudizio(),
+      broker: sumGiudizio('BROKER'),
+      agenzia: sumGiudizio('AGENZIA'),
+    },
     metric('Iscritti', ['S7', 'S8', 'S9']),
     metric('Attivi', ['S9']),
     metric('Churned', ['S10']),
@@ -170,9 +153,7 @@ export default async function AdminCrmPipelinePage({
   // Serializza ai client component (Date → string ISO)
   const contacts = pageContacts.map((c) => ({
     ...c,
-    assignedToName: c.assignedTo
-      ? `${c.assignedTo.nome} ${c.assignedTo.cognome}`.trim()
-      : null,
+    assignedToName: c.assignedTo ? `${c.assignedTo.nome} ${c.assignedTo.cognome}`.trim() : null,
     assignedTo: undefined,
     aziendaNome: c.company?.ragioneSociale ?? null,
     sedeNome: c.sede?.nome ?? null,
@@ -181,6 +162,7 @@ export default async function AdminCrmPipelinePage({
     lastContactAt: c.lastContactAt?.toISOString() ?? null,
     nextContactAt: c.nextContactAt?.toISOString() ?? null,
     linkInviatoAt: c.linkInviatoAt?.toISOString() ?? null,
+    linkApertoAt: c.linkApertoAt?.toISOString() ?? null,
     emailOptOutAt: c.emailOptOutAt?.toISOString() ?? null,
     iscrizioneAt: c.iscrizioneAt?.toISOString() ?? null,
     primaPraticaAt: c.primaPraticaAt?.toISOString() ?? null,
@@ -262,9 +244,7 @@ function CategoryStatCard({
 }) {
   return (
     <div className="rounded-[14px] border border-pv-slate-200 bg-white p-4 shadow-[var(--pv-shadow-card)]">
-      <p className="text-[10.5px] font-bold uppercase tracking-wider text-pv-slate-500">
-        {label}
-      </p>
+      <p className="text-[10.5px] font-bold uppercase tracking-wider text-pv-slate-500">{label}</p>
       <p className="mt-1 text-[26px] font-extrabold leading-none tracking-tight text-pv-navy-900">
         {total.toLocaleString('it-IT')}
       </p>

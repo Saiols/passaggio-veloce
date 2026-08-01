@@ -33,6 +33,7 @@ export async function GET(
         id: true,
         cat: true,
         status: true,
+        linkApertoAt: true,
         promoCodeInviato: { select: { code: true, active: true, expiresAt: true } },
       },
     });
@@ -45,12 +46,14 @@ export async function GET(
         promo = pc.code;
       }
 
-      // Tracking apertura best-effort.
+      // Tracking apertura best-effort. `linkApertoAt` data solo la PRIMA apertura
+      // (per la timeline dei fatti); le successive incrementano solo il contatore.
       await prisma.crmContact.update({
         where: { id: contact.id },
         data: {
           linkAperto: true,
           linkAperture: { increment: 1 },
+          linkApertoAt: contact.linkApertoAt ?? new Date(),
           status: nextStatoApertura(contact.status),
         },
       });

@@ -16,6 +16,8 @@ vi.mock('./actions', () => ({
   deleteCrmContactAction: vi.fn(),
   bulkImportCrmContactsAction: vi.fn(),
   updateCrmContactStatusAction: vi.fn(),
+  updateCrmContactGiudizioAction: vi.fn(),
+  updateCrmContactRichiamoAction: vi.fn(),
   sendEmailPartenzaAction: vi.fn(),
 }));
 
@@ -53,20 +55,13 @@ function selectByLabel(label: string): HTMLSelectElement {
   return select;
 }
 
-describe('ContactModal — Salva con stato S11 senza toccare il giorno del richiamo', () => {
-  // Regressione: `handleSave` sceglieva il tab su cui atterrare leggendo
-  // `field('nextContactAt').invalid`, che dipende da `touched`/`revealed` —
-  // stato React aggiornato da `reveal()` in modo asincrono. Nella closure del
-  // click che ha appena chiamato `reveal()`, `field` è ancora quello del
-  // render precedente: al primo clic su Salva, con lo stato portato a S11
-  // SENZA mai passare dal campo data (flusso naturale: cambio la tendina
-  // Stato, premo Salva), l'utente veniva spedito sul tab "Anagrafica" — dove
-  // nome e telefono sono validi e non compare nessun rosso — invece che su
-  // "Stato & Chiamate", dove sta il vero errore. Il pulsante Salva sembra non
-  // fare niente. Il fix legge `errors.nextContactAt` (ricalcolato ad ogni
-  // render da zodFieldErrors, indipendente da touched/revealed) al posto di
-  // `field(...).invalid`.
-  it('resta sul tab Stato & Chiamate con l\'errore visibile sul giorno', () => {
+describe('ContactModal — assi Fatti e Giudizio separati (modello a tre assi)', () => {
+  // Dal 2026-08 il modale separa i FATTI (funnel oggettivo `status`) dal
+  // GIUDIZIO soggettivo (`giudizio`) e dal RICHIAMO (`nextContactAt`). La
+  // tendina "Stato (fatti)" non deve più offrire i valori soggettivi/di
+  // richiamo (S2 Non interessato, S3 Interessato, S11 Richiamare): quelli
+  // vivono ora sull'asse Giudizio e sul richiamo, non su `status`.
+  it("la tendina Stato (fatti) non offre più S2/S3/S11, e c'è un asse Giudizio", () => {
     render(
       <ContactModal
         contact={null}
@@ -79,24 +74,19 @@ describe('ContactModal — Salva con stato S11 senza toccare il giorno del richi
       />,
     );
 
-    // Vai sul tab Stato & Chiamate e porta lo stato a S11, senza toccare il
-    // campo data (niente blur, niente onChange su nextContactAt).
     act(() => buttonByText('Stato & Chiamate').click());
-    const statoSelect = selectByLabel('Stato CRM');
-    act(() => {
-      statoSelect.value = 'S11';
-      statoSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
 
-    // Salva, senza mai aver toccato il campo del giorno.
-    act(() => buttonByText('Salva').click());
+    const statoSelect = selectByLabel('Stato (fatti)');
+    const valoriStato = Array.from(statoSelect.options).map((o) => o.value);
+    expect(valoriStato).toContain('S0');
+    expect(valoriStato).toContain('S4');
+    expect(valoriStato).toContain('S7');
+    expect(valoriStato).not.toContain('S2');
+    expect(valoriStato).not.toContain('S3');
+    expect(valoriStato).not.toContain('S11');
 
-    const tabStato = buttonByText('Stato & Chiamate');
-    const tabAnagrafica = buttonByText('Anagrafica');
-    expect(tabStato.getAttribute('aria-selected')).toBe('true');
-    expect(tabAnagrafica.getAttribute('aria-selected')).toBe('false');
-    expect(host!.textContent).toContain(
-      'Con lo stato Richiamare serve il giorno del richiamo',
-    );
+    const giudizioSelect = selectByLabel('Giudizio (soggettivo)');
+    const valoriGiudizio = Array.from(giudizioSelect.options).map((o) => o.value);
+    expect(valoriGiudizio).toEqual(['', 'INTERESSATO', 'NON_INTERESSATO']);
   });
 });

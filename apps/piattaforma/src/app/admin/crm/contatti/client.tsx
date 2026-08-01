@@ -27,7 +27,7 @@ import { OPZIONI_FASCIA } from '@/lib/crm/richiamo';
 import { telHref } from '@/lib/crm/tel';
 import { parseEmails } from '@/lib/crm/emails';
 import type { FiltroContatti } from '@/lib/crm/contatti-filtro';
-import { statoFattuale, type ContattoFatti } from '@/lib/crm/fatti';
+import { statoFattuale, timelineFatti, type ContattoFatti } from '@/lib/crm/fatti';
 import { BulkDeleteBar } from './bulk-delete-bar';
 import { GiudizioSelect } from './giudizio-select';
 
@@ -1197,7 +1197,7 @@ export function ContactModal({
             <TabStato data={data} set={set} readOnly={isReadOnlyForSales} field={field} />
           )}
           {tab === 'tracking' && (
-            <TabTracking data={data} set={set} readOnly={isReadOnlyForSales} />
+            <TabTracking data={data} set={set} readOnly={isReadOnlyForSales} contact={contact} />
           )}
           {tab === 'piattaforma' && (
             <TabPiattaforma
@@ -1258,6 +1258,7 @@ function initialData(c: ContactRow | null): CrmContactInput {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     regione: (c?.regione ?? '') as any,
     status: (c?.status ?? 'S0') as CrmContactInput['status'],
+    giudizio: (c?.giudizio ?? '') as CrmContactInput['giudizio'],
     fonte: (c?.fonte ?? 'CSV_INIZIALE') as CrmContactInput['fonte'],
     assignedToId: c?.assignedToId ?? '',
     lastContactAt: c?.lastContactAt?.slice(0, 10) ?? '',
@@ -1622,15 +1623,28 @@ function TabStato({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <FieldSelect
-        label="Stato CRM"
+        label="Stato (fatti)"
         value={data.status}
         required
         readOnly={readOnly}
         onChange={(v) => set('status', v as CrmContactInput['status'])}
-        options={Object.entries(STATI_LABEL).map(([k, l]) => ({
-          value: k,
-          label: `${k} — ${l}`,
-        }))}
+        options={Object.entries(STATI_LABEL)
+          .filter(([k]) => !['S2', 'S3', 'S11'].includes(k))
+          .map(([k, l]) => ({
+            value: k,
+            label: `${k} — ${l}`,
+          }))}
+      />
+      <FieldSelect
+        label="Giudizio (soggettivo)"
+        value={(data.giudizio as string) ?? ''}
+        readOnly={readOnly}
+        onChange={(v) => set('giudizio', v as CrmContactInput['giudizio'])}
+        options={[
+          { value: '', label: '—' },
+          { value: 'INTERESSATO', label: 'Interessato' },
+          { value: 'NON_INTERESSATO', label: 'Non interessato' },
+        ]}
       />
       <FieldText
         label="Ultimo contatto"
@@ -1729,9 +1743,42 @@ function TabStato({
   );
 }
 
-function TabTracking({ data, set, readOnly }: TabProps) {
+/** Storico datato dei fatti (timeline), sopra i flag editabili. Sola lettura. */
+function TimelineFatti({ contact }: { contact: ContactRow }) {
+  // Le chiamate (CrmCall) non sono ancora popolate (Vapi non attivo): la timeline
+  // si costruisce dai timestamp del contatto. Quando ci saranno, passare qui le call.
+  const eventi = timelineFatti(fattiDaRow(contact), []);
+  if (eventi.length === 0) return null;
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
+  return (
+    <div className="mb-1 sm:col-span-2">
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+        Storico fatti
+      </p>
+      <ol className="space-y-1.5">
+        {eventi.map((e, i) => {
+          const delta =
+            i > 0 ? Math.round((e.at.getTime() - eventi[i - 1]!.at.getTime()) / 86_400_000) : null;
+          return (
+            <li key={`${e.tipo}-${i}`} className="flex items-baseline gap-2 text-[12.5px]">
+              <span className="w-20 shrink-0 text-pv-slate-500">{fmt(e.at)}</span>
+              <span className="font-semibold text-pv-navy-800">{e.label}</span>
+              {delta !== null && delta > 0 && (
+                <span className="text-[11px] text-pv-slate-400">+{delta}g</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+function TabTracking({ data, set, readOnly, contact }: TabProps & { contact: ContactRow | null }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {contact && <TimelineFatti contact={contact} />}
       <FieldBool
         label="Link inviato"
         value={data.linkInviato}

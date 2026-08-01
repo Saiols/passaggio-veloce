@@ -1,28 +1,27 @@
 /**
- * Richiamo programmato di un contatto CRM (stato S11). Modulo PURO.
+ * Richiamo programmato di un contatto CRM. Modulo PURO.
  *
- * I write path che scrivono `status` su un CrmContact sono SEI, non quattro.
- * Passano da questo helper (`campiRichiamoDopoCambioStato`) i quattro che
- * possono chiudere un richiamo: le due server action della vista contatti,
- * l'aggancio del motore di match (`match/apply.ts`) e la firma di una pratica
- * (`sync.ts`). Questi ultimi due passano da `datiFunnel()`, che per uno stato
- * fuori da `ORDINE` — e S11 lo è, come S10 — restituisce direttamente
- * S7/S8/S9: un contatto da richiamare che si registra davvero esce da S11
- * senza che nessuna action se ne accorga. Se la regola vivesse dentro le
- * action, resterebbe un richiamo fantasma su un cliente già a bordo, e
- * continuerebbe a comparire nel chip "Da richiamare".
+ * MODELLO A TRE ASSI (dal 2026-08): il richiamo NON è più uno stato del funnel
+ * (`status = S11`), ma un asse indipendente che vive su `nextContactAt` /
+ * `nextContactFascia`. `status` porta solo i FATTI (funnel oggettivo), `giudizio`
+ * il giudizio soggettivo (Interessato/Non interessato), e il richiamo è "ho un
+ * `nextContactAt` da lavorare". Così un contatto può avere insieme un fatto, un
+ * giudizio e un richiamo, e mandare la mail / aprire il link avanza `status`
+ * senza toccare il richiamo — il bug per cui un "da richiamare" restava
+ * incastrato è sparito con la separazione.
  *
- * Gli altri due — `sendEmailPartenzaAction` (in
- * `app/admin/crm/contatti/actions.ts`) e `app/i/[token]/route.ts` — NON
- * passano da questo helper e non possono far uscire un contatto da S11 solo
- * perché `STATI_PRE_INVIO`/`STATI_PRE_APERTURA` in `lib/crm/email-partenza.ts`
- * non contengono S11 (comportamento voluto, coperto da test). Se un domani
- * S11 entrasse in uno di quei due set, quei due write path andrebbero fatti
- * passare da qui.
+ * La lista "Da richiamare" e il calendario filtrano su
+ * `nextContactAt <= soglia AND iscrizioneComp = false`: chi si registra sparisce
+ * dai richiami senza dover azzerare nulla nelle write path automatiche, che
+ * restano intatte.
+ *
+ * `STATO_RICHIAMARE`/`campiRichiamoDopoCambioStato` restano per compatibilità
+ * (nessun contatto è più in S11 dopo la migration), ma il richiamo si imposta e
+ * si rimuove con `updateCrmContactRichiamoAction`, non cambiando `status`.
  */
 import { romeYmd, romeEndOfDay } from '@/lib/date/rome-day';
 
-/** Stato del funnel che porta con sé un richiamo programmato. */
+/** Legacy: vecchio stato del funnel che portava il richiamo. Vedi header. */
 export const STATO_RICHIAMARE = 'S11';
 
 export type FasciaRichiamo = 'MATTINA' | 'POMERIGGIO';
@@ -73,10 +72,7 @@ const FMT_GIORNO = new Intl.DateTimeFormat('it-IT', {
 });
 
 /** -1 se a viene prima di b, 0 se stesso giorno, 1 se dopo. */
-function confrontaGiorni(
-  a: [number, number, number],
-  b: [number, number, number],
-): number {
+function confrontaGiorni(a: [number, number, number], b: [number, number, number]): number {
   for (let i = 0; i < 3; i++) {
     if (a[i]! !== b[i]!) return a[i]! < b[i]! ? -1 : 1;
   }

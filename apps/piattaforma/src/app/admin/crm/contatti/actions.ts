@@ -7,27 +7,18 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { prisma, Prisma } from '@pv/db';
 import { env } from '@/env';
-import {
-  canEditCrmContact,
-  canDeleteCrmContact,
-  canBulkImportCrm,
-} from '@/lib/auth/permissions';
+import { canEditCrmContact, canDeleteCrmContact, canBulkImportCrm } from '@/lib/auth/permissions';
 import { parseContactsCsv } from '@/lib/crm/csv-import';
 import { whereContatti, type FiltroContatti } from '@/lib/crm/contatti-filtro';
 import { normalizeTel, normalizeEmail } from '@/lib/crm/match/normalize';
 import { crmNormFields } from '@/lib/crm/match/norm-fields';
-import {
-  SELECT_ARRICCHIMENTO,
-  scollegaCampiModificati,
-} from '@/lib/crm/match/arricchimento';
+import { SELECT_ARRICCHIMENTO, scollegaCampiModificati } from '@/lib/crm/match/arricchimento';
 import { sendNotification } from '@/lib/notifiche';
 import { nextStatoInvio } from '@/lib/crm/email-partenza';
 import { campiRichiamoDopoCambioStato, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
 import { evaluatePromoCode } from '@/lib/promo/evaluate';
 
-export type CrmContactResult =
-  | { ok: true; id: string }
-  | { ok: false; error: string };
+export type CrmContactResult = { ok: true; id: string } | { ok: false; error: string };
 
 const REGIONI = [
   'Abruzzo',
@@ -52,75 +43,100 @@ const REGIONI = [
   'Veneto',
 ] as const;
 
-const CRM_CONTACT_INPUT = z.object({
-  // Anagrafica
-  nome: z.string().trim().min(2).max(160),
-  cat: z.enum(['BROKER', 'AGENZIA']),
-  tel: z.string().trim().min(5).max(40), // sempre obbligatorio (decisione 11)
-  wa: z.string().trim().max(40).optional().or(z.literal('')),
-  email: z.string().trim().email().optional().or(z.literal('')),
-  piva: z.string().trim().max(16).optional().or(z.literal('')),
-  indirizzo: z.string().trim().max(160).optional().or(z.literal('')),
-  citta: z.string().trim().max(80).optional().or(z.literal('')),
-  cap: z.string().trim().max(8).optional().or(z.literal('')),
-  regione: z.enum(REGIONI).optional().or(z.literal('')),
+const CRM_CONTACT_INPUT = z
+  .object({
+    // Anagrafica
+    nome: z.string().trim().min(2).max(160),
+    cat: z.enum(['BROKER', 'AGENZIA']),
+    tel: z.string().trim().min(5).max(40), // sempre obbligatorio (decisione 11)
+    wa: z.string().trim().max(40).optional().or(z.literal('')),
+    email: z.string().trim().email().optional().or(z.literal('')),
+    piva: z.string().trim().max(16).optional().or(z.literal('')),
+    indirizzo: z.string().trim().max(160).optional().or(z.literal('')),
+    citta: z.string().trim().max(80).optional().or(z.literal('')),
+    cap: z.string().trim().max(8).optional().or(z.literal('')),
+    regione: z.enum(REGIONI).optional().or(z.literal('')),
 
-  // Stato
-  status: z.enum([
-    'S0', 'S1', 'S2', 'S3', 'S4', 'S5',
-    'S6', 'S7', 'S8', 'S9', 'S10', 'S11',
-  ]),
-  fonte: z.enum(['CSV_INIZIALE', 'ISCRIZIONE_DIRETTA', 'REFERRAL', 'ALTRO']),
-  assignedToId: z.string().uuid().optional().or(z.literal('')),
-  lastContactAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  nextContactAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  nextContactFascia: z.enum(['MATTINA', 'POMERIGGIO']).optional().or(z.literal('')),
+    // Stato (funnel fattuale)
+    status: z.enum(['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11']),
+    // Giudizio soggettivo (asse ortogonale)
+    giudizio: z.enum(['INTERESSATO', 'NON_INTERESSATO']).optional().or(z.literal('')),
+    fonte: z.enum(['CSV_INIZIALE', 'ISCRIZIONE_DIRETTA', 'REFERRAL', 'ALTRO']),
+    assignedToId: z.string().uuid().optional().or(z.literal('')),
+    lastContactAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal('')),
+    nextContactAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal('')),
+    nextContactFascia: z.enum(['MATTINA', 'POMERIGGIO']).optional().or(z.literal('')),
 
-  // Chiamate (aggregati editabili manualmente)
-  callCount: z.coerce.number().int().min(0).default(0),
-  callEsito: z
-    .enum(['NON_RISPONDE', 'NON_INTERESSATO', 'INTERESSATO', 'RICHIAMA', 'ISCRITTO'])
-    .optional()
-    .or(z.literal('')),
-  sentiment: z.enum(['POSITIVO', 'NEUTRO', 'NEGATIVO']).optional().or(z.literal('')),
-  obiezioni: z.string().trim().max(500).optional().or(z.literal('')),
-  noteAI: z.string().trim().max(4000).optional().or(z.literal('')),
-  trascrizione: z.string().trim().max(20000).optional().or(z.literal('')),
-  noteManuali: z.string().trim().max(4000).optional().or(z.literal('')),
+    // Chiamate (aggregati editabili manualmente)
+    callCount: z.coerce.number().int().min(0).default(0),
+    callEsito: z
+      .enum(['NON_RISPONDE', 'NON_INTERESSATO', 'INTERESSATO', 'RICHIAMA', 'ISCRITTO'])
+      .optional()
+      .or(z.literal('')),
+    sentiment: z.enum(['POSITIVO', 'NEUTRO', 'NEGATIVO']).optional().or(z.literal('')),
+    obiezioni: z.string().trim().max(500).optional().or(z.literal('')),
+    noteAI: z.string().trim().max(4000).optional().or(z.literal('')),
+    trascrizione: z.string().trim().max(20000).optional().or(z.literal('')),
+    noteManuali: z.string().trim().max(4000).optional().or(z.literal('')),
 
-  // Tracking
-  linkInviato: z.coerce.boolean().default(false),
-  linkInviatoAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  linkAperto: z.coerce.boolean().default(false),
-  linkAperture: z.coerce.number().int().min(0).default(0),
-  videoInviato: z.coerce.boolean().default(false),
-  videoMin: z.coerce.number().int().min(0).max(600).default(0),
-  mailAperta: z.coerce.boolean().default(false),
-  smsInviato: z.coerce.boolean().default(false),
-  waInviato: z.coerce.boolean().default(false),
-  iscrizioneInit: z.coerce.boolean().default(false),
-  iscrizioneComp: z.coerce.boolean().default(false),
-  iscrizioneAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+    // Tracking
+    linkInviato: z.coerce.boolean().default(false),
+    linkInviatoAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal('')),
+    linkAperto: z.coerce.boolean().default(false),
+    linkAperture: z.coerce.number().int().min(0).default(0),
+    videoInviato: z.coerce.boolean().default(false),
+    videoMin: z.coerce.number().int().min(0).max(600).default(0),
+    mailAperta: z.coerce.boolean().default(false),
+    smsInviato: z.coerce.boolean().default(false),
+    waInviato: z.coerce.boolean().default(false),
+    iscrizioneInit: z.coerce.boolean().default(false),
+    iscrizioneComp: z.coerce.boolean().default(false),
+    iscrizioneAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal('')),
 
-  // Piattaforma (override manuale; il sync cron li sovrascrive)
-  platStatus: z.enum(['ATTIVO', 'INATTIVO', 'SOSPESO']).optional().or(z.literal('')),
-  primaPratica: z.coerce.boolean().default(false),
-  primaPraticaAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  praticheTotal: z.coerce.number().int().min(0).default(0),
-  praticheMonth: z.coerce.number().int().min(0).default(0),
-  lastAccessAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
-  tassoComp: z.coerce.number().int().min(0).max(100).default(0),
-}).superRefine((d, ctx) => {
-  // Un richiamo senza giorno non è un promemoria: è una riga che nessun
-  // filtro può far riemergere.
-  if (d.status === 'S11' && !d.nextContactAt) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['nextContactAt'],
-      message: 'Con lo stato Richiamare serve il giorno del richiamo',
-    });
-  }
-});
+    // Piattaforma (override manuale; il sync cron li sovrascrive)
+    platStatus: z.enum(['ATTIVO', 'INATTIVO', 'SOSPESO']).optional().or(z.literal('')),
+    primaPratica: z.coerce.boolean().default(false),
+    primaPraticaAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal('')),
+    praticheTotal: z.coerce.number().int().min(0).default(0),
+    praticheMonth: z.coerce.number().int().min(0).default(0),
+    lastAccessAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal('')),
+    tassoComp: z.coerce.number().int().min(0).max(100).default(0),
+  })
+  .superRefine((d, ctx) => {
+    // Un richiamo senza giorno non è un promemoria: è una riga che nessun
+    // filtro può far riemergere.
+    if (d.status === 'S11' && !d.nextContactAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['nextContactAt'],
+        message: 'Con lo stato Richiamare serve il giorno del richiamo',
+      });
+    }
+  });
 
 export type CrmContactInput = z.infer<typeof CRM_CONTACT_INPUT>;
 
@@ -150,10 +166,9 @@ function dataFromInput(d: CrmContactInput): Prisma.CrmContactCreateInput {
     cap: emptyToNull(d.cap),
     regione: emptyToNull(d.regione),
     status: d.status,
+    giudizio: emptyToNull(d.giudizio) as Prisma.CrmContactCreateInput['giudizio'],
     fonte: d.fonte,
-    assignedTo: assignedToId
-      ? { connect: { id: assignedToId } }
-      : undefined,
+    assignedTo: assignedToId ? { connect: { id: assignedToId } } : undefined,
     lastContactAt: parseDate(d.lastContactAt),
     nextContactAt: parseDate(d.nextContactAt),
     nextContactFascia: emptyToNull(
@@ -188,23 +203,17 @@ function dataFromInput(d: CrmContactInput): Prisma.CrmContactCreateInput {
   };
 }
 
-function dataFromInputForUpdate(
-  d: CrmContactInput,
-): Prisma.CrmContactUpdateInput {
+function dataFromInputForUpdate(d: CrmContactInput): Prisma.CrmContactUpdateInput {
   const create = dataFromInput(d);
   // Mappa la connect/disconnect per assignedTo
   const assignedToId = emptyToNull(d.assignedToId);
   return {
     ...create,
-    assignedTo: assignedToId
-      ? { connect: { id: assignedToId } }
-      : { disconnect: true },
+    assignedTo: assignedToId ? { connect: { id: assignedToId } } : { disconnect: true },
   };
 }
 
-export async function createCrmContactAction(
-  raw: unknown,
-): Promise<CrmContactResult> {
+export async function createCrmContactAction(raw: unknown): Promise<CrmContactResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!canEditCrmContact(session.user.role)) {
@@ -249,10 +258,7 @@ export async function createCrmContactAction(
   return { ok: true, id: created.id };
 }
 
-export async function updateCrmContactAction(
-  id: string,
-  raw: unknown,
-): Promise<CrmContactResult> {
+export async function updateCrmContactAction(id: string, raw: unknown): Promise<CrmContactResult> {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!canEditCrmContact(session.user.role)) {
@@ -287,10 +293,7 @@ export async function updateCrmContactAction(
   // Va DOPO la costruzione di `data`: se il contatto esce da S11, il richiamo
   // è chiuso e vince sui valori che il form ha comunque mandato (il campo data
   // resta compilato nella scheda finché non si ricarica).
-  Object.assign(
-    data,
-    campiRichiamoDopoCambioStato(attuale?.status ?? '', parsed.data.status),
-  );
+  Object.assign(data, campiRichiamoDopoCambioStato(attuale?.status ?? '', parsed.data.status));
 
   // Un campo ereditato dall'iscrizione e poi riscritto a mano non viene più
   // dall'iscrizione: esce dall'audit, altrimenti il pannello continuerebbe a
@@ -300,8 +303,7 @@ export async function updateCrmContactAction(
   // l'input grezzo: `dataFromInput` abbassa l'email e mappa '' a null, e
   // ricalcolare quelle regole qui vorrebbe dire duplicarle.
   if (attuale?.arricchitoDa) {
-    const scritto = (v: unknown): string | null =>
-      typeof v === 'string' ? v : null;
+    const scritto = (v: unknown): string | null => (typeof v === 'string' ? v : null);
     const restano = scollegaCampiModificati(attuale.arricchitoDa, attuale, {
       email: scritto(data.email),
       wa: scritto(data.wa),
@@ -450,9 +452,7 @@ export async function updateCrmContactStatusAction(
     return { ok: false, error: 'Non hai i permessi per modificare contatti CRM' };
   }
 
-  const STATI = [
-    'S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11',
-  ] as const;
+  const STATI = ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11'] as const;
   if (!STATI.includes(status as (typeof STATI)[number])) {
     return { ok: false, error: 'Stato non valido' };
   }
@@ -471,8 +471,7 @@ export async function updateCrmContactStatusAction(
   // se le due risposte differissero, la action diventerebbe un oracolo per
   // scoprire quali id esistono (provando id a caso e leggendo l'errore).
   const salesBloccato =
-    session.user.role === 'SALES' &&
-    (!target || target.assignedToId !== session.user.id);
+    session.user.role === 'SALES' && (!target || target.assignedToId !== session.user.id);
   if (salesBloccato) {
     return { ok: false, error: 'Puoi modificare solo i contatti a te assegnati' };
   }
@@ -551,12 +550,8 @@ export async function bulkImportCrmContactsAction(
     where: { deletedAt: null },
     select: { emailNorm: true, telNorm: true },
   });
-  const emailSet = new Set(
-    existing.map((c) => c.emailNorm).filter((e): e is string => !!e),
-  );
-  const telSet = new Set(
-    existing.map((c) => c.telNorm).filter((t): t is string => !!t),
-  );
+  const emailSet = new Set(existing.map((c) => c.emailNorm).filter((e): e is string => !!e));
+  const telSet = new Set(existing.map((c) => c.telNorm).filter((t): t is string => !!t));
 
   for (const row of parsed.rows) {
     // Dedup per email e per telefono normalizzato (no overwrite massivo).
@@ -601,9 +596,7 @@ export async function bulkImportCrmContactsAction(
       if (telNorm !== '') telSet.add(telNorm);
     } catch (err) {
       skipped++;
-      errors.push(
-        `Riga ${row.line}: errore creazione (${(err as Error).message.slice(0, 80)})`,
-      );
+      errors.push(`Riga ${row.line}: errore creazione (${(err as Error).message.slice(0, 80)})`);
     }
   }
 
@@ -705,8 +698,14 @@ export async function sendEmailPartenzaAction(input: {
   const contact = await prisma.crmContact.findUnique({
     where: { id: input.contactId },
     select: {
-      id: true, cat: true, status: true, email: true, nome: true,
-      emailOptOutAt: true, emailUnsubToken: true, assignedToId: true,
+      id: true,
+      cat: true,
+      status: true,
+      email: true,
+      nome: true,
+      emailOptOutAt: true,
+      emailUnsubToken: true,
+      assignedToId: true,
       companyId: true,
     },
   });
@@ -729,7 +728,8 @@ export async function sendEmailPartenzaAction(input: {
   if (contact.companyId) {
     return { ok: false, error: 'Il contatto è già registrato sulla piattaforma.' };
   }
-  if (contact.emailOptOutAt) return { ok: false, error: 'Il contatto si è disiscritto dalle email.' };
+  if (contact.emailOptOutAt)
+    return { ok: false, error: 'Il contatto si è disiscritto dalle email.' };
 
   // Destinatari = email del contatto (se c'è) + indirizzi extra rivalidati, dedup
   // case-insensitive, con un tetto di sicurezza. La stessa email/link parte a
@@ -744,7 +744,8 @@ export async function sendEmailPartenzaAction(input: {
   if (destinatari.length === 0) {
     return {
       ok: false,
-      error: 'Nessun destinatario valido (email del contatto assente e nessun indirizzo aggiuntivo).',
+      error:
+        'Nessun destinatario valido (email del contatto assente e nessun indirizzo aggiuntivo).',
     };
   }
 
@@ -754,7 +755,14 @@ export async function sendEmailPartenzaAction(input: {
   if (input.promoCodeId) {
     const promo = await prisma.promoCode.findUnique({
       where: { id: input.promoCodeId },
-      select: { id: true, code: true, amountCent: true, expiresAt: true, active: true, maxRedemptions: true },
+      select: {
+        id: true,
+        code: true,
+        amountCent: true,
+        expiresAt: true,
+        active: true,
+        maxRedemptions: true,
+      },
     });
     if (!promo) return { ok: false, error: 'Codice non trovato.' };
     const count = await prisma.promoCodeRedemption.count({ where: { promoCodeId: promo.id } });

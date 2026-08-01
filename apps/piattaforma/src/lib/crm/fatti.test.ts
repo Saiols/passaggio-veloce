@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { statoFattuale, timelineFatti } from './fatti';
 
 const vuoto = {
+  status: 'S0',
   createdAt: new Date('2026-01-01'),
+  lastContactAt: null,
   linkInviato: false,
   linkInviatoAt: null,
   linkAperto: false,
@@ -35,6 +37,27 @@ describe('statoFattuale', () => {
   it('prima pratica → S8, ≥2 pratiche → S9', () => {
     expect(statoFattuale({ ...vuoto, primaPratica: true, praticheTotal: 1 }).codice).toBe('S8');
     expect(statoFattuale({ ...vuoto, primaPratica: true, praticheTotal: 3 }).codice).toBe('S9');
+  });
+
+  it('status "Non risponde" (S1) impostato a mano compare anche senza flag', () => {
+    const at = new Date('2026-03-01');
+    const r = statoFattuale({ ...vuoto, status: 'S1', lastContactAt: at });
+    expect(r.codice).toBe('S1');
+    expect(r.label).toBe('Non risponde');
+    expect(r.at).toEqual(at); // usa l'ultimo contatto
+  });
+
+  it('status "Non risponde" ma un flag più avanzato (link aperto) → vince il flag (S5)', () => {
+    expect(statoFattuale({ ...vuoto, status: 'S1', linkAperto: true }).codice).toBe('S5');
+  });
+
+  it('status fattuale avanzato a mano (S7) senza flag → S7', () => {
+    expect(statoFattuale({ ...vuoto, status: 'S7' }).codice).toBe('S7');
+  });
+
+  it('status legacy fuori scala (S2/S3/S11) è ignorato: contano i flag', () => {
+    expect(statoFattuale({ ...vuoto, status: 'S3', linkInviato: true }).codice).toBe('S4');
+    expect(statoFattuale({ ...vuoto, status: 'S11' }).codice).toBe('S0');
   });
 });
 

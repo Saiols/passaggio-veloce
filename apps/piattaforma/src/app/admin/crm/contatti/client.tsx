@@ -92,7 +92,9 @@ export type ContactRow = {
 function fattiDaRow(c: ContactRow): ContattoFatti {
   const d = (s: string | null): Date | null => (s ? new Date(s) : null);
   return {
+    status: c.status,
     createdAt: new Date(c.createdAt),
+    lastContactAt: d(c.lastContactAt),
     linkInviato: c.linkInviato,
     linkInviatoAt: d(c.linkInviatoAt),
     linkAperto: c.linkAperto,

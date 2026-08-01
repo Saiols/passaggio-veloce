@@ -372,6 +372,72 @@ export async function bulkHardDeleteCrmContactsAction(
   return { ok: true, eliminati: res.count };
 }
 
+/**
+ * Giudizio soggettivo dell'operatore (asse ortogonale). Scrive SOLO `giudizio`,
+ * non tocca `status` (fatti) né il richiamo. `null` azzera il giudizio.
+ */
+export async function updateCrmContactGiudizioAction(
+  id: string,
+  giudizio: 'INTERESSATO' | 'NON_INTERESSATO' | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canEditCrmContact(session.user.role)) return { ok: false, error: 'Non autorizzato.' };
+  const contact = await prisma.crmContact.findUnique({
+    where: { id },
+    select: { assignedToId: true },
+  });
+  // Stesso errore per "non esiste" e "è di un altro": niente oracolo di enumerazione.
+  const ERR = { ok: false, error: 'Contatto non trovato.' } as const;
+  if (!contact) return ERR;
+  if (session.user.role === 'SALES' && contact.assignedToId !== session.user.id) return ERR;
+
+  await prisma.crmContact.update({ where: { id }, data: { giudizio } });
+  revalidatePath('/admin/crm/contatti');
+  return { ok: true };
+}
+
+/**
+ * Richiamo programmato (asse ortogonale). Scrive SOLO `nextContactAt`/
+ * `nextContactFascia`, mai `status`. `null` rimuove il richiamo.
+ */
+export async function updateCrmContactRichiamoAction(
+  id: string,
+  richiamo: { giorno: string; fascia: string } | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canEditCrmContact(session.user.role)) return { ok: false, error: 'Non autorizzato.' };
+  const contact = await prisma.crmContact.findUnique({
+    where: { id },
+    select: { assignedToId: true },
+  });
+  const ERR = { ok: false, error: 'Contatto non trovato.' } as const;
+  if (!contact) return ERR;
+  if (session.user.role === 'SALES' && contact.assignedToId !== session.user.id) return ERR;
+
+  if (richiamo === null) {
+    await prisma.crmContact.update({
+      where: { id },
+      data: { nextContactAt: null, nextContactFascia: null },
+    });
+    revalidatePath('/admin/crm/contatti');
+    return { ok: true };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(richiamo.giorno)) {
+    return { ok: false, error: 'Serve un giorno valido per il richiamo.' };
+  }
+  await prisma.crmContact.update({
+    where: { id },
+    data: {
+      nextContactAt: new Date(richiamo.giorno),
+      nextContactFascia: (richiamo.fascia || null) as 'MATTINA' | 'POMERIGGIO' | null,
+    },
+  });
+  revalidatePath('/admin/crm/contatti');
+  return { ok: true };
+}
+
 export async function updateCrmContactStatusAction(
   id: string,
   status: string,

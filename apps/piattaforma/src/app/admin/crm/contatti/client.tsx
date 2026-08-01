@@ -482,7 +482,7 @@ export function CrmContactsClient({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-[16px] border border-pv-slate-200 bg-white shadow-[var(--pv-shadow-card)]">
-          <table className="w-full min-w-[940px] text-left text-[13px]">
+          <table className="w-full min-w-[720px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-pv-slate-200 text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
                 {canDelete && (
@@ -496,12 +496,9 @@ export function CrmContactsClient({
                   </th>
                 )}
                 <th className="px-4 py-3">Azienda</th>
-                <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3">Città</th>
                 <th className="px-4 py-3">Telefono</th>
                 <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Assegnato</th>
-                <th className="px-4 py-3">Ultimo contatto</th>
                 <th className="px-4 py-3">Fatti</th>
                 <th className="px-4 py-3">Stato</th>
                 <th className="px-4 py-3 text-right">Dettaglio</th>
@@ -525,6 +522,9 @@ export function CrmContactsClient({
                   )}
                   <td className="px-4 py-2.5 font-semibold text-pv-navy-900">
                     {c.nome}
+                    <span className="mt-1 block">
+                      <CatBadge cat={c.cat} />
+                    </span>
                     {c.aziendaNome ? (
                       <span
                         className="mt-1 block text-[11.5px] font-semibold text-pv-green-500"
@@ -538,9 +538,6 @@ export function CrmContactsClient({
                         {c.sedeNome ? ` (${c.sedeNome})` : ''}
                       </span>
                     ) : null}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <CatBadge cat={c.cat} />
                   </td>
                   <td className="px-4 py-2.5 text-pv-slate-700">
                     {c.citta ?? '—'}
@@ -560,10 +557,6 @@ export function CrmContactsClient({
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-pv-slate-700">{c.email ?? '—'}</td>
-                  <td className="px-4 py-2.5 text-pv-slate-700">{c.assignedToName ?? '—'}</td>
-                  <td className="px-4 py-2.5 text-pv-slate-700">
-                    {c.lastContactAt ? new Date(c.lastContactAt).toLocaleDateString('it-IT') : '—'}
-                  </td>
                   <td className="px-4 py-2.5">
                     {(() => {
                       const f = statoFattuale(fattiDaRow(c));

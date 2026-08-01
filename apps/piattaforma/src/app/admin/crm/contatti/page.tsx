@@ -167,6 +167,7 @@ export default async function AdminCrmPipelinePage({
     iscrizioneAt: c.iscrizioneAt?.toISOString() ?? null,
     primaPraticaAt: c.primaPraticaAt?.toISOString() ?? null,
     lastAccessAt: c.lastAccessAt?.toISOString() ?? null,
+    matchedAt: c.matchedAt?.toISOString() ?? null,
     arricchitoAt: c.arricchitoAt?.toISOString() ?? null,
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),

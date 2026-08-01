@@ -1,32 +1,37 @@
 'use client';
 
-import { useState, useTransition, useRef, useEffect } from 'react';
+import { useState, useTransition, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { z } from 'zod';
 import { Alert, Button } from '@/components/ui';
 import { LoadingOverlay } from '@/components/ui/loading-overlay';
-import { useFieldErrorsState, zodFieldErrors, hasBlockingErrors, type FieldState } from '@/components/forms';
+import {
+  useFieldErrorsState,
+  zodFieldErrors,
+  hasBlockingErrors,
+  type FieldState,
+} from '@/components/forms';
 import {
   createCrmContactAction,
   updateCrmContactAction,
   deleteCrmContactAction,
   bulkImportCrmContactsAction,
-  updateCrmContactStatusAction,
   sendEmailPartenzaAction,
   type CrmContactInput,
 } from './actions';
 import { buildContactsQuery } from './query';
 import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
 import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
-import { etichettaRichiamo, OPZIONI_FASCIA, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
+import { OPZIONI_FASCIA } from '@/lib/crm/richiamo';
 import { telHref } from '@/lib/crm/tel';
 import { parseEmails } from '@/lib/crm/emails';
 import type { FiltroContatti } from '@/lib/crm/contatti-filtro';
-import { RichiamoDialog } from './richiamo-dialog';
+import { statoFattuale, type ContattoFatti } from '@/lib/crm/fatti';
 import { BulkDeleteBar } from './bulk-delete-bar';
+import { GiudizioSelect } from './giudizio-select';
 
-type ContactRow = {
+export type ContactRow = {
   id: string;
   nome: string;
   cat: 'BROKER' | 'AGENZIA';
@@ -39,9 +44,11 @@ type ContactRow = {
   cap: string | null;
   regione: string | null;
   status: string;
+  giudizio: string | null;
   fonte: string;
   assignedToId: string | null;
   assignedToName: string | null;
+  createdAt: string;
   lastContactAt: string | null;
   nextContactAt: string | null;
   nextContactFascia: string | null;
@@ -54,6 +61,7 @@ type ContactRow = {
   noteManuali: string | null;
   linkInviato: boolean;
   linkInviatoAt: string | null;
+  linkApertoAt: string | null;
   emailOptOutAt: string | null;
   linkAperto: boolean;
   linkAperture: number;
@@ -75,9 +83,39 @@ type ContactRow = {
   companyId: string | null;
   aziendaNome: string | null;
   sedeNome: string | null;
+  matchedAt: string | null;
   arricchitoDa: string | null;
   arricchitoAt: string | null;
 };
+
+/** Mappa una riga serializzata (date ISO) nei tipi Date attesi dagli helper Fatti. */
+function fattiDaRow(c: ContactRow): ContattoFatti {
+  const d = (s: string | null): Date | null => (s ? new Date(s) : null);
+  return {
+    createdAt: new Date(c.createdAt),
+    linkInviato: c.linkInviato,
+    linkInviatoAt: d(c.linkInviatoAt),
+    linkAperto: c.linkAperto,
+    linkApertoAt: d(c.linkApertoAt),
+    iscrizioneInit: c.iscrizioneInit,
+    iscrizioneComp: c.iscrizioneComp,
+    iscrizioneAt: d(c.iscrizioneAt),
+    primaPratica: c.primaPratica,
+    primaPraticaAt: d(c.primaPraticaAt),
+    praticheTotal: c.praticheTotal,
+    matchedAt: d(c.matchedAt),
+  };
+}
+
+/** Etichetta relativa breve ("oggi", "3g fa", "12/03") per la colonna Fatti. */
+function quandoBreve(at: Date | null): string {
+  if (!at) return '';
+  const giorni = Math.floor((Date.now() - at.getTime()) / 86_400_000);
+  if (giorni <= 0) return 'oggi';
+  if (giorni === 1) return 'ieri';
+  if (giorni < 30) return `${giorni}g fa`;
+  return at.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
 
 type SalesUser = { id: string; name: string };
 
@@ -129,21 +167,6 @@ const STATI_LABEL: Record<string, string> = {
   S11: 'Richiamare',
 };
 
-const STATI_COLOR: Record<string, string> = {
-  S0: 'bg-pv-slate-100 text-pv-slate-700',
-  S1: 'bg-pv-amber-50 text-pv-amber-500',
-  S2: 'bg-pv-red-50 text-pv-red-500',
-  S3: 'bg-pv-green-50 text-pv-green-500',
-  S4: 'bg-pv-amber-50 text-pv-amber-500',
-  S5: 'bg-orange-50 text-pv-orange-500',
-  S6: 'bg-purple-50 text-purple-700',
-  S7: 'bg-blue-50 text-blue-700',
-  S8: 'bg-pv-green-50 text-pv-green-500',
-  S9: 'bg-emerald-100 text-emerald-700',
-  S10: 'bg-pv-slate-100 text-pv-slate-500',
-  S11: 'bg-pv-navy-100 text-pv-navy-800',
-};
-
 const ROLE_CAN_DELETE = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
 const ROLE_CAN_BULK = ['ADMIN_PIATTAFORMA', 'AD', 'CTO', 'SALES_MANAGER'];
 
@@ -176,7 +199,9 @@ function CatBadge({ cat }: { cat: 'BROKER' | 'AGENZIA' }) {
         (isBroker ? 'bg-blue-50 text-blue-700' : 'bg-pv-orange-50 text-pv-orange-500')
       }
     >
-      <span className={'h-1.5 w-1.5 rounded-full ' + (isBroker ? 'bg-blue-500' : 'bg-pv-orange-500')} />
+      <span
+        className={'h-1.5 w-1.5 rounded-full ' + (isBroker ? 'bg-blue-500' : 'bg-pv-orange-500')}
+      />
       {isBroker ? 'Broker' : 'Agenzia'}
     </span>
   );
@@ -214,6 +239,7 @@ export function CrmContactsClient({
   const router = useRouter();
   const pathname = usePathname();
   const [editing, setEditing] = useState<ContactRow | null>(null);
+  const [editingTab, setEditingTab] = useState<Tab>('anagrafica');
   const [creating, setCreating] = useState(false);
   const [sending, setSending] = useState<ContactRow | null>(null);
   const canDelete = ROLE_CAN_DELETE.includes(currentUserRole);
@@ -227,10 +253,15 @@ export function CrmContactsClient({
 
   // La selezione non deve sopravvivere a un cambio di pagina o di filtri: gli id
   // fuori pagina non sono più visibili e "tutti i filtrati" cambierebbe insieme.
-  useEffect(() => {
+  // Reset in fase di render (pattern React "stato derivato da prop"), non in un
+  // effetto, per non innescare render a cascata.
+  const chiaveSelezione = `${filters.q}|${filters.cat}|${filters.status}|${filters.regione}|${filters.assigned}|${filters.preset}|${filters.sort}|${page}`;
+  const [chiaveSelezionePrec, setChiaveSelezionePrec] = useState(chiaveSelezione);
+  if (chiaveSelezione !== chiaveSelezionePrec) {
+    setChiaveSelezionePrec(chiaveSelezione);
     setSelezionati(new Set());
     setTuttiIFiltrati(false);
-  }, [filters, page]);
+  }
 
   const toggleUno = (id: string): void => {
     setTuttiIFiltrati(false);
@@ -465,6 +496,7 @@ export function CrmContactsClient({
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Assegnato</th>
                 <th className="px-4 py-3">Ultimo contatto</th>
+                <th className="px-4 py-3">Fatti</th>
                 <th className="px-4 py-3">Stato</th>
                 <th className="px-4 py-3 text-right">Dettaglio</th>
               </tr>
@@ -522,16 +554,37 @@ export function CrmContactsClient({
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-pv-slate-700">{c.email ?? '—'}</td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">{c.assignedToName ?? '—'}</td>
                   <td className="px-4 py-2.5 text-pv-slate-700">
-                    {c.assignedToName ?? '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-pv-slate-700">
-                    {c.lastContactAt
-                      ? new Date(c.lastContactAt).toLocaleDateString('it-IT')
-                      : '—'}
+                    {c.lastContactAt ? new Date(c.lastContactAt).toLocaleDateString('it-IT') : '—'}
                   </td>
                   <td className="px-4 py-2.5">
-                    <StatusSelect
+                    {(() => {
+                      const f = statoFattuale(fattiDaRow(c));
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingTab('tracking');
+                            setEditing(c);
+                          }}
+                          title="Apri la timeline dei fatti"
+                          className="text-left"
+                        >
+                          <span className="rounded-full bg-pv-slate-100 px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wider text-pv-slate-700">
+                            {f.label}
+                          </span>
+                          {f.at && (
+                            <span className="mt-1 block text-[11px] text-pv-slate-500">
+                              {quandoBreve(f.at)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <GiudizioSelect
                       contact={c}
                       currentUserRole={currentUserRole}
                       currentUserId={currentUserId}
@@ -540,7 +593,10 @@ export function CrmContactsClient({
                   <td className="px-4 py-2.5 text-right">
                     <button
                       type="button"
-                      onClick={() => setEditing(c)}
+                      onClick={() => {
+                        setEditingTab('anagrafica');
+                        setEditing(c);
+                      }}
                       className="rounded-[8px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-1 text-[12.5px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
                     >
                       Apri
@@ -580,11 +636,7 @@ export function CrmContactsClient({
             <span className="px-2 text-[12.5px] font-semibold text-pv-slate-700">
               {page} / {totalPages}
             </span>
-            <PageLink
-              href={pageHref(page + 1)}
-              disabled={page >= totalPages}
-              label="Succ ›"
-            />
+            <PageLink href={pageHref(page + 1)} disabled={page >= totalPages} label="Succ ›" />
           </div>
         </div>
       )}
@@ -592,6 +644,7 @@ export function CrmContactsClient({
       {(editing || creating) && (
         <ContactModal
           contact={editing}
+          tabIniziale={editingTab}
           salesUsers={salesUsers}
           canDelete={canDelete}
           currentUserRole={currentUserRole}
@@ -671,132 +724,16 @@ function AddContactsMenu({
         </>
       )}
       {importing && (
-        <CsvImportDialog
-          onClose={() => setImporting(false)}
-          onComplete={() => onImported()}
-        />
+        <CsvImportDialog onClose={() => setImporting(false)} onComplete={() => onImported()} />
       )}
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════
-// Status inline select (salvataggio immediato)
-// ════════════════════════════════════════════════════════
-function StatusSelect({
-  contact,
-  currentUserRole,
-  currentUserId,
-}: {
-  contact: ContactRow;
-  currentUserRole: string;
-  currentUserId: string;
-}) {
-  const [value, setValue] = useState(contact.status);
-  const [chiedeRichiamo, setChiedeRichiamo] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
-  const disabled =
-    currentUserRole === 'SALES' && contact.assignedToId !== currentUserId;
-
-  const salva = (next: string, richiamo?: { giorno: string; fascia: string }): void => {
-    const prev = value;
-    setValue(next); // ottimistico
-    startTransition(async () => {
-      const res = await updateCrmContactStatusAction(contact.id, next, richiamo);
-      if (!res.ok) {
-        setValue(prev); // revert
-        alert(res.error);
-        return;
-      }
-      setChiedeRichiamo(false);
-      router.refresh();
-    });
-  };
-
-  // Scegliere "Richiamare" NON salva: prima serve sapere quando. Lo stato
-  // ottimistico resta fermo finché il modale non conferma, così l'Annulla
-  // riporta la tendina dov'era senza rimettere le mani sul valore.
-  const onChange = (next: string): void => {
-    if (next === STATO_RICHIAMARE) {
-      setChiedeRichiamo(true);
-      return;
-    }
-    salva(next);
-  };
-
-  const richiamo =
-    value === STATO_RICHIAMARE && contact.nextContactAt
-      ? etichettaRichiamo(contact.nextContactAt, contact.nextContactFascia, new Date())
-      : null;
-
-  return (
-    <>
-      <select
-        value={value}
-        disabled={disabled || pending}
-        onChange={(e) => onChange(e.target.value)}
-        title={STATI_LABEL[value] ?? value}
-        className={
-          'rounded-full px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wider disabled:opacity-60 ' +
-          (STATI_COLOR[value] ?? 'bg-pv-slate-100 text-pv-slate-700')
-        }
-      >
-        {Object.entries(STATI_LABEL).map(([k, l]) => (
-          <option key={k} value={k}>
-            {k} — {l}
-          </option>
-        ))}
-      </select>
-
-      {richiamo && (
-        <button
-          type="button"
-          disabled={disabled || pending}
-          onClick={() => setChiedeRichiamo(true)}
-          title="Riprogramma il richiamo"
-          className={
-            'mt-1 block text-[11.5px] font-semibold hover:underline disabled:no-underline ' +
-            (richiamo.scaduto
-              ? 'text-pv-red-500'
-              : richiamo.oggi
-                ? 'text-pv-orange-500'
-                : 'text-pv-slate-500')
-          }
-        >
-          📞 {richiamo.testo}
-        </button>
-      )}
-
-      {chiedeRichiamo && (
-        <RichiamoDialog
-          giornoIniziale={contact.nextContactAt?.slice(0, 10) ?? ''}
-          fasciaIniziale={contact.nextContactFascia ?? ''}
-          pending={pending}
-          onConferma={(giorno, fascia) =>
-            salva(STATO_RICHIAMARE, { giorno, fascia })
-          }
-          onAnnulla={() => setChiedeRichiamo(false)}
-        />
-      )}
-
-      <LoadingOverlay show={pending} label="Aggiornamento…" />
-    </>
-  );
-}
-
-// ════════════════════════════════════════════════════════
 // Pagination link
 // ════════════════════════════════════════════════════════
-function PageLink({
-  href,
-  disabled,
-  label,
-}: {
-  href: string;
-  disabled: boolean;
-  label: string;
-}) {
+function PageLink({ href, disabled, label }: { href: string; disabled: boolean; label: string }) {
   if (disabled) {
     return (
       <span className="rounded-[8px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50 px-3 py-1 text-[12.5px] font-semibold text-pv-slate-400">
@@ -817,13 +754,7 @@ function PageLink({
 // ════════════════════════════════════════════════════════
 // CSV Import dialog (categoria + file)
 // ════════════════════════════════════════════════════════
-function CsvImportDialog({
-  onClose,
-  onComplete,
-}: {
-  onClose: () => void;
-  onComplete: () => void;
-}) {
+function CsvImportDialog({ onClose, onComplete }: { onClose: () => void; onComplete: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
@@ -1008,8 +939,8 @@ function EmailPartenzaModal({
             className="mt-1 block w-full resize-y rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px] leading-relaxed"
           />
           <span className="mt-1 block text-[11px] font-normal text-pv-slate-500">
-            Testo precompilato: modificalo pure prima di inviare. Saluto, pulsante,
-            checklist documenti e codice di benvenuto restano automatici.
+            Testo precompilato: modificalo pure prima di inviare. Saluto, pulsante, checklist
+            documenti e codice di benvenuto restano automatici.
           </span>
         </label>
 
@@ -1025,8 +956,8 @@ function EmailPartenzaModal({
           />
           <span className="mt-1 block text-[11px] font-normal text-pv-slate-500">
             {parsedAltri.validi.length} validi
-            {parsedAltri.scartati.length > 0 ? ` · ${parsedAltri.scartati.length} ignorati` : ''}. La
-            stessa email (stesso link) parte a ciascun indirizzo.
+            {parsedAltri.scartati.length > 0 ? ` · ${parsedAltri.scartati.length} ignorati` : ''}.
+            La stessa email (stesso link) parte a ciascun indirizzo.
           </span>
         </label>
 
@@ -1053,9 +984,7 @@ function EmailPartenzaModal({
           </label>
         ) : (
           <div className="mt-3 rounded-[10px] border border-pv-slate-200 bg-pv-slate-50 px-3 py-2.5">
-            <p className="text-[12.5px] font-semibold text-pv-slate-700">
-              Codice di benvenuto
-            </p>
+            <p className="text-[12.5px] font-semibold text-pv-slate-700">Codice di benvenuto</p>
             <p className="mt-0.5 text-[12px] leading-relaxed text-pv-slate-500">
               {promoCodesScartati > 0
                 ? `Nessun codice allegabile: ${promoCodesScartati === 1 ? "l'unico codice in piattaforma è scaduto, esaurito o disattivato" : `i ${promoCodesScartati} codici in piattaforma sono scaduti, esauriti o disattivati`}. L'email parte comunque, senza bonus.`
@@ -1077,9 +1006,7 @@ function EmailPartenzaModal({
           </div>
         )}
 
-        {error && (
-          <p className="mt-3 text-[12.5px] font-medium text-pv-red-500">{error}</p>
-        )}
+        {error && <p className="mt-3 text-[12.5px] font-medium text-pv-red-500">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="secondary" size="sm" onClick={onClose} disabled={pending}>
@@ -1112,6 +1039,7 @@ type Tab = 'anagrafica' | 'stato' | 'tracking' | 'piattaforma';
 
 export function ContactModal({
   contact,
+  tabIniziale = 'anagrafica',
   salesUsers,
   canDelete,
   currentUserRole,
@@ -1120,6 +1048,7 @@ export function ContactModal({
   onSaved,
 }: {
   contact: ContactRow | null;
+  tabIniziale?: Tab;
   salesUsers: SalesUser[];
   canDelete: boolean;
   currentUserRole: string;
@@ -1128,7 +1057,7 @@ export function ContactModal({
   onSaved: () => void;
 }) {
   const isCreate = !contact;
-  const [tab, setTab] = useState<Tab>('anagrafica');
+  const [tab, setTab] = useState<Tab>(tabIniziale);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -1145,17 +1074,11 @@ export function ContactModal({
   const { field, reveal } = useFieldErrorsState(errors);
 
   // Permessi specifici
-  const canEditPiattaforma =
-    !['SALES'].includes(currentUserRole); // SALES legge solo (decisione 7 + tab Piattaforma readonly)
+  const canEditPiattaforma = !['SALES'].includes(currentUserRole); // SALES legge solo (decisione 7 + tab Piattaforma readonly)
   const isReadOnlyForSales =
-    currentUserRole === 'SALES' &&
-    contact !== null &&
-    contact.assignedToId !== currentUserId;
+    currentUserRole === 'SALES' && contact !== null && contact.assignedToId !== currentUserId;
 
-  const set = <K extends keyof CrmContactInput>(
-    k: K,
-    v: CrmContactInput[K],
-  ): void => {
+  const set = <K extends keyof CrmContactInput>(k: K, v: CrmContactInput[K]): void => {
     setData((d) => ({ ...d, [k]: v }));
   };
 
@@ -1266,9 +1189,7 @@ export function ContactModal({
               readOnly={isReadOnlyForSales}
               field={field}
               arricchimento={
-                contact
-                  ? { da: contact.arricchitoDa, at: contact.arricchitoAt }
-                  : null
+                contact ? { da: contact.arricchitoDa, at: contact.arricchitoAt } : null
               }
             />
           )}
@@ -1294,12 +1215,7 @@ export function ContactModal({
 
         <footer className="flex items-center justify-between gap-3 border-t border-pv-slate-200 px-5 py-3">
           {!isCreate && canDelete ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleDelete}
-              disabled={pending}
-            >
+            <Button variant="danger" size="sm" onClick={handleDelete} disabled={pending}>
               Elimina contatto
             </Button>
           ) : (
@@ -1579,9 +1495,7 @@ function TabAnagrafica({
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {arricchimento?.da && (
-        <RigaArricchimento da={arricchimento.da} at={arricchimento.at} />
-      )}
+      {arricchimento?.da && <RigaArricchimento da={arricchimento.da} at={arricchimento.at} />}
       <div className="sm:col-span-2">
         <FieldText
           label="Nome azienda"
@@ -1902,8 +1816,8 @@ function TabPiattaforma({ data, set, readOnly }: TabProps) {
   return (
     <>
       <p className="mb-3 text-[12px] text-pv-slate-500">
-        Dati popolati automaticamente dal cron sync con la piattaforma. Modifica
-        manuale solo per casi eccezionali (override admin).
+        Dati popolati automaticamente dal cron sync con la piattaforma. Modifica manuale solo per
+        casi eccezionali (override admin).
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <FieldSelect

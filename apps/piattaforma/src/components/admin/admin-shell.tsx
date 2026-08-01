@@ -73,7 +73,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/pratiche', label: 'Pratiche', icon: IconPratiche },
       { href: '/admin/escalation', label: 'Escalation', icon: IconEscalation },
-      { href: '/admin/monitoraggio', label: 'Monitoraggio', icon: IconMonitoraggio, adminOnly: true },
+      {
+        href: '/admin/monitoraggio',
+        label: 'Monitoraggio',
+        icon: IconMonitoraggio,
+        adminOnly: true,
+      },
       {
         href: '/admin/segnalazioni',
         label: 'Segnalazioni',
@@ -95,7 +100,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/admin/broker', label: 'Broker', icon: IconBroker },
       { href: '/admin/agenzie', label: 'Agenzie', icon: IconAgenzie },
-      { href: '/admin/sedi-non-geocodate', label: 'Sedi non geocodate', icon: IconMappa, adminOnly: true },
+      {
+        href: '/admin/sedi-non-geocodate',
+        label: 'Sedi non geocodate',
+        icon: IconMappa,
+        adminOnly: true,
+      },
       { href: '/admin/utenti', label: 'Utenti', icon: IconUtenti },
     ],
   },
@@ -105,6 +115,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/crm/dashboard', label: 'Dashboard', icon: IconDashboard },
       { href: '/admin/crm/mappa', label: 'Mappa', icon: IconMappa },
       { href: '/admin/crm/contatti', label: 'Contatti', icon: IconCrm },
+      { href: '/admin/crm/richiami', label: 'Richiami', icon: IconCrm },
       { href: '/admin/crm/riconciliazione', label: 'Riconciliazione', icon: IconCrm },
       { href: '/admin/crm/contatti-operativi', label: 'Acquirenti/venditori', icon: IconContatti },
       { href: '/admin/crm/sales', label: 'Sales', icon: IconSales },
@@ -116,7 +127,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Crescita',
     items: [
-      { href: '/admin/affiliazioni', label: 'Affiliazioni', icon: IconAffiliazioni, adminOnly: true },
+      {
+        href: '/admin/affiliazioni',
+        label: 'Affiliazioni',
+        icon: IconAffiliazioni,
+        adminOnly: true,
+      },
       { href: '/admin/codici-promozionali', label: 'Promo', icon: IconPromo, adminOnly: true },
     ],
   },

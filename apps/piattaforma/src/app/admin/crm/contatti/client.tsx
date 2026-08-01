@@ -426,6 +426,12 @@ export function CrmContactsClient({
         >
           Reset
         </button>
+        <Link
+          href="/admin/crm/richiami"
+          className="rounded-[10px] border-[1.5px] border-pv-slate-300 bg-white px-3 py-2 text-[13px] font-semibold text-pv-navy-700 hover:bg-pv-slate-50"
+        >
+          📅 Calendario
+        </Link>
         <div className="ml-auto">
           <AddContactsMenu
             canBulk={canBulk}

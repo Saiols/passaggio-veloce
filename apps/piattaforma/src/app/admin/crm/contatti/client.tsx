@@ -20,6 +20,7 @@ import { buildContactsQuery } from './query';
 import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
 import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
 import { etichettaRichiamo, OPZIONI_FASCIA, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
+import { telHref } from '@/lib/crm/tel';
 import { RichiamoDialog } from './richiamo-dialog';
 
 type ContactRow = {
@@ -400,7 +401,19 @@ export function CrmContactsClient({
                     {c.citta ?? '—'}
                     {c.regione ? ` (${c.regione})` : ''}
                   </td>
-                  <td className="px-4 py-2.5 text-pv-slate-700">{c.tel}</td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">
+                    {telHref(c.tel) ? (
+                      <a
+                        href={telHref(c.tel)!}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-pv-navy-700 hover:underline"
+                      >
+                        {c.tel}
+                      </a>
+                    ) : (
+                      c.tel
+                    )}
+                  </td>
                   <td className="px-4 py-2.5 text-pv-slate-700">{c.email ?? '—'}</td>
                   <td className="px-4 py-2.5 text-pv-slate-700">
                     {c.assignedToName ?? '—'}
@@ -1457,17 +1470,27 @@ function TabAnagrafica({
           { value: 'AGENZIA', label: 'Agenzia' },
         ]}
       />
-      <FieldText
-        label="Telefono fisso"
-        value={data.tel}
-        required
-        readOnly={readOnly}
-        onChange={(v) => set('tel', v)}
-        hint="Sempre obbligatorio"
-        invalid={field('tel').invalid}
-        error={field('tel').error}
-        onBlur={field('tel').onBlur}
-      />
+      <div>
+        <FieldText
+          label="Telefono fisso"
+          value={data.tel}
+          required
+          readOnly={readOnly}
+          onChange={(v) => set('tel', v)}
+          hint="Sempre obbligatorio"
+          invalid={field('tel').invalid}
+          error={field('tel').error}
+          onBlur={field('tel').onBlur}
+        />
+        {telHref(data.tel) && (
+          <a
+            href={telHref(data.tel)!}
+            className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-pv-navy-700 hover:underline"
+          >
+            📞 Chiama {data.tel}
+          </a>
+        )}
+      </div>
       <FieldText
         label="WhatsApp"
         value={data.wa ?? ''}

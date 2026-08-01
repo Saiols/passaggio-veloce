@@ -13,6 +13,7 @@ import {
   canBulkImportCrm,
 } from '@/lib/auth/permissions';
 import { parseContactsCsv } from '@/lib/crm/csv-import';
+import { whereContatti, type FiltroContatti } from '@/lib/crm/contatti-filtro';
 import { normalizeTel, normalizeEmail } from '@/lib/crm/match/normalize';
 import { crmNormFields } from '@/lib/crm/match/norm-fields';
 import {
@@ -338,6 +339,37 @@ export async function deleteCrmContactAction(
 
   revalidatePath('/admin/crm/contatti');
   return { ok: true };
+}
+
+/**
+ * Eliminazione massiva DEFINITIVA (hard delete). I figli `CrmCall` e
+ * `CrmCampaignAssegnazione` hanno `onDelete: Cascade`, quindi vengono rimossi
+ * dal DB. Due modalità: elenco esplicito di id, oppure "tutti i contatti che
+ * corrispondono ai filtri correnti" (ricostruiti server-side dallo stesso
+ * `whereContatti` della lista) meno eventuali id deselezionati.
+ */
+export async function bulkHardDeleteCrmContactsAction(
+  input:
+    | { modo: 'ids'; ids: string[] }
+    | { modo: 'filtro'; filtro: FiltroContatti; escludi: string[] },
+): Promise<{ ok: true; eliminati: number } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canDeleteCrmContact(session.user.role)) {
+    return { ok: false, error: 'Non hai i permessi per eliminare contatti CRM' };
+  }
+
+  let where: Prisma.CrmContactWhereInput;
+  if (input.modo === 'ids') {
+    if (input.ids.length === 0) return { ok: true, eliminati: 0 };
+    where = { id: { in: input.ids } };
+  } else {
+    where = { ...whereContatti(input.filtro), id: { notIn: input.escludi ?? [] } };
+  }
+
+  const res = await prisma.crmContact.deleteMany({ where });
+  revalidatePath('/admin/crm/contatti');
+  return { ok: true, eliminati: res.count };
 }
 
 export async function updateCrmContactStatusAction(

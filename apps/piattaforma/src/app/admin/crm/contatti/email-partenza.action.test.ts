@@ -115,4 +115,49 @@ describe('sendEmailPartenzaAction', () => {
     expect(res.ok).toBe(false);
     expect(sendNotification).not.toHaveBeenCalled();
   });
+
+  it('destinatari extra: invia a tutti (dedup case-insensitive del primario), aggiorna una volta sola', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'AGENZIA', status: 'S4', email: 'primo@x.it', emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
+    update.mockResolvedValue({});
+    const res = await sendEmailPartenzaAction({
+      contactId: 'c1', nomeReferente: 'X', messaggio: MSG,
+      emailAggiuntive: ['due@x.it', 'PRIMO@x.it', 'tre@x.it'],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(sendNotification).toHaveBeenCalledTimes(3); // primo + due + tre
+    expect(update).toHaveBeenCalledTimes(1);
+    const destinazioni = sendNotification.mock.calls.map((c) => c[0].target.email);
+    expect(destinazioni).toEqual(['primo@x.it', 'due@x.it', 'tre@x.it']);
+  });
+
+  it('senza email primaria ma con extra validi, invia comunque agli extra', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'AGENZIA', status: 'S0', email: null, emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
+    update.mockResolvedValue({});
+    const res = await sendEmailPartenzaAction({
+      contactId: 'c1', nomeReferente: 'X', messaggio: MSG, emailAggiuntive: ['solo@y.it'],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(sendNotification.mock.calls[0][0].target.email).toBe('solo@y.it');
+  });
+
+  it('contatto disiscritto blocca tutto, anche con extra', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'BROKER', status: 'S4', email: 'primo@x.it', emailOptOutAt: new Date(), nome: 'X', emailUnsubToken: null });
+    const res = await sendEmailPartenzaAction({
+      contactId: 'c1', nomeReferente: 'X', messaggio: MSG, emailAggiuntive: ['x@y.it'],
+    });
+    expect(res.ok).toBe(false);
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('email invalide fra gli extra vengono scartate lato server', async () => {
+    findUnique.mockResolvedValue({ id: 'c1', cat: 'AGENZIA', status: 'S0', email: null, emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
+    update.mockResolvedValue({});
+    const res = await sendEmailPartenzaAction({
+      contactId: 'c1', nomeReferente: 'X', messaggio: MSG, emailAggiuntive: ['nonvale', 'ok@z.it'],
+    });
+    expect(res).toEqual({ ok: true });
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(sendNotification.mock.calls[0][0].target.email).toBe('ok@z.it');
+  });
 });

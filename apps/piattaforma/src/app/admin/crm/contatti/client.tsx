@@ -21,6 +21,7 @@ import { defaultMessaggioPartenza } from '@/lib/crm/email-partenza';
 import type { CampoArricchibile } from '@/lib/crm/match/arricchimento';
 import { etichettaRichiamo, OPZIONI_FASCIA, STATO_RICHIAMARE } from '@/lib/crm/richiamo';
 import { telHref } from '@/lib/crm/tel';
+import { parseEmails } from '@/lib/crm/emails';
 import { RichiamoDialog } from './richiamo-dialog';
 
 type ContactRow = {
@@ -441,14 +442,14 @@ export function CrmContactsClient({
                     <button
                       type="button"
                       onClick={() => setSending(c)}
-                      disabled={!c.email || !!c.emailOptOutAt || !!c.companyId}
+                      disabled={!!c.emailOptOutAt || !!c.companyId}
                       title={
                         c.companyId
                           ? 'Già registrato sulla piattaforma'
-                          : !c.email
-                            ? 'Manca l’email'
-                            : c.emailOptOutAt
-                              ? 'Contatto disiscritto'
+                          : c.emailOptOutAt
+                            ? 'Contatto disiscritto'
+                            : !c.email
+                              ? 'Nessuna email: potrai aggiungere destinatari nella finestra'
                               : undefined
                       }
                       className="ml-2 rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-pv-navy-700 hover:bg-pv-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -835,8 +836,11 @@ function EmailPartenzaModal({
     defaultMessaggioPartenza({ categoria: contact.cat, ragioneSociale: contact.nome }),
   );
   const [promoCodeId, setPromoCodeId] = useState('');
+  const [altriRaw, setAltriRaw] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const parsedAltri = parseEmails(altriRaw);
 
   const submit = async () => {
     setPending(true);
@@ -846,6 +850,7 @@ function EmailPartenzaModal({
       nomeReferente,
       messaggio,
       promoCodeId: promoCodeId || null,
+      emailAggiuntive: parsedAltri.validi,
     });
     setPending(false);
     if (res.ok) {
@@ -870,7 +875,9 @@ function EmailPartenzaModal({
           {contact.linkInviato ? 'Reinvia email di partenza' : 'Invia email di partenza'}
         </h3>
         <p className="mt-1 text-[12.5px] text-pv-slate-600">
-          A: {contact.email} · {contact.cat === 'BROKER' ? 'Broker' : 'Agenzia'}
+          A: {contact.email ?? '—'}
+          {parsedAltri.validi.length > 0 ? ` + ${parsedAltri.validi.length} altri` : ''} ·{' '}
+          {contact.cat === 'BROKER' ? 'Broker' : 'Agenzia'}
           {contact.linkInviato ? ' · già inviata in precedenza' : ''}
         </p>
 
@@ -897,6 +904,23 @@ function EmailPartenzaModal({
           <span className="mt-1 block text-[11px] font-normal text-pv-slate-500">
             Testo precompilato: modificalo pure prima di inviare. Saluto, pulsante,
             checklist documenti e codice di benvenuto restano automatici.
+          </span>
+        </label>
+
+        <label className="mt-3 block text-[12.5px] font-semibold text-pv-slate-700">
+          Altri destinatari (opzionale)
+          <textarea
+            value={altriRaw}
+            onChange={(e) => setAltriRaw(e.target.value)}
+            disabled={pending}
+            rows={2}
+            placeholder="email separate da virgola, spazio o a capo"
+            className="mt-1 block w-full resize-y rounded-[10px] border-[1.5px] border-pv-slate-300 px-3 py-2 text-[13px]"
+          />
+          <span className="mt-1 block text-[11px] font-normal text-pv-slate-500">
+            {parsedAltri.validi.length} validi
+            {parsedAltri.scartati.length > 0 ? ` · ${parsedAltri.scartati.length} ignorati` : ''}. La
+            stessa email (stesso link) parte a ciascun indirizzo.
           </span>
         </label>
 
@@ -958,7 +982,12 @@ function EmailPartenzaModal({
           <Button
             size="sm"
             onClick={submit}
-            disabled={pending || !nomeReferente.trim() || !messaggio.trim()}
+            disabled={
+              pending ||
+              !nomeReferente.trim() ||
+              !messaggio.trim() ||
+              (!contact.email && parsedAltri.validi.length === 0)
+            }
             loading={pending}
             loadingLabel="Invio…"
           >

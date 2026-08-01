@@ -584,6 +584,8 @@ export async function sendEmailPartenzaAction(input: {
   nomeReferente: string;
   messaggio: string;
   promoCodeId?: string | null;
+  /** Indirizzi extra a cui mandare la STESSA email (stesso link). Rivalidati qui. */
+  emailAggiuntive?: string[];
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await auth();
   if (!session?.user) redirect('/login');
@@ -629,8 +631,24 @@ export async function sendEmailPartenzaAction(input: {
   if (contact.companyId) {
     return { ok: false, error: 'Il contatto è già registrato sulla piattaforma.' };
   }
-  if (!contact.email) return { ok: false, error: 'Il contatto non ha un’email.' };
   if (contact.emailOptOutAt) return { ok: false, error: 'Il contatto si è disiscritto dalle email.' };
+
+  // Destinatari = email del contatto (se c'è) + indirizzi extra rivalidati, dedup
+  // case-insensitive, con un tetto di sicurezza. La stessa email/link parte a
+  // ciascuno; senza nessun destinatario valido non si invia.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const extra = (input.emailAggiuntive ?? [])
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => EMAIL_RE.test(e));
+  const destinatari = Array.from(
+    new Set([contact.email?.toLowerCase(), ...extra].filter((e): e is string => Boolean(e))),
+  ).slice(0, 20);
+  if (destinatari.length === 0) {
+    return {
+      ok: false,
+      error: 'Nessun destinatario valido (email del contatto assente e nessun indirizzo aggiuntivo).',
+    };
+  }
 
   // Rivalida il codice (potrebbe essere stato disattivato dopo l'apertura del modale).
   let codice: { code: string; importoEuro: number } | undefined;
@@ -658,18 +676,22 @@ export async function sendEmailPartenzaAction(input: {
   const linkUrl = `${env.NEXT_PUBLIC_APP_URL}/i/${invitoToken}`;
   const unsubUrl = `${env.NEXT_PUBLIC_APP_URL}/unsubscribe?token=${emailUnsubToken}`;
 
-  await sendNotification({
-    tipo: 'N26_EMAIL_PARTENZA',
-    target: { email: contact.email },
-    payload: {
-      nomeReferente: input.nomeReferente.trim() || contact.nome,
-      messaggio,
-      categoria: contact.cat as 'BROKER' | 'AGENZIA',
-      linkUrl,
-      unsubUrl,
-      codice,
-    },
-  });
+  // Un invio per destinatario: email individuali (nessuna visibilità incrociata
+  // fra gli indirizzi), stesso link/token/codice per tutti.
+  for (const email of destinatari) {
+    await sendNotification({
+      tipo: 'N26_EMAIL_PARTENZA',
+      target: { email },
+      payload: {
+        nomeReferente: input.nomeReferente.trim() || contact.nome,
+        messaggio,
+        categoria: contact.cat as 'BROKER' | 'AGENZIA',
+        linkUrl,
+        unsubUrl,
+        codice,
+      },
+    });
+  }
 
   await prisma.crmContact.update({
     where: { id: contact.id },

@@ -14,6 +14,7 @@
 
 - **Migration a mano.** Mai `pnpm db:migrate` (propone DROP SEQUENCE su questo schema). Si scrive il file SQL e si applica con `pnpm db:deploy`.
 - **Niente colori hardcoded.** Solo classi del design system (`pv-slate-*`, `pv-navy-*`, `pv-red-*`).
+- **Apostrofi tipografici nei testi utente.** Il repo scrive `'L’indirizzo…'` — apostrofo curvo U+2019 dentro una stringa ad apici singoli (vedi `client.tsx:1007`). **È sintatticamente valido**: `’` non chiude una stringa delimitata da `'`. Non "correggerlo": non è un errore di sintassi. Se il tuo editor te lo segnala come tale, sbaglia lui.
 - **Nomi tabella:** `crm_contacts`, `notifiche_inviate`. Le colonne sono camelCase, senza `@map`.
 - **Test:** `pnpm --filter piattaforma test` (vitest). Typecheck: `pnpm --filter piattaforma typecheck`.
 - **Categoria tag Resend dell'email di partenza:** `N26_EMAIL_PARTENZA` (valore di `NotificaTipo`, invariato da `sanitizeTagValue`).
@@ -105,17 +106,19 @@ Nessun backfill: i dati di produzione sono usa-e-getta e non esiste una fonte da
 - [ ] **Step 4: Applicare la migration e rigenerare il client**
 
 ```bash
-pnpm db:deploy
+pnpm --filter @pv/db db:deploy
 pnpm --filter @pv/db exec prisma generate
 ```
 
 Atteso: `1 migration applied`, generate senza errori.
 
+⚠️ `pnpm db:deploy` **alla radice non esiste**: il root package.json espone `db:migrate`, `db:generate` e `db:studio`, ma non `db:deploy` — che vive solo in `packages/db`. Va invocato col `--filter`.
+
 - [ ] **Step 5: Verificare sul DB reale che le colonne esistano**
 
 ```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "\d crm_contacts" | grep -E "mailApertaAt|iscrizioneInitAt|emailBounced"
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "\d notifiche_inviate" | grep -E "crmContactId|providerRef"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "\d crm_contacts" | grep -E "mailApertaAt|iscrizioneInitAt|emailBounce"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "\d notifiche_inviate" | grep -E "crmContactId|providerRef"
 ```
 
 Atteso: 4 righe dalla prima query, e dalla seconda la colonna `crmContactId` più i due indici. Se il nome del container differisce, ricavarlo con `docker ps`.
@@ -256,6 +259,8 @@ git commit -m "fix(crm): lo stato S6 usa la data di iscrizione iniziata"
 - Produces: `sendNotification(input, opts?)` accetta `opts.crmContactId?: string` e lo persiste. Il Task 5 (handler webhook) legge quella colonna.
 
 ⚠️ **Attenzione al precedente ingannevole:** `opts.praticaId` **non viene persistito** — serve solo a iniettare il blocco "Sede della firma" nel template (`send.ts:394`). Il canale `opts` esiste, la persistenza no: va aggiunta.
+
+⚠️ **Servono DUE test, non uno.** Il test qui sotto vive in un file dove `sendNotification` è mockata: dimostra che `actions.ts` passa l'argomento, ma non esegue mai la `create` dentro `send.ts`. La metà "e persisterlo" del requisito resterebbe a copertura **zero**, e un refactor che la togliesse non farebbe diventare rosso nulla — il sintomo comparirebbe solo in produzione, come "le aperture email non si registrano mai". Serve anche un test focalizzato su `sendNotification` stessa (mockando `@pv/db` e il provider email, **non** `sendNotification`) che asserisca `data.crmContactId` sulla `create`, più il caso senza `opts` che deve dare `null`.
 
 - [ ] **Step 1: Scrivere il test che fallisce**
 
@@ -564,7 +569,7 @@ describe('updateCrmContactAction — i campi tracking non sono scrivibili', () =
     cat: 'BROKER',
     tel: '3331234567',
     status: 'S4',
-    fonte: 'CSV',
+    fonte: 'CSV_INIZIALE', // 'CSV' NON e' nell'enum: fallirebbe la validazione
   };
 
   const CAMPI_TRACKING = [
@@ -683,7 +688,7 @@ con:
 pnpm --filter piattaforma typecheck
 ```
 
-Atteso: PASS. Se `bg-pv-red-50` non esiste nel design system, usare `bg-pv-red-500/10` (già in uso altrove nel file).
+Atteso: PASS. `bg-pv-red-50` e `text-pv-red-500` sono entrambi token del design system (`globals.css:27-28`, esposti a Tailwind alle righe 68-69): usarli così com'è.
 
 - [ ] **Step 3: Commit**
 
@@ -818,7 +823,19 @@ export function verificaFirmaResend(
 ): unknown | null {
   try {
     return new Webhook(secret).verify(rawBody, headers);
-  } catch {
+  } catch (e) {
+    // Il messaggio della libreria distingue cause opposte: segreto vuoto o
+    // base64 rotto (misconfigurazione), timestamp troppo vecchio (replay o
+    // clock disallineato), firma non corrispondente (payload non autentico).
+    // Senza questo log collassano tutte in `null`, e un `whsec_` sbagliato in
+    // produzione diventa indistinguibile da un attacco: 401 identici, nessun
+    // segnale, e il tracking aperture muore in silenzio. Si logga SOLO il
+    // messaggio della libreria — mai body, header o segreto — così nessun
+    // dato controllato dall'attaccante finisce nei log.
+    console.warn(
+      '[resend-webhook] firma rifiutata:',
+      e instanceof Error ? e.message : 'errore sconosciuto',
+    );
     return null;
   }
 }
@@ -884,12 +901,14 @@ const opened = (tags: Record<string, string> = { categoria: 'N26_EMAIL_PARTENZA'
   data: { email_id: 'em-1', tags },
 });
 
-const bounced = (subType: string) => ({
+// `type` = Permanent | Temporary (definitivo vs ritentabile).
+// `subType` viaggia insieme ma è solo la classificazione fine: non decide nulla.
+const bounced = (tipo: string) => ({
   type: 'email.bounced',
   data: {
     email_id: 'em-1',
     tags: { categoria: 'N26_EMAIL_PARTENZA' },
-    bounce: { subType, message: 'mailbox unavailable' },
+    bounce: { type: tipo, subType: 'MessageRejected', message: 'mailbox unavailable' },
   },
 });
 
@@ -922,7 +941,7 @@ describe('handleResendEvent', () => {
 
   // La garanzia anti-contaminazione: una mail transazionale aperta da una
   // persona che è anche un contatto CRM non deve sporcare il funnel.
-  it('ignora le email che non sono l’email di partenza', async () => {
+  it("ignora le email che non sono l'email di partenza", async () => {
     await handleResendEvent(opened({ categoria: 'N3_PRATICA_ACCETTATA' }));
     expect(notificaFindFirst).not.toHaveBeenCalled();
     expect(contactUpdate).not.toHaveBeenCalled();
@@ -933,16 +952,35 @@ describe('handleResendEvent', () => {
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it('bounce soft: registrato ma nessun blocco', async () => {
-    await handleResendEvent(bounced('soft'));
+  it('bounce temporaneo: nessuna scrittura, nessun blocco', async () => {
+    await handleResendEvent(bounced('Temporary'));
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it('bounce hard: blocca l’indirizzo con il motivo', async () => {
-    await handleResendEvent(bounced('hard'));
+  it("bounce definitivo: blocca l'indirizzo con il motivo", async () => {
+    await handleResendEvent(bounced('Permanent'));
     const data = contactUpdate.mock.calls[0][0].data;
     expect(data.emailBouncedAt).toBeInstanceOf(Date);
     expect(data.emailBounceMotivo).toBe('mailbox unavailable');
+  });
+
+  // Se Resend cambiasse vocabolario, il blocco smetterebbe di funzionare: deve
+  // restare fail-safe (nessun blocco) ma NON silenzioso.
+  it('bounce con type sconosciuto: nessun blocco', async () => {
+    await handleResendEvent(bounced('Qualcosaltro'));
+    expect(contactUpdate).not.toHaveBeenCalled();
+  });
+
+  // Il guard che impedisce di scrivere sul contatto SBAGLIATO: senza,
+  // `where: { providerRef: undefined }` in Prisma significa "nessun filtro"
+  // e findFirst restituirebbe una riga arbitraria.
+  it('tag giusto ma email_id assente: nessuna query', async () => {
+    await handleResendEvent({
+      type: 'email.opened',
+      data: { tags: { categoria: 'N26_EMAIL_PARTENZA' } },
+    });
+    expect(notificaFindFirst).not.toHaveBeenCalled();
+    expect(contactUpdate).not.toHaveBeenCalled();
   });
 
   it('providerRef sconosciuto: nessuna scrittura, nessuna eccezione', async () => {
@@ -1038,13 +1076,27 @@ export async function handleResendEvent(evento: unknown): Promise<void> {
   }
 
   // Solo i bounce definitivi bloccano: casella piena o server temporaneamente
-  // giù (`soft`) non devono impedire il reinvio a un cliente valido.
-  const subType = e.data?.bounce?.subType?.toLowerCase();
-  if (!subType) {
-    console.warn('[resend-webhook] bounce senza subType, ignorato', emailId);
+  // giù non devono impedire il reinvio a un cliente valido.
+  //
+  // ⚠️ Il campo giusto è `type`, NON `subType`. Resend deriva il bounce da SES:
+  // `type` vale `Permanent` | `Temporary`, mentre `subType` è la classificazione
+  // fine (`Suppressed`, `MessageRejected`, `General`…). Confrontare `subType`
+  // con 'hard'/'soft' non matcherebbe mai, e il blocco non scatterebbe MAI —
+  // in silenzio. Verificato sul payload d'esempio della doc Resend.
+  // NB: `bounceType`, non `tipo`: quel nome è già preso in cima dalla variabile
+  // che instrada opened/bounced, e ridichiararlo non compila.
+  const bounceType = e.data?.bounce?.type?.toLowerCase();
+  if (!bounceType) {
+    console.warn('[resend-webhook] bounce senza type, ignorato', emailId);
     return;
   }
-  if (subType !== 'hard') return;
+  if (bounceType !== 'permanent' && bounceType !== 'temporary') {
+    // Vocabolario inatteso: non blocchiamo (fail-safe), ma lo diciamo — è
+    // l'unico modo per accorgersi che il contratto del provider è cambiato.
+    console.warn('[resend-webhook] bounce con type sconosciuto', emailId, bounceType);
+    return;
+  }
+  if (bounceType !== 'permanent') return;
 
   await prisma.crmContact.update({
     where: { id: contatto.id },
@@ -1111,7 +1163,7 @@ In `mappa-api.ts`, nella sezione `// --- Webhook / diagnostica / metadati, nessu
   'src/app/api/webhooks/resend/route.ts': null, // autenticato via firma Svix (RESEND_WEBHOOK_SECRET), non da un permesso
 ```
 
-Aggiornare anche il conteggio nel commento in testa al file (`la mappa le enumera TUTTE (33)` → 34).
+Aggiornare anche il conteggio nel commento in testa al file. ⚠️ Il numero scritto lì (33) era **già disallineato** prima di questo lavoro: le route reali sono 38 dopo l'aggiunta. **Contare, non incrementare** — sia i file `route.ts` sotto `src/app/api` sia le chiavi di `MAPPA_API`, e verificare che i due numeri combacino (se non combaciano, c'è una route scoperta, ed è quello il problema serio).
 
 - [ ] **Step 7: Lanciare la suite e il typecheck**
 
@@ -1128,6 +1180,16 @@ Atteso: PASS. `mappa-api.test.ts` in particolare deve passare: fallisce se la ro
 git add apps/piattaforma/src/lib/jobs/resend-webhook.ts apps/piattaforma/src/lib/jobs/resend-webhook.test.ts apps/piattaforma/src/app/api/webhooks/resend apps/piattaforma/src/lib/auth/permessi/mappa-api.ts
 git commit -m "feat(crm): webhook Resend per mail aperta e indirizzo rimbalzato"
 ```
+
+**Correzione post-review (fix-wave 2026-08-06, finding I-2):** il codice sopra rispondeva
+200 anche quando `handleResendEvent` lanciava. Il committente ha deciso diversamente in
+review whole-branch: gli unici errori che raggiungono quel `catch` sono Prisma o di
+infrastruttura — i casi "non trovato" escono con `return` e non lanciano mai — cioè proprio
+la categoria per cui esistono i retry di Svix. Un 200 la perderebbe per sempre. La route ora
+risponde **500** quando l'handler lancia (vedi spec, sezione "Tre scelte, e perché"). Stesso
+giro di fix: aggiunto un `console.error` prima del 400 quando `RESEND_WEBHOOK_SECRET` manca
+(il log nel `catch` della verifica firma non scatta mai in quel caso, perché si esce prima di
+chiamarla).
 
 ---
 
@@ -1146,7 +1208,7 @@ git commit -m "feat(crm): webhook Resend per mail aperta e indirizzo rimbalzato"
 In `email-partenza.action.test.ts`:
 
 ```ts
-  it('errore se l’indirizzo ha rimbalzato', async () => {
+  it("errore se l'indirizzo ha rimbalzato", async () => {
     findUnique.mockResolvedValue({
       id: 'c1', cat: 'BROKER', status: 'S4', email: 'a@b.it',
       emailOptOutAt: null, nome: 'X', emailUnsubToken: null, companyId: null,
@@ -1161,7 +1223,7 @@ In `email-partenza.action.test.ts`:
 In `tracking-non-scrivibile.test.ts`, un nuovo `describe`:
 
 ```ts
-describe('updateCrmContactAction — il bounce si azzera correggendo l’email', () => {
+describe("updateCrmContactAction — il bounce si azzera correggendo l'email", () => {
   beforeEach(() => {
     findUnique.mockReset();
     update.mockReset();
@@ -1170,7 +1232,7 @@ describe('updateCrmContactAction — il bounce si azzera correggendo l’email',
 
   const base = {
     nome: 'Autofficina Rossi', cat: 'BROKER', tel: '3331234567',
-    status: 'S4', fonte: 'CSV',
+    status: 'S4', fonte: 'CSV_INIZIALE', // 'CSV' NON e' nell'enum: fallirebbe la validazione
   };
 
   it('email cambiata: azzera emailBouncedAt e il motivo', async () => {
@@ -1310,12 +1372,14 @@ describe('checkEmailDisponibileAction — accende iscrizioneInit', () => {
     expect(args.where.emailNorm).toBe('mario@rossi.it');
     expect(args.where.iscrizioneComp).toBe(false);
     expect(args.where.deletedAt).toBeNull();
+    // "Vince la prima data": chi ce l'ha già non deve nemmeno matchare.
+    expect(args.where.iscrizioneInitAt).toBeNull();
     expect(args.data.iscrizioneInit).toBe(true);
     expect(args.data.iscrizioneInitAt).toBeInstanceOf(Date);
   });
 
   // Il CRM è un effetto collaterale: se cade, la registrazione prosegue.
-  it('se il CRM lancia, l’action risponde comunque', async () => {
+  it("se il CRM lancia, l'action risponde comunque", async () => {
     updateMany.mockRejectedValue(new Error('db giù'));
     await expect(checkEmailDisponibileAction('mario@rossi.it')).resolves.toEqual({
       disponibile: true,
@@ -1361,7 +1425,16 @@ In `app/(auth)/actions.ts`, dentro `checkEmailDisponibileAction`, dopo il check 
 async function segnaIscrizioneIniziataCrm(emailLower: string): Promise<void> {
   try {
     await prisma.crmContact.updateMany({
-      where: { emailNorm: emailLower, deletedAt: null, iscrizioneComp: false },
+      // `iscrizioneInitAt: null` nella where, non solo nei data: senza, ogni
+      // tentativo dello step Account risposterebbe la data in avanti e la
+      // regola "vince la prima" sarebbe violata. Con questa clausola il
+      // secondo tentativo semplicemente non matcha.
+      where: {
+        emailNorm: emailLower,
+        deletedAt: null,
+        iscrizioneComp: false,
+        iscrizioneInitAt: null,
+      },
       data: { iscrizioneInit: true, iscrizioneInitAt: new Date() },
     });
   } catch (e) {
@@ -1370,26 +1443,13 @@ async function segnaIscrizioneIniziataCrm(emailLower: string): Promise<void> {
 }
 ```
 
-⚠️ `iscrizioneInitAt` qui **sovrascriverebbe** la data a ogni tentativo. Per rispettare la regola "prima data vince", restringere la where:
-
-```ts
-      where: {
-        emailNorm: emailLower,
-        deletedAt: null,
-        iscrizioneComp: false,
-        iscrizioneInitAt: null,
-      },
-```
-
-Così il secondo tentativo non tocca niente.
-
 - [ ] **Step 4: Lanciare i test**
 
 ```bash
 pnpm --filter piattaforma test -- iscrizione-init.test.ts
 ```
 
-Atteso: PASS. Aggiungere `expect(args.where.iscrizioneInitAt).toBeNull();` al primo test se non c'è già.
+Atteso: PASS su tutti e tre.
 
 - [ ] **Step 5: Lanciare la suite completa e il typecheck**
 
@@ -1444,7 +1504,7 @@ Con la scheda di un contatto che ha `linkAperture > 0`: aprire la modale, cambia
 Su un contatto con `emailBouncedAt` valorizzato a mano sul DB locale:
 
 ```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = now(), \"emailBounceMotivo\" = 'mailbox unavailable' WHERE id = '<id>';"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = now(), \"emailBounceMotivo\" = 'mailbox unavailable' WHERE id = '<id>';"
 ```
 
 Ricaricare la lista: badge "rimbalzata" accanto all'email, e nel tab la riga rossa. Poi correggere l'email dalla scheda e salvare: il badge sparisce.
@@ -1452,7 +1512,7 @@ Ricaricare la lista: badge "rimbalzata" accanto all'email, e nel tab la riga ros
 - [ ] **Step 5: Ripristinare il dato di prova**
 
 ```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = NULL, \"emailBounceMotivo\" = NULL WHERE id = '<id>';"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = NULL, \"emailBounceMotivo\" = NULL WHERE id = '<id>';"
 ```
 
 - [ ] **Step 6: Scrivere la checklist di rilascio**

@@ -150,6 +150,17 @@ describe('sendEmailPartenzaAction', () => {
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
+  it("errore se l'indirizzo ha rimbalzato", async () => {
+    findUnique.mockResolvedValue({
+      id: 'c1', cat: 'BROKER', status: 'S4', email: 'a@b.it',
+      emailOptOutAt: null, nome: 'X', emailUnsubToken: null, companyId: null,
+      emailBouncedAt: new Date(),
+    });
+    const res = await sendEmailPartenzaAction({ contactId: 'c1', nomeReferente: 'Mario', messaggio: MSG });
+    expect(res).toEqual({ ok: false, error: expect.stringContaining('rifiutato') });
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
   it('email invalide fra gli extra vengono scartate lato server', async () => {
     findUnique.mockResolvedValue({ id: 'c1', cat: 'AGENZIA', status: 'S0', email: null, emailOptOutAt: null, nome: 'X', emailUnsubToken: null });
     update.mockResolvedValue({});
@@ -159,5 +170,23 @@ describe('sendEmailPartenzaAction', () => {
     expect(res).toEqual({ ok: true });
     expect(sendNotification).toHaveBeenCalledTimes(1);
     expect(sendNotification.mock.calls[0][0].target.email).toBe('ok@z.it');
+  });
+
+  it('valorizza crmContactId su OGNI notifica, indirizzi aggiuntivi compresi', async () => {
+    findUnique.mockResolvedValue({
+      id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it',
+      emailOptOutAt: null, nome: 'X', emailUnsubToken: null, companyId: null,
+    });
+    update.mockResolvedValue({});
+    await sendEmailPartenzaAction({
+      contactId: 'c1',
+      nomeReferente: 'Mario',
+      messaggio: MSG,
+      emailAggiuntive: ['titolare@personale.it'],
+    });
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+    for (const call of sendNotification.mock.calls) {
+      expect(call[1]?.crmContactId).toBe('c1');
+    }
   });
 });

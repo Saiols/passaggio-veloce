@@ -9,7 +9,9 @@ const vuoto = {
   linkInviatoAt: null,
   linkAperto: false,
   linkApertoAt: null,
+  mailApertaAt: null,
   iscrizioneInit: false,
+  iscrizioneInitAt: null,
   iscrizioneComp: false,
   iscrizioneAt: null,
   primaPratica: false,
@@ -59,6 +61,19 @@ describe('statoFattuale', () => {
     expect(statoFattuale({ ...vuoto, status: 'S3', linkInviato: true }).codice).toBe('S4');
     expect(statoFattuale({ ...vuoto, status: 'S11' }).codice).toBe('S0');
   });
+
+  it('S6 riporta la data di iscrizione INIZIATA, non quella di completamento', () => {
+    const at = new Date('2026-08-01T10:00:00Z');
+    const r = statoFattuale({
+      ...vuoto,
+      linkInviato: true,
+      linkAperto: true,
+      iscrizioneInit: true,
+      iscrizioneInitAt: at,
+    });
+    expect(r.codice).toBe('S6');
+    expect(r.at).toEqual(at);
+  });
 });
 
 describe('timelineFatti', () => {
@@ -82,5 +97,22 @@ describe('timelineFatti', () => {
   it('salta i timestamp null', () => {
     const t = timelineFatti(vuoto, []);
     expect(t).toHaveLength(1); // solo "Contatto creato"
+  });
+
+  // Il pannello Fatti mostra queste due righe (RigaReferto "Mail aperta" e
+  // "Iscrizione iniziata") accanto alla timeline: se la timeline non le
+  // includesse, si contraddirebbe col referto a fianco.
+  it('include mail aperta e iscrizione iniziata, in ordine cronologico', () => {
+    const c = {
+      ...vuoto,
+      mailApertaAt: new Date('2026-01-06'),
+      iscrizioneInitAt: new Date('2026-01-08'),
+    };
+    const t = timelineFatti(c, []);
+    expect(t.map((e) => e.label)).toEqual([
+      'Contatto creato',
+      'Mail aperta',
+      'Iscrizione iniziata',
+    ]);
   });
 });

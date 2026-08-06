@@ -888,7 +888,40 @@ export async function checkEmailDisponibileAction(
   if (await emailGiaInUso(emailLower)) {
     return { disponibile: false, error: EMAIL_GIA_REGISTRATA };
   }
+  await segnaIscrizioneIniziataCrm(emailLower);
   return { disponibile: true };
+}
+
+/**
+ * Funnel CRM: chi arriva allo step successivo dell'Account ha *iniziato*
+ * l'iscrizione. Marca il contatto corrispondente (match sull'email, come già
+ * fa la riconciliazione per l'iscrizione completata), così lo stato S6
+ * "Iscrizione incompleta" smette di essere irraggiungibile.
+ *
+ * `updateMany` e non `update`: la where non è su una chiave unica, e più
+ * contatti possono condividere l'email (una persona, due aziende).
+ *
+ * Best-effort assoluto: un errore del CRM non deve MAI bloccare una
+ * registrazione in corso.
+ */
+async function segnaIscrizioneIniziataCrm(emailLower: string): Promise<void> {
+  try {
+    await prisma.crmContact.updateMany({
+      // `iscrizioneInitAt: null` nella where, non solo nei data: senza, ogni
+      // tentativo dello step Account risposterebbe la data in avanti e la
+      // regola "vince la prima" sarebbe violata. Con questa clausola il
+      // secondo tentativo semplicemente non matcha.
+      where: {
+        emailNorm: emailLower,
+        deletedAt: null,
+        iscrizioneComp: false,
+        iscrizioneInitAt: null,
+      },
+      data: { iscrizioneInit: true, iscrizioneInitAt: new Date() },
+    });
+  } catch (e) {
+    console.warn('[crm] iscrizioneInit non aggiornato', (e as Error).message);
+  }
 }
 
 // ============================================================

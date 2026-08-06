@@ -73,6 +73,10 @@ export type ContactRow = {
   iscrizioneInit: boolean;
   iscrizioneComp: boolean;
   iscrizioneAt: string | null;
+  mailApertaAt: string | null;
+  iscrizioneInitAt: string | null;
+  emailBouncedAt: string | null;
+  emailBounceMotivo: string | null;
   platStatus: string | null;
   primaPratica: boolean;
   primaPraticaAt: string | null;
@@ -99,7 +103,9 @@ function fattiDaRow(c: ContactRow): ContattoFatti {
     linkInviatoAt: d(c.linkInviatoAt),
     linkAperto: c.linkAperto,
     linkApertoAt: d(c.linkApertoAt),
+    mailApertaAt: d(c.mailApertaAt),
     iscrizioneInit: c.iscrizioneInit,
+    iscrizioneInitAt: d(c.iscrizioneInitAt),
     iscrizioneComp: c.iscrizioneComp,
     iscrizioneAt: d(c.iscrizioneAt),
     primaPratica: c.primaPratica,
@@ -558,7 +564,17 @@ export function CrmContactsClient({
                       c.tel
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-pv-slate-700">{c.email ?? '—'}</td>
+                  <td className="px-4 py-2.5 text-pv-slate-700">
+                    {c.email ?? '—'}
+                    {c.emailBouncedAt && (
+                      <span
+                        title={c.emailBounceMotivo ?? 'L’indirizzo ha rifiutato l’ultima email'}
+                        className="ml-1.5 whitespace-nowrap rounded-full bg-pv-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500"
+                      >
+                        rimbalzata
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">
                     {(() => {
                       const f = statoFattuale(fattiDaRow(c));
@@ -1197,9 +1213,7 @@ export function ContactModal({
           {tab === 'stato' && (
             <TabStato data={data} set={set} readOnly={isReadOnlyForSales} field={field} />
           )}
-          {tab === 'tracking' && (
-            <TabTracking data={data} set={set} readOnly={isReadOnlyForSales} contact={contact} />
-          )}
+          {tab === 'tracking' && <TabTracking contact={contact} />}
           {tab === 'piattaforma' && (
             <TabPiattaforma
               data={data}
@@ -1274,18 +1288,6 @@ function initialData(c: ContactRow | null): CrmContactInput {
     noteAI: c?.noteAI ?? '',
     trascrizione: c?.trascrizione ?? '',
     noteManuali: c?.noteManuali ?? '',
-    linkInviato: c?.linkInviato ?? false,
-    linkInviatoAt: c?.linkInviatoAt?.slice(0, 10) ?? '',
-    linkAperto: c?.linkAperto ?? false,
-    linkAperture: c?.linkAperture ?? 0,
-    videoInviato: c?.videoInviato ?? false,
-    videoMin: c?.videoMin ?? 0,
-    mailAperta: c?.mailAperta ?? false,
-    smsInviato: c?.smsInviato ?? false,
-    waInviato: c?.waInviato ?? false,
-    iscrizioneInit: c?.iscrizioneInit ?? false,
-    iscrizioneComp: c?.iscrizioneComp ?? false,
-    iscrizioneAt: c?.iscrizioneAt?.slice(0, 10) ?? '',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     platStatus: (c?.platStatus ?? '') as any,
     primaPratica: c?.primaPratica ?? false,
@@ -1744,7 +1746,7 @@ function TabStato({
   );
 }
 
-/** Storico datato dei fatti (timeline), sopra i flag editabili. Sola lettura. */
+/** Storico datato dei fatti (timeline), nello stesso pannello del referto Fatti. Sola lettura. */
 function TimelineFatti({ contact }: { contact: ContactRow }) {
   // Le chiamate (CrmCall) non sono ancora popolate (Vapi non attivo): la timeline
   // si costruisce dai timestamp del contatto. Quando ci saranno, passare qui le call.
@@ -1776,87 +1778,113 @@ function TimelineFatti({ contact }: { contact: ContactRow }) {
   );
 }
 
-function TabTracking({ data, set, readOnly, contact }: TabProps & { contact: ContactRow | null }) {
+/**
+ * Una riga del referto tracking: sola lettura per costruzione — non riceve
+ * `onChange`, quindi non c'è modo di scriverla da qui nemmeno per sbaglio.
+ */
+function RigaReferto({
+  label,
+  fatto,
+  quando,
+  dettaglio,
+  nota,
+  allarme,
+}: {
+  label: string;
+  fatto: boolean;
+  quando?: string | null;
+  dettaglio?: string;
+  nota?: string;
+  allarme?: boolean;
+}) {
+  const fmt = (s: string) =>
+    new Date(s).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {contact && <TimelineFatti contact={contact} />}
-      <FieldBool
-        label="Link inviato"
-        value={data.linkInviato}
-        readOnly={readOnly}
-        onChange={(v) => set('linkInviato', v)}
-      />
-      <FieldText
-        label="Data invio link"
-        type="date"
-        value={data.linkInviatoAt ?? ''}
-        readOnly={readOnly}
-        onChange={(v) => set('linkInviatoAt', v)}
-      />
-      <FieldBool
-        label="Link aperto"
-        value={data.linkAperto}
-        readOnly={readOnly}
-        onChange={(v) => set('linkAperto', v)}
-      />
-      <FieldText
-        label="N. aperture link"
-        type="number"
-        value={String(data.linkAperture ?? 0)}
-        readOnly={readOnly}
-        onChange={(v) => set('linkAperture', Number(v))}
-      />
-      <FieldBool
-        label="Video tutorial inviato"
-        value={data.videoInviato}
-        readOnly={readOnly}
-        onChange={(v) => set('videoInviato', v)}
-      />
-      <FieldText
-        label="Minuti video visti"
-        type="number"
-        value={String(data.videoMin ?? 0)}
-        readOnly={readOnly}
-        onChange={(v) => set('videoMin', Number(v))}
-      />
-      <FieldBool
-        label="Mail aperta"
-        value={data.mailAperta}
-        readOnly={readOnly}
-        onChange={(v) => set('mailAperta', v)}
-      />
-      <FieldBool
-        label="SMS inviato"
-        value={data.smsInviato}
-        readOnly={readOnly}
-        onChange={(v) => set('smsInviato', v)}
-      />
-      <FieldBool
-        label="WhatsApp inviato"
-        value={data.waInviato}
-        readOnly={readOnly}
-        onChange={(v) => set('waInviato', v)}
-      />
-      <FieldBool
-        label="Iscrizione iniziata"
-        value={data.iscrizioneInit}
-        readOnly={readOnly}
-        onChange={(v) => set('iscrizioneInit', v)}
-      />
-      <FieldBool
-        label="Iscrizione completata"
-        value={data.iscrizioneComp}
-        readOnly={readOnly}
-        onChange={(v) => set('iscrizioneComp', v)}
-      />
-      <FieldText
-        label="Data iscrizione"
-        type="date"
-        value={data.iscrizioneAt ?? ''}
-        readOnly={readOnly}
-        onChange={(v) => set('iscrizioneAt', v)}
-      />
+    <div className="rounded-[10px] border-[1.5px] border-pv-slate-200 bg-pv-slate-50/60 px-3 py-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-pv-slate-500">
+          {label}
+        </span>
+        <span
+          className={
+            'text-[12.5px] font-bold ' +
+            (allarme
+              ? 'text-pv-red-500'
+              : fatto
+                ? 'text-pv-navy-800'
+                : 'text-pv-slate-400')
+          }
+        >
+          {fatto ? (quando ? fmt(quando) : 'sì') : '—'}
+        </span>
+      </div>
+      {fatto && dettaglio ? (
+        <p className="mt-0.5 text-[11.5px] text-pv-slate-600">{dettaglio}</p>
+      ) : null}
+      {nota ? <p className="mt-0.5 text-[10.5px] text-pv-slate-500">{nota}</p> : null}
     </div>
+  );
+}
+
+function TabTracking({ contact }: { contact: ContactRow | null }) {
+  if (!contact) {
+    return (
+      <p className="text-[12.5px] text-pv-slate-500">
+        Nessun fatto registrato: il referto si popola dopo il salvataggio del contatto e
+        l&apos;invio dell&apos;email di partenza.
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="mb-3 text-[12px] text-pv-slate-500">
+        Referto automatico: questi dati li scrive il sistema. Per registrare
+        un&apos;attività fatta fuori piattaforma, usa lo Stato nel tab «Stato &amp;
+        Chiamate».
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <TimelineFatti contact={contact} />
+        <RigaReferto
+          label="Link inviato"
+          fatto={contact.linkInviato}
+          quando={contact.linkInviatoAt}
+        />
+        <RigaReferto
+          label="Link aperto"
+          fatto={contact.linkAperto}
+          quando={contact.linkApertoAt}
+          dettaglio={
+            contact.linkAperture > 1 ? `${contact.linkAperture} aperture` : undefined
+          }
+        />
+        <RigaReferto
+          label="Mail aperta"
+          fatto={contact.mailAperta}
+          quando={contact.mailApertaAt}
+          nota="Indizio, non prova: Gmail e Apple Mail caricano il pixel da soli."
+        />
+        <RigaReferto
+          label="Iscrizione iniziata"
+          fatto={contact.iscrizioneInit}
+          quando={contact.iscrizioneInitAt}
+        />
+        <RigaReferto
+          label="Iscrizione completata"
+          fatto={contact.iscrizioneComp}
+          quando={contact.iscrizioneAt}
+        />
+        {contact.emailBouncedAt ? (
+          <RigaReferto
+            label="Indirizzo email"
+            fatto
+            quando={contact.emailBouncedAt}
+            dettaglio={contact.emailBounceMotivo ?? 'Email rimbalzata'}
+            nota="L'invio resta bloccato finché l'indirizzo non viene corretto."
+            allarme
+          />
+        ) : null}
+      </div>
+    </>
   );
 }
 

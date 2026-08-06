@@ -87,28 +87,6 @@ const CRM_CONTACT_INPUT = z
     trascrizione: z.string().trim().max(20000).optional().or(z.literal('')),
     noteManuali: z.string().trim().max(4000).optional().or(z.literal('')),
 
-    // Tracking
-    linkInviato: z.coerce.boolean().default(false),
-    linkInviatoAt: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional()
-      .or(z.literal('')),
-    linkAperto: z.coerce.boolean().default(false),
-    linkAperture: z.coerce.number().int().min(0).default(0),
-    videoInviato: z.coerce.boolean().default(false),
-    videoMin: z.coerce.number().int().min(0).max(600).default(0),
-    mailAperta: z.coerce.boolean().default(false),
-    smsInviato: z.coerce.boolean().default(false),
-    waInviato: z.coerce.boolean().default(false),
-    iscrizioneInit: z.coerce.boolean().default(false),
-    iscrizioneComp: z.coerce.boolean().default(false),
-    iscrizioneAt: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional()
-      .or(z.literal('')),
-
     // Piattaforma (override manuale; il sync cron li sovrascrive)
     platStatus: z.enum(['ATTIVO', 'INATTIVO', 'SOSPESO']).optional().or(z.literal('')),
     primaPratica: z.coerce.boolean().default(false),
@@ -181,18 +159,6 @@ function dataFromInput(d: CrmContactInput): Prisma.CrmContactCreateInput {
     noteAI: emptyToNull(d.noteAI),
     trascrizione: emptyToNull(d.trascrizione),
     noteManuali: emptyToNull(d.noteManuali),
-    linkInviato: d.linkInviato,
-    linkInviatoAt: parseDate(d.linkInviatoAt),
-    linkAperto: d.linkAperto,
-    linkAperture: d.linkAperture,
-    videoInviato: d.videoInviato,
-    videoMin: d.videoMin,
-    mailAperta: d.mailAperta,
-    smsInviato: d.smsInviato,
-    waInviato: d.waInviato,
-    iscrizioneInit: d.iscrizioneInit,
-    iscrizioneComp: d.iscrizioneComp,
-    iscrizioneAt: parseDate(d.iscrizioneAt),
     platStatus: emptyToNull(d.platStatus) as Prisma.CrmContactCreateInput['platStatus'],
     primaPratica: d.primaPratica,
     primaPraticaAt: parseDate(d.primaPraticaAt),
@@ -269,7 +235,7 @@ export async function updateCrmContactAction(id: string, raw: unknown): Promise<
   // campi che l'iscrizione può aver riempito (servono sotto, per l'audit).
   const attuale = await prisma.crmContact.findUnique({
     where: { id },
-    select: { assignedToId: true, status: true, ...SELECT_ARRICCHIMENTO },
+    select: { assignedToId: true, status: true, emailBouncedAt: true, ...SELECT_ARRICCHIMENTO },
   });
 
   // SALES può modificare solo i propri assegnati (decisione 7)
@@ -294,6 +260,16 @@ export async function updateCrmContactAction(id: string, raw: unknown): Promise<
   // è chiuso e vince sui valori che il form ha comunque mandato (il campo data
   // resta compilato nella scheda finché non si ricarica).
   Object.assign(data, campiRichiamoDopoCambioStato(attuale?.status ?? '', parsed.data.status));
+
+  // Correggere l'indirizzo È il rimedio al bounce: non serve un pulsante
+  // "sblocca". Il confronto è sul valore come finisce sul DB — si legge `data`,
+  // che dataFromInput ha già normalizzato (lowercase, '' → null), non l'input
+  // grezzo. Stessa ragione per cui lo fa il blocco arricchimento qui sotto.
+  const emailScritta = typeof data.email === 'string' ? data.email : null;
+  if (attuale?.emailBouncedAt && emailScritta !== attuale.email) {
+    data.emailBouncedAt = null;
+    data.emailBounceMotivo = null;
+  }
 
   // Un campo ereditato dall'iscrizione e poi riscritto a mano non viene più
   // dall'iscrizione: esce dall'audit, altrimenti il pannello continuerebbe a
@@ -704,6 +680,7 @@ export async function sendEmailPartenzaAction(input: {
       email: true,
       nome: true,
       emailOptOutAt: true,
+      emailBouncedAt: true,
       emailUnsubToken: true,
       assignedToId: true,
       companyId: true,
@@ -730,6 +707,15 @@ export async function sendEmailPartenzaAction(input: {
   }
   if (contact.emailOptOutAt)
     return { ok: false, error: 'Il contatto si è disiscritto dalle email.' };
+  // Un indirizzo che ha rimbalzato in modo definitivo non va ritentato: Resend
+  // penalizza la reputazione del dominio se il tasso di bounce sale. Il rimedio
+  // è correggere l'email, che azzera il blocco da sola (updateCrmContactAction).
+  if (contact.emailBouncedAt) {
+    return {
+      ok: false,
+      error: 'L’indirizzo ha rifiutato l’ultima email: correggilo prima di riprovare.',
+    };
+  }
 
   // Destinatari = email del contatto (se c'è) + indirizzi extra rivalidati, dedup
   // case-insensitive, con un tetto di sicurezza. La stessa email/link parte a
@@ -785,18 +771,21 @@ export async function sendEmailPartenzaAction(input: {
   // Un invio per destinatario: email individuali (nessuna visibilità incrociata
   // fra gli indirizzi), stesso link/token/codice per tutti.
   for (const email of destinatari) {
-    await sendNotification({
-      tipo: 'N26_EMAIL_PARTENZA',
-      target: { email },
-      payload: {
-        nomeReferente: input.nomeReferente.trim() || contact.nome,
-        messaggio,
-        categoria: contact.cat as 'BROKER' | 'AGENZIA',
-        linkUrl,
-        unsubUrl,
-        codice,
+    await sendNotification(
+      {
+        tipo: 'N26_EMAIL_PARTENZA',
+        target: { email },
+        payload: {
+          nomeReferente: input.nomeReferente.trim() || contact.nome,
+          messaggio,
+          categoria: contact.cat as 'BROKER' | 'AGENZIA',
+          linkUrl,
+          unsubUrl,
+          codice,
+        },
       },
-    });
+      { crmContactId: contact.id },
+    );
   }
 
   await prisma.crmContact.update({

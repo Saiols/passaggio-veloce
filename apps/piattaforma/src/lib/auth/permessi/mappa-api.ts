@@ -11,9 +11,11 @@
  *
  * A differenza delle altre due mappe, qui NON si esclude un perimetro
  * "staff piattaforma"/"pre-sessione": le route API sono un namespace piatto
- * condiviso da azienda, staff e cron, e la mappa le enumera TUTTE (34), con
- * `null` per quelle staff/cron/pubbliche — enumerare tutto è più economico e
- * più sicuro che mantenere un secondo elenco di prefissi da tenere allineato.
+ * condiviso da azienda, staff e cron, e la mappa le enumera TUTTE (38 al
+ * 2026-08-06 — tienilo allineato quando aggiungi o rimuovi una route, così
+ * chi legge vede subito se il conteggio è rimasto indietro), con `null` per
+ * quelle staff/cron/pubbliche — enumerare tutto è più economico e più sicuro
+ * che mantenere un secondo elenco di prefissi da tenere allineato.
  *
  * Il test enumera TUTTE le `route.ts` sotto `src/app/api` e fallisce se una
  * non è qui mappata; per le voci con un permesso, verifica anche che il

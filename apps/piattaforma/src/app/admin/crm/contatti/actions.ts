@@ -87,28 +87,6 @@ const CRM_CONTACT_INPUT = z
     trascrizione: z.string().trim().max(20000).optional().or(z.literal('')),
     noteManuali: z.string().trim().max(4000).optional().or(z.literal('')),
 
-    // Tracking
-    linkInviato: z.coerce.boolean().default(false),
-    linkInviatoAt: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional()
-      .or(z.literal('')),
-    linkAperto: z.coerce.boolean().default(false),
-    linkAperture: z.coerce.number().int().min(0).default(0),
-    videoInviato: z.coerce.boolean().default(false),
-    videoMin: z.coerce.number().int().min(0).max(600).default(0),
-    mailAperta: z.coerce.boolean().default(false),
-    smsInviato: z.coerce.boolean().default(false),
-    waInviato: z.coerce.boolean().default(false),
-    iscrizioneInit: z.coerce.boolean().default(false),
-    iscrizioneComp: z.coerce.boolean().default(false),
-    iscrizioneAt: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/)
-      .optional()
-      .or(z.literal('')),
-
     // Piattaforma (override manuale; il sync cron li sovrascrive)
     platStatus: z.enum(['ATTIVO', 'INATTIVO', 'SOSPESO']).optional().or(z.literal('')),
     primaPratica: z.coerce.boolean().default(false),
@@ -181,18 +159,6 @@ function dataFromInput(d: CrmContactInput): Prisma.CrmContactCreateInput {
     noteAI: emptyToNull(d.noteAI),
     trascrizione: emptyToNull(d.trascrizione),
     noteManuali: emptyToNull(d.noteManuali),
-    linkInviato: d.linkInviato,
-    linkInviatoAt: parseDate(d.linkInviatoAt),
-    linkAperto: d.linkAperto,
-    linkAperture: d.linkAperture,
-    videoInviato: d.videoInviato,
-    videoMin: d.videoMin,
-    mailAperta: d.mailAperta,
-    smsInviato: d.smsInviato,
-    waInviato: d.waInviato,
-    iscrizioneInit: d.iscrizioneInit,
-    iscrizioneComp: d.iscrizioneComp,
-    iscrizioneAt: parseDate(d.iscrizioneAt),
     platStatus: emptyToNull(d.platStatus) as Prisma.CrmContactCreateInput['platStatus'],
     primaPratica: d.primaPratica,
     primaPraticaAt: parseDate(d.primaPraticaAt),

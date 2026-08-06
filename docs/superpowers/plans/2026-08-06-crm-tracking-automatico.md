@@ -1083,18 +1083,20 @@ export async function handleResendEvent(evento: unknown): Promise<void> {
   // fine (`Suppressed`, `MessageRejected`, `General`…). Confrontare `subType`
   // con 'hard'/'soft' non matcherebbe mai, e il blocco non scatterebbe MAI —
   // in silenzio. Verificato sul payload d'esempio della doc Resend.
-  const tipo = e.data?.bounce?.type?.toLowerCase();
-  if (!tipo) {
+  // NB: `bounceType`, non `tipo`: quel nome è già preso in cima dalla variabile
+  // che instrada opened/bounced, e ridichiararlo non compila.
+  const bounceType = e.data?.bounce?.type?.toLowerCase();
+  if (!bounceType) {
     console.warn('[resend-webhook] bounce senza type, ignorato', emailId);
     return;
   }
-  if (tipo !== 'permanent' && tipo !== 'temporary') {
+  if (bounceType !== 'permanent' && bounceType !== 'temporary') {
     // Vocabolario inatteso: non blocchiamo (fail-safe), ma lo diciamo — è
     // l'unico modo per accorgersi che il contratto del provider è cambiato.
-    console.warn('[resend-webhook] bounce con type sconosciuto', emailId, tipo);
+    console.warn('[resend-webhook] bounce con type sconosciuto', emailId, bounceType);
     return;
   }
-  if (tipo !== 'permanent') return;
+  if (bounceType !== 'permanent') return;
 
   await prisma.crmContact.update({
     where: { id: contatto.id },

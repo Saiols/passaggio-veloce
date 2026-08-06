@@ -37,6 +37,7 @@ export const env = createEnv({
     PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    RESEND_WEBHOOK_SECRET: z.string().optional(),
 
     CHATBOT_LLM_ENABLED: z
       .enum(['true', 'false'])
@@ -88,6 +89,7 @@ export const env = createEnv({
     PAYMENT_PROVIDER: process.env.PAYMENT_PROVIDER,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
     CHATBOT_LLM_ENABLED: process.env.CHATBOT_LLM_ENABLED,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     CHATBOT_DAILY_CAP: process.env.CHATBOT_DAILY_CAP,

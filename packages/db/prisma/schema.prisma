@@ -2051,12 +2051,19 @@ model NotificaInviata {
   providerRef  String? // message-id del provider (Resend/Twilio/...)
   errorMessage String?
 
+  /// Contatto CRM destinatario (valorizzato solo per N26_EMAIL_PARTENZA).
+  /// Riferimento SOFT (scalare, niente FK), come `EventoPratica.praticaId`:
+  /// il contatto può essere eliminato senza trascinarsi dietro il log di audit.
+  crmContactId String? @db.Uuid
+
   createdAt DateTime @default(now())
 
   @@index([tipo])
   @@index([userId])
   @@index([companyId])
   @@index([stato, scheduledAt])
+  @@index([crmContactId])
+  @@index([providerRef])
   @@map("notifiche_inviate")
 }
 
@@ -2253,11 +2260,22 @@ model CrmContact {
   videoInviato   Boolean   @default(false)
   videoMin       Int       @default(0)
   mailAperta     Boolean   @default(false)
+  /// Prima apertura della mail di partenza (webhook Resend `email.opened`).
+  /// Le aperture successive NON la sovrascrivono.
+  mailApertaAt   DateTime?
   smsInviato     Boolean   @default(false)
   waInviato      Boolean   @default(false)
   iscrizioneInit Boolean   @default(false)
+  /// Quando è iniziata l'iscrizione (step Account del wizard): è la data di S6.
+  /// `iscrizioneAt` invece è la data di iscrizione COMPLETATA (S7).
+  iscrizioneInitAt DateTime?
   iscrizioneComp Boolean   @default(false)
   iscrizioneAt   DateTime?
+  /// Bounce DEFINITIVO (`subType = hard`) dell'ultima email di partenza.
+  /// null = indirizzo utilizzabile. Si azzera da solo quando l'email cambia.
+  emailBouncedAt    DateTime?
+  /// Messaggio del server destinatario, troncato a 500 char.
+  emailBounceMotivo String?
 
   // Match con Company piattaforma (post-iscrizione, via webhook)
   companyId      String?        @db.Uuid

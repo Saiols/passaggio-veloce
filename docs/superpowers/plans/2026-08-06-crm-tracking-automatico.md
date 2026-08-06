@@ -687,7 +687,7 @@ con:
 pnpm --filter piattaforma typecheck
 ```
 
-Atteso: PASS. Se `bg-pv-red-50` non esiste nel design system, usare `bg-pv-red-500/10` (già in uso altrove nel file).
+Atteso: PASS. `bg-pv-red-50` e `text-pv-red-500` sono entrambi token del design system (`globals.css:27-28`, esposti a Tailwind alle righe 68-69): usarli così com'è.
 
 - [ ] **Step 3: Commit**
 

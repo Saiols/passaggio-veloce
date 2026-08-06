@@ -14,6 +14,7 @@
 
 - **Migration a mano.** Mai `pnpm db:migrate` (propone DROP SEQUENCE su questo schema). Si scrive il file SQL e si applica con `pnpm db:deploy`.
 - **Niente colori hardcoded.** Solo classi del design system (`pv-slate-*`, `pv-navy-*`, `pv-red-*`).
+- **Apostrofi tipografici nei testi utente.** Il repo scrive `'L’indirizzo…'` — apostrofo curvo U+2019 dentro una stringa ad apici singoli (vedi `client.tsx:1007`). **È sintatticamente valido**: `’` non chiude una stringa delimitata da `'`. Non "correggerlo": non è un errore di sintassi. Se il tuo editor te lo segnala come tale, sbaglia lui.
 - **Nomi tabella:** `crm_contacts`, `notifiche_inviate`. Le colonne sono camelCase, senza `@map`.
 - **Test:** `pnpm --filter piattaforma test` (vitest). Typecheck: `pnpm --filter piattaforma typecheck`.
 - **Categoria tag Resend dell'email di partenza:** `N26_EMAIL_PARTENZA` (valore di `NotificaTipo`, invariato da `sanitizeTagValue`).
@@ -672,7 +673,7 @@ con:
                     {c.email ?? '—'}
                     {c.emailBouncedAt && (
                       <span
-                        title={c.emailBounceMotivo ?? "L'indirizzo ha rifiutato l'ultima email"}
+                        title={c.emailBounceMotivo ?? 'L’indirizzo ha rifiutato l’ultima email'}
                         className="ml-1.5 whitespace-nowrap rounded-full bg-pv-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500"
                       >
                         rimbalzata
@@ -1221,7 +1222,7 @@ In `sendEmailPartenzaAction`, aggiungere `emailBouncedAt: true` al `select` del 
   if (contact.emailBouncedAt) {
     return {
       ok: false,
-      error: "L'indirizzo ha rifiutato l'ultima email: correggilo prima di riprovare.",
+      error: 'L’indirizzo ha rifiutato l’ultima email: correggilo prima di riprovare.',
     };
   }
 ```

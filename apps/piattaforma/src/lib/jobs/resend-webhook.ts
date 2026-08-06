@@ -16,7 +16,7 @@ type ResendEvent = {
   data?: {
     email_id?: string;
     tags?: Record<string, string>;
-    bounce?: { subType?: string; message?: string };
+    bounce?: { type?: string; subType?: string; message?: string };
   };
 };
 
@@ -65,13 +65,25 @@ export async function handleResendEvent(evento: unknown): Promise<void> {
   }
 
   // Solo i bounce definitivi bloccano: casella piena o server temporaneamente
-  // giù (`soft`) non devono impedire il reinvio a un cliente valido.
-  const subType = e.data?.bounce?.subType?.toLowerCase();
-  if (!subType) {
-    console.warn('[resend-webhook] bounce senza subType, ignorato', emailId);
+  // giù non devono impedire il reinvio a un cliente valido.
+  //
+  // ⚠️ Il campo giusto è `type`, NON `subType`. Resend deriva il bounce da SES:
+  // `type` vale `Permanent` | `Temporary`, mentre `subType` è la classificazione
+  // fine (`Suppressed`, `MessageRejected`, `General`…). Confrontare `subType`
+  // con 'hard'/'soft' non matcherebbe mai, e il blocco non scatterebbe MAI —
+  // in silenzio.
+  const bounceType = e.data?.bounce?.type?.toLowerCase();
+  if (!bounceType) {
+    console.warn('[resend-webhook] bounce senza type, ignorato', emailId);
     return;
   }
-  if (subType !== 'hard') return;
+  if (bounceType !== 'permanent' && bounceType !== 'temporary') {
+    // Vocabolario inatteso: non blocchiamo (fail-safe), ma lo diciamo — è
+    // l'unico modo per accorgersi che il contratto del provider è cambiato.
+    console.warn('[resend-webhook] bounce con type sconosciuto', emailId, bounceType);
+    return;
+  }
+  if (bounceType !== 'permanent') return;
 
   await prisma.crmContact.update({
     where: { id: contatto.id },

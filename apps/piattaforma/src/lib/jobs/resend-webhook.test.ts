@@ -24,12 +24,14 @@ const opened = (tags: Record<string, string> = { categoria: 'N26_EMAIL_PARTENZA'
   data: { email_id: 'em-1', tags },
 });
 
-const bounced = (subType: string) => ({
+// `type` = Permanent | Temporary (definitivo vs ritentabile).
+// `subType` viaggia insieme ma è solo la classificazione fine: non decide nulla.
+const bounced = (tipo: string) => ({
   type: 'email.bounced',
   data: {
     email_id: 'em-1',
     tags: { categoria: 'N26_EMAIL_PARTENZA' },
-    bounce: { subType, message: 'mailbox unavailable' },
+    bounce: { type: tipo, subType: 'MessageRejected', message: 'mailbox unavailable' },
   },
 });
 
@@ -73,16 +75,23 @@ describe('handleResendEvent', () => {
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it('bounce soft: registrato ma nessun blocco', async () => {
-    await handleResendEvent(bounced('soft'));
+  it('bounce temporaneo: nessuna scrittura, nessun blocco', async () => {
+    await handleResendEvent(bounced('Temporary'));
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it("bounce hard: blocca l'indirizzo con il motivo", async () => {
-    await handleResendEvent(bounced('hard'));
+  it("bounce permanente: blocca l'indirizzo con il motivo", async () => {
+    await handleResendEvent(bounced('Permanent'));
     const data = contactUpdate.mock.calls[0][0].data;
     expect(data.emailBouncedAt).toBeInstanceOf(Date);
     expect(data.emailBounceMotivo).toBe('mailbox unavailable');
+  });
+
+  // Se Resend cambiasse vocabolario, il blocco smetterebbe di funzionare: deve
+  // restare fail-safe (nessun blocco) ma NON silenzioso.
+  it('bounce con type sconosciuto: nessun blocco', async () => {
+    await handleResendEvent(bounced('Qualcosaltro'));
+    expect(contactUpdate).not.toHaveBeenCalled();
   });
 
   it('providerRef sconosciuto: nessuna scrittura, nessuna eccezione', async () => {
@@ -94,5 +103,15 @@ describe('handleResendEvent', () => {
   it('payload malformato: non lancia', async () => {
     await expect(handleResendEvent(null)).resolves.toBeUndefined();
     await expect(handleResendEvent({ type: 'email.opened' })).resolves.toBeUndefined();
+  });
+
+  // Il guard che impedisce di scrivere sul contatto SBAGLIATO.
+  it('tag giusto ma email_id assente: nessuna query', async () => {
+    await handleResendEvent({
+      type: 'email.opened',
+      data: { tags: { categoria: 'N26_EMAIL_PARTENZA' } },
+    });
+    expect(notificaFindFirst).not.toHaveBeenCalled();
+    expect(contactUpdate).not.toHaveBeenCalled();
   });
 });

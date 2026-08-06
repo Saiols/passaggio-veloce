@@ -431,3 +431,40 @@ documentazione Resend e corretto nel piano e nel codice.
   player video), le colonne restano sul DB pronte.
 - Eventi `email.delivered` ed `email.complained`: non gestiti in questo giro.
 - Vista/filtro dedicato "indirizzi da correggere" in lista: c'è il badge, non il filtro.
+
+---
+
+## Debito residuo
+
+Triato dalla review whole-branch come **non bloccante per il merge**. Qui perché altrimenti
+evapora: il resto della tracciabilità viveva in file di lavoro ora eliminati.
+
+**Documentazione che è diventata falsa altrove.** `docs/crm-spec-implementativa.md`
+(decisione 8) dichiara *"Pixel tracking: solo modello dati in CRM-B, endpoint in CRM-H"*. Da
+questo branch è **falsa per `mailAperta`** (l'endpoint esiste) e vera per video/SMS/WhatsApp.
+È un doc di primo livello e finisce nella KB del chatbot: chi lo legge conclude che
+`mailAperta` non ha scrittori — la premessa esatta che porterebbe a rimettere la checkbox
+manuale che questo lavoro ha tolto. Stessa classe di problema del commento `subType = hard`
+in `schema.prisma`, che era l'ultimo posto a dire il falso ed è stato corretto.
+
+**`mailAperta` è misurata ma il funnel la ignora.** `statoFattuale` non la considera: un
+contatto che apre la mail ma non clicca resta S4, indistinguibile da uno che non l'ha mai
+aperta. Non è un difetto — la spec non lo prometteva — ma è la domanda naturale successiva,
+da porsi con in mano il fatto che l'apertura è un indizio debole (Gmail e Apple Mail
+pre-caricano il pixel).
+
+**Coperture mancanti**, tutte su rami secondari: nessun test sul route handler
+(`400` senza segreto, `401` su firma non valida, `500` su throw dell'handler), benché il repo
+testi abitualmente i route handler; `NotificaInviata.readAt` è scritto dal webhook e non
+letto da nessuna parte; il troncamento a 500 char del motivo bounce non è testato.
+
+**Due divergenze latenti, oggi innocue.** `checkEmailDisponibileAction` interroga `emailNorm`
+(colonna calcolata da `lib/crm/match/normalize`) con un valore prodotto da
+`lib/auth/email-univoca.normalizzaEmail`: le due funzioni sono oggi identiche, ma se il CRM
+cambiasse normalizzazione quella query smetterebbe di matchare in silenzio. E un
+`email.bounced` che arrivasse *dopo* la correzione dell'indirizzo riaccenderebbe il blocco
+(finestra di secondi, nessun confronto con lo stato attuale).
+
+**Nota di manutenzione:** il blocco `// Pixel/funnel tracking` in `schema.prisma` ha le
+colonne disallineate. Un `prisma format` le sistema, ma riformatterà l'intero file: meglio
+farlo in un commit dedicato che dentro un diff da rivedere.

@@ -73,6 +73,10 @@ export type ContactRow = {
   iscrizioneInit: boolean;
   iscrizioneComp: boolean;
   iscrizioneAt: string | null;
+  mailApertaAt: string | null;
+  iscrizioneInitAt: string | null;
+  emailBouncedAt: string | null;
+  emailBounceMotivo: string | null;
   platStatus: string | null;
   primaPratica: boolean;
   primaPraticaAt: string | null;
@@ -100,6 +104,7 @@ function fattiDaRow(c: ContactRow): ContattoFatti {
     linkAperto: c.linkAperto,
     linkApertoAt: d(c.linkApertoAt),
     iscrizioneInit: c.iscrizioneInit,
+    iscrizioneInitAt: d(c.iscrizioneInitAt),
     iscrizioneComp: c.iscrizioneComp,
     iscrizioneAt: d(c.iscrizioneAt),
     primaPratica: c.primaPratica,

@@ -10,6 +10,7 @@ const vuoto = {
   linkAperto: false,
   linkApertoAt: null,
   iscrizioneInit: false,
+  iscrizioneInitAt: null,
   iscrizioneComp: false,
   iscrizioneAt: null,
   primaPratica: false,
@@ -58,6 +59,19 @@ describe('statoFattuale', () => {
   it('status legacy fuori scala (S2/S3/S11) è ignorato: contano i flag', () => {
     expect(statoFattuale({ ...vuoto, status: 'S3', linkInviato: true }).codice).toBe('S4');
     expect(statoFattuale({ ...vuoto, status: 'S11' }).codice).toBe('S0');
+  });
+
+  it('S6 riporta la data di iscrizione INIZIATA, non quella di completamento', () => {
+    const at = new Date('2026-08-01T10:00:00Z');
+    const r = statoFattuale({
+      ...vuoto,
+      linkInviato: true,
+      linkAperto: true,
+      iscrizioneInit: true,
+      iscrizioneInitAt: at,
+    });
+    expect(r.codice).toBe('S6');
+    expect(r.at).toEqual(at);
   });
 });
 

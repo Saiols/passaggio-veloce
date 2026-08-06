@@ -9,6 +9,7 @@ export interface ContattoFatti {
   linkAperto: boolean;
   linkApertoAt: Date | null;
   iscrizioneInit: boolean;
+  iscrizioneInitAt: Date | null;
   iscrizioneComp: boolean;
   iscrizioneAt: Date | null;
   primaPratica: boolean;
@@ -74,7 +75,7 @@ export function statoFattuale(c: ContattoFatti): {
     flagAt = c.iscrizioneAt;
   } else if (c.iscrizioneInit) {
     flag = 'S6';
-    flagAt = c.iscrizioneAt;
+    flagAt = c.iscrizioneInitAt;
   } else if (c.linkAperto) {
     flag = 'S5';
     flagAt = c.linkApertoAt;

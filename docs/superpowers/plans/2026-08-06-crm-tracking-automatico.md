@@ -901,12 +901,14 @@ const opened = (tags: Record<string, string> = { categoria: 'N26_EMAIL_PARTENZA'
   data: { email_id: 'em-1', tags },
 });
 
-const bounced = (subType: string) => ({
+// `type` = Permanent | Temporary (definitivo vs ritentabile).
+// `subType` viaggia insieme ma è solo la classificazione fine: non decide nulla.
+const bounced = (tipo: string) => ({
   type: 'email.bounced',
   data: {
     email_id: 'em-1',
     tags: { categoria: 'N26_EMAIL_PARTENZA' },
-    bounce: { subType, message: 'mailbox unavailable' },
+    bounce: { type: tipo, subType: 'MessageRejected', message: 'mailbox unavailable' },
   },
 });
 
@@ -950,16 +952,35 @@ describe('handleResendEvent', () => {
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it('bounce soft: registrato ma nessun blocco', async () => {
-    await handleResendEvent(bounced('soft'));
+  it('bounce temporaneo: nessuna scrittura, nessun blocco', async () => {
+    await handleResendEvent(bounced('Temporary'));
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it("bounce hard: blocca l'indirizzo con il motivo", async () => {
-    await handleResendEvent(bounced('hard'));
+  it("bounce definitivo: blocca l'indirizzo con il motivo", async () => {
+    await handleResendEvent(bounced('Permanent'));
     const data = contactUpdate.mock.calls[0][0].data;
     expect(data.emailBouncedAt).toBeInstanceOf(Date);
     expect(data.emailBounceMotivo).toBe('mailbox unavailable');
+  });
+
+  // Se Resend cambiasse vocabolario, il blocco smetterebbe di funzionare: deve
+  // restare fail-safe (nessun blocco) ma NON silenzioso.
+  it('bounce con type sconosciuto: nessun blocco', async () => {
+    await handleResendEvent(bounced('Qualcosaltro'));
+    expect(contactUpdate).not.toHaveBeenCalled();
+  });
+
+  // Il guard che impedisce di scrivere sul contatto SBAGLIATO: senza,
+  // `where: { providerRef: undefined }` in Prisma significa "nessun filtro"
+  // e findFirst restituirebbe una riga arbitraria.
+  it('tag giusto ma email_id assente: nessuna query', async () => {
+    await handleResendEvent({
+      type: 'email.opened',
+      data: { tags: { categoria: 'N26_EMAIL_PARTENZA' } },
+    });
+    expect(notificaFindFirst).not.toHaveBeenCalled();
+    expect(contactUpdate).not.toHaveBeenCalled();
   });
 
   it('providerRef sconosciuto: nessuna scrittura, nessuna eccezione', async () => {
@@ -1055,13 +1076,25 @@ export async function handleResendEvent(evento: unknown): Promise<void> {
   }
 
   // Solo i bounce definitivi bloccano: casella piena o server temporaneamente
-  // giù (`soft`) non devono impedire il reinvio a un cliente valido.
-  const subType = e.data?.bounce?.subType?.toLowerCase();
-  if (!subType) {
-    console.warn('[resend-webhook] bounce senza subType, ignorato', emailId);
+  // giù non devono impedire il reinvio a un cliente valido.
+  //
+  // ⚠️ Il campo giusto è `type`, NON `subType`. Resend deriva il bounce da SES:
+  // `type` vale `Permanent` | `Temporary`, mentre `subType` è la classificazione
+  // fine (`Suppressed`, `MessageRejected`, `General`…). Confrontare `subType`
+  // con 'hard'/'soft' non matcherebbe mai, e il blocco non scatterebbe MAI —
+  // in silenzio. Verificato sul payload d'esempio della doc Resend.
+  const tipo = e.data?.bounce?.type?.toLowerCase();
+  if (!tipo) {
+    console.warn('[resend-webhook] bounce senza type, ignorato', emailId);
     return;
   }
-  if (subType !== 'hard') return;
+  if (tipo !== 'permanent' && tipo !== 'temporary') {
+    // Vocabolario inatteso: non blocchiamo (fail-safe), ma lo diciamo — è
+    // l'unico modo per accorgersi che il contratto del provider è cambiato.
+    console.warn('[resend-webhook] bounce con type sconosciuto', emailId, tipo);
+    return;
+  }
+  if (tipo !== 'permanent') return;
 
   await prisma.crmContact.update({
     where: { id: contatto.id },

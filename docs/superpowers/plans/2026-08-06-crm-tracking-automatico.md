@@ -823,7 +823,19 @@ export function verificaFirmaResend(
 ): unknown | null {
   try {
     return new Webhook(secret).verify(rawBody, headers);
-  } catch {
+  } catch (e) {
+    // Il messaggio della libreria distingue cause opposte: segreto vuoto o
+    // base64 rotto (misconfigurazione), timestamp troppo vecchio (replay o
+    // clock disallineato), firma non corrispondente (payload non autentico).
+    // Senza questo log collassano tutte in `null`, e un `whsec_` sbagliato in
+    // produzione diventa indistinguibile da un attacco: 401 identici, nessun
+    // segnale, e il tracking aperture muore in silenzio. Si logga SOLO il
+    // messaggio della libreria — mai body, header o segreto — così nessun
+    // dato controllato dall'attaccante finisce nei log.
+    console.warn(
+      '[resend-webhook] firma rifiutata:',
+      e instanceof Error ? e.message : 'errore sconosciuto',
+    );
     return null;
   }
 }

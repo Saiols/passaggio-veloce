@@ -337,7 +337,7 @@ function render(input: SendInput): NotificaContent {
  */
 export async function sendNotification(
   input: SendInput,
-  opts?: { attachments?: EmailAttachment[]; praticaId?: string },
+  opts?: { attachments?: EmailAttachment[]; praticaId?: string; crmContactId?: string },
 ): Promise<void> {
   const content = render(input);
   const payload: Prisma.InputJsonValue = JSON.parse(JSON.stringify(input.payload));
@@ -433,6 +433,7 @@ export async function sendNotification(
       subject: content.subject,
       bodyPreview: content.text.slice(0, 200),
       payload,
+      crmContactId: opts?.crmContactId ?? null,
     },
   });
 

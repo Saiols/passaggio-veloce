@@ -160,4 +160,22 @@ describe('sendEmailPartenzaAction', () => {
     expect(sendNotification).toHaveBeenCalledTimes(1);
     expect(sendNotification.mock.calls[0][0].target.email).toBe('ok@z.it');
   });
+
+  it('valorizza crmContactId su OGNI notifica, indirizzi aggiuntivi compresi', async () => {
+    findUnique.mockResolvedValue({
+      id: 'c1', cat: 'BROKER', status: 'S3', email: 'a@b.it',
+      emailOptOutAt: null, nome: 'X', emailUnsubToken: null, companyId: null,
+    });
+    update.mockResolvedValue({});
+    await sendEmailPartenzaAction({
+      contactId: 'c1',
+      nomeReferente: 'Mario',
+      messaggio: MSG,
+      emailAggiuntive: ['titolare@personale.it'],
+    });
+    expect(sendNotification).toHaveBeenCalledTimes(2);
+    for (const call of sendNotification.mock.calls) {
+      expect(call[1]?.crmContactId).toBe('c1');
+    }
+  });
 });

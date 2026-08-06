@@ -785,18 +785,21 @@ export async function sendEmailPartenzaAction(input: {
   // Un invio per destinatario: email individuali (nessuna visibilità incrociata
   // fra gli indirizzi), stesso link/token/codice per tutti.
   for (const email of destinatari) {
-    await sendNotification({
-      tipo: 'N26_EMAIL_PARTENZA',
-      target: { email },
-      payload: {
-        nomeReferente: input.nomeReferente.trim() || contact.nome,
-        messaggio,
-        categoria: contact.cat as 'BROKER' | 'AGENZIA',
-        linkUrl,
-        unsubUrl,
-        codice,
+    await sendNotification(
+      {
+        tipo: 'N26_EMAIL_PARTENZA',
+        target: { email },
+        payload: {
+          nomeReferente: input.nomeReferente.trim() || contact.nome,
+          messaggio,
+          categoria: contact.cat as 'BROKER' | 'AGENZIA',
+          linkUrl,
+          unsubUrl,
+          codice,
+        },
       },
-    });
+      { crmContactId: contact.id },
+    );
   }
 
   await prisma.crmContact.update({

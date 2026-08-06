@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request): Promise<Response> {
   if (!env.RESEND_WEBHOOK_SECRET) {
+    console.error('[resend-webhook] RESEND_WEBHOOK_SECRET non configurato: evento scartato');
     return new Response('Webhook non configurato', { status: 400 });
   }
 
@@ -24,9 +25,11 @@ export async function POST(req: Request): Promise<Response> {
   try {
     await handleResendEvent(evento);
   } catch (e) {
-    // 200 anche in errore applicativo: un 5xx farebbe ritentare a Svix per ore
-    // un evento che non andrà mai a buon fine (contatto eliminato, ecc.).
+    // I casi "non trovato" escono con `return` e non lanciano: qui arrivano
+    // solo errori Prisma o di infrastruttura, cioè proprio quelli per cui i
+    // retry di Svix esistono. Un 200 li perderebbe per sempre.
     console.error('[resend-webhook] handler error', (e as Error).message);
+    return new Response('Errore handler', { status: 500 });
   }
   return new Response('ok', { status: 200 });
 }

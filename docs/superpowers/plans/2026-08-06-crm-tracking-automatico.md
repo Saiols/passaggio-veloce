@@ -1181,6 +1181,16 @@ git add apps/piattaforma/src/lib/jobs/resend-webhook.ts apps/piattaforma/src/lib
 git commit -m "feat(crm): webhook Resend per mail aperta e indirizzo rimbalzato"
 ```
 
+**Correzione post-review (fix-wave 2026-08-06, finding I-2):** il codice sopra rispondeva
+200 anche quando `handleResendEvent` lanciava. Il committente ha deciso diversamente in
+review whole-branch: gli unici errori che raggiungono quel `catch` sono Prisma o di
+infrastruttura — i casi "non trovato" escono con `return` e non lanciano mai — cioè proprio
+la categoria per cui esistono i retry di Svix. Un 200 la perderebbe per sempre. La route ora
+risponde **500** quando l'handler lancia (vedi spec, sezione "Tre scelte, e perché"). Stesso
+giro di fix: aggiunto un `console.error` prima del 400 quando `RESEND_WEBHOOK_SECRET` manca
+(il log nel `catch` della verifica firma non scatta mai in quel caso, perché si esce prima di
+chiamarla).
+
 ---
 
 ### Task 9: Il bounce blocca il reinvio, la correzione lo sblocca

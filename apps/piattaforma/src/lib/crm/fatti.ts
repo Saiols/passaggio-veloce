@@ -8,6 +8,7 @@ export interface ContattoFatti {
   linkInviatoAt: Date | null;
   linkAperto: boolean;
   linkApertoAt: Date | null;
+  mailApertaAt: Date | null;
   iscrizioneInit: boolean;
   iscrizioneInitAt: Date | null;
   iscrizioneComp: boolean;
@@ -112,6 +113,8 @@ export function timelineFatti(
   push('creato', 'Contatto creato', c.createdAt);
   push('email', 'Email inviata', c.linkInviatoAt);
   push('apertura', 'Link aperto', c.linkApertoAt);
+  push('mail-aperta', 'Mail aperta', c.mailApertaAt);
+  push('iscrizione-init', 'Iscrizione iniziata', c.iscrizioneInitAt);
   push('iscrizione', 'Registrazione completata', c.iscrizioneAt);
   push('pratica', 'Prima pratica', c.primaPraticaAt);
   push('match', 'Agganciato ad azienda', c.matchedAt);

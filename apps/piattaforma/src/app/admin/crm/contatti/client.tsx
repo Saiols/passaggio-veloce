@@ -103,6 +103,7 @@ function fattiDaRow(c: ContactRow): ContattoFatti {
     linkInviatoAt: d(c.linkInviatoAt),
     linkAperto: c.linkAperto,
     linkApertoAt: d(c.linkApertoAt),
+    mailApertaAt: d(c.mailApertaAt),
     iscrizioneInit: c.iscrizioneInit,
     iscrizioneInitAt: d(c.iscrizioneInitAt),
     iscrizioneComp: c.iscrizioneComp,
@@ -1745,7 +1746,7 @@ function TabStato({
   );
 }
 
-/** Storico datato dei fatti (timeline), sopra i flag editabili. Sola lettura. */
+/** Storico datato dei fatti (timeline), nello stesso pannello del referto Fatti. Sola lettura. */
 function TimelineFatti({ contact }: { contact: ContactRow }) {
   // Le chiamate (CrmCall) non sono ancora popolate (Vapi non attivo): la timeline
   // si costruisce dai timestamp del contatto. Quando ci saranno, passare qui le call.

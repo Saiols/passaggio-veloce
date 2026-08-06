@@ -41,8 +41,13 @@ describe('handleResendEvent', () => {
     notificaUpdate.mockReset();
     contactFindUnique.mockReset();
     contactUpdate.mockReset();
-    notificaFindFirst.mockResolvedValue({ id: 'n1', crmContactId: 'c1', readAt: null });
-    contactFindUnique.mockResolvedValue({ id: 'c1', mailApertaAt: null });
+    notificaFindFirst.mockResolvedValue({
+      id: 'n1',
+      crmContactId: 'c1',
+      readAt: null,
+      destinazione: 'em-1@example.it',
+    });
+    contactFindUnique.mockResolvedValue({ id: 'c1', mailApertaAt: null, email: 'em-1@example.it' });
     contactUpdate.mockResolvedValue({});
     notificaUpdate.mockResolvedValue({});
   });
@@ -94,9 +99,53 @@ describe('handleResendEvent', () => {
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
+  // Il bug della review: un "indirizzo aggiuntivo" digitato a mano rimbalza,
+  // ma non è l'email del contatto — non deve bloccare il contatto sbagliato.
+  it("bounce su un indirizzo aggiuntivo (diverso da quello del contatto): nessun blocco", async () => {
+    notificaFindFirst.mockResolvedValue({
+      id: 'n1',
+      crmContactId: 'c1',
+      readAt: null,
+      destinazione: 'titolare@personale.it',
+    });
+    contactFindUnique.mockResolvedValue({
+      id: 'c1',
+      mailApertaAt: null,
+      email: 'em-1@example.it',
+    });
+    await handleResendEvent(bounced('Permanent'));
+    expect(contactUpdate).not.toHaveBeenCalled();
+  });
+
+  it('bounce sull\'indirizzo del contatto con maiuscole diverse: blocca comunque (confronto case-insensitive)', async () => {
+    notificaFindFirst.mockResolvedValue({
+      id: 'n1',
+      crmContactId: 'c1',
+      readAt: null,
+      destinazione: 'EM-1@Example.it',
+    });
+    contactFindUnique.mockResolvedValue({
+      id: 'c1',
+      mailApertaAt: null,
+      email: 'em-1@example.it',
+    });
+    await handleResendEvent(bounced('Permanent'));
+    expect(contactUpdate).toHaveBeenCalledTimes(1);
+    expect(contactUpdate.mock.calls[0][0].data.emailBouncedAt).toBeInstanceOf(Date);
+  });
+
   it('providerRef sconosciuto: nessuna scrittura, nessuna eccezione', async () => {
     notificaFindFirst.mockResolvedValue(null);
     await expect(handleResendEvent(opened())).resolves.toBeUndefined();
+    expect(contactUpdate).not.toHaveBeenCalled();
+  });
+
+  // L'invariante che impedisce davvero la contaminazione del funnel: una
+  // notifica trovata ma senza contatto CRM agganciato non scrive nulla.
+  it('notifica trovata ma senza crmContactId: nessuna query sul contatto, nessuna scrittura', async () => {
+    notificaFindFirst.mockResolvedValue({ id: 'n1', crmContactId: null, readAt: null });
+    await expect(handleResendEvent(opened())).resolves.toBeUndefined();
+    expect(contactFindUnique).not.toHaveBeenCalled();
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 

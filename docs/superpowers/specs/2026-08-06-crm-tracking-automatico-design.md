@@ -209,7 +209,8 @@ data.tags.categoria ≠ N26_EMAIL_PARTENZA ──► 200, no-op
 providerRef = data.email_id → NotificaInviata → crmContactId
    ├─ opened   → mailAperta = true, mailApertaAt ??= now
    │             NotificaInviata.readAt ??= now
-   └─ bounced  → SOLO se data.bounce.subType === 'hard':
+   └─ bounced  → SOLO se data.bounce.type === 'Permanent'
+                 E l'indirizzo rimbalzato == l'email del contatto:
                  emailBouncedAt = now
                  emailBounceMotivo = data.bounce.message troncato a 500
 ```
@@ -217,8 +218,22 @@ providerRef = data.email_id → NotificaInviata → crmContactId
 Il filtro sul tag `categoria` è gratis: `ResendEmailProvider` tagga **già** ogni email con
 `categoria = <NotificaTipo>` (`lib/providers/email/resend.ts:34-36`), Resend rimanda i tag
 nel payload, e `N26_EMAIL_PARTENZA` sopravvive intatto a `sanitizeTagValue` (solo lettere,
-cifre e underscore). È questo filtro a garantire che **una mail transazionale aperta da una
-persona che è anche un contatto CRM non sporchi il funnel**.
+cifre e underscore). **Non è però questo filtro a garantire** che una mail transazionale
+aperta da una persona che è anche un contatto CRM non sporchi il funnel: quella garanzia è
+`NotificaInviata.crmContactId`, colonna scritta da un solo chiamante in tutto il repo
+(`sendEmailPartenzaAction` via `sendNotification`) — nessuna notifica non-N26 può averla
+valorizzata, a prescindere dal tag. Il filtro sul tag è un'ottimizzazione che risparmia le
+due query quando l'evento non è nemmeno un'email di partenza, non l'unica barriera contro la
+contaminazione. Per questo l'handler logga quando lo scarto avviene per questo filtro:
+Resend documenta i tag in uscita come array e qui li leggiamo come oggetto, un'asimmetria
+verificata ma della stessa forma di rischio già costata un giro di fix con `subType`.
+
+Sul bounce, il blocco scatta **solo se l'indirizzo rimbalzato è quello del contatto**: gli
+"indirizzi aggiuntivi" digitati a mano dall'operatore condividono lo stesso `crmContactId`
+(l'attribuzione larga è corretta per le aperture, non per i bounce) e sono i più esposti agli
+hard bounce di tutto il sistema, perché nessuno li valida mai. Bloccare il contatto per il
+rimbalzo di un indirizzo che non è il suo metterebbe il badge e il messaggio di blocco su
+un'email che non c'entra.
 
 ### Tre scelte, e perché
 
@@ -226,13 +241,19 @@ persona che è anche un contatto CRM non sporchi il funnel**.
 evento può arrivare due volte. Non sovrascrivendo mai la prima data, la ripetizione diventa
 innocua — senza bisogno di una tabella di deduplica degli eventi.
 
-**200 anche sugli errori applicativi; 401 solo sulla firma.** Rispondere 500 perché un
-contatto non esiste più significa far ritentare a Svix per ore un evento che non andrà mai
-a buon fine. L'errore si logga, non si ritenta.
+**500 sugli errori dell'handler; 200 solo sui no-op genuini; 401 sulla firma; 400 sul segreto
+mancante.** `handleResendEvent` esce con un semplice `return` (mai un `throw`) su ogni caso
+"non c'è niente da fare" — tipo non gestito, tag diverso da N26, `providerRef` sconosciuto,
+contatto eliminato: quegli eventi raggiungono comunque un 200, senza passare dal `catch`. Le
+uniche eccezioni che il `catch` della route intercetta davvero sono errori Prisma o di
+infrastruttura — cioè proprio la categoria per cui esistono i retry di Svix. Rispondere 200
+anche lì significherebbe perdere per sempre un evento per un hiccup del DB. Decisione presa
+in review (finding I-2 del 2026-08-06): un hiccup transitorio deve poter essere ritentato,
+quindi la route risponde **500** quando l'handler lancia.
 
-**Solo i bounce `hard` bloccano.** Casella piena o server momentaneamente giù (`soft`) si
-registrano ma non impediscono il reinvio: bloccare un cliente valido perché aveva la
-casella piena martedì è il danno peggiore dei due.
+**Solo i bounce `Permanent` bloccano.** Casella piena o server momentaneamente giù
+(`Temporary`) si registrano ma non impediscono il reinvio: bloccare un cliente valido
+perché aveva la casella piena martedì è il danno peggiore dei due.
 
 ### Dove vive il blocco
 
@@ -290,12 +311,17 @@ Poi `fatti.ts` usa `iscrizioneInitAt` come data di S6 al posto di `iscrizioneAt`
 
 **Webhook** (`api/webhooks/resend`)
 - firma non valida → 401, nessuna scrittura;
-- `tags.categoria` diverso da N26 → nessuna scrittura (garanzia anti-contaminazione);
+- `tags.categoria` diverso da N26 → nessuna scrittura (no-op: l'evento non è un'email di
+  partenza; la garanzia anti-contaminazione vera è `crmContactId`, testata a parte);
 - tipo non gestito → 200, nessuna scrittura;
 - stesso `email.opened` due volte → `mailApertaAt` invariato dopo il secondo;
-- `bounce.subType = 'soft'` → nessun blocco;
-- `bounce.subType = 'hard'` → `emailBouncedAt` valorizzato;
-- `providerRef` sconosciuto → 200, nessuna eccezione.
+- `bounce.type = 'Temporary'` → nessun blocco;
+- `bounce.type = 'Permanent'` sull'email del contatto → `emailBouncedAt` valorizzato;
+- `bounce.type = 'Permanent'` su un indirizzo diverso da quello del contatto (indirizzo
+  aggiuntivo) → nessun blocco;
+- `crmContactId` assente sulla notifica trovata → nessuna scrittura;
+- `providerRef` sconosciuto → 200, nessuna eccezione;
+- handler che lancia (errore Prisma/infrastruttura) → 500, non 200.
 
 **Verifica firma** (`lib/webhooks/resend-signature.ts`)
 - payload valido → true; body alterato di un byte → false.
@@ -321,14 +347,20 @@ in lista vanno guardati nel DOM.
 
 ## Da fare a mano, fuori dal codice
 
-1. **Resend → Webhooks**: creare l'endpoint verso `https://<app>/api/webhooks/resend`,
+1. 🛑 **Migration SQL applicata a mano su Neon, PRIMA del deploy.** Raggio d'azione: NON è
+   solo il CRM. `send.ts` scrive `crmContactId` nella `create` di **ogni** `NotificaInviata`
+   (fuori dal blocco `try`, incondizionato), quindi se il deploy precede la migration
+   **tutte le email transazionali della piattaforma** falliscono a creare la riga di audit, e
+   `/admin/crm/contatti` va in 500 per la colonna mancante.
+2. **Resend → Webhooks**: creare l'endpoint verso `https://<app>/api/webhooks/resend`,
    eventi `email.opened` e `email.bounced`.
-2. **Resend → dominio: abilitare l'open tracking.** Senza, `email.opened` non arriva mai.
-3. ⚠️ **NON abilitare il click tracking.** Riscriverebbe gli URL dentro le email, e il
+3. **Resend → dominio: abilitare l'open tracking** — 🛑 **BLOCCATO** dalla voce LIA qui
+   sotto: non abilitare finché il trattamento non è coperto da LIA e informativa. Senza,
+   comunque, `email.opened` non arriva mai.
+4. ⚠️ **NON abilitare il click tracking.** Riscriverebbe gli URL dentro le email, e il
    conteggio delle aperture del link passa già da `/i/<token>`: lo falserebbe.
-4. `RESEND_WEBHOOK_SECRET` su Vercel (in `env.ts` **opzionale**, come
+5. `RESEND_WEBHOOK_SECRET` su Vercel (in `env.ts` **opzionale**, come
    `STRIPE_WEBHOOK_SECRET`).
-5. Migration SQL applicata a mano su Neon **prima** del deploy.
 
 ---
 
@@ -364,16 +396,24 @@ per task. Piano: `docs/superpowers/plans/2026-08-06-crm-tracking-automatico.md`.
 
 ### ⚠️ Da fare a mano prima che serva davvero
 
-1. **Resend → Webhooks**: creare l'endpoint verso `https://<app>/api/webhooks/resend`, eventi
+1. 🛑 **Migration applicata a mano su Neon, PRIMA del deploy.** Non riguarda solo il CRM:
+   `send.ts` scrive `crmContactId` nella `create` di **ogni** `NotificaInviata` (fuori dal
+   `try`, per qualunque tipo di notifica). Se il deploy precede la migration, tutte le email
+   transazionali della piattaforma falliscono e `/admin/crm/contatti` va in 500.
+2. **Resend → Webhooks**: creare l'endpoint verso `https://<app>/api/webhooks/resend`, eventi
    `email.opened` e `email.bounced`.
-2. **Resend → dominio: abilitare l'open tracking.** Senza, `email.opened` non arriva mai.
-3. ⚠️ **NON abilitare il click tracking**: riscriverebbe gli URL nelle email e falserebbe il
+3. **Resend → dominio: abilitare l'open tracking** — 🛑 **BLOCCATO dal punto 6 (voce LIA)**:
+   non abilitare finché il trattamento non è coperto da LIA e informativa. Senza, comunque,
+   `email.opened` non arriva mai.
+4. ⚠️ **NON abilitare il click tracking**: riscriverebbe gli URL nelle email e falserebbe il
    conteggio aperture, che passa già da `/i/<token>`.
-4. **`RESEND_WEBHOOK_SECRET` su Vercel** (production). Senza, il webhook risponde "non
-   configurato" e gli eventi si perdono — il log aggiunto nel `catch` della verifica firma è
-   ciò che rende visibile questo caso invece di lasciarlo muto.
-5. **Migration applicata a mano su Neon** *prima* del deploy.
-6. Voce LIA aperta (sotto): l'open tracking è un trattamento nuovo.
+5. **`RESEND_WEBHOOK_SECRET` su Vercel** (production). Senza, il webhook risponde "non
+   configurato" e gli eventi si perdono — il log aggiunto nella route subito prima di quel
+   400 è ciò che rende visibile questo caso invece di lasciarlo muto (il log nel `catch`
+   della verifica firma non c'entra: con il segreto assente si esce prima ancora di chiamare
+   `verificaFirmaResend`, quindi quel log non scatta mai per questo caso).
+6. 🛑 Voce LIA aperta: l'open tracking è un trattamento nuovo, non ancora coperto da LIA e
+   informativa — **blocca il punto 3**.
 
 ### Correzione rispetto a questa spec
 

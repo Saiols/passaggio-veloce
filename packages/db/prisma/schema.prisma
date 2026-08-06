@@ -2271,7 +2271,7 @@ model CrmContact {
   iscrizioneInitAt DateTime?
   iscrizioneComp Boolean   @default(false)
   iscrizioneAt   DateTime?
-  /// Bounce DEFINITIVO (`subType = hard`) dell'ultima email di partenza.
+  /// Bounce DEFINITIVO (`type = Permanent`) dell'ultima email di partenza.
   /// null = indirizzo utilizzabile. Si azzera da solo quando l'email cambia.
   emailBouncedAt    DateTime?
   /// Messaggio del server destinatario, troncato a 500 char.

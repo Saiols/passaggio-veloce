@@ -74,3 +74,39 @@ describe('updateCrmContactAction — i campi tracking non sono scrivibili', () =
     }
   });
 });
+
+describe("updateCrmContactAction — il bounce si azzera correggendo l'email", () => {
+  beforeEach(() => {
+    findUnique.mockReset();
+    update.mockReset();
+    update.mockResolvedValue({});
+  });
+
+  // fonte deve essere un valore valido dell'enum (CSV_INIZIALE, non 'CSV'):
+  // altrimenti la validazione Zod fallisce prima di arrivare al blocco bounce.
+  const base = {
+    nome: 'Autofficina Rossi', cat: 'BROKER', tel: '3331234567',
+    status: 'S4', fonte: 'CSV_INIZIALE',
+  };
+
+  it('email cambiata: azzera emailBouncedAt e il motivo', async () => {
+    findUnique.mockResolvedValue({
+      assignedToId: null, status: 'S4', arricchitoDa: null,
+      email: 'vecchia@b.it', emailBouncedAt: new Date(),
+    });
+    await updateCrmContactAction('c1', { ...base, email: 'nuova@b.it' });
+    const data = update.mock.calls[0][0].data;
+    expect(data.emailBouncedAt).toBeNull();
+    expect(data.emailBounceMotivo).toBeNull();
+  });
+
+  it('email invariata: il blocco resta', async () => {
+    findUnique.mockResolvedValue({
+      assignedToId: null, status: 'S4', arricchitoDa: null,
+      email: 'vecchia@b.it', emailBouncedAt: new Date(),
+    });
+    await updateCrmContactAction('c1', { ...base, email: 'vecchia@b.it' });
+    const data = update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('emailBouncedAt');
+  });
+});

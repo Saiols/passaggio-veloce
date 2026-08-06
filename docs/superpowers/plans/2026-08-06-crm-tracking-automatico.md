@@ -259,6 +259,8 @@ git commit -m "fix(crm): lo stato S6 usa la data di iscrizione iniziata"
 
 ⚠️ **Attenzione al precedente ingannevole:** `opts.praticaId` **non viene persistito** — serve solo a iniettare il blocco "Sede della firma" nel template (`send.ts:394`). Il canale `opts` esiste, la persistenza no: va aggiunta.
 
+⚠️ **Servono DUE test, non uno.** Il test qui sotto vive in un file dove `sendNotification` è mockata: dimostra che `actions.ts` passa l'argomento, ma non esegue mai la `create` dentro `send.ts`. La metà "e persisterlo" del requisito resterebbe a copertura **zero**, e un refactor che la togliesse non farebbe diventare rosso nulla — il sintomo comparirebbe solo in produzione, come "le aperture email non si registrano mai". Serve anche un test focalizzato su `sendNotification` stessa (mockando `@pv/db` e il provider email, **non** `sendNotification`) che asserisca `data.crmContactId` sulla `create`, più il caso senza `opts` che deve dare `null`.
+
 - [ ] **Step 1: Scrivere il test che fallisce**
 
 In `email-partenza.action.test.ts`, aggiungere:

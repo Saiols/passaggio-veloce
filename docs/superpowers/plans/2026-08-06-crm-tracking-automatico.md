@@ -672,7 +672,7 @@ con:
                     {c.email ?? '—'}
                     {c.emailBouncedAt && (
                       <span
-                        title={c.emailBounceMotivo ?? 'L’indirizzo ha rifiutato l’ultima email'}
+                        title={c.emailBounceMotivo ?? "L'indirizzo ha rifiutato l'ultima email"}
                         className="ml-1.5 whitespace-nowrap rounded-full bg-pv-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500"
                       >
                         rimbalzata
@@ -926,7 +926,7 @@ describe('handleResendEvent', () => {
 
   // La garanzia anti-contaminazione: una mail transazionale aperta da una
   // persona che è anche un contatto CRM non deve sporcare il funnel.
-  it('ignora le email che non sono l’email di partenza', async () => {
+  it("ignora le email che non sono l'email di partenza", async () => {
     await handleResendEvent(opened({ categoria: 'N3_PRATICA_ACCETTATA' }));
     expect(notificaFindFirst).not.toHaveBeenCalled();
     expect(contactUpdate).not.toHaveBeenCalled();
@@ -942,7 +942,7 @@ describe('handleResendEvent', () => {
     expect(contactUpdate).not.toHaveBeenCalled();
   });
 
-  it('bounce hard: blocca l’indirizzo con il motivo', async () => {
+  it("bounce hard: blocca l'indirizzo con il motivo", async () => {
     await handleResendEvent(bounced('hard'));
     const data = contactUpdate.mock.calls[0][0].data;
     expect(data.emailBouncedAt).toBeInstanceOf(Date);
@@ -1150,7 +1150,7 @@ git commit -m "feat(crm): webhook Resend per mail aperta e indirizzo rimbalzato"
 In `email-partenza.action.test.ts`:
 
 ```ts
-  it('errore se l’indirizzo ha rimbalzato', async () => {
+  it("errore se l'indirizzo ha rimbalzato", async () => {
     findUnique.mockResolvedValue({
       id: 'c1', cat: 'BROKER', status: 'S4', email: 'a@b.it',
       emailOptOutAt: null, nome: 'X', emailUnsubToken: null, companyId: null,
@@ -1165,7 +1165,7 @@ In `email-partenza.action.test.ts`:
 In `tracking-non-scrivibile.test.ts`, un nuovo `describe`:
 
 ```ts
-describe('updateCrmContactAction — il bounce si azzera correggendo l’email', () => {
+describe("updateCrmContactAction — il bounce si azzera correggendo l'email", () => {
   beforeEach(() => {
     findUnique.mockReset();
     update.mockReset();
@@ -1221,7 +1221,7 @@ In `sendEmailPartenzaAction`, aggiungere `emailBouncedAt: true` al `select` del 
   if (contact.emailBouncedAt) {
     return {
       ok: false,
-      error: 'L’indirizzo ha rifiutato l’ultima email: correggilo prima di riprovare.',
+      error: "L'indirizzo ha rifiutato l'ultima email: correggilo prima di riprovare.",
     };
   }
 ```
@@ -1321,7 +1321,7 @@ describe('checkEmailDisponibileAction — accende iscrizioneInit', () => {
   });
 
   // Il CRM è un effetto collaterale: se cade, la registrazione prosegue.
-  it('se il CRM lancia, l’action risponde comunque', async () => {
+  it("se il CRM lancia, l'action risponde comunque", async () => {
     updateMany.mockRejectedValue(new Error('db giù'));
     await expect(checkEmailDisponibileAction('mario@rossi.it')).resolves.toEqual({
       disponibile: true,

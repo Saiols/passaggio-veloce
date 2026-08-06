@@ -567,7 +567,7 @@ export function CrmContactsClient({
                     {c.email ?? '—'}
                     {c.emailBouncedAt && (
                       <span
-                        title={c.emailBounceMotivo ?? `L'indirizzo ha rifiutato l'ultima email`}
+                        title={c.emailBounceMotivo ?? 'L’indirizzo ha rifiutato l’ultima email'}
                         className="ml-1.5 whitespace-nowrap rounded-full bg-pv-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-pv-red-500"
                       >
                         rimbalzata

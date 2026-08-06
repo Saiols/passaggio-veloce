@@ -105,17 +105,19 @@ Nessun backfill: i dati di produzione sono usa-e-getta e non esiste una fonte da
 - [ ] **Step 4: Applicare la migration e rigenerare il client**
 
 ```bash
-pnpm db:deploy
+pnpm --filter @pv/db db:deploy
 pnpm --filter @pv/db exec prisma generate
 ```
 
 Atteso: `1 migration applied`, generate senza errori.
 
+⚠️ `pnpm db:deploy` **alla radice non esiste**: il root package.json espone `db:migrate`, `db:generate` e `db:studio`, ma non `db:deploy` — che vive solo in `packages/db`. Va invocato col `--filter`.
+
 - [ ] **Step 5: Verificare sul DB reale che le colonne esistano**
 
 ```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "\d crm_contacts" | grep -E "mailApertaAt|iscrizioneInitAt|emailBounced"
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "\d notifiche_inviate" | grep -E "crmContactId|providerRef"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "\d crm_contacts" | grep -E "mailApertaAt|iscrizioneInitAt|emailBounce"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "\d notifiche_inviate" | grep -E "crmContactId|providerRef"
 ```
 
 Atteso: 4 righe dalla prima query, e dalla seconda la colonna `crmContactId` più i due indici. Se il nome del container differisce, ricavarlo con `docker ps`.
@@ -1442,7 +1444,7 @@ Con la scheda di un contatto che ha `linkAperture > 0`: aprire la modale, cambia
 Su un contatto con `emailBouncedAt` valorizzato a mano sul DB locale:
 
 ```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = now(), \"emailBounceMotivo\" = 'mailbox unavailable' WHERE id = '<id>';"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = now(), \"emailBounceMotivo\" = 'mailbox unavailable' WHERE id = '<id>';"
 ```
 
 Ricaricare la lista: badge "rimbalzata" accanto all'email, e nel tab la riga rossa. Poi correggere l'email dalla scheda e salvare: il badge sparisce.
@@ -1450,7 +1452,7 @@ Ricaricare la lista: badge "rimbalzata" accanto all'email, e nel tab la riga ros
 - [ ] **Step 5: Ripristinare il dato di prova**
 
 ```bash
-docker exec -i pv-postgres psql -U postgres -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = NULL, \"emailBounceMotivo\" = NULL WHERE id = '<id>';"
+docker exec -i pv-postgres psql -U pv -d passaggio_veloce -c "UPDATE crm_contacts SET \"emailBouncedAt\" = NULL, \"emailBounceMotivo\" = NULL WHERE id = '<id>';"
 ```
 
 - [ ] **Step 6: Scrivere la checklist di rilascio**

@@ -1310,6 +1310,8 @@ describe('checkEmailDisponibileAction — accende iscrizioneInit', () => {
     expect(args.where.emailNorm).toBe('mario@rossi.it');
     expect(args.where.iscrizioneComp).toBe(false);
     expect(args.where.deletedAt).toBeNull();
+    // "Vince la prima data": chi ce l'ha già non deve nemmeno matchare.
+    expect(args.where.iscrizioneInitAt).toBeNull();
     expect(args.data.iscrizioneInit).toBe(true);
     expect(args.data.iscrizioneInitAt).toBeInstanceOf(Date);
   });
@@ -1361,7 +1363,16 @@ In `app/(auth)/actions.ts`, dentro `checkEmailDisponibileAction`, dopo il check 
 async function segnaIscrizioneIniziataCrm(emailLower: string): Promise<void> {
   try {
     await prisma.crmContact.updateMany({
-      where: { emailNorm: emailLower, deletedAt: null, iscrizioneComp: false },
+      // `iscrizioneInitAt: null` nella where, non solo nei data: senza, ogni
+      // tentativo dello step Account risposterebbe la data in avanti e la
+      // regola "vince la prima" sarebbe violata. Con questa clausola il
+      // secondo tentativo semplicemente non matcha.
+      where: {
+        emailNorm: emailLower,
+        deletedAt: null,
+        iscrizioneComp: false,
+        iscrizioneInitAt: null,
+      },
       data: { iscrizioneInit: true, iscrizioneInitAt: new Date() },
     });
   } catch (e) {
@@ -1370,26 +1381,13 @@ async function segnaIscrizioneIniziataCrm(emailLower: string): Promise<void> {
 }
 ```
 
-⚠️ `iscrizioneInitAt` qui **sovrascriverebbe** la data a ogni tentativo. Per rispettare la regola "prima data vince", restringere la where:
-
-```ts
-      where: {
-        emailNorm: emailLower,
-        deletedAt: null,
-        iscrizioneComp: false,
-        iscrizioneInitAt: null,
-      },
-```
-
-Così il secondo tentativo non tocca niente.
-
 - [ ] **Step 4: Lanciare i test**
 
 ```bash
 pnpm --filter piattaforma test -- iscrizione-init.test.ts
 ```
 
-Atteso: PASS. Aggiungere `expect(args.where.iscrizioneInitAt).toBeNull();` al primo test se non c'è già.
+Atteso: PASS su tutti e tre.
 
 - [ ] **Step 5: Lanciare la suite completa e il typecheck**
 

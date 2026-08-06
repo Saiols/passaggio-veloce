@@ -1128,7 +1128,7 @@ In `mappa-api.ts`, nella sezione `// --- Webhook / diagnostica / metadati, nessu
   'src/app/api/webhooks/resend/route.ts': null, // autenticato via firma Svix (RESEND_WEBHOOK_SECRET), non da un permesso
 ```
 
-Aggiornare anche il conteggio nel commento in testa al file (`la mappa le enumera TUTTE (33)` → 34).
+Aggiornare anche il conteggio nel commento in testa al file. ⚠️ Il numero scritto lì (33) era **già disallineato** prima di questo lavoro: le route reali sono 38 dopo l'aggiunta. **Contare, non incrementare** — sia i file `route.ts` sotto `src/app/api` sia le chiavi di `MAPPA_API`, e verificare che i due numeri combacino (se non combaciano, c'è una route scoperta, ed è quello il problema serio).
 
 - [ ] **Step 7: Lanciare la suite e il typecheck**
 

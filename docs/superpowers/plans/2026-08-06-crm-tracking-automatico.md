@@ -569,7 +569,7 @@ describe('updateCrmContactAction — i campi tracking non sono scrivibili', () =
     cat: 'BROKER',
     tel: '3331234567',
     status: 'S4',
-    fonte: 'CSV',
+    fonte: 'CSV_INIZIALE', // 'CSV' NON e' nell'enum: fallirebbe la validazione
   };
 
   const CAMPI_TRACKING = [
@@ -1222,7 +1222,7 @@ describe("updateCrmContactAction — il bounce si azzera correggendo l'email", (
 
   const base = {
     nome: 'Autofficina Rossi', cat: 'BROKER', tel: '3331234567',
-    status: 'S4', fonte: 'CSV',
+    status: 'S4', fonte: 'CSV_INIZIALE', // 'CSV' NON e' nell'enum: fallirebbe la validazione
   };
 
   it('email cambiata: azzera emailBouncedAt e il motivo', async () => {

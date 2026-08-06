@@ -342,6 +342,49 @@ considerare chiusa la feature.
 
 ---
 
+## Stato del rilascio
+
+Implementato sul branch `feat/crm-tracking-automatico` il 2026-08-06, in 11 task con review
+per task. Piano: `docs/superpowers/plans/2026-08-06-crm-tracking-automatico.md`.
+
+### Verificato sul browser (non solo dai test)
+
+- **Il tab non contiene più campi scrivibili.** Letto il DOM della modale: gli unici elementi
+  interattivi sono la chiusura, i 4 tab e i 3 bottoni in fondo. Nessun `input`, `select` o
+  `textarea` nel pannello Tracking — assenti, non disabilitati.
+- **Il lost update è chiuso.** Su un contatto di prova con `linkAperture = 3`: modificata la
+  città, salvato, e riletto il DB → `citta = 'Roma'` (il salvataggio è avvenuto davvero) con
+  `linkAperture` ancora **3**, `linkAperto` ancora `true`, `linkApertoAt` intatto. Prima di
+  questo lavoro lo stesso salvataggio avrebbe scritto `false` e `0`.
+- **Il badge "rimbalzata"** compare in lista accanto all'email, e nel tab compare la riga rossa
+  «Indirizzo email» col motivo e la nota sul blocco.
+- **Il reset del bounce è mirato.** Salvataggio con email invariata → `emailBouncedAt` resta.
+  Salvataggio con email corretta → `emailBouncedAt` e `emailBounceMotivo` diventano `NULL`.
+- Il contatto di prova è stato eliminato; il totale contatti è tornato al valore iniziale.
+
+### ⚠️ Da fare a mano prima che serva davvero
+
+1. **Resend → Webhooks**: creare l'endpoint verso `https://<app>/api/webhooks/resend`, eventi
+   `email.opened` e `email.bounced`.
+2. **Resend → dominio: abilitare l'open tracking.** Senza, `email.opened` non arriva mai.
+3. ⚠️ **NON abilitare il click tracking**: riscriverebbe gli URL nelle email e falserebbe il
+   conteggio aperture, che passa già da `/i/<token>`.
+4. **`RESEND_WEBHOOK_SECRET` su Vercel** (production). Senza, il webhook risponde "non
+   configurato" e gli eventi si perdono — il log aggiunto nel `catch` della verifica firma è
+   ciò che rende visibile questo caso invece di lasciarlo muto.
+5. **Migration applicata a mano su Neon** *prima* del deploy.
+6. Voce LIA aperta (sotto): l'open tracking è un trattamento nuovo.
+
+### Correzione rispetto a questa spec
+
+Il campo che distingue un rimbalzo definitivo da uno temporaneo **non** è `bounce.subType`
+(che vale `Suppressed` / `MessageRejected` / `General`) ma **`bounce.type`** (`Permanent` /
+`Temporary`). La spec diceva `subType === 'hard'`: non avrebbe fatto match mai, e nessun
+indirizzo sarebbe mai stato bloccato — in silenzio. Verificato sul payload d'esempio della
+documentazione Resend e corretto nel piano e nel codice.
+
+---
+
 ## Fuori scope (esplicito)
 
 - Video tutorial, SMS, WhatsApp: restano senza tracker. Sono il bundle **CRM-H** (Twilio +
